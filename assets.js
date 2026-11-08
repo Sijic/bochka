@@ -14,7 +14,7 @@ export const ASSET_MAP = {
   church: 'assets/keyed/church.webp',
   factorySector: 'assets/keyed/factory_sector.webp',
   ocean: 'assets/keyed/ocean.webp',
-  oceanSprites: 'assets/keyed/ocean_sprites.webp',
+  oceanSprites: 'assets/keyed/ocean_sprites.webp?v=60',
   /* Stage 3: Постеры актёров и кадры из бочки для скримеров и досье */
   posterPriest: 'assets/images_3.jpg',
   posterPriestHand: 'assets/poster_en.jpg',
