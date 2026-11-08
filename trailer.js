@@ -167,13 +167,12 @@ export function initTrailer(el) {
   const ytUrl = CONFIG?.trailer?.youtubeUrl || `https://youtu.be/${ytId}`;
   const kpUrl = CONFIG?.kinopoiskUrl || CONFIG?.ticketUrl || 'https://www.kinopoisk.ru/film/11226275/?socialAlias=MzcwNjU0MjQ%3D';
   const posterWide = CONFIG?.trailer?.posterWide || 'photo_2026-11-08_00-00-14.jpg';
-  const mp4Url = safeUrl(CONFIG?.trailer?.mp4 || 'assets/trailer.mp4');
 
   const mountYoutubeFacade = (autoPlay = false) => {
     wrap.innerHTML = '';
     if (autoPlay) {
       const iframe = document.createElement('iframe');
-      iframe.src = `https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0&modestbranding=1`;
+      iframe.src = `https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0&modestbranding=1&playsinline=1`;
       iframe.title = 'БОЧКА — Официальный трейлер (YouTube)';
       iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
       iframe.allowFullscreen = true;
@@ -198,41 +197,19 @@ export function initTrailer(el) {
     wrap.append(img, play);
   };
 
-  const mountMp4Fallback = () => {
-    wrap.innerHTML = '';
-    if (!mp4Url) {
-      mountCanvasTeaser(wrap);
-      return;
-    }
-    const video = document.createElement('video');
-    video.src = mp4Url;
-    video.poster = posterWide;
-    video.controls = true;
-    video.playsInline = true;
-    video.autoplay = true;
-    video.onerror = () => {
-      wrap.innerHTML = '';
-      mountCanvasTeaser(wrap);
-    };
-    wrap.appendChild(video);
-    video.play().catch(() => {});
-  };
-
-  /* По умолчанию рендерим лёгкую обложку с официальным постером и запуском YouTube-плеера по клику (0 МБ лишнего трафика при загрузке сайта!) */
+  /* По умолчанию рендерим лёгкую обложку с официальным постером и запуском YouTube-плеера по клику (0 МБ локального видеофайла!) */
   mountYoutubeFacade(false);
 
   const switchBar = document.createElement('div');
   switchBar.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center;justify-content:space-between';
   switchBar.innerHTML = `
     <div style="display:flex;flex-wrap:wrap;gap:6px">
-      <button type="button" class="btn btn--gold" data-tr-mode="yt">▶️ YOUTUBE ПЛЕЕР (БЫСТРО)</button>
+      <button type="button" class="btn btn--gold" data-tr-mode="yt">▶️ ЗАПУСТИТЬ YOUTUBE ТРЕЙЛЕР НА САЙТЕ</button>
       <a class="btn" href="${ytUrl}" target="_blank" rel="noopener">↗️ ОТКРЫТЬ В YOUTUBE</a>
-      <button type="button" class="btn" data-tr-mode="mp4">🎞️ ВСТРОЕННЫЙ ПЛЕЕР (БЕЗ YOUTUBE)</button>
     </div>
     <a class="btn btn--gold" href="${kpUrl}" target="_blank" rel="noopener" style="border-color:#FF6B00;color:#FFD166">🎬 КИНОПОИСК · О ФИЛЬМЕ И БИЛЕТЫ ↗</a>
   `;
   switchBar.querySelector('[data-tr-mode="yt"]')?.addEventListener('click', () => mountYoutubeFacade(true));
-  switchBar.querySelector('[data-tr-mode="mp4"]')?.addEventListener('click', () => mountMp4Fallback());
 
   outer.append(wrap, switchBar);
   el.replaceWith(outer);

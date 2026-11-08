@@ -259,8 +259,8 @@ function switchMode(m) {
     startedAt = Date.now();
     $('hero').classList.add('is-started');
     $('enterBox').classList.add('is-hidden');
-    const sv = $('splashVideo');
-    if (sv) { sv.pause(); sv.muted = true; }
+    lobbyYtCmd('pauseVideo');
+    lobbyYtCmd('mute');
   }
   if (mode === 'tap') levelIntro(); else nightIntro();
 }
@@ -284,9 +284,19 @@ function hudInfo() {
 /* Кинематографическая виньетка и сканлайны уже отрисованы аппаратным CSS-слоем .hero::after (0 нагрузки на Canvas 2D!) */
 function drawCinemaPost() {}
 
-/* ---------- ПЕРЕД СТАРТОМ ИГРЫ: НА ЗАДНЕМ ФОНЕ ИГРАЕТ ТРЕЙЛЕР И ИДУТ ТИТРЫ С ПРАВИЛАМИ ИГРЫ, А НА ПЕРЕДНЕМ ФОНЕ — РЕАЛИСТИЧНЫЕ БОЧКИ С ОПОЯСЫВАЮЩИМИ ИМЕНАМИ АКТЁРОВ ---------- */
+/* ---------- ПЕРЕД СТАРТОМ ИГРЫ: НА ЗАДНЕМ ФОНЕ ИГРАЕТ YOUTUBE-ТРЕЙЛЕР И ИДУТ ТИТРЫ С ПРАВИЛАМИ ИГРЫ, А НА ПЕРЕДНЕМ ФОНЕ — РЕАЛИСТИЧНЫЕ БОЧКИ С ОПОЯСЫВАЮЩИМИ ИМЕНАМИ АКТЁРОВ ---------- */
 const lobbyPosterImg = new Image();
 lobbyPosterImg.src = 'photo_2026-11-08_00-00-14.jpg';
+
+let lobbyYtMuted = true;
+let lastYtRectKey = '';
+function lobbyYtCmd(func, args = []) {
+  const ifr = $('lobbyYtIframe');
+  if (!ifr || !ifr.contentWindow) return;
+  try {
+    ifr.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args }), '*');
+  } catch { /* ignore */ }
+}
 
 const LOBBY_CREDITS_LINES = [
   { kind: 'head', txt: '🎬 БОЧКА (BARREL) · В КИНО С 17 ДЕКАБРЯ 2026' },
@@ -395,10 +405,7 @@ function triggerLobbyBarrelKnock(idx, isRub = false) {
   if (b.hasHand || b.hits % 2 === 0) {
     b.handT = 1.85;
   }
-  const sv = $('splashVideo');
-  if (sv && sv.paused && preGameLobby.screenMode === 'trailer') {
-    sv.play().catch(() => {});
-  }
+  lobbyYtCmd('playVideo');
   audio.startAudio();
   if (isRub) {
     audio.knockTone(idx % 3, 0.55);
@@ -569,17 +576,15 @@ function hitPreGameLobby(x, y, isRub = false) {
   if (!isRub && preGameLobby.screenRect) {
     const sr = preGameLobby.screenRect;
     if (x >= sr.x && x <= sr.x + sr.w && y >= sr.y && y <= sr.y + 26) {
-      const sv = $('splashVideo');
       if (preGameLobby.screenMode === 'trailer') {
         preGameLobby.screenMode = 'credits';
         preGameLobby.creditsT = 0;
-        if (sv) sv.pause();
+        lobbyYtCmd('pauseVideo');
       } else {
         preGameLobby.screenMode = 'trailer';
-        if (sv) {
-          sv.currentTime = 0;
-          sv.play().catch(() => {});
-        }
+        preGameLobby.trailerT = 0;
+        lobbyYtCmd('seekTo', [0, true]);
+        lobbyYtCmd('playVideo');
       }
       audio.coin(1.4);
       return true;
@@ -597,11 +602,40 @@ function drawLobbyBackgroundTrailerAndCredits(c, v, dt = 0.016) {
   const scrY = Math.round(v.y + v.h * (narrow ? 0.20 : 0.14));
   preGameLobby.screenRect = { x: scrX, y: scrY, w: scrW, h: scrH };
 
-  const sv = $('splashVideo');
-  /* Когда заканчивается трейлер — автоматически включаются бегущие титры с правилами игры! */
-  if (preGameLobby.screenMode === 'trailer' && sv && sv.ended) {
-    preGameLobby.screenMode = 'credits';
-    preGameLobby.creditsT = 0;
+  /* Позиционируем встроенный YouTube-плеер ровно в окно киноэкрана за бочками (16:9 cover без чёрных полос по бокам!) */
+  const ytWrap = $('lobbyYtWrap');
+  if (ytWrap) {
+    const cssL = Math.round(view.ox + scrX * view.s);
+    const cssT = Math.round(view.oy + (scrY + 20) * view.s);
+    const cssW = Math.round(scrW * view.s);
+    const cssH = Math.round((scrH - 20) * view.s);
+    const rk = `${cssL},${cssT},${cssW},${cssH},${preGameLobby.screenMode}`;
+    if (rk !== lastYtRectKey) {
+      lastYtRectKey = rk;
+      ytWrap.style.left = `${cssL}px`;
+      ytWrap.style.top = `${cssT}px`;
+      ytWrap.style.width = `${cssW}px`;
+      ytWrap.style.height = `${cssH}px`;
+      ytWrap.classList.toggle('is-credits', preGameLobby.screenMode !== 'trailer');
+      const ytIfr = $('lobbyYtIframe');
+      if (ytIfr) {
+        const ifrW = Math.ceil(Math.max(cssW, cssH * (16 / 9)) * 1.08);
+        const ifrH = Math.ceil(Math.max(cssH, cssW * (9 / 16)) * 1.08);
+        ytIfr.style.width = `${ifrW}px`;
+        ytIfr.style.height = `${ifrH}px`;
+      }
+    }
+  }
+
+  /* Когда заканчивается 90-секундный трейлер — автоматически включаются бегущие титры с правилами игры! */
+  if (preGameLobby.screenMode === 'trailer') {
+    preGameLobby.trailerT = (preGameLobby.trailerT || 0) + dt;
+    if (preGameLobby.trailerT >= 91) {
+      preGameLobby.screenMode = 'credits';
+      preGameLobby.creditsT = 0;
+      preGameLobby.trailerT = 0;
+      lobbyYtCmd('pauseVideo');
+    }
   }
 
   c.save();
@@ -650,25 +684,9 @@ function drawLobbyBackgroundTrailerAndCredits(c, v, dt = 0.016) {
   c.clip();
 
   if (preGameLobby.screenMode === 'trailer') {
-    /* ФАЗА 1: ИГРАЕТ ЧИСТЫЙ ТРЕЙЛЕР ФИЛЬМА НА ЭКРАНЕ ЗА БОЧКАМИ (без текста правил поверх видео!) */
-    if (sv && sv.readyState >= 2 && sv.videoWidth > 0) {
-      if (sv.paused && !sv.ended) sv.play().catch(() => {});
-      const vw = sv.videoWidth;
-      const vh = sv.videoHeight;
-      const scale = Math.max(scrW / vw, scrH / vh);
-      const dw = vw * scale;
-      const dh = vh * scale;
-      const dx = scrX + (scrW - dw) * 0.5;
-      const dy = scrY + (scrH - dh) * 0.5;
-      c.drawImage(sv, dx, dy, dw, dh);
-    } else if (lobbyPosterImg.complete && lobbyPosterImg.naturalWidth > 0) {
-      const iw = lobbyPosterImg.naturalWidth;
-      const ih = lobbyPosterImg.naturalHeight;
-      const scale = Math.max(scrW / iw, scrH / ih);
-      const dw = iw * scale;
-      const dh = ih * scale;
-      c.drawImage(lobbyPosterImg, scrX + (scrW - dw) * 0.5, scrY + (scrH - dh) * 0.5, dw, dh);
-    }
+    /* ФАЗА 1: Прозрачное окно в холсте — сквозь него играет настоящий YouTube-трейлер (#lobbyYtIframe на z-index: 1),
+       а поверх этого окна на холсте (z-index: 2) рисуются 6 бочек и вылезающие из них спрайт-персонажи! */
+    c.clearRect(scrX, scrY + 20, scrW, scrH - 20);
   } else {
     /* ФАЗА 2: КОГДА ЗАКОНЧИЛСЯ ТРЕЙЛЕР — ПО ЭКРАНУ ЗА БОЧКАМИ ИДУТ КИНОТИТРЫ С ПРАВИЛАМИ ИГРЫ! */
     preGameLobby.creditsT += dt;
@@ -701,8 +719,6 @@ function drawLobbyBackgroundTrailerAndCredits(c, v, dt = 0.016) {
       const edgeAlpha = Math.max(0, Math.min(1, Math.min(distTop / 24, distBot / 24)));
       c.save();
       c.globalAlpha = edgeAlpha;
-      c.shadowColor = 'rgba(0, 0, 0, 0.95)';
-      c.shadowBlur = 4;
 
       if (item.kind === 'head') {
         c.font = `900 ${narrow ? 9.5 : 11.5}px "JetBrains Mono", monospace`;
@@ -723,14 +739,13 @@ function drawLobbyBackgroundTrailerAndCredits(c, v, dt = 0.016) {
       c.restore();
     });
 
-    /* Когда титры с правилами дошли до конца — снова запускаем трейлер */
+    /* Когда титры с правилами дошли до конца — снова запускаем YouTube-трейлер */
     if (scrollOffset >= totalBlockH) {
       preGameLobby.screenMode = 'trailer';
       preGameLobby.creditsT = 0;
-      if (sv) {
-        sv.currentTime = 0;
-        sv.play().catch(() => {});
-      }
+      preGameLobby.trailerT = 0;
+      lobbyYtCmd('seekTo', [0, true]);
+      lobbyYtCmd('playVideo');
     }
   }
 
@@ -1214,8 +1229,8 @@ function boot() {
   document.querySelectorAll('#godModeBar [data-god-lvl]').forEach((btn) => {
     btn.onclick = () => {
       const lvl = Number(btn.dataset.godLvl) || 1;
-      const svEl = $('splashVideo');
-      if (svEl) { svEl.pause(); svEl.muted = true; }
+      lobbyYtCmd('pauseVideo');
+      lobbyYtCmd('mute');
       closeModal();
       audio.startAudio();
       started = true;
@@ -1345,20 +1360,16 @@ function boot() {
       );
     };
   }
-  const svInit = $('splashVideo');
-  if (svInit) {
-    svInit.play().catch(() => {});
-  }
   if ($('btnSplashMute')) {
     $('btnSplashMute').onclick = () => {
-      const sv = $('splashVideo');
-      if (!sv) return;
-      sv.muted = !sv.muted;
-      if (!sv.muted) {
-        sv.volume = 0.85;
-        sv.play().catch(() => {});
+      lobbyYtMuted = !lobbyYtMuted;
+      if (!lobbyYtMuted) {
+        lobbyYtCmd('unMute');
+        lobbyYtCmd('setVolume', [85]);
+        lobbyYtCmd('playVideo');
         $('btnSplashMute').textContent = '🔊 ЗВУК ТРЕЙЛЕРА: ВКЛ';
       } else {
+        lobbyYtCmd('mute');
         $('btnSplashMute').textContent = '🔇 ЗВУК ТРЕЙЛЕРА: ВЫКЛ';
       }
     };
@@ -1371,13 +1382,12 @@ function boot() {
       $('hero').classList.remove('is-started', 'is-playing');
       $('enterBox').classList.remove('is-hidden');
       $('btnEnter').textContent = t('enter');
-      const sv = $('splashVideo');
-      if (sv) sv.play().catch(() => {});
+      lobbyYtCmd('playVideo');
     };
   }
   $('btnEnter').onclick = () => {
-    const sv = $('splashVideo');
-    if (sv) { sv.pause(); sv.muted = true; }
+    lobbyYtCmd('pauseVideo');
+    lobbyYtCmd('mute');
     audio.startAudio(); started = true; startedAt = Date.now();
     $('hero').classList.add('is-started');
     $('enterBox').classList.add('is-hidden');

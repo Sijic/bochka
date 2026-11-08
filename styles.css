@@ -33,7 +33,12 @@ body { margin: 0; background: var(--bg); color: var(--chalk); font-family: var(-
 
 /* ---------- hero ---------- */
 .hero { position: relative; height: 100vh; height: 100dvh; min-height: 540px; overflow: hidden; background: var(--bg); }
-#gameCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; image-rendering: pixelated; cursor: crosshair; }
+.lobby-yt-wrap { position: absolute; z-index: 1; pointer-events: none; overflow: hidden; background: #04060A; }
+.lobby-yt-wrap iframe { position: absolute; top: 50%; left: 50%; width: 100%; height: 100%; border: 0; display: block; pointer-events: none; transform: translate(-50%, -50%); }
+.hero.is-started .lobby-yt-wrap,
+.hero.is-playing .lobby-yt-wrap,
+.lobby-yt-wrap.is-credits { opacity: 0; visibility: hidden; }
+#gameCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; image-rendering: pixelated; cursor: crosshair; z-index: 2; }
 .hero::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0,0,0,0.08) 0 1px, transparent 1px 3px), radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(8,9,11,0.7) 100%); z-index: 2; }
 .hero__copy { position: absolute; top: 64px; left: 28px; max-width: min(420px, 44vw); pointer-events: none; z-index: 3; transition: opacity 0.35s ease, transform 0.35s ease; }
 .hero__tag { font-size: 9px; letter-spacing: 0.24em; color: var(--steel); margin-bottom: 6px; }

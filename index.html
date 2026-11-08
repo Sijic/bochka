@@ -16,7 +16,7 @@
   <link rel="preload" as="image" href="assets/keyed/boy.webp" type="image/webp">
   <link rel="preload" as="image" href="assets/keyed/girl.webp" type="image/webp">
   <link rel="preload" as="image" href="assets/keyed/father.webp" type="image/webp">
-  <link rel="stylesheet" href="./styles.css?v=47">
+  <link rel="stylesheet" href="./styles.css?v=49">
   <script src="https://telegram.org/js/telegram-web-app.js" async></script>
 </head>
 <body>
@@ -57,6 +57,15 @@
   </div>
 
   <section class="hero" id="hero">
+    <div class="lobby-yt-wrap" id="lobbyYtWrap">
+      <iframe
+        id="lobbyYtIframe"
+        src="https://www.youtube.com/embed/EZFDcXeLTzQ?autoplay=1&mute=1&controls=0&rel=0&modestbranding=1&playsinline=1&enablejsapi=1&loop=1&playlist=EZFDcXeLTzQ"
+        title="БОЧКА — Официальный трейлер (YouTube)"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowfullscreen
+      ></iframe>
+    </div>
     <canvas id="gameCanvas"></canvas>
 
     <div class="hero__copy">
@@ -105,7 +114,6 @@
     </div>
 
     <div class="hero__enter" id="enterBox">
-      <video id="splashVideo" src="assets/trailer.mp4" autoplay muted playsinline preload="auto" style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px"></video>
       <div class="lobby-dock">
         <div class="lobby-corner lobby-corner--left" id="btnLobbyPoster" title="Нажми, чтобы открыть постер и описание фильма">
           <img src="photo_2026-11-08_00-00-26.jpg" alt="Постер фильма БОЧКА" class="lobby-poster-thumb">
@@ -406,6 +414,6 @@
 
   <div class="screamer is-hidden" id="screamer"><div class="screamer__role" id="screamerRole"></div><canvas id="screamerCanvas" width="640" height="640"></canvas><div class="screamer__txt" id="screamerTxt"></div></div>
 
-  <script type="module" src="./main.js?v=47"></script>
+  <script type="module" src="./main.js?v=49"></script>
 </body>
 </html>

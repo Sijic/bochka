@@ -19,18 +19,16 @@ export const CONFIG = {
   privacyUrl: '',
   rulesUrl: '',
   contestEnabled: false,
-  /* Официальный YouTube-трейлер (делает сайт лёгким и быстрым) + локальные видеофайлы как резерв:
+  /* Официальный YouTube-трейлер (встроен с YouTube без загрузки локального видеофайла трейлера!):
      - YouTube: https://youtu.be/EZFDcXeLTzQ?si=-NIU0mFyayaYjHnf
-     - assets/trailer.mp4 (Режиссёрский трейлер Алексея Звонцова)
-     - Barrel_MP_TRL_V2.mp4 (Полный официальный трейлер V2)
      - hf_20261017_093522_42c309d3-daf2-486e-9539-a8dcb422167c.mp4 (Видео от режиссёра / со съёмок) */
   trailer: {
     youtubeId: 'EZFDcXeLTzQ',
     youtubeUrl: 'https://youtu.be/EZFDcXeLTzQ?si=-NIU0mFyayaYjHnf',
     posterWide: 'photo_2026-11-08_00-00-14.jpg',
     posterVert: 'photo_2026-11-08_00-00-26.jpg',
-    mp4: 'assets/trailer.mp4',
-    fullMp4: 'Barrel_MP_TRL_V2_web.mp4',
+    mp4: '',
+    fullMp4: '',
     directorMp4: 'hf_20261017_093522_42c309d3-daf2-486e-9539-a8dcb422167c.mp4',
   },
   socials: {
@@ -43,8 +41,8 @@ export const CONFIG = {
 
 export const MEDIA = {
   crew1: { title: 'crew', type: 'video', url: '', fallbackAsset: 'hf_20261017_093522_42c309d3-daf2-486e-9539-a8dcb422167c.mp4', storagePath: '', level: 1 },
-  crew2: { title: 'crew', type: 'video', url: '', fallbackAsset: 'assets/trailer.mp4', storagePath: '', level: 2 },
-  crew3: { title: 'crew', type: 'video', url: '', fallbackAsset: 'Barrel_MP_TRL_V2_web.mp4', storagePath: '', level: 3 },
+  crew2: { title: 'crew', type: 'video', youtubeId: 'EZFDcXeLTzQ', url: '', fallbackAsset: '', storagePath: '', level: 2 },
+  crew3: { title: 'crew', type: 'video', youtubeId: 'EZFDcXeLTzQ', url: '', fallbackAsset: '', storagePath: '', level: 3 },
   poster: { title: 'mediaPoster', type: 'art', art: 'poster', url: 'photo_2026-11-08_00-00-26.jpg', score: 2000 },
   cast: {
     title: 'mediaCast',
@@ -68,7 +66,7 @@ export const MEDIA = {
     score: 10000,
   },
   bts: { title: 'mediaBts', type: 'video', youtubeId: '', url: 'hf_20261017_093522_42c309d3-daf2-486e-9539-a8dcb422167c.mp4', storagePath: '', score: 250000 },
-  interview: { title: 'mediaInterview', type: 'video', youtubeId: '', url: 'Barrel_MP_TRL_V2_web.mp4', storagePath: '', score: 1000000 },
+  interview: { title: 'mediaInterview', type: 'video', youtubeId: 'EZFDcXeLTzQ', url: '', storagePath: '', score: 1000000 },
   secret: { title: 'mediaSecret', type: 'video', url: '', fallbackAsset: 'hf_20261017_093522_42c309d3-daf2-486e-9539-a8dcb422167c.mp4', storagePath: '', bonus: true },
   streakPoster: { title: 'mediaStreak', type: 'art', art: 'poster', url: 'assets/images_3.jpg', streak: true },
 };
