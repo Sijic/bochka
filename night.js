@@ -2449,7 +2449,7 @@ export class Night {
 
     const narrow = v.w < 620;
     const cx = v.x + v.w / 2;
-    const topOffset = narrow ? (S.godMode ? 168 : 124) : (S.godMode ? 68 : 48);
+    const topOffset = narrow ? (S.godMode ? 208 : 158) : (S.godMode ? 68 : 48);
     const barW = Math.min(740, v.w - 16);
     ctx.save();
     const activeBanner = (this.msgT > 0 && this.msg) ? this.msg : this.currentObjectiveText();
