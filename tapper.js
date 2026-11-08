@@ -3809,23 +3809,23 @@ export class Tapper {
     ctx.fill();
     ctx.restore();
 
-    /* 4. СТЕНА НА КРЫШЕ ЗАВОДА с надписью краской: «НА НЕБЕ ТОЛЬКО И РАЗГОВОРОВ, ЧТО О МОРЕ…» */
-    const wallW = Math.min(v.w * (narrow ? 0.94 : 0.74), 640);
-    const wallH = narrow ? 66 : 84;
+    /* 4. СТЕНА НА КРЫШЕ ЗАВОДА с надписью краской: «НА НЕБЕ ТОЛЬКО И РАЗГОВОРОВ, ЧТО О МОРЕ…» (компактная, не закрывает небо и закат!) */
+    const wallW = Math.min(v.w * (narrow ? 0.92 : 0.64), 560);
+    const wallH = narrow ? 48 : 54;
     const wallX = v.x + (v.w - wallW) / 2;
-    const wallY = v.y + (narrow ? Math.round(v.h * 0.205) : 64);
+    const wallY = v.y + (narrow ? Math.round(v.h * 0.165) : 52);
     ctx.save();
     /* Боковые стальные фермы-опоры, удерживающие стену на крыше завода (не закрывают солнце и море по центру!) */
-    ctx.fillStyle = 'rgba(20, 26, 34, 0.88)';
+    ctx.fillStyle = 'rgba(20, 26, 34, 0.82)';
     ctx.strokeStyle = '#3E4A59';
-    ctx.lineWidth = 1.8;
-    ctx.fillRect(wallX + 10, wallY + wallH, 9, Math.max(12, roofDeckY - (wallY + wallH)));
-    ctx.fillRect(wallX + wallW - 19, wallY + wallH, 9, Math.max(12, roofDeckY - (wallY + wallH)));
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(wallX + 10, wallY + wallH, 7, Math.max(12, roofDeckY - (wallY + wallH)));
+    ctx.fillRect(wallX + wallW - 17, wallY + wallH, 7, Math.max(12, roofDeckY - (wallY + wallH)));
 
     /* Кирпично-бетонная фактура стены крыши */
     if (sheets.factory) {
       const fw = sheets.factory.width, fh = sheets.factory.height;
-      ctx.globalAlpha = 0.85;
+      ctx.globalAlpha = 0.82;
       ctx.drawImage(
         sheets.factory,
         Math.floor(fw * 0.08), Math.floor(fh * 0.38),
@@ -3836,40 +3836,22 @@ export class Tapper {
     }
     ctx.fillStyle = 'rgba(14,17,22,0.82)';
     ctx.fillRect(wallX, wallY, wallW, wallH);
-    ctx.strokeStyle = 'rgba(212,168,67,0.82)';
-    ctx.lineWidth = 1.8;
+    ctx.strokeStyle = 'rgba(212,168,67,0.75)';
+    ctx.lineWidth = 1.4;
     ctx.strokeRect(wallX, wallY, wallW, wallH);
-
-    /* Трафаретная табличка «КРЫША ЗАВОДА · ВИД НА МОРЕ» в верхней кромке стены */
-    const roofTag = '🏭 КРЫША ЗАВОДА · ВИД НА МОРЕ · 🔒 БЕЗ КАРТ УСИЛЕНИЯ';
-    ctx.font = narrow ? 'bold 7.5px "JetBrains Mono", monospace' : 'bold 9.5px "JetBrains Mono", monospace';
-    const rtw = ctx.measureText(roofTag).width + 16;
-    ctx.fillStyle = 'rgba(18,24,32,0.95)';
-    ctx.fillRect(wallX + (wallW - rtw) / 2, wallY - 9, rtw, 15);
-    ctx.strokeStyle = '#64DFDF';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(wallX + (wallW - rtw) / 2, wallY - 9, rtw, 15);
-    ctx.fillStyle = '#64DFDF';
-    ctx.textAlign = 'center';
-    ctx.fillText(roofTag, wallX + wallW / 2, wallY + 2);
 
     /* Надпись белой/охристой краской на стене крыши с потёками краски */
     ctx.fillStyle = '#ECE4D2';
     ctx.font = narrow
-      ? 'bold 14px "Bebas Neue", "Impact", "JetBrains Mono", sans-serif'
-      : 'bold 20px "Bebas Neue", "Impact", "JetBrains Mono", sans-serif';
+      ? 'bold 12.5px "Bebas Neue", "Impact", "JetBrains Mono", sans-serif'
+      : 'bold 17px "Bebas Neue", "Impact", "JetBrains Mono", sans-serif';
     ctx.textAlign = 'center';
     ctx.shadowColor = 'rgba(0,0,0,0.92)';
-    ctx.shadowBlur = 6;
-    ctx.fillText(t('oceanWallQuote'), wallX + wallW / 2, wallY + (narrow ? 31 : 38), wallW - 16);
-    ctx.font = narrow ? '8px "JetBrains Mono", monospace' : '10.5px "JetBrains Mono", monospace';
+    ctx.shadowBlur = 5;
+    ctx.fillText(t('oceanWallQuote'), wallX + wallW / 2, wallY + (narrow ? 22 : 25), wallW - 16);
+    ctx.font = narrow ? '7.5px "JetBrains Mono", monospace' : '9.5px "JetBrains Mono", monospace';
     ctx.fillStyle = 'rgba(212,168,67,0.94)';
-    ctx.fillText(t('oceanWallSub'), wallX + wallW / 2, wallY + (narrow ? 51 : 60), wallW - 16);
-    /* Потёки краски от букв на стене */
-    ctx.fillStyle = 'rgba(236,228,210,0.45)';
-    [-160, -85, -12, 64, 142, 195].forEach((dx, i) => {
-      ctx.fillRect(wallX + wallW / 2 + dx, wallY + (narrow ? 36 : 42), 2, 7 + (i % 3) * 4);
-    });
+    ctx.fillText(t('oceanWallSub'), wallX + wallW / 2, wallY + (narrow ? 38 : 43), wallW - 16);
     ctx.restore();
 
     /* 5. СТАЛЬНОЙ ПОМОСТ НА КРЫШЕ ЗАВОДА (на котором стоят все бочки и сидит герой!) */
@@ -3902,7 +3884,7 @@ export class Tapper {
       }
     });
 
-    /* 7. Качающаяся на стальном помосте крыши бочка с высунутой рукой и надписью «ТИЛЬ» */
+    /* 7. Качающаяся на стальном помосте крыши бочка с высунутой рукой и надписью «ТИЛЬ» (БЕЗ квадратной рамки вокруг неё!) */
     const mainB = this.barrels[0];
     if (mainB) {
       const bx = mainB.x;
@@ -3933,103 +3915,90 @@ export class Tapper {
       } else if (sh) {
         this.drawBarrelSolid(ctx, sh, 'fallen', 0, bh * 0.38, bh, 'fallen', 'ТИЛЬ');
       }
-
-      /* Подсветка качающейся бочки, когда стучать МОЖНО */
-      if (this.oceanState === 'sea') {
-        ctx.strokeStyle = `rgba(212,168,67,${0.45 + Math.sin(this.t * 6) * 0.25})`;
-        ctx.lineWidth = 2.5;
-        ctx.strokeRect(-bh * 0.72, -bh * 0.52, bh * 1.44, bh * 1.02);
-      } else if (this.oceanState === 'turned') {
-        ctx.strokeStyle = `rgba(212,56,52,${0.65 + Math.sin(this.t * 14) * 0.3})`;
-        ctx.lineWidth = 3;
-        ctx.strokeRect(-bh * 0.72, -bh * 0.52, bh * 1.44, bh * 1.02);
-      }
       ctx.restore();
     }
 
-    /* 8. Сидящий на стальном помосте крыши завода герой из «Достучаться до небес» (смотрит на море и поворачивается к бочке!) */
+    /* 8. Сидящий на стальном помосте крыши завода герой из «Достучаться до небес»:
+       - когда 'sea': сидит спиной и смотрит на море (sittingMan);
+       - когда 'turning': поворачивает голову и плечо вполоборота (sittingManTurning);
+       - когда 'turned': повернулся к нам лицом в пиджаке и белом джемпере и смотрит на бочку «ТИЛЬ» (sittingManTurned)! */
     const manX = v.x + v.w * 0.30;
     const manY = roofTierY - 2;
     const manH = bh * 1.24;
     drawShadow(ctx, manX, manY, manH * 0.38);
 
     if (this.oceanState === 'turned' && mainB) {
-      /* Красный луч взгляда прямо на качающуюся бочку «ТИЛЬ» — СТУЧАТЬ НЕЛЬЗЯ ВООБЩЕ! */
-      drawCone(ctx, manX + 18, manY - manH * 0.76, mainB.x, mainB.y - bh * 0.38, '212,58,52', 0.42, 74);
+      /* Луч взгляда от лица повернувшегося героя прямо на качающуюся бочку «ТИЛЬ» */
+      drawCone(ctx, manX + 14, manY - manH * 0.78, mainB.x, mainB.y - bh * 0.38, '212,58,52', 0.34, 62);
     }
 
     if (ocSp) {
-      const [sx, sy, sw, shRect] = oceanRect(ocSp, 'sittingMan');
+      const manFrameKey = (this.oceanState === 'turned' && sheets.oceanSprites)
+        ? 'sittingManTurned'
+        : (this.oceanState === 'turning' && sheets.oceanSprites)
+          ? 'sittingManTurning'
+          : 'sittingMan';
+      const [sx, sy, sw, shRect] = oceanRect(ocSp, manFrameKey);
       const drawW = manH * (sw / shRect);
       ctx.save();
       ctx.translate(manX, manY);
       if (this.oceanState === 'turning') {
-        ctx.translate(Math.sin(this.t * 28) * 3, 0);
-      } else if (this.oceanState === 'turned') {
-        /* Повернулся в сторону бочки «ТИЛЬ» */
-        ctx.scale(-1, 1);
+        ctx.translate(Math.sin(this.t * 24) * 2, 0);
       }
       ctx.drawImage(ocSp, sx, sy, sw, shRect, -drawW / 2, -manH, drawW, manH);
-
-      /* Когда он повернулся — рисуем пристальный взгляд на бочку */
-      if (this.oceanState === 'turned') {
-        ctx.fillStyle = '#FF4D4D';
-        ctx.fillRect(-14, -manH * 0.80, 5, 4);
-        ctx.fillRect(-4, -manH * 0.80, 5, 4);
-      }
       ctx.restore();
     }
 
-    /* Знак тревоги и реплика над сидящим героем */
+    /* Компактный знак внимания над головой сидящего героя только при повороте */
     if (this.oceanState !== 'sea') {
       ctx.save();
-      ctx.font = 'bold 26px "JetBrains Mono"';
+      ctx.font = 'bold 18px "JetBrains Mono"';
       ctx.textAlign = 'center';
-      ctx.fillStyle = this.oceanState === 'turned' ? '#FF4D4D' : '#D4A843';
-      ctx.fillText(this.oceanState === 'turned' ? '🚫 👁️ !' : '⚠️ ?', manX, manY - manH - 14);
+      ctx.fillStyle = this.oceanState === 'turned' ? '#FF4D4D' : '#FFD166';
+      ctx.fillText(this.oceanState === 'turned' ? '👁️ !' : '⚠️ ?', manX, manY - manH - 6);
       ctx.restore();
     }
 
     if (this.oceanSpeechT > 0 && this.oceanSpeech) {
       ctx.save();
-      ctx.font = '11px "JetBrains Mono", monospace';
-      const tw = Math.min(360, ctx.measureText(this.oceanSpeech).width + 24);
-      const bx = Math.max(v.x + tw / 2 + 10, Math.min(v.x + v.w - tw / 2 - 10, manX + 40));
-      const by = manY - manH - 42;
-      ctx.fillStyle = 'rgba(8,9,11,0.92)';
+      ctx.font = narrow ? '8.5px "JetBrains Mono", monospace' : '10px "JetBrains Mono", monospace';
+      const tw = Math.min(narrow ? 260 : 320, ctx.measureText(this.oceanSpeech).width + 18);
+      const bx = Math.max(v.x + tw / 2 + 8, Math.min(v.x + v.w - tw / 2 - 8, manX));
+      const by = manY - manH - 22;
+      ctx.fillStyle = 'rgba(8,9,11,0.90)';
       ctx.strokeStyle = this.oceanState === 'turned' ? '#FF4D4D' : '#D4A843';
-      ctx.lineWidth = 1.5;
-      ctx.fillRect(bx - tw / 2, by - 22, tw, 26);
-      ctx.strokeRect(bx - tw / 2, by - 22, tw, 26);
+      ctx.lineWidth = 1.2;
+      ctx.fillRect(bx - tw / 2, by - 17, tw, 20);
+      ctx.strokeRect(bx - tw / 2, by - 17, tw, 20);
       ctx.fillStyle = '#ECE4D2';
       ctx.textAlign = 'center';
-      ctx.fillText(this.oceanSpeech, bx, by - 5);
+      ctx.fillText(this.oceanSpeech, bx, by - 4, tw - 10);
       ctx.restore();
     }
 
-    /* 9. Индикатор статуса на кромке парапета крыши: МОЖНО СТУЧАТЬ vs ОН СМОТРИТ — СТУЧАТЬ НЕЛЬЗЯ ВООБЩЕ! */
+    /* 9. Индикатор статуса перенесён в самый низ экрана под помост (чтобы не перекрывать ни героя, ни бочку «ТИЛЬ»!) */
     ctx.save();
     const bannerTxt = this.oceanState === 'turned'
-      ? `🚫 ОН СМОТРИТ (${Math.max(0, this.oceanStateT).toFixed(1)}с) — СТУЧАТЬ НЕЛЬЗЯ ВООБЩЕ!`
+      ? `🚫 ОН ПОВЕРНУЛСЯ И СМОТРИТ (${Math.max(0, this.oceanStateT).toFixed(1)}с) — НЕ СТУЧИ!`
       : this.oceanState === 'turning'
         ? t('oceanTurnWarn')
         : t('oceanSafeHint');
-    ctx.font = narrow ? 'bold 10px "JetBrains Mono", monospace' : 'bold 12px "JetBrains Mono", monospace';
-    const bw = Math.min(v.w - 20, Math.max(290, ctx.measureText(bannerTxt).width + 26));
+    ctx.font = narrow ? 'bold 9px "JetBrains Mono", monospace' : 'bold 10.5px "JetBrains Mono", monospace';
+    const bw = Math.min(v.w - 20, Math.max(260, ctx.measureText(bannerTxt).width + 22));
     const bx = v.x + v.w / 2;
-    const by = roofDeckY - 12;
+    const by = v.y + v.h - (narrow ? 12 : 10);
     ctx.fillStyle = this.oceanState === 'turned'
-      ? 'rgba(168,28,32,0.96)'
+      ? 'rgba(168,28,32,0.95)'
       : this.oceanState === 'turning'
         ? 'rgba(180,125,32,0.95)'
-        : 'rgba(12,22,34,0.92)';
+        : 'rgba(10,18,28,0.90)';
     ctx.strokeStyle = this.oceanState === 'turned' ? '#FF6B6B' : '#D4A843';
-    ctx.lineWidth = 1.6;
-    ctx.fillRect(bx - bw / 2, by - 15, bw, 23);
-    ctx.strokeRect(bx - bw / 2, by - 15, bw, 23);
+    ctx.lineWidth = 1.4;
+    ctx.fillRect(bx - bw / 2, by - 15, bw, 20);
+    ctx.strokeRect(bx - bw / 2, by - 15, bw, 20);
     ctx.fillStyle = '#ECE4D2';
     ctx.textAlign = 'center';
-    ctx.fillText(bannerTxt, bx, by);
+    ctx.fillText(bannerTxt, bx, by - 1.5, bw - 10);
     ctx.restore();
   }
 
@@ -5059,47 +5028,42 @@ export class Tapper {
       }
     }
 
-    /* Плашка уникальной игровой механики текущего уровня + индикатор Режима Бога */
-    if (this.cfg && this.cfg.mechanicTitle) {
+    /* Плашка игровой механики уровня показывается только первые 4.2 сек старта, чтобы не загораживать экран */
+    if (this.cfg && this.cfg.mechanicTitle && this.t < 4.2) {
       ctx.save();
+      ctx.globalAlpha = Math.min(1, (4.2 - this.t) * 1.2);
       const narrow = v.w < 620;
-      const mTitle = S.godMode ? `⚡ РЕЖИМ БОГА · ${this.cfg.mechanicTitle}` : this.cfg.mechanicTitle;
-      ctx.font = narrow ? 'bold 8.5px "JetBrains Mono"' : 'bold 10px "JetBrains Mono"';
-      const mw = Math.min(v.w - 20, ctx.measureText(mTitle).width + 22);
+      const mTitle = this.cfg.mechanicTitle;
+      ctx.font = narrow ? 'bold 8.5px "JetBrains Mono"' : 'bold 9.5px "JetBrains Mono"';
+      const mw = Math.min(v.w - 20, ctx.measureText(mTitle).width + 20);
       const mx = v.x + v.w * 0.5 - mw / 2;
-      const my = v.y + (narrow ? 156 : 98);
-      ctx.fillStyle = S.godMode ? 'rgba(28,22,8,0.92)' : 'rgba(9,13,18,0.88)';
-      ctx.fillRect(mx, my, mw, 19);
-      ctx.strokeStyle = S.godMode ? '#FFD166' : '#D4A843';
-      ctx.lineWidth = 1.2;
-      ctx.strokeRect(mx, my, mw, 19);
-      ctx.fillStyle = S.godMode ? '#FFD166' : '#ECE4D2';
+      const my = v.y + v.h - 24;
+      ctx.fillStyle = 'rgba(9,13,18,0.88)';
+      ctx.fillRect(mx, my, mw, 18);
+      ctx.strokeStyle = '#D4A843';
+      ctx.lineWidth = 1.1;
+      ctx.strokeRect(mx, my, mw, 18);
+      ctx.fillStyle = '#ECE4D2';
       ctx.textAlign = 'center';
-      ctx.fillText(mTitle, v.x + v.w * 0.5, my + 13, mw - 12);
+      ctx.fillText(mTitle, v.x + v.w * 0.5, my + 12.5, mw - 12);
       ctx.restore();
     }
 
-    /* Громкоговоритель под потолком цеха (во время эфира аудио-пранка) + плашка активных навыков */
+    /* Громкоговоритель цеха (во время эфира аудио-пранка) — компактно снизу, не перекрывает персонажей */
     if (this.loudspeakerBannerT > 0) {
       ctx.save();
       const spX = v.x + v.w * 0.5;
-      const spY = v.y + (v.w < 620 ? 182 : 124);
-      const boxW = Math.min(v.w - 24, 380);
+      const spY = v.y + v.h - 26;
+      const boxW = Math.min(v.w - 24, 360);
       ctx.fillStyle = 'rgba(12,15,20,0.92)';
       ctx.strokeStyle = '#F4A261';
-      ctx.lineWidth = 1.6;
-      ctx.fillRect(spX - boxW / 2, spY, boxW, 24);
-      ctx.strokeRect(spX - boxW / 2, spY, boxW, 24);
-      /* Звуковые волны от рупора громкоговорителя */
-      const waveR = 8 + ((this.t * 28) % 18);
-      ctx.strokeStyle = `rgba(244,162,97,${0.75 - (waveR - 8) / 22})`;
-      ctx.beginPath();
-      ctx.arc(spX - boxW / 2 + 16, spY + 12, waveR, -0.6, 0.6);
-      ctx.stroke();
+      ctx.lineWidth = 1.4;
+      ctx.fillRect(spX - boxW / 2, spY, boxW, 20);
+      ctx.strokeRect(spX - boxW / 2, spY, boxW, 20);
       ctx.fillStyle = '#F4A261';
-      ctx.font = v.w < 620 ? 'bold 8.5px "JetBrains Mono"' : 'bold 10px "JetBrains Mono"';
+      ctx.font = v.w < 620 ? 'bold 8px "JetBrains Mono"' : 'bold 9.5px "JetBrains Mono"';
       ctx.textAlign = 'center';
-      ctx.fillText(`📢 ГРОМКОГОВОРИТЕЛЬ ЦЕХА: ${this.loudspeakerLabel}`, spX, spY + 15, boxW - 18);
+      ctx.fillText(`📢 ГРОМКОГОВОРИТЕЛЬ ЦЕХА: ${this.loudspeakerLabel}`, spX, spY + 13.5, boxW - 16);
       ctx.restore();
     }
 
@@ -5161,41 +5125,6 @@ export class Tapper {
         ctx.fillText(sf % 2 === 0 ? '❄️' : '✦', sfx, sfy);
       }
       ctx.restore();
-    }
-
-    if (this.skills) {
-      const activeList = Object.entries(this.skills).filter(([, sec]) => sec > 0.05);
-      if (activeList.length > 0) {
-        ctx.save();
-        const namesMap = {
-          fragile: '🔨 ХРУПКАЯ СТАЛЬ',
-          shrink: '🛢️ ОДЕТЬ БОЧКУ (ТОЛЬКО НОГИ)',
-          freeze: '❄️👑 АБСОЛЮТНАЯ ЗАМОРОЗКА ★',
-          stealth: '👻 ФОНАРЬ МИГАЕТ И ГАСНЕТ',
-          distract: '📢 ТОЧКА ПРАНКА (ВСЕ БЕГУТ)',
-          overcharge: '🔥 ОГОНЬ ИЗ БОЧКИ',
-          jackpot: '🎁 ВЫБРАТЬ ПРИЗОВЫЕ БОЧКИ',
-          xray: '👁️ РЕНТГЕН',
-          oxygen: '💨 ЩИТ O₂',
-          magnet: '🧲 МАГНИТ',
-        };
-        let pillY = v.y + (v.w < 620 ? 210 : 152);
-        activeList.forEach(([k, sec]) => {
-          const txt = `${namesMap[k] || k.toUpperCase()}: ${sec.toFixed(1)}с`;
-          ctx.font = 'bold 9.5px "JetBrains Mono"';
-          const pw = ctx.measureText(txt).width + 16;
-          const px = v.x + v.w * 0.5 - pw / 2;
-          ctx.fillStyle = 'rgba(10,14,20,0.9)';
-          ctx.fillRect(px, pillY, pw, 18);
-          ctx.strokeStyle = '#64DFDF';
-          ctx.strokeRect(px, pillY, pw, 18);
-          ctx.fillStyle = '#ECE4D2';
-          ctx.textAlign = 'center';
-          ctx.fillText(txt, v.x + v.w * 0.5, pillY + 12.5);
-          pillY += 21;
-        });
-        ctx.restore();
-      }
     }
 
     /* Отрисовка лучей и ударных волн при применении навыка из руки на персонажа или бочку */

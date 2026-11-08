@@ -260,6 +260,13 @@ export function renderHudSkillsBar(force = false) {
   const curE = Math.floor(S.energy || 0);
   const hs = S.handSkillState;
   const isOceanLvl = (S.level || 1) === 7;
+  if (isOceanLvl) {
+    bar.innerHTML = '';
+    bar.style.display = 'none';
+    lastHudSkillSig = 'ocean-hidden';
+    return;
+  }
+  bar.style.display = 'flex';
   const hsSig = hs ? `${hs.cardId}:${hs.state}:${Math.ceil(hs.timeLeft || 0)}` : 'none';
   const sig = `${eq.join(',')}|${Math.floor(curE / 10)}|${hsSig}|${isOceanLvl}|${lang}`;
   if (!force && sig === lastHudSkillSig) return;

@@ -21,7 +21,7 @@ body { margin: 0; background: var(--bg); color: var(--chalk); font-family: var(-
 .is-hidden { display: none !important; }
 
 /* ---------- header ---------- */
-.top { position: fixed; top: 0; left: 0; right: 0; height: 50px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; z-index: 40; background: linear-gradient(180deg, rgba(8,9,11,0.92), rgba(8,9,11,0.35)); border-bottom: 1px solid rgba(140,155,174,0.1); pointer-events: none; }
+.top { position: fixed; top: 0; left: 0; right: 0; height: 42px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; z-index: 40; background: linear-gradient(180deg, rgba(8,9,11,0.92), rgba(8,9,11,0.35)); border-bottom: 1px solid rgba(140,155,174,0.1); pointer-events: none; }
 .top > * { pointer-events: auto; }
 .top__logo { font-family: var(--font-display); font-size: 18px; letter-spacing: 0.32em; color: var(--chalk); text-decoration: none; text-shadow: 0 0 18px rgba(230,232,234,0.25); }
 .top__nav { display: flex; gap: 20px; }
@@ -49,9 +49,10 @@ body { margin: 0; background: var(--bg); color: var(--chalk); font-family: var(-
 .hero__sub { font-size: clamp(12px, 1.4vw, 16px); letter-spacing: 0.14em; color: var(--chalk); margin: 0 0 6px; }
 .hero__sub2 { font-size: 11px; letter-spacing: 0.1em; color: var(--steel); margin: 0; }
 .hero__tc { position: absolute; bottom: 10px; right: 16px; font-size: 9px; letter-spacing: 0.14em; color: var(--iron); z-index: 3; pointer-events: none; opacity: 0.75; }
-.hero__actions { position: absolute; top: 58px; right: 16px; z-index: 8; display: flex; align-items: center; gap: 6px; }
-.hero__qbtn { padding: 6px 10px; font-size: 9px; background: rgba(8,9,11,0.92); border-color: rgba(212,168,67,0.55); color: var(--chalk); }
-.hero__qbtn--icon { padding: 6px 10px; color: var(--gold); border-color: var(--gold); font-size: 11px; }
+.hero__actions { position: absolute; top: 48px; right: 16px; z-index: 8; display: flex; align-items: center; gap: 5px; }
+body.is-god-mode .hero__actions { top: 76px; }
+.hero__qbtn { padding: 4px 8px; font-size: 8.5px; background: rgba(8,9,11,0.92); border-color: rgba(212,168,67,0.55); color: var(--chalk); }
+.hero__qbtn--icon { padding: 4px 8px; color: var(--gold); border-color: var(--gold); font-size: 10px; }
 
 /* После нажатия «ВОЙТИ В ЦЕХ» названия и нижняя стрелка полностью исчезают, чтобы не мешать обзору */
 .hero.is-started .hero__copy,
@@ -72,15 +73,17 @@ body { margin: 0; background: var(--bg); color: var(--chalk); font-family: var(-
   display: none !important;
 }
 .plate--bl {
-  top: 58px;
+  top: 48px;
   left: 16px;
-  max-width: calc(100vw - 290px);
-  padding: 5px 12px;
+  max-width: calc(100vw - 300px);
+  padding: 4px 10px;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px 12px;
+  gap: 5px 10px;
 }
+body.is-god-mode .plate--bl { top: 76px; }
+body.is-god-mode .plate--br { top: 106px; }
 .plate--bl .plate__h,
 .plate--bl #hintTxt { display: none; }
 .sqs { display: flex; gap: 5px; margin: 0; align-items: center; }
@@ -227,8 +230,8 @@ body { margin: 0; background: var(--bg); color: var(--chalk); font-family: var(-
 .shop-card__meta { font-size: 10px; color: var(--steel); letter-spacing: 0.1em; }
 
 /* ---------- Панель активных боевых навыков на HUD завода ---------- */
-.hud-skills { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; width: 100%; margin-top: 2px; }
-.hud-skill-chip { display: inline-flex; align-items: center; gap: 4px; background: rgba(14, 17, 23, 0.92); border: 1px solid var(--sk-accent, var(--gold)); color: var(--chalk); font-family: var(--font-mono); font-size: 9px; padding: 3px 7px; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s; }
+.hud-skills { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; width: auto; margin-top: 0; }
+.hud-skill-chip { display: inline-flex; align-items: center; gap: 3px; background: rgba(14, 17, 23, 0.92); border: 1px solid var(--sk-accent, var(--gold)); color: var(--chalk); font-family: var(--font-mono); font-size: 8.5px; padding: 2px 6px; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s; }
 .hud-skill-chip.is-ready:hover { transform: translateY(-1px); box-shadow: 0 0 12px var(--sk-accent, var(--gold)); }
 .hud-skill-chip.is-in-hand { background: rgba(212, 168, 67, 0.24); border-color: #ECE4D2; box-shadow: 0 0 14px var(--sk-accent, var(--gold)), inset 0 0 8px var(--sk-accent, var(--gold)); transform: translateY(-1px); }
 .hud-skill-chip.is-low { opacity: 0.52; border-style: dashed; }
@@ -571,7 +574,7 @@ body.is-modal-open {
 }
 .god-bar {
   position: fixed;
-  top: calc(var(--top-h, 58px) + var(--safe-top, 0px));
+  top: calc(var(--top-h, 42px) + var(--safe-top, 0px));
   left: 0;
   right: 0;
   z-index: 65;
@@ -579,10 +582,10 @@ body.is-modal-open {
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 5px 8px;
-  background: rgba(14, 11, 5, 0.96);
-  border-bottom: 1.5px solid #FFD166;
+  gap: 3px;
+  padding: 3px 6px;
+  background: rgba(14, 11, 5, 0.95);
+  border-bottom: 1px solid #FFD166;
 }
 .god-bar__lbl {
   font-family: var(--font-mono);

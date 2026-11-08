@@ -110,6 +110,7 @@ const tapper = new Tapper({
   onTrap: () => { tgHaptic('notification', 'error'); showScreamer(t('trap'), () => lifeLost()); },
   onLose: (reason) => { tgHaptic('notification', 'error'); showScreamer(t(reason), () => lifeLost()); },
 });
+window.__BOCHKA_TAPPER__ = tapper;
 const night = new Night({
   onWin: (points) => {
     tgHaptic('notification', 'success');
@@ -1205,6 +1206,7 @@ function boot() {
     if (bar) {
       bar.classList.toggle('is-hidden', !S.godMode);
     }
+    document.body.classList.toggle('is-god-mode', !!S.godMode);
   };
   syncGodModeUI();
 

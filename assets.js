@@ -43,6 +43,8 @@ export const LEGACY_ASSET_MAP = {
 export const OCEAN_RECTS = {
   bg: [0, 0, 0.702, 1.0],
   sittingMan: [0.765, 0.025, 0.182, 0.295],
+  sittingManTurning: [0.200, 0.025, 0.182, 0.295],
+  sittingManTurned: [0.450, 0.025, 0.182, 0.295],
   barrelClosed: [0.742, 0.392, 0.228, 0.196],
   barrelHand: [0.718, 0.618, 0.254, 0.194],
   handOnly: [0.790, 0.854, 0.145, 0.104],
