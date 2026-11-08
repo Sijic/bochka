@@ -3810,10 +3810,10 @@ export class Tapper {
     ctx.restore();
 
     /* 4. СТЕНА НА КРЫШЕ ЗАВОДА с надписью краской: «НА НЕБЕ ТОЛЬКО И РАЗГОВОРОВ, ЧТО О МОРЕ…» (компактная, не закрывает небо и закат!) */
-    const wallW = Math.min(v.w * (narrow ? 0.92 : 0.64), 560);
-    const wallH = narrow ? 48 : 54;
+    const wallW = Math.min(v.w * (narrow ? 0.92 : 0.62), 540);
+    const wallH = narrow ? 46 : 48;
     const wallX = v.x + (v.w - wallW) / 2;
-    const wallY = v.y + (narrow ? Math.round(v.h * 0.165) : 52);
+    const wallY = v.y + (narrow ? Math.round(v.h * 0.165) : (S.godMode ? 84 : 58));
     ctx.save();
     /* Боковые стальные фермы-опоры, удерживающие стену на крыше завода (не закрывают солнце и море по центру!) */
     ctx.fillStyle = 'rgba(20, 26, 34, 0.82)';
