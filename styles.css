@@ -13,12 +13,11 @@
   --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--tg-safe-bottom, 0px));
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
-  --noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='3'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html { scroll-behavior: smooth; overscroll-behavior-y: none; }
 body { margin: 0; background: var(--bg); color: var(--chalk); font-family: var(--font-mono); overflow-x: hidden; overscroll-behavior-y: none; }
-.grain { position: fixed; inset: 0; pointer-events: none; z-index: 999; opacity: 0.05; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E"); }
+.grain { display: none; }
 .is-hidden { display: none !important; }
 
 /* ---------- header ---------- */
@@ -39,14 +38,14 @@ body { margin: 0; background: var(--bg); color: var(--chalk); font-family: var(-
 .hero__copy { position: absolute; top: 64px; left: 28px; max-width: min(420px, 44vw); pointer-events: none; z-index: 3; transition: opacity 0.35s ease, transform 0.35s ease; }
 .hero__tag { font-size: 9px; letter-spacing: 0.24em; color: var(--steel); margin-bottom: 6px; }
 .hero__title { font-family: var(--font-display); font-size: clamp(26px, min(3.6vw, 6.2vh), 50px); line-height: 0.94; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.01em; }
-.hero__title span { display: block; -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 6px 22px rgba(0,0,0,0.85)); }
-.hero__l1 { background-image: var(--noise), linear-gradient(180deg, #F4F2ED 0%, #CFCBC2 50%, #8C9BAE 100%); }
-.hero__l2 { background-image: var(--noise), linear-gradient(180deg, #E09A5A 0%, var(--rust2) 40%, #8B4513 72%, var(--rust-dark) 100%); }
+.hero__title span { display: block; -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hero__l1 { background-image: linear-gradient(180deg, #F4F2ED 0%, #CFCBC2 50%, #8C9BAE 100%); }
+.hero__l2 { background-image: linear-gradient(180deg, #E09A5A 0%, var(--rust2) 40%, #8B4513 72%, var(--rust-dark) 100%); }
 .hero__sub { font-size: clamp(12px, 1.4vw, 16px); letter-spacing: 0.14em; color: var(--chalk); margin: 0 0 6px; }
 .hero__sub2 { font-size: 11px; letter-spacing: 0.1em; color: var(--steel); margin: 0; }
 .hero__tc { position: absolute; bottom: 10px; right: 16px; font-size: 9px; letter-spacing: 0.14em; color: var(--iron); z-index: 3; pointer-events: none; opacity: 0.75; }
 .hero__actions { position: absolute; top: 58px; right: 16px; z-index: 8; display: flex; align-items: center; gap: 6px; }
-.hero__qbtn { padding: 6px 10px; font-size: 9px; background: rgba(8,9,11,0.84); border-color: rgba(212,168,67,0.55); color: var(--chalk); backdrop-filter: blur(4px); }
+.hero__qbtn { padding: 6px 10px; font-size: 9px; background: rgba(8,9,11,0.92); border-color: rgba(212,168,67,0.55); color: var(--chalk); }
 .hero__qbtn--icon { padding: 6px 10px; color: var(--gold); border-color: var(--gold); font-size: 11px; }
 
 /* После нажатия «ВОЙТИ В ЦЕХ» названия и нижняя стрелка полностью исчезают, чтобы не мешать обзору */
@@ -63,7 +62,7 @@ body { margin: 0; background: var(--bg); color: var(--chalk); font-family: var(-
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
 
 /* Компактная верхняя полоска HUD (жизни, воздух, прогресс, энергия, уровень/таймер) — появляется ТОЛЬКО после старта игры (.hero.is-started) */
-.plate { position: absolute; z-index: 6; font-size: 10px; letter-spacing: 0.06em; color: var(--steel); border: 1px solid rgba(140,155,174,0.18); background: rgba(8,9,11,0.82); backdrop-filter: blur(4px); }
+.plate { position: absolute; z-index: 6; font-size: 10px; letter-spacing: 0.06em; color: var(--steel); border: 1px solid rgba(140,155,174,0.18); background: rgba(8,9,11,0.92); }
 .hero:not(.is-started) .plate--bl {
   display: none !important;
 }
@@ -118,7 +117,7 @@ body { margin: 0; background: var(--bg); color: var(--chalk); font-family: var(-
 
 .hero__enter { position: absolute; inset: 0; z-index: 5; display: flex; align-items: flex-end; justify-content: center; padding: 0 24px 36px; pointer-events: none; }
 .lobby-dock { width: 100%; max-width: 1360px; display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; pointer-events: none; }
-.lobby-corner { pointer-events: auto; position: relative; background: rgba(8, 9, 12, 0.86); border: 1px solid rgba(140, 155, 174, 0.24); padding: 12px 14px; max-width: 310px; backdrop-filter: blur(5px); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.78); }
+.lobby-corner { pointer-events: auto; position: relative; background: rgba(8, 9, 12, 0.92); border: 1px solid rgba(140, 155, 174, 0.24); padding: 12px 14px; max-width: 310px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.78); }
 .lobby-corner::before, .lobby-corner::after { content: ''; position: absolute; width: 10px; height: 10px; border-color: var(--gold); border-style: solid; pointer-events: none; }
 .lobby-corner::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
 .lobby-corner::after { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
@@ -577,9 +576,8 @@ body.is-modal-open {
   justify-content: center;
   gap: 4px;
   padding: 5px 8px;
-  background: rgba(14, 11, 5, 0.94);
+  background: rgba(14, 11, 5, 0.96);
   border-bottom: 1.5px solid #FFD166;
-  backdrop-filter: blur(8px);
 }
 .god-bar__lbl {
   font-family: var(--font-mono);

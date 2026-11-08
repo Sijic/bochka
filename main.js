@@ -70,7 +70,7 @@ window.bochkaInitTelegram = initTelegramMiniApp;
 
 function resize() {
   const cw = canvas.clientWidth || innerWidth, ch = canvas.clientHeight || innerHeight;
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const dpr = Math.min(cw >= 800 ? 1.25 : 1.5, window.devicePixelRatio || 1);
   canvas.width = Math.round(cw * dpr);
   canvas.height = Math.round(ch * dpr);
   const portrait = cw < ch;
@@ -281,25 +281,8 @@ function hudInfo() {
   return { mode, points: night.points, air: night.boy?.air ?? 100, progress: nightProg, timer: night.clockText() };
 }
 
-/* Кинематографическая постобработка: мягкая анаморфная виньетка, тёпло-холодное свечение и микро-сrez плёнки */
-function drawCinemaPost(c) {
-  const w = canvas.width, h = canvas.height;
-  c.save();
-  c.setTransform(1, 0, 0, 1, 0, 0);
-  const vg = c.createRadialGradient(w * 0.5, h * 0.48, Math.min(w, h) * 0.34, w * 0.5, h * 0.5, Math.max(w, h) * 0.76);
-  vg.addColorStop(0, 'rgba(0,0,0,0)');
-  vg.addColorStop(0.68, 'rgba(4,7,12,0.16)');
-  vg.addColorStop(1, 'rgba(2,4,8,0.62)');
-  c.fillStyle = vg;
-  c.fillRect(0, 0, w, h);
-
-  /* Тонкие горизонтальные линии киноплёнки / камеры наблюдения */
-  c.fillStyle = 'rgba(220,235,255,0.012)';
-  for (let y = 0; y < h; y += 4) {
-    c.fillRect(0, y, w, 1);
-  }
-  c.restore();
-}
+/* Кинематографическая виньетка и сканлайны уже отрисованы аппаратным CSS-слоем .hero::after (0 нагрузки на Canvas 2D!) */
+function drawCinemaPost() {}
 
 /* ---------- ПЕРЕД СТАРТОМ ИГРЫ: НА ЗАДНЕМ ФОНЕ ИГРАЕТ ТРЕЙЛЕР И ИДУТ ТИТРЫ С ПРАВИЛАМИ ИГРЫ, А НА ПЕРЕДНЕМ ФОНЕ — РЕАЛИСТИЧНЫЕ БОЧКИ С ОПОЯСЫВАЮЩИМИ ИМЕНАМИ АКТЁРОВ ---------- */
 const lobbyPosterImg = new Image();
@@ -1051,7 +1034,7 @@ function updateAndDrawPreGameLobby(c, dt) {
 }
 
 /* ---------- loop ---------- */
-let last = performance.now(), acc = 0;
+let last = performance.now(), acc = 0, saveAcc = 0;
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   const anyModal = modalOpen() || !$('screamer').classList.contains('is-hidden');
@@ -1060,7 +1043,6 @@ function frame(now) {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#06080B'; ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.setTransform(view.s * dpr, 0, 0, view.s * dpr, view.ox * dpr, view.oy * dpr);
   ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
   if (!started) {
     updateAndDrawPreGameLobby(ctx, dt);
   } else if (mode === 'tap') {
@@ -1068,9 +1050,9 @@ function frame(now) {
   } else {
     night.update(dt); night.draw(ctx);
   }
-  drawCinemaPost(ctx);
   acc += dt;
-  if (acc > 0.2) {
+  saveAcc += dt;
+  if (acc > 0.35) {
     acc = 0; tick(); renderHUD(hudInfo());
     $('hero').classList.toggle('is-playing', started && (tapper.active || night.active));
     if (S.lives > 0 && started && !tapper.active && !night.active && !anyModal && $('hero').classList.contains('is-dead')) { $('hero').classList.remove('is-dead'); (mode === 'tap' ? levelIntro() : nightIntro()); }
@@ -1087,7 +1069,10 @@ function frame(now) {
     }
     const el = Date.now() - startedAt, f = Math.floor((el / 40) % 25);
     $('timecode').textContent = `${String(Math.floor(el / 3600000)).padStart(2, '0')}:${String(Math.floor(el / 60000) % 60).padStart(2, '0')}:${String(Math.floor(el / 1000) % 60).padStart(2, '0')}:${String(f).padStart(2, '0')}`;
-    save();
+    if (saveAcc > 4.0) {
+      saveAcc = 0;
+      save();
+    }
   }
   requestAnimationFrame(frame);
 }

@@ -651,7 +651,7 @@ export function drawFrame(ctx, sheet, rect, x, y, h, flip = false, fallbackColor
   const w = h * (sw / sh);
   x = Math.round(x); y = Math.round(y);
   ctx.save();
-  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.imageSmoothingEnabled = true;
   if (flip) { ctx.translate(x, 0); ctx.scale(-1, 1); ctx.translate(-x, 0); }
   ctx.drawImage(sheet, sx, sy, sw, sh, Math.round(x - w / 2), y - h, w, h);
   ctx.restore();
