@@ -15,7 +15,6 @@ zip.zip
 *.ogg
 package-lock.json
 server/
-shared/
 firebase.json
 firestore.rules
 database.rules.json
