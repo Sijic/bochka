@@ -1156,19 +1156,45 @@ const KEYMAP = {
   ArrowRight: 'right', d: 'right', D: 'right', в: 'right', В: 'right',
   ArrowUp: 'up', w: 'up', W: 'up', ц: 'up', Ц: 'up',
   ArrowDown: 'down', s: 'down', S: 'down', ы: 'down', Ы: 'down',
-  e: 'act', E: 'act', у: 'act', У: 'act', ' ': 'act', Enter: 'act',
-  h: 'hide', H: 'hide', р: 'hide', Р: 'hide',
+  e: 'act', E: 'act', у: 'act', У: 'act', Enter: 'act',
+  h: 'hide', H: 'hide', р: 'hide', Р: 'hide', ' ': 'hide',
   Shift: 'run',
   f: 'lure', F: 'lure', а: 'lure', А: 'lure',
   q: 'door', Q: 'door', й: 'door', Й: 'door',
   z: 'zoom', Z: 'zoom', я: 'zoom', Я: 'zoom',
 };
-document.addEventListener('keydown', (e) => { const k = KEYMAP[e.key]; if (k && mode === 'night' && !modalOpen()) { e.preventDefault(); if (!e.repeat) night.key(k, true); } });
-document.addEventListener('keyup', (e) => { const k = KEYMAP[e.key]; if (k) night.key(k, false); });
+const setTouchBtnVisual = (k, on) => {
+  const btn = document.querySelector(`.touch__btn[data-k="${k}"]`);
+  if (btn) btn.classList.toggle('is-pressed', !!on);
+};
+document.addEventListener('keydown', (e) => {
+  const k = KEYMAP[e.key];
+  if (k && mode === 'night' && !modalOpen()) {
+    e.preventDefault();
+    setTouchBtnVisual(k, true);
+    if (!e.repeat) night.key(k, true);
+  }
+});
+document.addEventListener('keyup', (e) => {
+  const k = KEYMAP[e.key];
+  if (k) {
+    setTouchBtnVisual(k, false);
+    night.key(k, false);
+  }
+});
 document.querySelectorAll('.touch__btn').forEach((b) => {
   const k = b.dataset.k;
-  b.addEventListener('pointerdown', (e) => { e.preventDefault(); night.key(k, true); });
-  ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => b.addEventListener(ev, () => night.key(k, false)));
+  b.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    setTouchBtnVisual(k, true);
+    night.key(k, true);
+  });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) =>
+    b.addEventListener(ev, () => {
+      setTouchBtnVisual(k, false);
+      night.key(k, false);
+    })
+  );
 });
 
 /* ---------- boot ---------- */

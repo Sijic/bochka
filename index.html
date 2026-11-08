@@ -16,7 +16,7 @@
   <link rel="preload" as="image" href="assets/keyed/boy.webp" type="image/webp">
   <link rel="preload" as="image" href="assets/keyed/girl.webp" type="image/webp">
   <link rel="preload" as="image" href="assets/keyed/father.webp" type="image/webp">
-  <link rel="stylesheet" href="./styles.css?v=53">
+  <link rel="stylesheet" href="./styles.css?v=55">
   <script src="https://telegram.org/js/telegram-web-app.js" async></script>
 </head>
 <body>
@@ -149,16 +149,16 @@
     </div>
 
     <div class="touch" id="touchCtl">
-      <button class="touch__btn" data-k="left" title="Влево (A / ◀)">◀</button>
-      <button class="touch__btn" data-k="up" title="Вверх по лестнице (W / ▲)">▲</button>
-      <button class="touch__btn" data-k="down" title="Вниз по лестнице (S / ▼)">▼</button>
-      <button class="touch__btn" data-k="right" title="Вправо (D / ▶)">▶</button>
-      <button class="touch__btn touch__btn--act" data-k="run" title="Рывок / Бег (Shift)">⚡ БЕГ</button>
-      <button class="touch__btn touch__btn--act" data-k="act" data-i18n="act" title="Действие: свет, вентиль, щиток, ключ, узники (E)">🔧 ДЕЙСТВИЕ</button>
-      <button class="touch__btn touch__btn--hide" data-k="hide" data-i18n="hide" title="Спрятаться: бочка, шкафчик, верстак, ящики, машина (H)">🛢️ УКРЫТИЕ</button>
-      <button class="touch__btn touch__btn--act" data-k="lure" title="Бросить звонящий телефон-приманку (F)">📱 ПРИМАНКА</button>
-      <button class="touch__btn touch__btn--act" data-k="door" title="Запереть стальную дверь на засов (Q)">🚪 ЗАСОВ</button>
-      <button class="touch__btn touch__btn--act" data-k="zoom" title="Переключить масштаб камеры: Весь завод / Крупно (Z)">🔍 ОБЗОР</button>
+      <button class="touch__btn" data-k="left" title="Влево (A / ←)">◀ <kbd class="touch__key">[A/←]</kbd></button>
+      <button class="touch__btn" data-k="up" title="Вверх по лестнице (W / ↑)">▲ <kbd class="touch__key">[W/↑]</kbd></button>
+      <button class="touch__btn" data-k="down" title="Вниз по лестнице (S / ↓)">▼ <kbd class="touch__key">[S/↓]</kbd></button>
+      <button class="touch__btn" data-k="right" title="Вправо (D / →)">▶ <kbd class="touch__key">[D/→]</kbd></button>
+      <button class="touch__btn touch__btn--act" data-k="run" title="Рывок / Бег (Shift)">⚡ БЕГ <kbd class="touch__key">[SHIFT]</kbd></button>
+      <button class="touch__btn touch__btn--act" data-k="act" title="Действие: свет, вентиль, ключ, стук по бочке (E / Enter)">🔧 ДЕЙСТВИЕ <kbd class="touch__key">[E]</kbd></button>
+      <button class="touch__btn touch__btn--hide" data-k="hide" title="Спрятаться в бочку / укрытие (H / Пробел)">🛢️ В БОЧКУ <kbd class="touch__key">[H/ПРОБЕЛ]</kbd></button>
+      <button class="touch__btn touch__btn--act" data-k="lure" title="Бросить звонящий телефон-приманку (F)">📱 ПРИМАНКА <kbd class="touch__key">[F]</kbd></button>
+      <button class="touch__btn touch__btn--act" data-k="door" title="Запереть стальную дверь на засов (Q)">🚪 ЗАСОВ <kbd class="touch__key">[Q]</kbd></button>
+      <button class="touch__btn touch__btn--act" data-k="zoom" title="Переключить масштаб камеры: Весь завод / Крупно (Z)">🔍 ОБЗОР <kbd class="touch__key">[Z]</kbd></button>
     </div>
 
     <a class="hero__down" href="#upgrade" data-i18n="down">ВНИЗ</a>
@@ -414,6 +414,6 @@
 
   <div class="screamer is-hidden" id="screamer"><div class="screamer__role" id="screamerRole"></div><canvas id="screamerCanvas" width="640" height="640"></canvas><div class="screamer__txt" id="screamerTxt"></div></div>
 
-  <script type="module" src="./main.js?v=53"></script>
+  <script type="module" src="./main.js?v=55"></script>
 </body>
 </html>

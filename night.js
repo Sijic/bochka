@@ -11,7 +11,7 @@ const BASE_W = 960, BASE_H = 540;
 const WORLD_W = 3080;
 const SKY_H = 175;
 const FH = 220; /* Высота одного этажа в мировых координатах (3 этажа = 660px + 175px небо) */
-const WORLD_H = SKY_H + FH * 3 + 75; /* 910px */
+const WORLD_H = SKY_H + FH * 3 + 155; /* 990px — оптимальный фундамент внизу, чтобы 1-й этаж и верхние ярусы были полностью видны! */
 
 /* Зоны мира по горизонтали:
    0..520       — Старая Деревянная Церковь (с колокольней на верхнем ярусе)
@@ -144,7 +144,7 @@ export class Night {
       pendingAction: false,
     };
     this.camX = 0;
-    this.camY = Math.max(0, floorY(2) - 520);
+    this.camY = Math.max(0, floorY(2) - 510);
     this.boyActor = new Actor('boy', { fallback: '#4A7A8C' });
 
     /* Стальные межкомнатные двери с засовами + Бронированная дверь в Тайное Помещение с Бочкой (требует 3 ключа!) */
@@ -262,8 +262,24 @@ export class Night {
     return (this.quests.key1 ? 1 : 0) + (this.quests.key2 ? 1 : 0) + (this.quests.key3 ? 1 : 0);
   }
 
-  /* Текущая подсказка логики прохождения для верхней/нижней плашки */
+  /* Определяет, играет ли пользователь на сенсорном экране телефона/планшета (чисто под тач) или на ноутбуке/ПК (с клавиатурой) */
+  isTouchView() {
+    const v = this.view || { x: 0, y: 0, w: BASE_W, h: BASE_H };
+    if (v.w < 700) return true;
+    try {
+      return window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    } catch {
+      return false;
+    }
+  }
+
+  actPrompt() {
+    return this.isTouchView() ? '[ТАП]' : '[E]';
+  }
+
+  /* Текущая подсказка логики прохождения для верхней плашки */
   currentObjectiveText() {
+    const p = this.actPrompt();
     if (this.finale.stage === 'captured_cutscene') {
       if (this.finale.cutsceneT < 1.3) {
         return '🚨 ОХРАНА ВРЫВАЕТСЯ В ПОМЕЩЕНИЕ С БОЧКОЙ!';
@@ -279,33 +295,33 @@ export class Night {
         : '⛓️ ТЕБЯ СХВАТИЛИ И ЗАПЕРЛИ В БОЧКУ!';
     }
     if (this.finale.stage === 'tapping_barrel') {
-      return `🛢️ В ПОМЕЩЕНИИ С БОЧКОЙ: БЫСТРО СТУЧИ ПО БОЧКЕ (ТАПАЙ / [E])! УДАРОВ: ${this.finale.hits}/${this.finale.maxHits}`;
+      return `🛢️ В ПОМЕЩЕНИИ С БОЧКОЙ: БЫСТРО СТУЧИ ПО БОЧКЕ (${p})! УДАРОВ: ${this.finale.hits}/${this.finale.maxHits}`;
     }
     if (!this.quests.key1) {
-      return 'ШАГ 1: Возьми 🗝️ КЛЮЧ №1 у Алтаря в Церкви [E] → открой ворота Сектора 3';
+      return `ШАГ 1: Возьми 🗝️ КЛЮЧ №1 у Алтаря в Церкви ${p} → открой ворота Сектора 3`;
     }
     if (!this.quests.sec3LightOff && !this.quests.valve1Closed) {
-      return 'ШАГ 2: Внизу ГЛУБОКАЯ ВОДА — не войти! Поднимись по левой лестнице на 2-й ярус и ОТКЛЮЧИ СВЕТ ⚡ [E], чтобы пройти!';
+      return `ШАГ 2: Внизу ГЛУБОКАЯ ВОДА — не войти! Поднимись по левой лестнице на 2-й ярус и ОТКЛЮЧИ СВЕТ ⚡ ${p}!`;
     }
     if (!this.quests.valve1Closed) {
-      return 'ШАГ 3: Стукни по БОЧКЕ 🛢️ [E / Тап], чтобы приманить охрану на звук, ОБОЙДИ ВСЁ по верху направо и закрой ⚙️ ЗАДВИЖКУ №1!';
+      return `ШАГ 3: Стукни по БОЧКЕ 🛢️ ${p}, чтобы приманить охрану на звук, ОБОЙДИ по верху направо и закрой ⚙️ ЗАДВИЖКУ №1!`;
     }
     if (!this.quests.key2) {
-      return 'ШАГ 4: Вода в Секторе 3 слита! Спустись по правой лестнице в осушенный коллектор и забери 🗝️ КЛЮЧ №2 [E]!';
+      return `ШАГ 4: Вода в Секторе 3 слита! Спустись по правой лестнице в осушенный коллектор и забери 🗝️ КЛЮЧ №2 ${p}!`;
     }
     if (!this.quests.corpbLightOff && !this.quests.valve2Closed) {
-      return 'ШАГ 5: В Корпусе Б снова ГЛУБОКАЯ ВОДА! Поднимись по лестнице слева на 3-й ярус и ОТКЛЮЧИ СВЕТ ⚡ [E]!';
+      return `ШАГ 5: В Корпусе Б снова ГЛУБОКАЯ ВОДА! Поднимись по лестнице слева на 3-й ярус и ОТКЛЮЧИ СВЕТ ⚡ ${p}!`;
     }
     if (!this.quests.valve2Closed) {
-      return 'ШАГ 6: Примани охрану СТУКОМ ПО БОЧКЕ 🛢️ [E], обойди их сверху направо и закрой ⚙️ ЗАДВИЖКУ №2 (3-й ярус справа)!';
+      return `ШАГ 6: Примани охрану СТУКОМ ПО БОЧКЕ 🛢️ ${p}, обойди сверху направо и закрой ⚙️ ЗАДВИЖКУ №2 (3-й ярус справа)!`;
     }
     if (!this.quests.key3) {
-      return 'ШАГ 7: Спустись по правой лестнице в осушенную Насосную Корпуса Б (1-й ярус) и забери 🗝️ КЛЮЧ №3!';
+      return `ШАГ 7: Спустись по правой лестнице в осушенную Насосную Корпуса Б (1-й ярус) и забери 🗝️ КЛЮЧ №3 ${p}!`;
     }
     if (!this.quests.finalDoorOpen) {
-      return 'ШАГ 8: Все 3/3 ключей собраны! Поднимись на 2-й ярус Корпуса Б справа и открой 🚪 ПОМЕЩЕНИЕ С БОЧКОЙ [E]!';
+      return `ШАГ 8: Все 3/3 ключей собраны! Поднимись на 2-й ярус Корпуса Б справа и открой 🚪 ПОМЕЩЕНИЕ С БОЧКОЙ ${p}!`;
     }
-    return 'ШАГ 9: Зайди в открытое 🛢️ ПОМЕЩЕНИЕ С БОЧКОЙ (справа на 2-м ярусе) и начни стучать по Бочке!';
+    return `ШАГ 9: Зайди в открытое 🛢️ ПОМЕЩЕНИЕ С БОЧКОЙ (справа на 2-м ярусе) и стучи по Бочке ${p}!`;
   }
 
   viewSize() {
@@ -1290,12 +1306,14 @@ export class Night {
       }
     }
 
-    /* Плавное панорамирование камеры за координатой b.x и плавной высотой b.y */
+    /* Плавное панорамирование камеры за координатой b.x и плавной высотой b.y:
+       держим Пацана и наземный этаж (floor=2) в центральной части экрана (0.55..0.58 vh),
+       чтобы ни нижние кнопки, ни верхняя шапка ничего не закрывали! */
     const { vw, vh } = this.viewSize();
     const targetCamX = Math.max(0, Math.min(WORLD_W - vw, b.x - vw * 0.45));
     const targetCamY = vh > WORLD_H
       ? -(vh - WORLD_H) * 0.46
-      : Math.max(0, Math.min(WORLD_H - vh, b.y - vh * 0.62));
+      : Math.max(0, Math.min(WORLD_H - vh, b.y - vh * 0.72));
     this.camX += (targetCamX - this.camX) * Math.min(1, dt * 6);
     this.camY += (targetCamY - this.camY) * Math.min(1, dt * 6);
 
@@ -1648,6 +1666,19 @@ export class Night {
     }
 
     /* Д. ТВЁРДЫЕ СТАЛЬНЫЕ И КАМЕННЫЕ ПОЛЫ / ЭСТАКАДЫ ПОД НОГАМИ НА ВСЕХ ЭТАЖАХ (чтобы персонажи ходили по полу, а не по воздуху!) */
+    /* Подземный бетонный фундамент под наземным этажом (чтобы камера могла держать 1-й этаж в центре экрана) */
+    const subGrad = ctx.createLinearGradient(0, groundY + 14, 0, WORLD_H);
+    subGrad.addColorStop(0, '#141920');
+    subGrad.addColorStop(0.4, '#0C0F14');
+    subGrad.addColorStop(1, '#06080B');
+    ctx.fillStyle = subGrad;
+    ctx.fillRect(0, groundY + 14, WORLD_W, WORLD_H - (groundY + 14));
+    ctx.strokeStyle = 'rgba(72, 86, 102, 0.25)';
+    ctx.lineWidth = 1.5;
+    for (let sx = 60; sx < WORLD_W; sx += 180) {
+      ctx.strokeRect(sx, groundY + 24, 120, 46);
+    }
+
     this.drawSolidFloorDeck(ctx, 40, 235, floorY(0), 'wood');    /* Пол колокольни Церкви (3 ярус) */
     this.drawSolidFloorDeck(ctx, 40, 505, floorY(1), 'wood');    /* Пол хоров Церкви (2 ярус) */
     this.drawSolidFloorDeck(ctx, 20, WORLD_W, floorY(2), 'ground'); /* Наземный каменный/бетонный пол всего мира (1 ярус) */
@@ -1885,8 +1916,9 @@ export class Night {
       ctx.fillStyle = valveClosed ? '#80ED99' : '#FFD166';
       ctx.font = 'bold 10px "JetBrains Mono"';
       ctx.textAlign = 'center';
+      const p = this.actPrompt();
       ctx.fillText(
-        valveClosed ? `✓ ЗАДВИЖКА №${idx + 1}: ВОДА СЛИТА` : `⚙️ ЗАДВИЖКА №${idx + 1} [E] (СЛИТЬ ВОДУ)`,
+        valveClosed ? `✓ ЗАДВИЖКА №${idx + 1}: ВОДА СЛИТА` : `⚙️ ЗАДВИЖКА №${idx + 1} ${p} (СЛИТЬ ВОДУ)`,
         vx,
         vy - 33
       );
@@ -1894,6 +1926,7 @@ export class Night {
     });
 
     /* ---------- 2 ГЛАВНЫХ РУБИЛЬНИКА ОТКЛЮЧЕНИЯ СВЕТА (НА ВЕРХНИХ ЭТАЖАХ ОБХОДА ВОДЫ) ---------- */
+    const pAct = this.actPrompt();
     this.lightSwitches.forEach((sw) => {
       const isOff = !!this.quests[sw.questKey];
       const sx = sw.x;
@@ -1935,7 +1968,7 @@ export class Night {
       ctx.font = 'bold 9.5px "JetBrains Mono"';
       ctx.textAlign = 'center';
       ctx.fillText(
-        isOff ? `🌑 СВЕТ №${sw.id} ОТКЛЮЧЁН (ПУТЬ В ТЕМНОТЕ)` : sw.label,
+        isOff ? `🌑 СВЕТ №${sw.id} ОТКЛЮЧЁН (ПУТЬ В ТЕМНОТЕ)` : `⚡ РУБИЛЬНИК №${sw.id}: ОТКЛЮЧИТЬ СВЕТ ${pAct}`,
         sx,
         sw.floor === 0 ? sy - 34 : sy - 34
       );
@@ -1944,9 +1977,9 @@ export class Night {
 
     /* ---------- 3 СЮЖЕТНЫХ КЛЮЧА (НА АЛТАРЕ И НА ДНЕ ДВУХ ЗАТОПЛЕННЫХ КОЛЛЕКТОРОВ) ---------- */
     const keysList = [
-      { id: 1, taken: this.quests.key1, x: 435, floor: 2, label: '🗝️ КЛЮЧ №1 (АЛТАРЬ) [E]' },
-      { id: 2, taken: this.quests.key2, x: SEC3_X + 540, floor: 2, label: '🗝️ КЛЮЧ №2 (СЛЕЙ ВОДУ №1!) [E]' },
-      { id: 3, taken: this.quests.key3, x: CORPB_X + 460, floor: 2, label: '🗝️ КЛЮЧ №3 (СЛЕЙ ВОДУ №2!) [E]' },
+      { id: 1, taken: this.quests.key1, x: 435, floor: 2, label: `🗝️ КЛЮЧ №1 (АЛТАРЬ) ${pAct}` },
+      { id: 2, taken: this.quests.key2, x: SEC3_X + 540, floor: 2, label: `🗝️ КЛЮЧ №2 (СЛЕЙ ВОДУ №1!) ${pAct}` },
+      { id: 3, taken: this.quests.key3, x: CORPB_X + 460, floor: 2, label: `🗝️ КЛЮЧ №3 (СЛЕЙ ВОДУ №2!) ${pAct}` },
     ];
     keysList.forEach((k) => {
       if (k.taken) return;
@@ -2003,9 +2036,9 @@ export class Night {
         ctx.fillStyle = '#90E0EF';
         ctx.font = 'bold 8.5px "JetBrains Mono"';
         ctx.textAlign = 'center';
-        ctx.fillText('🔊 СТУК НА ЗВУК [E]', s.x, sy - barrelH - 7);
+        ctx.fillText(`🔊 СТУК НА ЗВУК ${pAct}`, s.x, sy - barrelH - 7);
         ctx.restore();
-      } else {
+      } else if (!(s.id === 'h3' && !this.quests.key1)) {
         ctx.save();
         ctx.fillStyle = 'rgba(12,18,24,0.82)';
         ctx.strokeStyle = 'rgba(74,122,140,0.85)';
@@ -2171,7 +2204,7 @@ export class Night {
     } else {
       /* Индикатор ударов по Главной Бочке */
       const promptTxt = this.quests.finalDoorOpen
-        ? `💥 СТУЧИ ПО БОЧКЕ [E] (${this.finale.hits}/${this.finale.maxHits})`
+        ? `💥 СТУЧИ ПО БОЧКЕ ${this.actPrompt()} (${this.finale.hits}/${this.finale.maxHits})`
         : `🔒 СОБЕРИ 3 КЛЮЧА (${this.keysCollectedCount()}/3)`;
       ctx.fillStyle = 'rgba(10, 14, 20, 0.92)';
       ctx.strokeStyle = this.quests.finalDoorOpen ? '#80ED99' : '#FFD166';
@@ -2373,6 +2406,20 @@ export class Night {
       }
     }
 
+    /* Маркер точки назначения при тапе на телефоне / клике мышью */
+    if (b.targetX !== null) {
+      const tf = b.targetFloor !== null ? b.targetFloor : b.floor;
+      const ty = floorY(tf);
+      const pulseR = 12 + Math.sin(this.t * 9) * 3;
+      ctx.save();
+      ctx.strokeStyle = b.pendingAction ? '#FFD166' : '#64DFDF';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(b.targetX, ty - 3, pulseR, pulseR * 0.42, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     /* Искры от ударов по Главной Бочке и задвижкам */
     ctx.fillStyle = '#FFD166';
     this.sparks.forEach((s) => ctx.fillRect(s.x, s.y, 4, 4));
@@ -2388,45 +2435,45 @@ export class Night {
     ctx.globalAlpha = 1;
     ctx.restore();
 
-    /* ---------- ЭКРАННЫЙ ИНТЕРФЕЙС ЦЕПОЧКИ ПРОХОЖДЕНИЯ (СВЕТ + БОЧКИ НА ЗВУК + ЗАДВИЖКИ + КЛЮЧИ + БОЧКА) ---------- */
+    /* ---------- КОМПАКТНАЯ ВЕРХНЯЯ ПАНЕЛЬ ЗАДАНИЯ И ЧЕК-ЛИСТА (ВВЕРХУ ЭКРАНА, ЧТОБЫ НИЗ И ПЕРСОНАЖ БЫЛИ ПОЛНОСТЬЮ ОТКРЫТЫ!) ---------- */
     const qSteps = [
       this.quests.key1 ? '✓Ключ1' : '○Ключ1',
-      this.quests.sec3LightOff ? '✓Свет1(ВЫКЛ)' : '○Свет1(Сект3)',
-      this.quests.valve1Closed ? '✓Задвижка1' : '○Задвижка1(Обход)',
-      this.quests.key2 ? '✓Ключ2' : '○Ключ2(Слив1)',
-      this.quests.corpbLightOff ? '✓Свет2(ВЫКЛ)' : '○Свет2(КорпБ)',
-      this.quests.valve2Closed ? '✓Задвижка2' : '○Задвижка2(Обход)',
-      this.quests.key3 ? '✓Ключ3' : '○Ключ3(Слив2)',
-      this.finale.hits > 0 ? `🛢️Стук:${this.finale.hits}/${this.finale.maxHits}` : '○БочкаФинала',
+      this.quests.sec3LightOff ? '✓Свет1' : '○Свет1',
+      this.quests.valve1Closed ? '✓Задв1' : '○Задв1',
+      this.quests.key2 ? '✓Ключ2' : '○Ключ2',
+      this.quests.corpbLightOff ? '✓Свет2' : '○Свет2',
+      this.quests.valve2Closed ? '✓Задв2' : '○Задв2',
+      this.quests.key3 ? '✓Ключ3' : '○Ключ3',
+      this.finale.hits > 0 ? `🛢️${this.finale.hits}/${this.finale.maxHits}` : '○Бочка',
     ].join(' · ');
 
     const narrow = v.w < 620;
     const cx = v.x + v.w / 2;
-    const bottomOffset = narrow ? 132 : 72;
-    const barW = Math.min(820, v.w - 16);
+    const topOffset = narrow ? (S.godMode ? 168 : 124) : (S.godMode ? 68 : 48);
+    const barW = Math.min(740, v.w - 16);
     ctx.save();
-    ctx.fillStyle = 'rgba(7,10,14,0.92)';
-    ctx.strokeStyle = 'rgba(212,168,67,0.65)';
-    ctx.lineWidth = 1.2;
-    ctx.fillRect(cx - barW / 2, v.y + v.h - bottomOffset, barW, 22);
-    ctx.strokeRect(cx - barW / 2, v.y + v.h - bottomOffset, barW, 22);
-    ctx.fillStyle = '#ECE4D2';
-    ctx.font = narrow ? '8.5px "JetBrains Mono", monospace' : '10px "JetBrains Mono", monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(qSteps, cx, v.y + v.h - bottomOffset + 15, barW - 10);
-
     const activeBanner = (this.msgT > 0 && this.msg) ? this.msg : this.currentObjectiveText();
     if (activeBanner) {
-      const msgW = Math.min(760, v.w - 16);
-      const msgY = v.y + v.h - bottomOffset - 28;
-      ctx.fillStyle = 'rgba(7,10,14,0.95)';
-      ctx.fillRect(cx - msgW / 2, msgY, msgW, 24);
-      ctx.strokeStyle = '#FFD166';
-      ctx.strokeRect(cx - msgW / 2, msgY, msgW, 24);
+      ctx.fillStyle = 'rgba(7,10,14,0.88)';
+      ctx.fillRect(cx - barW / 2, v.y + topOffset, barW, 20);
+      ctx.strokeStyle = 'rgba(255,209,102,0.82)';
+      ctx.lineWidth = 1.2;
+      ctx.strokeRect(cx - barW / 2, v.y + topOffset, barW, 20);
       ctx.fillStyle = '#FFD166';
-      ctx.font = narrow ? 'bold 9px "JetBrains Mono"' : 'bold 10.5px "JetBrains Mono"';
-      ctx.fillText(activeBanner, cx, msgY + 16, msgW - 12);
+      ctx.font = narrow ? 'bold 8.5px "JetBrains Mono"' : 'bold 9.5px "JetBrains Mono"';
+      ctx.textAlign = 'center';
+      ctx.fillText(activeBanner, cx, v.y + topOffset + 13.5, barW - 12);
     }
+
+    ctx.fillStyle = 'rgba(7,10,14,0.82)';
+    ctx.strokeStyle = 'rgba(212,168,67,0.5)';
+    ctx.lineWidth = 1;
+    ctx.fillRect(cx - barW / 2, v.y + topOffset + 22, barW, 17);
+    ctx.strokeRect(cx - barW / 2, v.y + topOffset + 22, barW, 17);
+    ctx.fillStyle = '#ECE4D2';
+    ctx.font = narrow ? '8px "JetBrains Mono", monospace' : '9px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(qSteps, cx, v.y + topOffset + 33.5, barW - 10);
     ctx.restore();
   }
 }
