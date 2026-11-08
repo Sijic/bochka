@@ -375,12 +375,13 @@ const preGameLobby = {
 function getLobbyBarrelPos(b) {
   const v = tapper.view || { x: 0, y: 0, w: VW, h: VH };
   const narrow = v.w < 640;
-  /* На узком вертикальном экране телефона аккуратно размещаем полукруг бочек прямо перед киноэкраном */
+  /* На узком вертикальном экране телефона аккуратно размещаем полукруг бочек прямо перед киноэкраном,
+     а на компьютере опускаем бочки чуть ниже от экрана и делаем чуть аккуратнее! */
   const rx = narrow ? (0.5 + (b.rx - 0.5) * 1.12) : b.rx;
-  const ry = narrow ? (b.ry + 0.025) : (b.ry + 0.015);
+  const ry = narrow ? (b.ry + 0.025) : (b.ry + 0.085);
   const x = v.x + v.w * rx;
   const y = v.y + v.h * ry;
-  const s = b.scale * (narrow ? 0.82 : 1.02);
+  const s = b.scale * (narrow ? 0.82 : 0.86);
   const bh = 150 * s;
   const bw = bh * 0.56;
   return { x, y, s, bw, bh };
@@ -596,11 +597,11 @@ function hitPreGameLobby(x, y, isRub = false) {
 
 function drawLobbyBackgroundTrailerAndCredits(c, v, dt = 0.016) {
   const narrow = v.w < 640;
-  /* Большой киноэкран прямо за бочками: бочки стоят непосредственно перед экраном! */
-  const scrW = Math.min(v.w * (narrow ? 0.94 : 0.68), 680);
-  const scrH = narrow ? Math.round(v.h * 0.42) : Math.round(v.h * 0.48);
+  /* Большой киноэкран прямо за бочками: бочки стоят чуть ниже у нижней кромки экрана! */
+  const scrW = Math.min(v.w * (narrow ? 0.94 : 0.66), 660);
+  const scrH = narrow ? Math.round(v.h * 0.42) : Math.round(v.h * 0.44);
   const scrX = Math.round(v.x + (v.w - scrW) * 0.5);
-  const scrY = Math.round(v.y + v.h * (narrow ? 0.20 : 0.14));
+  const scrY = Math.round(v.y + v.h * (narrow ? 0.20 : 0.105));
   preGameLobby.screenRect = { x: scrX, y: scrY, w: scrW, h: scrH };
 
   /* Позиционируем встроенный YouTube-плеер ровно в окно киноэкрана за бочками (16:9 cover без чёрных полос по бокам!) */
