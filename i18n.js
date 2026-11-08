@@ -368,33 +368,123 @@ function resolveStudioVoiceClip(text = '', charKey = 'father') {
   const s = String(text || '').toLowerCase();
   if (!s) return null;
 
-  /* 1. Точные реплики бочек на стартовой заставке */
-  if (s.includes('стучите, и отворят')) return 'priest_lobby';
-  if (s.includes('никто не услышит')) return 'capguy_lobby';
-  if (s.includes('выпустите меня')) return 'boy_lobby';
-  if (s.includes('камера включена')) return 'girl_lobby';
-  if (s.includes('мотор!') || charKey === 'director') return 'director_lobby';
-  if (s.includes('я найду тебя')) return 'father_lobby';
+  /* 1. Точные реплики бочек на стартовой заставке (по 4 разных реплики на каждого персонажа) */
+  if (s.includes('стучите, и отворят')) return 'priest_lobby_1';
+  if (s.includes('принёс бочку для вашего мальчика') && s.includes('швайгер')) return 'priest_lobby_2';
+  if (s.includes('последнем пранке')) return 'priest_lobby_3';
+  if (s.includes('прислушайся к тишине цеха')) return 'priest_lobby_4';
 
-  /* 2. Специальные сюжетные и реактивные фразы в игре */
+  if (s.includes('никто не услышит')) return 'capguy_lobby_1';
+  if (s.includes('лучшие ништяки закованы')) return 'capguy_lobby_2';
+  if (s.includes('иначе схвачу')) return 'capguy_lobby_3';
+  if (s.includes('забирай куш')) return 'capguy_lobby_4';
+
+  if (s.includes('это не пранк')) return 'boy_lobby_1';
+  if (s.includes('заперли в стальной бочке')) return 'boy_lobby_2';
+  if (s.includes('воздух внутри кончается')) return 'boy_lobby_3';
+  if (s.includes('единственный ключ')) return 'boy_lobby_4';
+
+  if (s.includes('камера включена')) return 'girl_lobby_1';
+  if (s.includes('доносится глухой стук')) return 'girl_lobby_2';
+  if (s.includes('выключи им фонари')) return 'girl_lobby_3';
+  if (s.includes('значком кислорода')) return 'girl_lobby_4';
+
+  if (s.includes('камера, мотор')) return 'director_lobby_1';
+  if (s.includes('режиссёр алексей звонцов')) return 'director_lobby_2';
+  if (s.includes('закрытый показ')) return 'director_lobby_3';
+  if (s.includes('снято! жми')) return 'director_lobby_4';
+
+  if (s.includes('найду тебя по звуку') || s.includes('я найду тебя')) return 'father_lobby_1';
+  if (s.includes('разорву эти цепи')) return 'father_lobby_2';
+  if (s.includes('двойные очки')) return 'father_lobby_3';
+  if (s.includes('опрокинутая бочка')) return 'father_lobby_4';
+
+  /* 2. Контекстные подсказки (WALKER_HINTS) */
+  if (s.includes('показалась рука')) return 'hint_hand';
+  if (s.includes('светится телефон')) return 'hint_phone';
+  if (s.includes('после снятия цепи не стучи')) return 'hint_chained';
+  if (s.includes('переключи инструмент сверху')) return 'hint_handChain';
+  if (s.includes('цепь снята, все ништяки забраны')) return 'hint_chainOffWarn';
+  if (s.includes('предупреждал: не стучи')) return 'hint_hitAfterChain';
+  if (s.includes('не бей по пустым бочкам')) return 'hint_wrong';
+  if (s.includes('воздух на исходе')) return 'hint_lowAir';
+  if (s.includes('поменялись местами')) return 'hint_shuffle';
+  if (s.includes('кто стучал под фонарём')) return 'hint_beamCaught';
+  if (s.includes('все ништяки за цепью! рукой цепь нельзя')) return 'hint_start';
+
+  /* 3. Реакции на карточки навыков (skillReactions) */
+  if (s.includes('холод сковал') || s.includes('во льду')) return 'skill_freeze';
+  if (s.includes('надел на меня стальную бочку') || s.includes('только ноги ходят')) return 'skill_shrink';
+  if (s.includes('фонарь заискрил')) return 'skill_stealth';
+  if (s.includes('звуковой волны даже стальные цепи')) return 'skill_fragile';
+  if (s.includes('пламя хлещет') || s.includes('огонь валит') || s.includes('огонь хлещет')) return 'skill_overcharge';
+  if (s.includes('золотые жетоны')) return 'skill_jackpot';
+  if (s.includes('карту обхода')) return 'skill_xray';
+  if (s.includes('кислородный баллон')) return 'skill_oxygen';
+  if (s.includes('магнитом вырвало')) return 'skill_magnet';
+
+  /* 4. Реакции при клике по персонажам и сюжетные реплики */
   if (s.includes('попался! бери его')) return 'father_caught';
   if (s.includes('я свободен')) return 'father_free';
-  if (s.includes('побойся бога') || s.includes('по пастору') || s.includes('по голове пастора')) return 'priest_hit';
-  if (s.includes('по мне стучишь') || s.includes('фонарь из рук') || s.includes('не стальная бочка')) return 'father_hit';
-  if (s.includes('по каске') || s.includes('шахтёрский фонарь') || s.includes('толкаешься')) return 'capguy_hit';
-  if (s.includes('не пугай меня') || s.includes('телефон не выронила') || s.includes('щекотать')) return 'girl_hit';
-  if (s.includes('разговоров, что о море') || s.includes('становится алым')) return 'ocean_1';
-  if (s.includes('смотрю на волны') || s.includes('бочке тиля') || s.includes('поворачиваюсь')) return 'ocean_2';
-  if (s.includes('кто там') && charKey === 'father') return 'father_2';
+  if (s.includes('к стене алтаря')) return 'father_altar';
+  if (s.includes('не стучи мне по спине')) return 'ocean_hit';
 
-  /* 3. Чередующиеся студийные голосовые реплики каждого персонажа */
+  if (s.includes('побойся бога')) return 'priest_hit_1';
+  if (s.includes('по пастору колотишь')) return 'priest_hit_2';
+  if (s.includes('по голове пастора')) return 'priest_hit_3';
+
+  if (s.includes('по мне стучишь')) return 'father_hit_1';
+  if (s.includes('фонарь из рук')) return 'father_hit_2';
+  if (s.includes('не стальная бочка')) return 'father_hit_3';
+
+  if (s.includes('по каске')) return 'capguy_hit_1';
+  if (s.includes('шахтёрский фонарь')) return 'capguy_hit_2';
+  if (s.includes('толкаешься')) return 'capguy_hit_3';
+
+  if (s.includes('не пугай меня')) return 'girl_hit_1';
+  if (s.includes('телефон не выронила')) return 'girl_hit_2';
+  if (s.includes('щекотать')) return 'girl_hit_3';
+
+  /* 5. Точные реплики патрульных в игре (WALKER_LINES) */
+  if (s.includes('правило цеха: слушай эхо')) return 'father_1';
+  if (s.includes('правило цепи: все ништяки')) return 'father_2';
+  if (s.includes('трать энергию') && charKey === 'father') return 'father_3';
+  if (s.includes('сынок, ты здесь')) return 'father_4';
+  if (s.includes('руку из горловины')) return 'father_5';
+
+  if (s.includes('правило орудия')) return 'capguy_1';
+  if (s.includes('прокачивай карточки навыков')) return 'capguy_2';
+  if (s.includes('запомни: все ништяки')) return 'capguy_3';
+  if (s.includes('следи за воздухом')) return 'capguy_4';
+
+  if (s.includes('правило игры: используй навыки')) return 'girl_1';
+  if (s.includes('бочка в натуральной цепи')) return 'girl_2';
+  if (s.includes('лучшие ништяки спрятаны за цепью')) return 'girl_3';
+  if (s.includes('лови бочки со значком воздуха')) return 'girl_4';
+
+  if (s.includes('принёс бочку для вашего мальчика')) return 'priest_1';
+  if (s.includes('правило навыков: копи энергию')) return 'priest_2';
+  if (s.includes('видишь цепь? рукой нельзя')) return 'priest_3';
+  if (s.includes('все ништяки закованы за цепью')) return 'priest_4';
+
+  if (s.includes('эй, подписчики')) return 'boy_1';
+  if (s.includes('главное правило: как снял цепь')) return 'boy_2';
+  if (s.includes('луч фонарика светит на бочку')) return 'boy_3';
+
+  if (s.includes('разговоров, что о море')) return 'ocean_1';
+  if (s.includes('смотрю на волны')) return 'ocean_2';
+  if (s.includes('становится алым как кровь')) return 'ocean_3';
+  if (s.includes('поворачиваюсь к бочке')) return 'ocean_4';
+
+  /* 6. Чередующиеся студийные голосовые реплики каждого персонажа */
   const pools = {
-    priest: ['priest_1', 'priest_2'],
-    father: ['father_1', 'father_2'],
-    capguy: ['capguy_1', 'capguy_2'],
-    girl: ['girl_1', 'girl_2'],
-    boy: ['boy_1', 'boy_2'],
-    ocean: ['ocean_1', 'ocean_2'],
+    priest: ['priest_1', 'priest_2', 'priest_3', 'priest_4'],
+    father: ['father_1', 'father_2', 'father_3', 'father_4', 'father_5'],
+    capguy: ['capguy_1', 'capguy_2', 'capguy_3', 'capguy_4'],
+    girl: ['girl_1', 'girl_2', 'girl_3', 'girl_4'],
+    boy: ['boy_1', 'boy_2', 'boy_3'],
+    ocean: ['ocean_1', 'ocean_2', 'ocean_3', 'ocean_4'],
+    director: ['director_lobby_1', 'director_lobby_2', 'director_lobby_3', 'director_lobby_4'],
   };
   const pool = pools[charKey];
   if (pool && pool.length) {

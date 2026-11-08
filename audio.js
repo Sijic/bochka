@@ -3,10 +3,13 @@ let activePrankAudio = null;
 let activePrankIdx = -1;
 let prankVoiceCursor = 0;
 let activeCharVoiceAudio = null;
+let activeScreamAudio = null;
 
 export const PRANK_VOICE_FILES = [
-  { id: 0, src: 'Пранк.mp3', label: '🎙️ Пранк #1 (MP3)' },
-  { id: 1, src: 'Пранкер_2.mp3', label: '🎙️ Пранкер #2 (MP3)' },
+  { id: 0, src: 'assets/sfx/voices/prank_till.mp3', label: '🎙️ Пранк #1: Тиль Швайгер (Бочка)' },
+  { id: 1, src: 'assets/sfx/voices/prank_zvontsov.mp3', label: '🎙️ Пранк #2: Режиссёр А. Звонцов' },
+  { id: 2, src: 'Пранк.mp3', label: '🎙️ Пранк #3: Звонок из цеха' },
+  { id: 3, src: 'Пранкер_2.mp3', label: '🎙️ Пранк #4: Запись пранкера' },
 ];
 
 /* Preloaded studio foley buffers (assets/sfx/*.mp3) for zero-latency playback */
@@ -92,8 +95,50 @@ export function setMuted(m) {
   if (activeCharVoiceAudio) {
     activeCharVoiceAudio.muted = m;
   }
+  if (activeScreamAudio) {
+    activeScreamAudio.muted = m;
+  }
+  if (m && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    try { window.speechSynthesis.cancel(); } catch { /* ignore */ }
+  }
 }
 export function isMuted() { return muted; }
+
+/* Полная остановка любых активных голосов (персонажей, пранка, скримера и браузерного TTS), чтобы звуки НИКОГДА не накладывались друг на друга! */
+export function stopAllVoices() {
+  if (activeCharVoiceAudio) {
+    try {
+      activeCharVoiceAudio.pause();
+      activeCharVoiceAudio.currentTime = 0;
+    } catch { /* ignore */ }
+    activeCharVoiceAudio = null;
+  }
+  if (activePrankAudio) {
+    try {
+      activePrankAudio.pause();
+      activePrankAudio.currentTime = 0;
+    } catch { /* ignore */ }
+    activePrankAudio = null;
+  }
+  activePrankIdx = -1;
+  if (activeScreamAudio) {
+    try {
+      activeScreamAudio.pause();
+      activeScreamAudio.currentTime = 0;
+    } catch { /* ignore */ }
+    activeScreamAudio = null;
+  }
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    try { window.speechSynthesis.cancel(); } catch { /* ignore */ }
+  }
+}
+
+export function isVoiceOrPrankBusy() {
+  if (activePrankAudio && !activePrankAudio.paused) return true;
+  if (activeScreamAudio && !activeScreamAudio.paused) return true;
+  if (activeCharVoiceAudio && !activeCharVoiceAudio.paused) return true;
+  return false;
+}
 
 /* Build stereo impulse response of a dark concrete-and-steel factory hall (Sector B) */
 function createWarehouseReverb() {
@@ -403,10 +448,12 @@ export function stopCharacterVoice() {
 export function playCharacterVoice(clipKey, onEnded = null) {
   startAudio();
   if (muted || !clipKey) return false;
-  stopCharacterVoice();
+  /* Если сейчас играет голосовой пранк или скример — фоновые реплики не перебивают их и не накладываются */
+  if (activeScreamAudio && !activeScreamAudio.paused) return true;
+  stopAllVoices();
   try {
     const a = new Audio(`assets/sfx/voices/${clipKey}.mp3`);
-    a.volume = 0.94;
+    a.volume = 0.96;
     a.muted = muted;
     activeCharVoiceAudio = a;
     a.onended = () => {
@@ -634,85 +681,33 @@ function makeDistortionCurve(amount = 220) {
   return curve;
 }
 
-/* Страшный кинематографический скример (настоящий леденящий душу крик ужаса + удар по металлу и саб-бас в грудь) */
+/* Кинематографический скример: мгновенно останавливает любые другие голоса, даёт один чёткий удар по металлу и включает чистую драматичную голосовую реплику персонажа! */
 export function scream(variantOverride = null) {
   startAudio();
-  if (!started || !ctx || muted) return;
-  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+  if (muted) return;
+  stopAllVoices();
+  if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
 
-  const vIdx = (variantOverride !== null ? variantOverride : screamCounter++) % 6;
-  const t = ctx.currentTime;
+  const vIdx = ((variantOverride !== null ? variantOverride : screamCounter++) % 6 + 6) % 6;
 
-  /* 6 вариантов настоящего страшного крика по ролям персонажей */
-  const screamConfigs = [
-    /* 0: Пронзительный женский истерический крик ужаса (Девушка) */
-    [
-      { key: 'scream_1', volume: 1.0, pan: -0.25, rate: 1.0, reverb: 0.36, offset: 0 },
-      { key: 'scream_3', volume: 0.72, pan: 0.35, rate: 1.12, reverb: 0.32, offset: 0.04 },
-    ],
-    /* 1: Жуткий мужской вопль и яростный рёв в упор (Отец) */
-    [
-      { key: 'scream_2', volume: 1.0, pan: 0.2, rate: 0.96, reverb: 0.36, offset: 0 },
-      { key: 'scream_3', volume: 0.78, pan: -0.3, rate: 0.92, reverb: 0.32, offset: 0.03 },
-    ],
-    /* 2: Демонический многоголосый вопль ужаса (Священник) */
-    [
-      { key: 'scream_2', volume: 1.0, pan: -0.35, rate: 0.88, reverb: 0.40, offset: 0 },
-      { key: 'scream_1', volume: 0.85, pan: 0.35, rate: 0.94, reverb: 0.36, offset: 0.02 },
-    ],
-    /* 3: Страшный срывающийся крик узника из бочки (Пацан) */
-    [
-      { key: 'scream_3', volume: 1.0, pan: 0.25, rate: 1.04, reverb: 0.38, offset: 0 },
-      { key: 'scream_1', volume: 0.82, pan: -0.25, rate: 0.96, reverb: 0.35, offset: 0.025 },
-    ],
-    /* 4: Внезапный леденящий крик из темноты со спины (Сообщник) */
-    [
-      { key: 'scream_2', volume: 1.0, pan: -0.45, rate: 1.02, reverb: 0.36, offset: 0 },
-      { key: 'scream_3', volume: 0.85, pan: 0.45, rate: 0.98, reverb: 0.34, offset: 0.02 },
-    ],
-    /* 5: Бешеный рык овчарки Рекса у самого лица + страшный крик жертвы */
-    [
-      { key: 'scream_3', volume: 1.0, pan: 0.25, rate: 1.0, reverb: 0.36, offset: 0 },
-      { key: 'dog_bark_1', volume: 1.0, pan: -0.4, rate: 0.90, reverb: 0.32, offset: 0 },
-      { key: 'scream_1', volume: 0.85, pan: 0.35, rate: 0.98, reverb: 0.34, offset: 0.05 },
-    ],
-  ];
+  /* 1. Один чистый кинематографический хоррор-удар (без наложения нескольких криков и без пилящего синтезатора!) */
+  const stingerKey = `scream_${(vIdx % 3) + 1}`;
+  playSample(stingerKey, { volume: 0.45, pan: 0, rate: 1.0, reverb: 0.18, offset: 0 });
+  playSample('barrel_low', { volume: 0.52, pan: 0, rate: 0.90, reverb: 0.20, offset: 0 });
 
-  const layers = screamConfigs[vIdx] || screamConfigs[0];
-  let samplePlayed = false;
-  layers.forEach((cfg) => {
-    if (playSample(cfg.key, cfg)) samplePlayed = true;
-  });
+  /* 2. Чистый студийный голос персонажа скримера (screamer_0..5.mp3) */
+  try {
+    const a = new Audio(`assets/sfx/voices/screamer_${vIdx}.mp3`);
+    a.volume = 0.98;
+    a.muted = muted;
+    activeScreamAudio = a;
+    a.onended = () => {
+      if (activeScreamAudio === a) activeScreamAudio = null;
+    };
+    a.play().catch(() => {});
+  } catch { /* ignore */ }
 
-  /* Если буфер ещё декодируется в первые секунды — запускаем аудиофайл напрямую без задержки */
-  if (!samplePlayed) {
-    try {
-      const primaryKey = layers[0].key;
-      const a = new Audio(SFX_FILES[primaryKey] || 'assets/sfx/scream_1.mp3');
-      a.volume = 1.0;
-      a.muted = muted;
-      a.play().catch(() => {});
-      samplePlayed = true;
-    } catch { /* ignore */ }
-  }
-
-  /* Внезапный ударный саб-бас в грудь и грохот стальной бочки с цепями */
-  playSample('barrel_low', { volume: 0.92, pan: 0, rate: 0.82, reverb: 0.35 });
-  playSample('chain_break', { volume: 0.78, pan: 0, rate: 0.96, reverb: 0.32 });
-
-  const sub = ctx.createOscillator();
-  sub.type = 'sawtooth';
-  sub.frequency.setValueAtTime(92, t);
-  sub.frequency.exponentialRampToValueAtTime(24, t + 0.48);
-  const subGain = ctx.createGain();
-  subGain.gain.setValueAtTime(0.88, t);
-  subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.56);
-  sub.connect(subGain);
-  subGain.connect(master);
-  sub.start(t);
-  sub.stop(t + 0.58);
-
-  if (navigator.vibrate) navigator.vibrate([260, 60, 320, 50, 220]);
+  if (navigator.vibrate) navigator.vibrate([220, 50, 260]);
   try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch (e) { /* ignore */ }
 }
 
@@ -900,15 +895,15 @@ export function playPrankVoice(idx = null, onEnded = null) {
     : (prankVoiceCursor++ % PRANK_VOICE_FILES.length);
 
   if (idx !== null && activePrankAudio && !activePrankAudio.paused && activePrankIdx === targetIdx) {
-    stopPrankVoice();
+    stopAllVoices();
     return { stopped: true, track: PRANK_VOICE_FILES[targetIdx] };
   }
 
-  stopPrankVoice();
+  stopAllVoices();
   const track = PRANK_VOICE_FILES[targetIdx];
   try {
     const a = new Audio(encodeURI(track.src));
-    a.volume = 0.92;
+    a.volume = 0.95;
     a.muted = muted;
     activePrankAudio = a;
     activePrankIdx = targetIdx;
@@ -924,7 +919,7 @@ export function playPrankVoice(idx = null, onEnded = null) {
   return { stopped: false, track, index: targetIdx, total: PRANK_VOICE_FILES.length };
 }
 
-/* Воспроизведение аудио-пранка как из старого заводского громкоговорителя под потолком цеха */
+/* Воспроизведение аудио-пранка в цеху: чистое и разборчивое звучание голоса без искажений и без эха! */
 export function playPrankLoudspeaker(idx = null, onEnded = null) {
   startAudio();
   if (muted) return { stopped: true, track: null };
@@ -932,88 +927,15 @@ export function playPrankLoudspeaker(idx = null, onEnded = null) {
     ? ((idx % PRANK_VOICE_FILES.length) + PRANK_VOICE_FILES.length) % PRANK_VOICE_FILES.length
     : (prankVoiceCursor++ % PRANK_VOICE_FILES.length);
 
-  stopPrankVoice();
+  stopAllVoices();
   const track = PRANK_VOICE_FILES[targetIdx];
-
-  if (ctx && started) {
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-    const t = ctx.currentTime;
-    [660, 495].forEach((freq, i) => {
-      const o = ctx.createOscillator();
-      o.type = 'triangle';
-      o.frequency.setValueAtTime(freq, t + i * 0.19);
-      const flt = ctx.createBiquadFilter();
-      flt.type = 'bandpass';
-      flt.frequency.value = 1100;
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0.24, t + i * 0.19);
-      g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.19 + 0.22);
-      o.connect(flt);
-      flt.connect(g);
-      g.connect(master);
-      o.start(t + i * 0.19);
-      o.stop(t + i * 0.19 + 0.24);
-    });
-  }
 
   try {
     const a = new Audio(encodeURI(track.src));
-    a.crossOrigin = 'anonymous';
     a.volume = 0.95;
     a.muted = muted;
     activePrankAudio = a;
     activePrankIdx = targetIdx;
-
-    if (ctx && started && ctx.createMediaElementSource) {
-      try {
-        const srcNode = ctx.createMediaElementSource(a);
-        const hp = ctx.createBiquadFilter();
-        hp.type = 'highpass';
-        hp.frequency.value = 480;
-
-        const hornPeak = ctx.createBiquadFilter();
-        hornPeak.type = 'peaking';
-        hornPeak.frequency.value = 1350;
-        hornPeak.Q.value = 2.4;
-        hornPeak.gain.value = 9.5;
-
-        const lp = ctx.createBiquadFilter();
-        lp.type = 'lowpass';
-        lp.frequency.value = 2400;
-
-        const shaper = ctx.createWaveShaper();
-        shaper.curve = makeDistortionCurve(28);
-
-        const delay = ctx.createDelay(0.5);
-        delay.delayTime.value = 0.155;
-        const fb = ctx.createGain();
-        fb.gain.value = 0.34;
-        const echoTone = ctx.createBiquadFilter();
-        echoTone.type = 'bandpass';
-        echoTone.frequency.value = 1100;
-        delay.connect(echoTone);
-        echoTone.connect(fb);
-        fb.connect(delay);
-
-        const dryGain = ctx.createGain();
-        dryGain.gain.value = 0.85;
-        const wetGain = ctx.createGain();
-        wetGain.gain.value = 0.48;
-
-        srcNode.connect(hp);
-        hp.connect(hornPeak);
-        hornPeak.connect(lp);
-        lp.connect(shaper);
-
-        shaper.connect(dryGain);
-        dryGain.connect(master);
-
-        shaper.connect(delay);
-        delay.connect(wetGain);
-        wetGain.connect(master);
-      } catch { /* fallback to direct audio output */ }
-    }
-
     a.onended = () => {
       if (activePrankAudio === a) {
         activePrankAudio = null;
@@ -1021,11 +943,7 @@ export function playPrankLoudspeaker(idx = null, onEnded = null) {
       }
       if (onEnded) onEnded(track);
     };
-    setTimeout(() => {
-      if (activePrankAudio === a && !muted) {
-        a.play().catch(() => {});
-      }
-    }, 360);
+    a.play().catch(() => {});
   } catch { /* ignore */ }
 
   return { stopped: false, track, index: targetIdx, total: PRANK_VOICE_FILES.length, loudspeaker: true };

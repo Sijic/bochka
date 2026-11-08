@@ -690,18 +690,21 @@ export class Tapper {
 
   speakWalker(w, hintType = null) {
     if (!w) return;
+    if (!hintType && audio.isVoiceOrPrankBusy && audio.isVoiceOrPrankBusy()) {
+      w.nextSpeechT = 4.5;
+      return;
+    }
     const effectiveHint = (!w.firstHintDone && !hintType) ? 'start' : hintType;
     if (effectiveHint === 'start') w.firstHintDone = true;
     const line = walkerLine(w.key, w.dog ? null : effectiveHint);
     w.speech = line;
-    w.speechT = effectiveHint ? 4.4 : 3.6;
-    w.nextSpeechT = 6.5 + Math.random() * 4.5;
-    const pan = ((w.x - this.view.x) / (this.view.w || W)) * 2 - 1;
+    w.speechT = effectiveHint ? 4.4 : 3.8;
+    w.nextSpeechT = 8.5 + Math.random() * 5.0;
     if (w.dog) {
       audio.bark();
-    } else {
-      audio.voiceMumble(pan, w.key === 'girl' ? 1.45 : w.key === 'priest' ? 0.85 : w.key === 'boy' ? 1.18 : 0.95);
-      if (this.active && !audio.isMuted()) speak(line, w.key);
+    } else if (this.active && !audio.isMuted()) {
+      if (audio.getActivePrankVoice && audio.getActivePrankVoice() >= 0) return;
+      speak(line, w.key);
     }
   }
 
@@ -1690,7 +1693,6 @@ export class Tapper {
       if (idx === 0) {
         w.speech = 'Слышите?! Там голосовой пранк гремит! Все бежим туда проверять!';
         w.speechT = 4.0;
-        if (!w.dog && !audio.isMuted()) speak(w.speech, w.key);
       }
     });
     if (this.betweenDog) {
@@ -2234,13 +2236,6 @@ export class Tapper {
       });
     }
     this.loudspeakerBannerT = Math.max(0, (this.loudspeakerBannerT || 0) - dt);
-    if (this.active) {
-      this.loudspeakerT = (this.loudspeakerT ?? 12) - dt;
-      if (this.loudspeakerT <= 0) {
-        this.loudspeakerT = 16 + Math.random() * 10;
-        this.triggerLoudspeakerBroadcast(false);
-      }
-    }
 
     const freezeOn = !!(this.skills && this.skills.freeze > 0);
     const oxyShieldOn = !!(this.skills && this.skills.oxygen > 0) || !!S.godMode;

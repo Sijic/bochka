@@ -289,15 +289,114 @@ function drawCinemaPost() {}
 const lobbyPosterImg = new Image();
 lobbyPosterImg.src = 'photo_2026-11-08_00-00-14.jpg';
 
-let lobbyYtMuted = true;
+let lobbyYtMuted = false;
+let lobbyYtPlayer = null;
+let lobbyYtDuckTimer = 0;
 let lastYtRectKey = '';
+
 function lobbyYtCmd(func, args = []) {
+  if (lobbyYtPlayer && typeof lobbyYtPlayer[func] === 'function') {
+    try {
+      lobbyYtPlayer[func](...args);
+      return;
+    } catch { /* fallback to postMessage */ }
+  }
   const ifr = $('lobbyYtIframe');
   if (!ifr || !ifr.contentWindow) return;
   try {
+    ifr.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 'lobbyYtIframe', channel: 'widget' }), '*');
     ifr.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args }), '*');
   } catch { /* ignore */ }
 }
+
+function updateSplashMuteBtnLabel() {
+  const btn = $('btnSplashMute');
+  if (btn) {
+    btn.textContent = lobbyYtMuted ? '🔇 ЗВУК ТРЕЙЛЕРА: ВЫКЛ' : '🔊 ЗВУК ТРЕЙЛЕРА: ВКЛ';
+  }
+}
+
+function ensureLobbyTrailerSound() {
+  if (started || lobbyYtMuted || preGameLobby.screenMode !== 'trailer') return;
+  lobbyYtCmd('unMute');
+  lobbyYtCmd('setVolume', [audio.isVoiceOrPrankBusy() ? 10 : 85]);
+  lobbyYtCmd('playVideo');
+  updateSplashMuteBtnLabel();
+}
+
+function duckLobbyTrailerForVoice(ms = 3200) {
+  if (started || lobbyYtMuted) return;
+  clearTimeout(lobbyYtDuckTimer);
+  lobbyYtCmd('setVolume', [10]);
+  const restore = () => {
+    if (started || lobbyYtMuted) return;
+    if (audio.isVoiceOrPrankBusy()) {
+      lobbyYtDuckTimer = setTimeout(restore, 400);
+      return;
+    }
+    lobbyYtCmd('unMute');
+    lobbyYtCmd('setVolume', [85]);
+  };
+  lobbyYtDuckTimer = setTimeout(restore, ms);
+}
+
+/* Подключаем официальный YouTube IFrame API и рукопожатие listening для гарантированного воспроизведения трейлера со звуком */
+(function initLobbyYoutubePlayer() {
+  const ifr = $('lobbyYtIframe');
+  if (ifr) {
+    ifr.addEventListener('load', () => {
+      try {
+        ifr.contentWindow?.postMessage(JSON.stringify({ event: 'listening', id: 'lobbyYtIframe', channel: 'widget' }), '*');
+      } catch { /* ignore */ }
+      if (!started && !lobbyYtMuted) {
+        setTimeout(() => ensureLobbyTrailerSound(), 250);
+      }
+    });
+  }
+  const prevReady = window.onYouTubeIframeAPIReady;
+  window.onYouTubeIframeAPIReady = () => {
+    if (typeof prevReady === 'function') prevReady();
+    if (!window.YT || !window.YT.Player || !$('lobbyYtIframe')) return;
+    lobbyYtPlayer = new window.YT.Player('lobbyYtIframe', {
+      events: {
+        onReady: (e) => {
+          try {
+            if (!started && !lobbyYtMuted && preGameLobby.screenMode === 'trailer') {
+              e.target.unMute();
+              e.target.setVolume(85);
+              e.target.playVideo();
+              /* Если браузер заблокировал старт со звуком до первого клика — запускаем видео и включим звук при первом же касании */
+              setTimeout(() => {
+                try {
+                  const st = e.target.getPlayerState?.();
+                  if (st !== 1 && st !== 3 && !started) {
+                    e.target.mute();
+                    e.target.playVideo();
+                  }
+                } catch { /* ignore */ }
+              }, 450);
+            }
+          } catch { /* ignore */ }
+        },
+      },
+    });
+  };
+  if (!document.getElementById('ytIframeApiScript')) {
+    const tag = document.createElement('script');
+    tag.id = 'ytIframeApiScript';
+    tag.src = 'https://www.youtube.com/iframe_api';
+    tag.async = true;
+    document.head.appendChild(tag);
+  }
+  const onFirstLobbyGesture = () => {
+    if (!started && !lobbyYtMuted && preGameLobby.screenMode === 'trailer') {
+      ensureLobbyTrailerSound();
+    }
+  };
+  ['pointerdown', 'click', 'touchstart', 'keydown'].forEach((ev) => {
+    window.addEventListener(ev, onFirstLobbyGesture, { passive: true });
+  });
+})();
 
 const LOBBY_CREDITS_LINES = [
   { kind: 'head', txt: '🎬 БОЧКА (BARREL) · В КИНО С 17 ДЕКАБРЯ 2026' },
@@ -331,42 +430,90 @@ const preGameLobby = {
       rx: 0.36, ry: 0.61, scale: 0.84, spriteKey: 'igor',
       charKey: 'priest', frameIdx: 4, voiceRole: 'priest',
       name: 'ТИЛЬ ШВАЙГЕР', firstName: 'ТИЛЬ', lastName: 'ШВАЙГЕР', shortRole: 'ПАСТОР',
-      role: 'ПАСТОР · НАСТАВНИК', quote: '«Бочка: стучите, и отворят вам…»',
+      role: 'ПАСТОР · НАСТАВНИК',
+      quote: '«Бочка: стучите, и отворят вам…»',
+      quotes: [
+        '«Бочка: стучите, и отворят вам…»',
+        '«Тук-тук! Это я, Тиль Швайгер! Принёс бочку для вашего мальчика!»',
+        '«На небесах только и говорят, что о море… и о твоём последнем пранке!»',
+        '«Прислушайся к тишине цеха: одна из бочек стучит изнутри. Жми Старт игры!»',
+      ],
+      voiceKeys: ['priest_lobby_1', 'priest_lobby_2', 'priest_lobby_3', 'priest_lobby_4'],
       shake: 0, glow: 0, handT: 0, popT: 0, popAnim: 0, rubCd: 0, hits: 0,
     },
     {
       rx: 0.56, ry: 0.60, scale: 0.84, spriteKey: 'oleg',
       charKey: 'capguy', frameIdx: 3, voiceRole: 'capguy',
       name: 'ОЛА КЕЙРУ', firstName: 'ОЛА', lastName: 'КЕЙРУ', shortRole: 'СООБЩНИК',
-      role: 'СООБЩНИК', quote: '«В Секторе Б никто не услышит…»',
+      role: 'СООБЩНИК',
+      quote: '«В Секторе Б никто не услышит твой крик…»',
+      quotes: [
+        '«В Секторе Б никто не услышит твой крик…»',
+        '«Все лучшие ништяки закованы в цепь! Голой рукой не пробить — бери инструмент!»',
+        '«Когда луч фонаря светит на бочку — замри и не стучи, иначе схвачу!»',
+        '«Как собьёшь цепь с бочки — забирай куш и больше по ней не стучи!»',
+      ],
+      voiceKeys: ['capguy_lobby_1', 'capguy_lobby_2', 'capguy_lobby_3', 'capguy_lobby_4'],
       shake: 0, glow: 0, handT: 0, popT: 0, popAnim: 0, rubCd: 0, hits: 0,
     },
     {
       rx: 0.44, ry: 0.72, scale: 1.02, spriteKey: 'mark',
       charKey: 'boy', frameIdx: 1, voiceRole: 'boy',
       name: 'НАТАН ПОЛ-КОЛЛИС', firstName: 'НАТАН', lastName: 'ПОЛ-КОЛЛИС', shortRole: 'В БОЧКЕ',
-      role: 'ПАЦАН В БОЧКЕ', quote: '«ЭТО НЕ ПРАНК! ВЫПУСТИТЕ МЕНЯ!»',
+      role: 'ПАЦАН В БОЧКЕ',
+      quote: '«ЭТО НЕ ПРАНК! ВЫПУСТИТЕ МЕНЯ!»',
+      quotes: [
+        '«ЭТО НЕ ПРАНК! ВЫПУСТИТЕ МЕНЯ ИЗ БОЧКИ!»',
+        '«Эй, кто-нибудь! Меня заперли в стальной бочке посреди тёмного завода!»',
+        '«Воздух внутри кончается! Стучи по правильной бочке, чтобы спасти меня!»',
+        '«Единственный ключ — у моего отца, прикованного цепями в пяти метрах!»',
+      ],
+      voiceKeys: ['boy_lobby_1', 'boy_lobby_2', 'boy_lobby_3', 'boy_lobby_4'],
       shake: 0, glow: 0, handT: 0, popT: 0, popAnim: 0, rubCd: 0, hits: 0, hasHand: true,
     },
     {
       rx: 0.63, ry: 0.74, scale: 1.05, spriteKey: 'anna',
       charKey: 'girl', frameIdx: 3, voiceRole: 'girl',
       name: 'ИРИНА КОБЗЕВА', firstName: 'ИРИНА', lastName: 'КОБЗЕВА', shortRole: 'ДЕВУШКА',
-      role: 'ДЕВУШКА', quote: '«Камера включена… запись идёт!»',
+      role: 'ДЕВУШКА',
+      quote: '«Камера включена… запись пранка идёт!»',
+      quotes: [
+        '«Камера включена… запись пранка идёт!»',
+        '«Прислушайся: из этой бочки доносится глухой стук! Скорее помоги ему!»',
+        '«Используй карточки навыков за энергию — заморозь охрану или выключи им фонари!»',
+        '«Лови бочки со значком кислорода, чтобы узник внутри не задохнулся!»',
+      ],
+      voiceKeys: ['girl_lobby_1', 'girl_lobby_2', 'girl_lobby_3', 'girl_lobby_4'],
       shake: 0, glow: 0, handT: 0, popT: 0, popAnim: 0, rubCd: 0, hits: 0,
     },
     {
       rx: 0.78, ry: 0.68, scale: 0.96, spriteKey: 'artur',
       charKey: 'director', frameIdx: 3, voiceRole: 'director', isDirector: true,
       name: 'АЛЕКСЕЙ ЗВОНЦОВ', firstName: 'АЛЕКСЕЙ', lastName: 'ЗВОНЦОВ', shortRole: 'РЕЖИССЁР',
-      role: 'РЕЖИССЁР ФИЛЬМА', quote: '«Мотор! В кино с 17 декабря 2026!»',
+      role: 'РЕЖИССЁР ФИЛЬМА',
+      quote: '«Камера, мотор! В кино с 17 декабря 2026!»',
+      quotes: [
+        '«Камера, мотор! Триллер Бочка — в кино с 17 декабря 2026!»',
+        '«Я режиссёр Алексей Звонцов! Пройди все 8 уровней цеха и попади в топ рейтинга!»',
+        '«Качай карточку Бочка друзьями до 200 уровня и выиграй приглашение на закрытый показ!»',
+        '«Снято! Жми большую золотую кнопку Старт игры — испытание начинается!»',
+      ],
+      voiceKeys: ['director_lobby_1', 'director_lobby_2', 'director_lobby_3', 'director_lobby_4'],
       shake: 0, glow: 0, handT: 0, popT: 0, popAnim: 0, rubCd: 0, hits: 0,
     },
     {
       rx: 0.22, ry: 0.74, scale: 1.08, spriteKey: 'daniyar',
       charKey: 'father', frameIdx: 6, voiceRole: 'father',
       name: 'ФИЛИПП РЕЙНХАРДТ', firstName: 'ФИЛИПП', lastName: 'РЕЙНХАРДТ', shortRole: 'ОТЕЦ',
-      role: 'ОТЕЦ МАЛЬЧИКА', quote: '«Сынок! Стучи по бочке — я найду тебя!»',
+      role: 'ОТЕЦ МАЛЬЧИКА',
+      quote: '«Сынок! Стучи по бочке — я найду тебя!»',
+      quotes: [
+        '«Сынок! Стучи по бочке — я найду тебя по звуку!»',
+        '«Держись, родной! Я разорву эти цепи и вытащу тебя отсюда!»',
+        '«Видишь руку из горловины бочки — стучи быстрее, это двойные очки!»',
+        '«Осторожно, опрокинутая бочка — это ловушка! Бей только по стоящим бочкам!»',
+      ],
+      voiceKeys: ['father_lobby_1', 'father_lobby_2', 'father_lobby_3', 'father_lobby_4'],
       shake: 0, glow: 0, handT: 0, popT: 0, popAnim: 0, rubCd: 0, hits: 0,
     },
   ],
@@ -412,10 +559,21 @@ function triggerLobbyBarrelKnock(idx, isRub = false) {
   if (isRub) {
     audio.knockTone(idx % 3, 0.55);
   } else {
+    const qIdx = Array.isArray(b.quotes) && b.quotes.length
+      ? (b.hits - 1) % b.quotes.length
+      : 0;
+    const activeQuote = (Array.isArray(b.quotes) && b.quotes[qIdx]) ? b.quotes[qIdx] : b.quote;
+    b.quote = activeQuote;
+    const activeVoiceKey = (Array.isArray(b.voiceKeys) && b.voiceKeys[qIdx]) ? b.voiceKeys[qIdx] : null;
     audio.barrelMelodyBeat(idx % 3, b.hits);
     audio.hit(1.0);
-    if (!audio.isMuted() && b.quote) {
-      speak(b.quote.replace(/[«»]/g, ''), b.voiceRole || 'father');
+    if (!audio.isMuted() && activeQuote) {
+      duckLobbyTrailerForVoice(3400);
+      if (activeVoiceKey) {
+        audio.playCharacterVoice(activeVoiceKey);
+      } else {
+        speak(activeQuote.replace(/[«»]/g, ''), b.voiceRole || 'father');
+      }
     }
   }
   const spCount = isRub ? 5 : 14;
@@ -522,10 +680,10 @@ function hitPreGameLobby(x, y, isRub = false) {
       return true;
     }
   }
-  /* 2. Клик по верхней плашке киноэкрана позволяет в любой момент переключить: ТРЕЙЛЕР <-> ТИТРЫ С ПРАВИЛАМИ */
+  /* 2. Клик по верхней плашке киноэкрана справа переключает: ТРЕЙЛЕР <-> ТИТРЫ С ПРАВИЛАМИ, а клик по самому экрану включает звук трейлера! */
   if (!isRub && preGameLobby.screenRect) {
     const sr = preGameLobby.screenRect;
-    if (x >= sr.x && x <= sr.x + sr.w && y >= sr.y && y <= sr.y + 26) {
+    if (x >= sr.x && x <= sr.x + sr.w && y >= sr.y && y <= sr.y + 26 && x >= sr.x + sr.w * 0.52) {
       if (preGameLobby.screenMode === 'trailer') {
         preGameLobby.screenMode = 'credits';
         preGameLobby.creditsT = 0;
@@ -534,9 +692,19 @@ function hitPreGameLobby(x, y, isRub = false) {
         preGameLobby.screenMode = 'trailer';
         preGameLobby.trailerT = 0;
         lobbyYtCmd('seekTo', [0, true]);
-        lobbyYtCmd('playVideo');
+        ensureLobbyTrailerSound();
       }
       audio.coin(1.4);
+      return true;
+    }
+    if (x >= sr.x && x <= sr.x + sr.w && y >= sr.y && y <= sr.y + sr.h) {
+      if (preGameLobby.screenMode !== 'trailer') {
+        preGameLobby.screenMode = 'trailer';
+        preGameLobby.trailerT = 0;
+      }
+      lobbyYtMuted = false;
+      ensureLobbyTrailerSound();
+      toast('🔊 Звук официального трейлера включён!');
       return true;
     }
   }
@@ -1260,6 +1428,7 @@ function boot() {
   $('btnHud').onclick = () => $('hero').classList.toggle('is-menu');
   document.querySelectorAll('.plate--br .btn').forEach((b) => b.addEventListener('click', () => { $('hero').classList.remove('is-menu'); }));
   const triggerPrankQuick = () => {
+    duckLobbyTrailerForVoice(6500);
     const res = audio.playPrankVoice();
     if (res && res.track) {
       toast(`${res.track.label} (${res.index + 1}/${res.total}) — нажми ещё для следующей записи!`);
@@ -1304,16 +1473,15 @@ function boot() {
     };
   }
   if ($('btnSplashMute')) {
+    updateSplashMuteBtnLabel();
     $('btnSplashMute').onclick = () => {
       lobbyYtMuted = !lobbyYtMuted;
       if (!lobbyYtMuted) {
-        lobbyYtCmd('unMute');
-        lobbyYtCmd('setVolume', [85]);
-        lobbyYtCmd('playVideo');
-        $('btnSplashMute').textContent = '🔊 ЗВУК ТРЕЙЛЕРА: ВКЛ';
+        audio.stopAllVoices();
+        ensureLobbyTrailerSound();
       } else {
         lobbyYtCmd('mute');
-        $('btnSplashMute').textContent = '🔇 ЗВУК ТРЕЙЛЕРА: ВЫКЛ';
+        updateSplashMuteBtnLabel();
       }
     };
   }
@@ -1325,7 +1493,7 @@ function boot() {
       $('hero').classList.remove('is-started', 'is-playing');
       $('enterBox').classList.remove('is-hidden');
       $('btnEnter').textContent = t('enter');
-      lobbyYtCmd('playVideo');
+      ensureLobbyTrailerSound();
     };
   }
   $('btnEnter').onclick = () => {

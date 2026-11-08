@@ -171,8 +171,14 @@ export function initTrailer(el) {
   const mountYoutubeFacade = (autoPlay = false) => {
     wrap.innerHTML = '';
     if (autoPlay) {
+      const lobbyIfr = document.getElementById('lobbyYtIframe');
+      if (lobbyIfr && lobbyIfr.contentWindow) {
+        try {
+          lobbyIfr.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'pauseVideo', args: [] }), '*');
+        } catch { /* ignore */ }
+      }
       const iframe = document.createElement('iframe');
-      iframe.src = `https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0&modestbranding=1&playsinline=1`;
+      iframe.src = `https://www.youtube.com/embed/${ytId}?autoplay=1&mute=0&controls=1&rel=0&modestbranding=1&playsinline=1`;
       iframe.title = 'БОЧКА — Официальный трейлер (YouTube)';
       iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
       iframe.allowFullscreen = true;
