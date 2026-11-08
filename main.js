@@ -454,6 +454,7 @@ function triggerLobbyBarrelKnock(idx, isRub = false) {
 function drawBarrelPopCharacter(c, b, idx, sx, sy, bw, bh, posS, dt = 1 / 60) {
   const pop = b.popAnim || 0;
   if (pop <= 0.02) return;
+  if (!sheets[b.charKey || 'father']) return;
 
   if (!b.actor) {
     b.actor = new Actor(b.charKey || 'father');

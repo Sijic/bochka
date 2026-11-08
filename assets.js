@@ -1,23 +1,41 @@
-/* Sprite sheets and location backgrounds in assets/ */
+/* Sprite sheets and location backgrounds in assets/ (pre-keyed high-speed WebP + fallback JPGs) */
 export const ASSET_MAP = {
-  church: 'assets/church.jpg',
-  ocean: 'assets/ocean.jpg',
-  dog: 'assets/dog.jpg',
-  capguy: 'assets/capguy.jpg',
-  priest: 'assets/priest.jpg',
-  girl: 'assets/girl.jpg',
-  boy: 'assets/boy.jpg',
-  father: 'assets/father.jpg',
-  factorySector: 'assets/factory_sector.jpg',
-  factory: 'assets/factory.jpg',
-  barrels: 'assets/barrels.jpg',
-  /* Постеры всех актёров и кадры из бочки для жутких меняющихся скримеров и досье */
+  /* Stage 1: Бочки и все персонажи перед киноэкраном — загружаются в первую очередь (< 500 КБ суммарно!) */
+  barrels: 'assets/keyed/barrels.webp',
+  priest: 'assets/keyed/priest.webp',
+  capguy: 'assets/keyed/capguy.webp',
+  boy: 'assets/keyed/boy.webp',
+  girl: 'assets/keyed/girl.webp',
+  father: 'assets/keyed/father.webp',
+  /* Stage 2: Локации цеха, овчарка, церковь и море */
+  factory: 'assets/keyed/factory.webp',
+  dog: 'assets/keyed/dog.webp',
+  church: 'assets/keyed/church.webp',
+  factorySector: 'assets/keyed/factory_sector.webp',
+  ocean: 'assets/keyed/ocean.webp',
+  oceanSprites: 'assets/keyed/ocean_sprites.webp',
+  /* Stage 3: Постеры актёров и кадры из бочки для скримеров и досье */
   posterPriest: 'assets/images_3.jpg',
   posterPriestHand: 'assets/poster_en.jpg',
   posterFather: 'assets/images_6.jpg',
   posterFatherFull: 'assets/father_photo.jpg',
   posterBoy: 'assets/images_2.jpg',
   posterGirl: 'assets/images_5.jpg',
+  posterBarrelEye: 'assets/keyed/barrel_hole.webp',
+};
+
+export const LEGACY_ASSET_MAP = {
+  barrels: 'assets/barrels.jpg',
+  priest: 'assets/priest.jpg',
+  capguy: 'assets/capguy.jpg',
+  boy: 'assets/boy.jpg',
+  girl: 'assets/girl.jpg',
+  father: 'assets/father.jpg',
+  factory: 'assets/factory.jpg',
+  dog: 'assets/dog.jpg',
+  church: 'assets/church.jpg',
+  factorySector: 'assets/factory_sector.jpg',
+  ocean: 'assets/ocean.jpg',
   posterBarrelEye: 'assets/barrel_hole.jpg',
 };
 
@@ -54,22 +72,41 @@ export const BARREL_RECTS = {
 
 /* Prefer the inlined data URL of an uploaded asset: it never taints the canvas,
    so getImageData (needed for background removal) always works. */
-function resolveSrc(src) {
-  const name = src.split('/').pop();
-  const up = (window.UPLOADED_IMAGES || []).find((a) => a.name === name);
+function resolveSrc(src, key = '') {
+  const legacy = LEGACY_ASSET_MAP[key];
+  const legacyName = legacy ? legacy.split('/').pop() : src.split('/').pop();
+  const up = (window.UPLOADED_IMAGES || []).find((a) => a.name === legacyName || a.name === src.split('/').pop());
   return up?.dataUrl || src;
 }
 
-function loadImage(src) {
+function loadImage(src, retries = 2) {
   return new Promise((resolve) => {
-    const img = new Image();
-    if (/^https?:/i.test(src) || location.protocol.startsWith('http')) {
-      img.crossOrigin = 'anonymous';
-    }
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
-    img.src = resolveSrc(src);
+    const attempt = (left) => {
+      const img = new Image();
+      if (/^https?:/i.test(src) && !src.startsWith(location.origin)) {
+        img.crossOrigin = 'anonymous';
+      }
+      img.onload = () => resolve(img);
+      img.onerror = () => {
+        if (left > 0) {
+          setTimeout(() => attempt(left - 1), 150);
+        } else {
+          resolve(null);
+        }
+      };
+      img.src = src;
+    };
+    attempt(retries);
   });
+}
+
+function imgToCanvas(img) {
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth || img.width;
+  c.height = img.naturalHeight || img.height;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0);
+  return c;
 }
 
 /* Removes the grey checkerboard "transparency" background baked into the JPG sheets.
@@ -547,22 +584,51 @@ export const sheets = {};
 export async function loadAll(onProgress) {
   const keys = Object.keys(ASSET_MAP);
   let n = 0;
-  await Promise.all(keys.map(async (k) => {
-    const img = await loadImage(ASSET_MAP[k]);
-    if (!img) { sheets[k] = null; }
-    else if (k === 'ocean') {
+  const loadKey = async (k) => {
+    const primarySrc = resolveSrc(ASSET_MAP[k], k);
+    const isPreKeyed = primarySrc.includes('/keyed/') && !primarySrc.startsWith('data:');
+    let img = await loadImage(primarySrc);
+    let usedLegacy = !isPreKeyed;
+    if (!img && LEGACY_ASSET_MAP[k]) {
+      img = await loadImage(LEGACY_ASSET_MAP[k]);
+      usedLegacy = true;
+    }
+    if (!img) {
+      sheets[k] = null;
+    } else if (!usedLegacy) {
+      /* Pre-keyed WebP: already has 100% clean alpha transparency — instant GPU drawImage! */
+      if (k === 'ocean' || k.startsWith('poster')) {
+        sheets[k] = img;
+      } else {
+        sheets[k] = imgToCanvas(img);
+      }
+    } else if (k === 'ocean') {
       sheets.ocean = img;
-      sheets.oceanSprites = keyOutOceanSprites(img);
-    }
-    else if (k.startsWith('poster')) {
+      if (!sheets.oceanSprites) sheets.oceanSprites = keyOutOceanSprites(img);
+    } else if (k === 'oceanSprites') {
+      sheets.oceanSprites = imgToCanvas(img);
+    } else if (k.startsWith('poster')) {
       sheets[k] = img;
-    }
-    else if (k === 'factory' || k === 'factorySector' || k === 'church') {
+    } else if (k === 'factory' || k === 'factorySector' || k === 'church') {
       sheets[k] = keyOutBuildingChecker(img, k);
+    } else {
+      sheets[k] = keyOutChecker(img, k !== 'barrels', k);
     }
-    else { sheets[k] = keyOutChecker(img, k !== 'barrels', k); }
-    n++; if (onProgress) onProgress(n / keys.length);
-  }));
+    n++;
+    if (onProgress) onProgress(n / keys.length);
+  };
+
+  /* Stage 1: Мгновенная загрузка бочек и всех 5 спрайт-персонажей на главном экране (< 500 КБ) */
+  const stage1 = ['barrels', 'priest', 'capguy', 'boy', 'girl', 'father'];
+  await Promise.all(stage1.map(loadKey));
+
+  /* Stage 2: Фоны цеха, овчарка, церковь и море */
+  const stage2 = ['factory', 'dog', 'church', 'factorySector', 'ocean', 'oceanSprites'];
+  await Promise.all(stage2.map(loadKey));
+
+  /* Stage 3: Постеры актёров и скримеры */
+  const rest = keys.filter((k) => !stage1.includes(k) && !stage2.includes(k));
+  await Promise.all(rest.map(loadKey));
   return sheets;
 }
 
