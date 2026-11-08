@@ -79,7 +79,7 @@ function resize() {
   const targetPortraitW = cw < 600 ? 580 : 760;
   const s = portrait
     ? (cw / targetPortraitW)
-    : Math.max(cw / VW, ch / VH);
+    : Math.min(cw / VW, ch / VH);
   view = { s, ox: (cw - VW * s) / 2, oy: (ch - VH * s) / 2, dpr, cw, ch };
   /* visible part of the world in world units, so the game can lay itself out on any screen */
   const vis = { x: -view.ox / s, y: -view.oy / s, w: cw / s, h: ch / s };
@@ -427,7 +427,7 @@ const preGameLobby = {
   floats: [],
   barrels: [
     {
-      rx: 0.36, ry: 0.61, scale: 0.84, spriteKey: 'igor',
+      rx: 0.35, ry: 0.63, scale: 0.92, spriteKey: 'igor',
       charKey: 'priest', frameIdx: 4, voiceRole: 'priest',
       name: 'ТИЛЬ ШВАЙГЕР', firstName: 'ТИЛЬ', lastName: 'ШВАЙГЕР', shortRole: 'ПАСТОР',
       role: 'ПАСТОР · НАСТАВНИК',
@@ -442,7 +442,7 @@ const preGameLobby = {
       shake: 0, glow: 0, handT: 0, popT: 0, popAnim: 0, rubCd: 0, hits: 0,
     },
     {
-      rx: 0.56, ry: 0.60, scale: 0.84, spriteKey: 'oleg',
+      rx: 0.56, ry: 0.63, scale: 0.92, spriteKey: 'oleg',
       charKey: 'capguy', frameIdx: 3, voiceRole: 'capguy',
       name: 'ОЛА КЕЙРУ', firstName: 'ОЛА', lastName: 'КЕЙРУ', shortRole: 'СООБЩНИК',
       role: 'СООБЩНИК',
@@ -457,7 +457,7 @@ const preGameLobby = {
       shake: 0, glow: 0, handT: 0, popT: 0, popAnim: 0, rubCd: 0, hits: 0,
     },
     {
-      rx: 0.44, ry: 0.72, scale: 1.02, spriteKey: 'mark',
+      rx: 0.45, ry: 0.72, scale: 1.00, spriteKey: 'mark',
       charKey: 'boy', frameIdx: 1, voiceRole: 'boy',
       name: 'НАТАН ПОЛ-КОЛЛИС', firstName: 'НАТАН', lastName: 'ПОЛ-КОЛЛИС', shortRole: 'В БОЧКЕ',
       role: 'ПАЦАН В БОЧКЕ',
@@ -472,7 +472,7 @@ const preGameLobby = {
       shake: 0, glow: 0, handT: 0, popT: 0, popAnim: 0, rubCd: 0, hits: 0, hasHand: true,
     },
     {
-      rx: 0.63, ry: 0.74, scale: 1.05, spriteKey: 'anna',
+      rx: 0.64, ry: 0.72, scale: 1.00, spriteKey: 'anna',
       charKey: 'girl', frameIdx: 3, voiceRole: 'girl',
       name: 'ИРИНА КОБЗЕВА', firstName: 'ИРИНА', lastName: 'КОБЗЕВА', shortRole: 'ДЕВУШКА',
       role: 'ДЕВУШКА',
@@ -487,7 +487,7 @@ const preGameLobby = {
       shake: 0, glow: 0, handT: 0, popT: 0, popAnim: 0, rubCd: 0, hits: 0,
     },
     {
-      rx: 0.78, ry: 0.68, scale: 0.96, spriteKey: 'artur',
+      rx: 0.77, ry: 0.68, scale: 0.96, spriteKey: 'artur',
       charKey: 'director', frameIdx: 3, voiceRole: 'director', isDirector: true,
       name: 'АЛЕКСЕЙ ЗВОНЦОВ', firstName: 'АЛЕКСЕЙ', lastName: 'ЗВОНЦОВ', shortRole: 'РЕЖИССЁР',
       role: 'РЕЖИССЁР ФИЛЬМА',
@@ -502,7 +502,7 @@ const preGameLobby = {
       shake: 0, glow: 0, handT: 0, popT: 0, popAnim: 0, rubCd: 0, hits: 0,
     },
     {
-      rx: 0.22, ry: 0.74, scale: 1.08, spriteKey: 'daniyar',
+      rx: 0.24, ry: 0.72, scale: 1.02, spriteKey: 'daniyar',
       charKey: 'father', frameIdx: 6, voiceRole: 'father',
       name: 'ФИЛИПП РЕЙНХАРДТ', firstName: 'ФИЛИПП', lastName: 'РЕЙНХАРДТ', shortRole: 'ОТЕЦ',
       role: 'ОТЕЦ МАЛЬЧИКА',
@@ -522,14 +522,14 @@ const preGameLobby = {
 function getLobbyBarrelPos(b) {
   const v = tapper.view || { x: 0, y: 0, w: VW, h: VH };
   const narrow = v.w < 640;
-  /* На узком вертикальном экране телефона аккуратно размещаем полукруг бочек прямо перед киноэкраном,
-     а на компьютере опускаем бочки чуть ниже от экрана и делаем чуть аккуратнее! */
+  /* Размещаем 6 бочек полукругом перед нижней кромкой киноэкрана так, чтобы они полностью
+     помещались в кадр над нижней панелью «СТАРТ ИГРЫ» и ничего не уходило за края экрана! */
   const rx = narrow ? (0.5 + (b.rx - 0.5) * 1.12) : b.rx;
-  const ry = narrow ? (b.ry + 0.025) : (b.ry + 0.085);
+  const ry = narrow ? (b.ry + 0.015) : b.ry;
   const x = v.x + v.w * rx;
   const y = v.y + v.h * ry;
-  const s = b.scale * (narrow ? 0.82 : 0.86);
-  const bh = 150 * s;
+  const s = b.scale * (narrow ? 0.80 : 0.84);
+  const bh = 146 * s;
   const bw = bh * 0.56;
   return { x, y, s, bw, bh };
 }
@@ -591,9 +591,9 @@ function triggerLobbyBarrelKnock(idx, isRub = false) {
     addPoints(pts);
     preGameLobby.floats.push({
       x: pos.x,
-      y: pos.y - pos.bh * 1.48,
-      txt: `${b.name} · ${b.role} (+${pts})`,
-      sub: b.quote,
+      y: Math.max((tapper.view ? tapper.view.y + 82 : 82), pos.y - pos.bh * 1.32),
+      txt: b.quote,
+      sub: `+${pts} ОЧКОВ`,
       life: 1.85,
     });
     tgHaptic('impact', 'light');
@@ -713,11 +713,11 @@ function hitPreGameLobby(x, y, isRub = false) {
 
 function drawLobbyBackgroundTrailerAndCredits(c, v, dt = 0.016) {
   const narrow = v.w < 640;
-  /* Большой киноэкран прямо за бочками: бочки стоят чуть ниже у нижней кромки экрана! */
-  const scrW = Math.min(v.w * (narrow ? 0.94 : 0.66), 660);
-  const scrH = narrow ? Math.round(v.h * 0.42) : Math.round(v.h * 0.44);
+  /* Большой киноэкран прямо за бочками: аккуратно помещается между верхней шапкой и бочками! */
+  const scrW = Math.min(v.w * (narrow ? 0.92 : 0.56), 580);
+  const scrH = narrow ? Math.round(v.h * 0.36) : Math.round(v.h * 0.40);
   const scrX = Math.round(v.x + (v.w - scrW) * 0.5);
-  const scrY = Math.round(v.y + v.h * (narrow ? 0.20 : 0.105));
+  const scrY = Math.round(v.y + v.h * (narrow ? 0.19 : 0.095));
   preGameLobby.screenRect = { x: scrX, y: scrY, w: scrW, h: scrH };
 
   /* Позиционируем встроенный YouTube-плеер ровно в окно киноэкрана за бочками (16:9 cover без чёрных полос по бокам!) */
@@ -968,25 +968,6 @@ function updateAndDrawPreGameLobby(c, dt) {
   /* 4. БОЛЬШОЙ КИНОЭКРАН ПРЯМО ЗА БОЧКАМИ: сначала идёт Трейлер, а когда он закончится — Титры с правилами игры! */
   drawLobbyBackgroundTrailerAndCredits(c, v, dt);
 
-  /* Глянцевый круглый подиум / люк с двумя бликами прожекторов на переднем плане под бочками */
-  const discX = v.x + v.w * 0.50;
-  const discY = v.y + v.h * 0.85;
-  const discRx = Math.min(185, v.w * 0.24);
-  const discRy = discRx * 0.44;
-  c.save();
-  c.beginPath();
-  c.ellipse(discX, discY, discRx, discRy, 0, 0, Math.PI * 2);
-  const discGrad = c.createRadialGradient(discX, discY - discRy * 0.3, 8, discX, discY, discRx);
-  discGrad.addColorStop(0, '#121720');
-  discGrad.addColorStop(0.7, '#06080B');
-  discGrad.addColorStop(1, '#020305');
-  c.fillStyle = discGrad;
-  c.fill();
-  c.strokeStyle = 'rgba(212, 168, 67, 0.22)';
-  c.lineWidth = 1.5;
-  c.stroke();
-  c.restore();
-
   /* 5. ПЕРЕД КИНОЭКРАНОМ СТОЯТ 6 ФОТОРЕАЛИСТИЧНЫХ БОЧЕК ИЗ sheets.barrels, И ТОЛЬКО ПОСЛЕ УДАРОВ ИЗ НИХ ПОЯВЛЯЮТСЯ НАШИ СПРАЙТ-ПЕРСОНАЖИ! */
   const sh = sheets.barrels;
   const drawOrder = [0, 1, 4, 2, 3, 5];
@@ -1056,12 +1037,11 @@ function updateAndDrawPreGameLobby(c, dt) {
       glow: Math.max(b.glow, lightBoost * 0.75),
     });
 
-    /* Индикатор стука изнутри или высунувшегося персонажа над бочкой */
-    if (isKnockingNow || b.popT > 0 || b.hits > 0) {
+    /* Индикатор стука изнутри ТОЛЬКО над закрытой стучащей бочкой (без имён над головами высунувшихся персонажей!) */
+    if (isKnockingNow && !b.hits && !(b.popT > 0)) {
       c.save();
-      const extraLift = (b.popAnim || 0) * bh * 0.72;
-      const tagY = sy - (showHand ? bh * 1.02 : bh * 0.86) - extraLift - 12 * pos.s;
-      const tagTxt = (b.hits > 0 || b.popT > 0) ? `🎭 ${b.firstName} ${b.lastName}` : '🔊 ТУК-ТУК!';
+      const tagY = sy - (showHand ? bh * 1.02 : bh * 0.86) - 10 * pos.s;
+      const tagTxt = '🔊 ТУК-ТУК!';
       c.font = `800 ${Math.max(7.5, Math.round(9 * pos.s))}px "JetBrains Mono", monospace`;
       const tw = c.measureText(tagTxt).width + 12;
       c.fillStyle = 'rgba(10, 12, 16, 0.92)';
