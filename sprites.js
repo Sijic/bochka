@@ -9,12 +9,13 @@
    4) Свечение и конус света (beam) выходят ровно из пиксельных координат фонаря/телефона в руке. */
 import { sheets } from './assets.js';
 
-export const TORCH = { father: 'lantern', capguy: 'flashlight', girl: 'phone', boy: 'phone', priest: 'book' };
+export const TORCH = { father: 'lantern', capguy: 'flashlight', girl: 'phone', boy: 'phone', priest: 'book', director: null };
 
 /* Канонический опорный кадр (индекс 0..7 в сетке 4x2) и высота линии бедра (hip) для каждого героя */
 const CHAR_SPEC = {
-  father: { base: 6, hip: 0.56, handX: 0.91, handY: 0.48 },  /* кадр 6: Отец держит фонарь в вытянутой руке */
-  boy:    { base: 1, hip: 0.54, handX: 0.94, handY: 0.275 }, /* кадр 1: Пацан светит вспышкой с верхней части телефона в вытянутой руке */
+  father:   { base: 6, hip: 0.56, handX: 0.91, handY: 0.48 },  /* кадр 6: Отец держит фонарь в вытянутой руке */
+  director: { base: 3, hip: 0.56, handX: 0.90, handY: 0.36 },  /* кадр 3: Режиссёр Алексей Звонцов в чёрной куртке и белой футболке жестикулирует */
+  boy:      { base: 1, hip: 0.54, handX: 0.94, handY: 0.275 }, /* кадр 1: Пацан светит вспышкой с верхней части телефона в вытянутой руке */
   girl:   { base: 3, hip: 0.53, handX: 0.95, handY: 0.215 }, /* кадр 3: Девушка — луч строго из верхней LED-вспышки телефона, а не снизу! */
   priest: { base: 4, hip: 0.55, handX: 0.62, handY: 0.42 },  /* кадр 4: Тиль Швайгер в 3/4 с Библией в руке */
   capguy: { base: 3, hip: 0.53, handX: 0.93, handY: 0.325 }, /* кадр 3: Сообщник — пристёгнутый шахтёрский фонарь на груди/в поднятой руке */

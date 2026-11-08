@@ -170,12 +170,13 @@ export function renderHUD(o) {
 
 /* ---------- sprite thumbnails ---------- */
 const DOSSIER_POSTER_MAP = {
-  priest: { key: 'posterPriest', crop: [0.02, 0.0, 0.96, 0.68] },
-  father: { key: 'posterFather', crop: [0.06, 0.02, 0.88, 0.68] },
-  boy:    { key: 'posterBoy',    crop: [0.06, 0.02, 0.88, 0.68] },
-  girl:   { key: 'posterGirl',   crop: [0.06, 0.02, 0.88, 0.68] },
-  capguy: { key: 'posterPriestHand', crop: [0.06, 0.08, 0.88, 0.68] },
-  dog:    { key: 'posterBarrelEye',  crop: [0.22, 0.04, 0.74, 0.72] },
+  priest:   { key: 'posterPriest', crop: [0.02, 0.0, 0.96, 0.68] },
+  father:   { key: 'posterFather', crop: [0.06, 0.02, 0.88, 0.68] },
+  boy:      { key: 'posterBoy',    crop: [0.06, 0.02, 0.88, 0.68] },
+  girl:     { key: 'posterGirl',   crop: [0.06, 0.02, 0.88, 0.68] },
+  capguy:   { key: 'posterPriestHand', crop: [0.06, 0.08, 0.88, 0.68] },
+  director: { key: 'posterDirector',   crop: [0.0, 0.0, 1.0, 0.88] },
+  dog:      { key: 'posterBarrelEye',  crop: [0.22, 0.04, 0.74, 0.72] },
 };
 
 function charCanvas(sheetKey, frame = 0) {
@@ -1291,7 +1292,7 @@ function playCipherDemo() {
 /* ---------- ДОСЬЕ И СЕКРЕТНЫЙ АРХИВ ---------- */
 const CAST = [
   ['priest', 'castPriest', 'Тиль Швайгер'], ['father', 'castFather', 'Филипп Рейнхардт'], ['boy', 'castBoy', 'Нэйтан Пол-Коллис'],
-  ['capguy', 'castCap', 'Ола Кейру'], ['girl', 'castGirl', 'Ирина Кобзева'], ['dog', 'castDog', 'Рекс'],
+  ['capguy', 'castCap', 'Ола Кейру'], ['girl', 'castGirl', 'Ирина Кобзева'], ['director', 'Режиссёр фильма', 'Алексей Звонцов'], ['dog', 'castDog', 'Рекс'],
 ];
 function renderCast() {
   const box = $('cast'); if (!box) return;
@@ -1299,7 +1300,8 @@ function renderCast() {
   CAST.forEach(([k, label, actor], i) => {
     const d = document.createElement('div'); d.className = 'dossier';
     d.appendChild(charCanvas(k, k === 'dog' ? DOG_FRAMES.idle : CHAR_FRAMES.idle));
-    d.insertAdjacentHTML('beforeend', `<div class="dossier__role">${t('role')} / ${pad(i + 1)}</div><div class="dossier__name">${t(label)}</div><div class="dossier__actor">${actor}</div>`);
+    const roleLabel = t(label) !== label ? t(label) : label;
+    d.insertAdjacentHTML('beforeend', `<div class="dossier__role">${t('role')} / ${pad(i + 1)}</div><div class="dossier__name">${roleLabel}</div><div class="dossier__actor">${actor}</div>`);
     box.appendChild(d);
   });
 }

@@ -7,6 +7,7 @@ export const ASSET_MAP = {
   boy: 'assets/keyed/boy.webp',
   girl: 'assets/keyed/girl.webp',
   father: 'assets/keyed/father.webp',
+  director: 'assets/keyed/director.webp',
   /* Stage 2: Локации цеха, овчарка, церковь и море */
   factory: 'assets/keyed/factory.webp',
   dog: 'assets/keyed/dog.webp',
@@ -21,6 +22,7 @@ export const ASSET_MAP = {
   posterFatherFull: 'assets/father_photo.jpg',
   posterBoy: 'assets/images_2.jpg',
   posterGirl: 'assets/images_5.jpg',
+  posterDirector: 'assets/zvontsov.png',
   posterBarrelEye: 'assets/keyed/barrel_hole.webp',
 };
 
@@ -620,8 +622,8 @@ export async function loadAll(onProgress) {
     if (onProgress) onProgress(n / keys.length);
   };
 
-  /* Stage 1: Мгновенная загрузка бочек и всех 5 спрайт-персонажей на главном экране (< 500 КБ) */
-  const stage1 = ['barrels', 'priest', 'capguy', 'boy', 'girl', 'father'];
+  /* Stage 1: Мгновенная загрузка бочек и всех 6 спрайт-персонажей на главном экране (< 600 КБ) */
+  const stage1 = ['barrels', 'priest', 'capguy', 'boy', 'girl', 'father', 'director'];
   await Promise.all(stage1.map(loadKey));
 
   /* Stage 2: Фоны цеха, овчарка, церковь и море */

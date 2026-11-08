@@ -357,7 +357,7 @@ const preGameLobby = {
     },
     {
       rx: 0.78, ry: 0.68, scale: 0.96, spriteKey: 'artur',
-      charKey: 'father', frameIdx: 3, voiceRole: 'director', isDirector: true,
+      charKey: 'director', frameIdx: 3, voiceRole: 'director', isDirector: true,
       name: 'АЛЕКСЕЙ ЗВОНЦОВ', firstName: 'АЛЕКСЕЙ', lastName: 'ЗВОНЦОВ', shortRole: 'РЕЖИССЁР',
       role: 'РЕЖИССЁР ФИЛЬМА', quote: '«Мотор! В кино с 17 декабря 2026!»',
       shake: 0, glow: 0, handT: 0, popT: 0, popAnim: 0, rubCd: 0, hits: 0,
@@ -446,18 +446,20 @@ function triggerLobbyBarrelKnock(idx, isRub = false) {
 function drawBarrelPopCharacter(c, b, idx, sx, sy, bw, bh, posS, dt = 1 / 60) {
   const pop = b.popAnim || 0;
   if (pop <= 0.02) return;
-  if (!sheets[b.charKey || 'father']) return;
+  const charKey = b.charKey || 'father';
+  if (!sheets[charKey] && !sheets.father) return;
 
-  if (!b.actor) {
-    b.actor = new Actor(b.charKey || 'father');
+  if (!b.actor || b.actor.key !== charKey) {
+    b.actor = new Actor(charKey);
   }
   const faceDir = b.rx > 0.52 ? -1 : 1;
   b.actor.look(faceDir);
   b.actor.update(dt);
 
-  const rimY = sy - bh * 0.90;
+  /* Реальная верхняя кромка стальной бочки в спрайте sheets.barrels находится на уровне sy - bh * 0.77 */
+  const rimY = sy - bh * 0.77;
   const rimRx = bw * 0.45;
-  const rimRy = bh * 0.055;
+  const rimRy = bh * 0.048;
 
   /* Эластичная кривая выпрыгивания спрайт-персонажа из бочки + подпрыгивание при повторных ударах */
   const easeOutBack = (t) => {
@@ -465,92 +467,38 @@ function drawBarrelPopCharacter(c, b, idx, sx, sy, bw, bh, posS, dt = 1 / 60) {
     const c3 = c1 + 1;
     return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
   };
-  const bounceLift = Math.sin((b.popBounce || 0) * Math.PI) * 0.16;
-  const lift = Math.min(1.22, easeOutBack(Math.min(1, pop)) + bounceLift);
+  const bounceLift = Math.sin((b.popBounce || 0) * Math.PI) * 0.14;
+  const lift = Math.min(1.18, easeOutBack(Math.min(1, pop)) + bounceLift);
 
   c.save();
 
-  /* 1. Тёмная открытая горловина бочки и контровое свечение изнутри */
-  const holeGrad = c.createRadialGradient(sx, rimY, 2, sx, rimY, rimRx);
-  holeGrad.addColorStop(0, '#040507');
-  holeGrad.addColorStop(0.72, '#100B08');
-  holeGrad.addColorStop(1, '#2B1D14');
-  c.fillStyle = holeGrad;
-  c.beginPath();
-  c.ellipse(sx, rimY, rimRx, rimRy, 0, 0, Math.PI * 2);
-  c.fill();
-
-  /* Световое сияние вокруг вылезающего из бочки спрайт-персонажа */
-  const auraR = bw * 0.92 * Math.min(1, pop * 1.2);
-  const auraG = c.createRadialGradient(sx, rimY - bh * 0.38 * lift, 4, sx, rimY - bh * 0.34 * lift, auraR);
-  auraG.addColorStop(0, 'rgba(255, 214, 118, 0.46)');
-  auraG.addColorStop(0.55, 'rgba(212, 168, 67, 0.16)');
+  /* Световое сияние за спиной вылезающего из бочки спрайт-персонажа */
+  const auraR = bw * 0.85 * Math.min(1, pop * 1.2);
+  const auraG = c.createRadialGradient(sx, rimY - bh * 0.34 * lift, 4, sx, rimY - bh * 0.30 * lift, auraR);
+  auraG.addColorStop(0, 'rgba(255, 214, 118, 0.38)');
+  auraG.addColorStop(0.55, 'rgba(212, 168, 67, 0.12)');
   auraG.addColorStop(1, 'rgba(212, 168, 67, 0)');
   c.fillStyle = auraG;
   c.beginPath();
-  c.arc(sx, rimY - bh * 0.34 * lift, auraR, 0, Math.PI * 2);
+  c.arc(sx, rimY - bh * 0.30 * lift, auraR, 0, Math.PI * 2);
   c.fill();
 
-  /* 2. Область отсечения по передней дуге горловины бочки, чтобы спрайт-персонаж вылезал строго ИЗНУТРИ бочки */
+  /* Область отсечения по верхней крышке бочки, чтобы спрайт-персонаж вылезал прямо из бочки без лишних колец и шариков */
   c.save();
   c.beginPath();
   c.moveTo(sx - bw * 1.15, rimY - bh * 1.85);
   c.lineTo(sx + bw * 1.15, rimY - bh * 1.85);
-  c.lineTo(sx + rimRx * 1.16, rimY);
-  c.quadraticCurveTo(sx, rimY + rimRy * 1.42, sx - rimRx * 1.16, rimY);
+  c.lineTo(sx + rimRx * 1.12, rimY);
+  c.quadraticCurveTo(sx, rimY + rimRy * 1.15, sx - rimRx * 1.12, rimY);
   c.closePath();
   c.clip();
 
-  /* 3. Отрисовка нашего игрового спрайт-персонажа (Actor с фонарём / телефоном / коногонкой / Библией) по пояс из бочки */
-  const charFullH = bh * 1.34;
-  const footY = rimY + rimRy * 0.55 + charFullH * (1 - 0.68 * lift);
-  b.actor.beam(c, sx, footY, charFullH, 95 * posS, '255, 226, 155', 0.14 * Math.min(1, pop), 30 * posS);
+  /* Отрисовка нашего игрового спрайт-персонажа по пояс из бочки */
+  const charFullH = bh * 1.26;
+  const footY = rimY + rimRy * 0.45 + charFullH * (1 - 0.66 * lift);
+  b.actor.beam(c, sx, footY, charFullH, 90 * posS, '255, 226, 155', 0.12 * Math.min(1, pop), 28 * posS);
   b.actor.draw(c, sx, footY, charFullH);
-
-  /* Если это бочка Режиссёра Алексея Звонцова — рисуем в руке кинохлопушку «БОЧКА · СЦЕНА 1» */
-  if (b.isDirector) {
-    const clapX = sx + faceDir * (bw * 0.32);
-    const clapY = footY - charFullH * 0.62;
-    const cw = Math.max(16, 22 * posS);
-    const ch = Math.max(13, 17 * posS);
-    c.save();
-    c.translate(clapX, clapY);
-    c.rotate(faceDir * (-0.14 + Math.sin(preGameLobby.t * 9) * 0.08));
-    c.fillStyle = '#10141A';
-    c.strokeStyle = '#FFD166';
-    c.lineWidth = 1.2;
-    c.fillRect(-cw * 0.5, -ch * 0.5, cw, ch);
-    c.strokeRect(-cw * 0.5, -ch * 0.5, cw, ch);
-    c.fillStyle = '#FFD166';
-    c.fillRect(-cw * 0.5, -ch * 0.5, cw, ch * 0.28);
-    c.fillStyle = '#10141A';
-    for (let s = -cw * 0.4; s < cw * 0.45; s += cw * 0.28) {
-      c.fillRect(s, -ch * 0.5, cw * 0.14, ch * 0.28);
-    }
-    c.restore();
-  }
   c.restore();
-
-  /* 4. Передняя стальная кромка обода бочки и ладони персонажа, держащиеся за край бочки */
-  c.strokeStyle = b.glow > 0.1 ? '#FFD166' : 'rgba(225, 232, 240, 0.72)';
-  c.lineWidth = 2.2 * posS;
-  c.beginPath();
-  c.ellipse(sx, rimY, rimRx, rimRy, 0, 0.06, Math.PI - 0.06);
-  c.stroke();
-
-  if (pop > 0.35) {
-    c.fillStyle = '#C9B199';
-    c.strokeStyle = '#241A14';
-    c.lineWidth = 1.1;
-    [-rimRx * 0.48, rimRx * 0.48].forEach((hxOff) => {
-      const gx = sx + hxOff;
-      const gy = rimY + rimRy * 0.76;
-      c.beginPath();
-      c.ellipse(gx, gy, 5.2 * posS, 3.6 * posS, 0, 0, Math.PI * 2);
-      c.fill();
-      c.stroke();
-    });
-  }
 
   c.restore();
 }
@@ -869,19 +817,6 @@ function updateAndDrawPreGameLobby(c, dt) {
   c.strokeStyle = 'rgba(212, 168, 67, 0.22)';
   c.lineWidth = 1.5;
   c.stroke();
-
-  [-0.36, 0.36].forEach((off) => {
-    const hx = discX + discRx * off + (lx - discX) * 0.05;
-    const hy = discY - discRy * 0.52;
-    const spG = c.createRadialGradient(hx, hy, 2, hx, hy, discRx * 0.22);
-    spG.addColorStop(0, 'rgba(245, 248, 255, 0.72)');
-    spG.addColorStop(0.45, 'rgba(190, 205, 220, 0.20)');
-    spG.addColorStop(1, 'rgba(190, 205, 220, 0)');
-    c.fillStyle = spG;
-    c.beginPath();
-    c.ellipse(hx, hy, discRx * 0.22, discRy * 0.32, 0, 0, Math.PI * 2);
-    c.fill();
-  });
   c.restore();
 
   /* 5. ПЕРЕД КИНОЭКРАНОМ СТОЯТ 6 ФОТОРЕАЛИСТИЧНЫХ БОЧЕК ИЗ sheets.barrels, И ТОЛЬКО ПОСЛЕ УДАРОВ ИЗ НИХ ПОЯВЛЯЮТСЯ НАШИ СПРАЙТ-ПЕРСОНАЖИ! */
@@ -937,27 +872,6 @@ function updateAndDrawPreGameLobby(c, dt) {
     if (sh) {
       const rect = barrelRect(sh, spriteKey);
       drawFrame(c, sh, rect, sx, sy, drawBh);
-
-      /* 3D-цилиндрический металлический блик и контурный свет прожектора на верхнем ободе бочки */
-      c.save();
-      const bodyTop = sy - bh * 0.92;
-      const bodyH = bh * 0.88;
-      const cyl = c.createLinearGradient(sx - bw * 0.5, 0, sx + bw * 0.5, 0);
-      cyl.addColorStop(0, 'rgba(0,0,0,0.36)');
-      cyl.addColorStop(0.26, 'rgba(255,236,195,0.13)');
-      cyl.addColorStop(0.52, 'rgba(255,236,195,0.03)');
-      cyl.addColorStop(0.82, 'rgba(0,0,0,0.20)');
-      cyl.addColorStop(1, 'rgba(0,0,0,0.40)');
-      c.fillStyle = cyl;
-      c.fillRect(sx - bw * 0.5, bodyTop, bw, bodyH);
-
-      /* Блик верхнего стального обода крышки */
-      c.strokeStyle = b.glow > 0.1 ? 'rgba(255,209,102,0.75)' : 'rgba(255,242,210,0.38)';
-      c.lineWidth = 1.6;
-      c.beginPath();
-      c.ellipse(sx, sy - bh * 0.90, bw * 0.46, bh * 0.055, 0, Math.PI * 1.08, Math.PI * 1.92);
-      c.stroke();
-      c.restore();
     } else {
       drawBarrelFallback(c, sx, sy - bh * 0.5, bw, bh, showHand ? 'hand' : 'closed');
     }
@@ -977,8 +891,8 @@ function updateAndDrawPreGameLobby(c, dt) {
     /* Индикатор стука изнутри или высунувшегося персонажа над бочкой */
     if (isKnockingNow || b.popT > 0 || b.hits > 0) {
       c.save();
-      const extraLift = (b.popAnim || 0) * bh * 0.58;
-      const tagY = sy - (showHand ? bh * 1.16 : bh * 0.98) - extraLift - 12 * pos.s;
+      const extraLift = (b.popAnim || 0) * bh * 0.72;
+      const tagY = sy - (showHand ? bh * 1.02 : bh * 0.86) - extraLift - 12 * pos.s;
       const tagTxt = (b.hits > 0 || b.popT > 0) ? `🎭 ${b.firstName} ${b.lastName}` : '🔊 ТУК-ТУК!';
       c.font = `800 ${Math.max(7.5, Math.round(9 * pos.s))}px "JetBrains Mono", monospace`;
       const tw = c.measureText(tagTxt).width + 12;
