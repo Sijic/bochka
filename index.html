@@ -17,7 +17,7 @@
   <link rel="preload" as="image" href="assets/keyed/girl.webp" type="image/webp">
   <link rel="preload" as="image" href="assets/keyed/father.webp" type="image/webp">
   <link rel="preload" as="image" href="assets/keyed/director.webp" type="image/webp">
-  <link rel="stylesheet" href="./styles.css?v=62">
+  <link rel="stylesheet" href="./styles.css?v=63">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
@@ -83,22 +83,41 @@
       <button class="btn hero__qbtn hero__qbtn--icon" id="btnHud" aria-label="menu">☰</button>
     </div>
 
-    <div class="plate plate--bl">
-      <div class="plate__h" data-i18n="attempts">ПОПЫТКИ</div>
-      <div class="sqs" id="lives"></div>
-      <div class="air"><span data-i18n="air">ВОЗДУХ</span><div class="air__bar"><div class="air__fill" id="airFill"></div></div></div>
-      <div class="air"><span>▮▮</span><div class="air__bar air__bar--gold"><div class="air__fill air__fill--gold" id="progFill"></div></div></div>
-      <div class="air"><span data-i18n="energy">ЭНЕРГИЯ</span><div class="air__bar"><div class="air__fill" id="hudEnergyFill"></div></div></div>
-      <div class="hud-tool" id="hudToolWrap" title="Курсор-инструмент (10 уровней)">
+    <div class="plate plate--bl hud">
+      <div class="hud__row">
+        <div class="cap cap--air" title="Воздух">
+          <span class="cap__ic">💨</span>
+          <div class="cap__bar"><div class="cap__fill air__fill" id="airFill"></div><span class="cap__txt" id="airPct">100%</span></div>
+        </div>
+        <div class="cap cap--score" title="Очки пранка (лайки)">
+          <span class="cap__ic">❤️</span>
+          <span class="cap__val" id="scoreBig">0</span>
+        </div>
+        <div class="cap cap--energy" title="Энергия ударов">
+          <span class="cap__ic">⚡</span>
+          <div class="cap__bar"><div class="cap__fill cap__fill--energy air__fill" id="hudEnergyFill"></div><span class="cap__txt" id="energyPct">100%</span></div>
+        </div>
+        <button type="button" class="cap cap--btn" id="btnDrawer" aria-label="Инвентарь">🧰 <span>ИНВЕНТАРЬ</span></button>
+      </div>
+      <div class="hud__sub">
+        <div class="sqs" id="lives"></div>
+        <div class="air__bar air__bar--gold hud__prog"><div class="air__fill air__fill--gold" id="progFill"></div></div>
+        <div class="plate__stat" id="statTxt">УРОВЕНЬ 01 // БАЛЛЫ: 0</div>
+        <button type="button" class="btn hud__exit" id="btnExitLobby" title="Вернуться в тёмный зал с бочками актёров">✕ В ЗАЛ</button>
+        <button class="btn btn--blood plate__wide is-hidden" id="btnInvite" data-i18n="inviteBtn">ПРИГЛАСИТЬ ДРУГА — ВЕРНУТЬ ПОПЫТКИ</button>
+      </div>
+      <div class="plate__txt is-hidden" id="hintTxt"></div>
+    </div>
+
+    <div class="drawer" id="invDrawer" aria-hidden="true">
+      <div class="drawer__head"><span>🧰 ИНВЕНТАРЬ: Болторез · Кувалда · Монтажка · Молоток · Фонарь · Магнит</span><button type="button" class="drawer__close" id="btnDrawerClose" aria-label="Закрыть">✕</button></div>
+      <div class="drawer__tools" id="drawerTools"></div>
+      <div class="hud-tool" id="hudToolWrap">
         <button type="button" class="hud-tool__btn" id="btnToolPrev" aria-label="prev tool">◀</button>
         <span class="hud-tool__txt" id="hudToolTxt">✊ УР.1 РУКА</span>
         <button type="button" class="hud-tool__btn" id="btnToolNext" aria-label="next tool">▶</button>
       </div>
-      <div class="plate__stat" id="statTxt">УРОВЕНЬ 01 // БАЛЛЫ: 0</div>
-      <button type="button" class="btn" id="btnExitLobby" style="padding:2px 7px;font-size:8px;border-color:var(--steel)" title="Вернуться в тёмный зал с бочками актёров">✕ В ЗАЛ</button>
-      <div class="hud-skills" id="hudSkillsBar" title="Активные навыки выживания (тратят много энергии ⚡)"></div>
-      <div class="plate__txt" id="hintTxt">Прислушайся: одна из бочек стучит изнутри.</div>
-      <button class="btn btn--blood plate__wide is-hidden" id="btnInvite" data-i18n="inviteBtn">ПРИГЛАСИТЬ ДРУГА — ВЕРНУТЬ ПОПЫТКИ</button>
+      <div class="hud-skills" id="hudSkillsBar"></div>
     </div>
 
     <div class="plate plate--br">
@@ -138,6 +157,8 @@
         <div class="lobby-spacer" aria-hidden="true"></div>
       </div>
     </div>
+
+    <div class="goal is-hidden" id="goalTxt"></div>
 
     <div class="touch" id="touchCtl">
       <button class="touch__btn" data-k="left" title="Влево (A / ←)">◀ <kbd class="touch__key">[A/←]</kbd></button>
@@ -405,6 +426,6 @@
 
   <div class="screamer is-hidden" id="screamer"><div class="screamer__role" id="screamerRole"></div><canvas id="screamerCanvas" width="640" height="640"></canvas><div class="screamer__txt" id="screamerTxt"></div></div>
 
-  <script type="module" src="./main.js?v=62"></script>
+  <script type="module" src="./main.js?v=63"></script>
 </body>
 </html>

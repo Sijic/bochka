@@ -2529,6 +2529,7 @@ export class Tapper {
       audio.chainClink(pan, 0.95);
       this.spawnBrokenChains(b.x, b.y - bh * 0.5, 2);
       this.float(b.x, b.y - bh * 0.80, `⛓️ ЦЕПЬ: ЕЩЁ ${leftHits} УД. (${toolName})`, '#D4A843');
+      this.popText('ЦЕПЬ -1', '#FFD166', 30);
       if (b.chainHitsDone === 1 && this.walker && this.walker.speechT <= 1.2) {
         this.walker.dir = b.x >= this.walker.x ? 1 : -1;
         this.speakWalker(this.walker, 'chained');
@@ -2572,6 +2573,7 @@ export class Tapper {
     }
 
     this.float(b.x, b.y - bh * 1.18, '🔓 ЦЕПЬ СНЯТА! БОЛЬШЕ ПО НЕЙ НЕ СТУЧИ!', '#FFCC4D');
+    this.popText(`+${loot === 'jackpot' ? bigPoints * 2 : bigPoints} ⚡ ПРОБИТИЕ!`, '#FFE066', 40);
     if (this.walker) {
       this.walker.dir = b.x >= this.walker.x ? 1 : -1;
       this.speakWalker(this.walker, 'chainOffWarn');
@@ -2624,6 +2626,7 @@ export class Tapper {
 
   hit(x, y) {
     if (this.paused) return;
+    this.lastTapPt = { x, y };
     this.toolSwing = 1.0;
     const bh = this.bh;
 
@@ -2904,14 +2907,15 @@ export class Tapper {
       b.hasAirBubble = false;
       b.rewardType = 'points';
       b.hasSupply = false;
-      this.float(b.x, b.y - bh * 0.90, `💨 +${airGain}% ВОЗДУХ · +${gain}`, '#64DFDF');
+      this.float(b.x, b.y - bh * 0.90, `💨 +${airGain}% ВОЗДУХ`, '#64DFDF');
+      this.popText(`+${gain} ❤️`, '#FF6BA0', 32);
       audio.knock(pan, 1);
       audio.coin(1.35);
     } else {
       this.air = Math.min(100, this.air + (isOcean ? 2.8 : 2.2) + (this.streak % 4 === 0 ? 12 : 0));
       this.levelPoints += gain;
       const prefix = isOcean ? (this.streak % 2 === 0 ? '♪ +' : '♫ +') : '+';
-      this.float(b.x, b.y - bh * (isOcean ? 0.82 : 1.0), `${prefix}${gain}`, gain > 50 || isOcean ? '#D49A45' : '#E6E8EA');
+      this.popText(`${isOcean ? (this.streak % 2 === 0 ? '♪ ' : '♫ ') : ''}+${gain} ${gain > 50 ? '👍' : '❤️'}`, gain > 50 ? '#FFD166' : '#FF6BA0', gain > 50 ? 36 : 30);
       audio.knock(pan, 1);
       audio.coin(1 + Math.min(1, this.streak / 20));
     }
@@ -2958,7 +2962,12 @@ export class Tapper {
     }
   }
 
-  float(x, y, txt, color) { this.floats.push({ x, y, txt, color, life: 0.95 }); }
+  float(x, y, txt, color, size) { this.floats.push({ x, y, txt, color, life: size ? 1.35 : 0.95, size }); }
+  /* Крупный всплывающий текст из точки удара: +25 ❤️, ЦЕПЬ -1, +100 ⚡ ПРОБИТИЕ! */
+  popText(txt, color = '#FF6BA0', size = 30, at = null) {
+    const p = at || this.lastTapPt || { x: this.view.x + this.view.w / 2, y: this.view.y + this.view.h / 2 };
+    this.floats.push({ x: p.x + (Math.random() - 0.5) * 26, y: p.y - 18, txt, color, life: 1.4, size });
+  }
   spark(x, y) { for (let i = 0; i < 8; i++) this.sparks.push({ x, y, vx: (Math.random() - 0.5) * 300, vy: -Math.random() * 250, life: 0.4 + Math.random() * 0.3 }); }
 
   drawSingleWalker(ctx, w) {
@@ -5013,9 +5022,10 @@ export class Tapper {
 
     /* Всплывающие индикаторы очков, Энергии, Воздуха и Жизней с чёткой контурной обводкой */
     ctx.save();
-    ctx.font = v.w < 620 ? 'bold 17px "JetBrains Mono"' : 'bold 25px "JetBrains Mono"';
     ctx.textAlign = 'center';
     this.floats.forEach((f) => {
+      const fs = f.size ? (v.w < 620 ? Math.round(f.size * 0.75) : f.size) : (v.w < 620 ? 17 : 25);
+      ctx.font = `bold ${fs}px "JetBrains Mono"`;
       ctx.globalAlpha = Math.min(1, f.life * 2.2);
       ctx.strokeStyle = 'rgba(6,8,12,0.92)';
       ctx.lineWidth = v.w < 620 ? 3 : 4;

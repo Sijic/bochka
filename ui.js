@@ -83,18 +83,9 @@ export function modal(title, body, actions = [], opts = {}) {
     return b;
   };
   actions.forEach((a) => {
-    box.appendChild(makeActionBtn(a));
+    box.appendChild(makeActionBtn(a, actions.length === 1 ? 'modal__cta' : ''));
   });
-  /* Дублируем кнопки действий («▶ ИГРАТЬ / ПРОДОЛЖИТЬ») прямо внутри прокручиваемого блока #modalBody
-     (и сверху, и в самом низу прокрутки), чтобы при скролле окна кнопка «ИГРАТЬ» всегда выезжала прямо перед глазами! */
-  if (mb && actions.length) {
-    const bottomInline = document.createElement('div');
-    bottomInline.className = 'modal__inline-actions';
-    actions.forEach((a) => {
-      bottomInline.appendChild(makeActionBtn(a, 'modal__inline-btn'));
-    });
-    mb.appendChild(bottomInline);
-  }
+  /* Единственная кнопка действия — в закреплённой нижней панели (никаких дублей внутри текста) */
   if (!modalWheelBound) {
     modalWheelBound = true;
     m.addEventListener('wheel', (e) => {
@@ -131,9 +122,12 @@ export function renderHUD(o) {
   const maxSq = Math.max(3, S.livesMax || 3, S.lives + (S.halfLives ? 1 : 0));
   lives.innerHTML = Array.from({ length: maxSq }, (_, i) => `<span class="sq ${i < S.lives ? 'is-on' : (i === S.lives && S.halfLives ? 'is-half' : '')}"></span>`).join('');
   $('airFill').style.width = Math.max(0, Math.min(100, o.air)) + '%';
+  $('airFill').classList.toggle('is-low', o.air < 35);
+  if ($('airPct')) $('airPct').textContent = Math.max(0, Math.round(o.air)) + '%';
   $('progFill').style.width = Math.max(0, Math.min(100, o.progress * 100)) + '%';
   const ePct = S.energyMax ? Math.max(0, Math.min(100, (S.energy / S.energyMax) * 100)) : 100;
   if ($('hudEnergyFill')) $('hudEnergyFill').style.width = ePct + '%';
+  if ($('energyPct')) $('energyPct').textContent = Math.round(S.energy || 0) + '⚡';
   if ($('hudToolTxt')) {
     const hs = S.handSkillState;
     if (hs) {
@@ -150,6 +144,13 @@ export function renderHUD(o) {
   }
 
   const score = number(S.balance + Math.floor(o.points || 0));
+  const big = $('scoreBig');
+  if (big && big.dataset.v !== score) {
+    const up = Number(String(big.dataset.v || '0').replace(/\D/g, '')) < Number(String(score).replace(/\D/g, ''));
+    big.dataset.v = score;
+    big.textContent = score;
+    if (up) { big.classList.remove('is-bump'); void big.offsetWidth; big.classList.add('is-bump'); }
+  }
   $('statTxt').textContent = o.mode === 'tap'
     ? `${t('levelWord')} ${pad(S.level)} // ${t('scoreWord')}: ${score} // ${o.timer}`
     : `${t('shift')} ${pad(S.nightRuns + 1)} // ${o.timer} // ${score}`;
@@ -2207,6 +2208,51 @@ export function initUI() {
   if ($('btnToolPrev')) $('btnToolPrev').onclick = () => cycleTool(-1);
   if ($('btnToolNext')) $('btnToolNext').onclick = () => cycleTool(1);
   if ($('hudToolTxt')) $('hudToolTxt').onclick = () => cycleTool(1);
+
+  /* Выдвижная плашка-инвентарь: оружие и навыки крупными кнопками */
+  const drawer = $('invDrawer');
+  const DRAWER_TOOLS = [
+    { lvl: 9, label: 'Болторез', icon: '✂️', hint: '1 уд.' },
+    { lvl: 7, label: 'Кувалда', icon: '⚒️', hint: '3 уд.' },
+    { lvl: 3, label: 'Монтажка', icon: '🛠️', hint: '8 уд.' },
+    { lvl: 2, label: 'Молоток', icon: '🔨', hint: '30 уд.' },
+    { skill: 'stealth', label: 'Фонарь', icon: '🔦', hint: 'гасит' },
+    { skill: 'magnet', label: 'Магнит', icon: '🧲', hint: 'ништяки' },
+  ];
+  const renderDrawerTools = () => {
+    const box = $('drawerTools');
+    if (!box) return;
+    box.innerHTML = '';
+    DRAWER_TOOLS.forEach((it) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      const active = it.lvl && (S.toolLevel || 1) === it.lvl;
+      b.className = 'drawer__btn' + (active ? ' is-active' : '');
+      b.innerHTML = `<span class="drawer__ic">${it.icon}</span><b>${it.label}</b><small>${it.hint}</small>`;
+      b.onclick = () => {
+        if (it.lvl) {
+          document.dispatchEvent(new CustomEvent('clear-hand-skill'));
+          const tl = setToolLevel(it.lvl);
+          audio.knock(0, 0.55);
+          toast(`${tl.icon} ${tl[lang] || tl.ru}${tl.breaksChains ? ' · РАЗБИВАЕТ ЦЕПИ' : ''}`);
+          renderUpgrade();
+          renderHudSkillsBar(true);
+        } else {
+          triggerSkillActivation(it.skill);
+        }
+        renderDrawerTools();
+      };
+      box.appendChild(b);
+    });
+  };
+  const setDrawer = (open) => {
+    if (!drawer) return;
+    drawer.classList.toggle('is-open', open);
+    drawer.setAttribute('aria-hidden', open ? 'false' : 'true');
+    if (open) renderDrawerTools();
+  };
+  if ($('btnDrawer')) $('btnDrawer').onclick = () => setDrawer(!drawer.classList.contains('is-open'));
+  if ($('btnDrawerClose')) $('btnDrawerClose').onclick = () => setDrawer(false);
   document.querySelectorAll('#friendsMsgGrid [data-mch]').forEach((btn) => {
     btn.onclick = () => shareViaMessenger(btn.dataset.mch);
   });

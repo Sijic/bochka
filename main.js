@@ -125,6 +125,7 @@ const tapper = new Tapper({
   onLose: (reason) => { tgHaptic('notification', 'error'); showScreamer(t(reason), () => lifeLost()); },
 });
 window.__BOCHKA_TAPPER__ = tapper;
+window.__BOCHKA_NIGHT_REF__ = () => night;
 const night = new Night({
   onWin: (points) => {
     tgHaptic('notification', 'success');
@@ -215,7 +216,7 @@ function levelIntro() {
     ? `${posterSplashHtml}${mechHtml}<p>${t('oceanIntro')}</p>`
     : `${posterSplashHtml}${mechHtml}<p>${t('lvlText', { b: c.n, g: c.goal, s: c.sec })}</p>`;
   modal(titleStr, bodyStr, [{
-    label: `▶ ${t('start')} ИГРУ`,
+    label: '▶ ВХОД В ЦЕХ',
     fn: () => {
       tapper.start(S.level);
       queueAction({ type: 'begin' });
@@ -240,7 +241,7 @@ function nightIntro() {
     </div>
   `;
   modal(t('modeNight') + ' · ' + t('shift') + ' ' + (S.nightRuns + 1), dirVideoHtml, [{
-    label: t('start'),
+    label: '▶ ВХОД В ЦЕХ',
     fn: () => {
       night.start();
       queueAction({ type: 'nightStart' });
@@ -1147,6 +1148,15 @@ function frame(now) {
   saveAcc += dt;
   if (acc > 0.35) {
     acc = 0; tick(); renderHUD(hudInfo());
+    const goalEl = $('goalTxt');
+    if (goalEl) {
+      const showGoal = started && mode === 'night' && night.active && !anyModal;
+      goalEl.classList.toggle('is-hidden', !showGoal);
+      if (showGoal) {
+        const gt = night.goalBanner();
+        if (goalEl.textContent !== gt) goalEl.textContent = gt;
+      }
+    }
     $('hero').classList.toggle('is-playing', started && (tapper.active || night.active));
     if (S.lives > 0 && started && !tapper.active && !night.active && !anyModal && $('hero').classList.contains('is-dead')) { $('hero').classList.remove('is-dead'); (mode === 'tap' ? levelIntro() : nightIntro()); }
     if (S.lives > 0) $('hero').classList.remove('is-dead');

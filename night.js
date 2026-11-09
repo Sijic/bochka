@@ -51,6 +51,77 @@ const LADDERS = [
 const findLadder = (x, floor, tol = 40) =>
   LADDERS.find((l) => Math.abs(x - l.x) < tol && floor >= l.minF && floor <= l.maxF);
 
+/* Текст с тёмной обводкой без рамок — подсказки не перекрывают лица и не рисуют «технические коробки» */
+function outlined(ctx, txt, x, y, color = '#FFD166', size = 12) {
+  ctx.save();
+  ctx.font = `bold ${size}px "JetBrains Mono"`;
+  ctx.textAlign = 'center';
+  ctx.lineWidth = 4;
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(4,6,10,0.92)';
+  ctx.strokeText(txt, x, y);
+  ctx.fillStyle = color;
+  ctx.fillText(txt, x, y);
+  ctx.restore();
+}
+
+/* Фургон пранкера (пиксель-арт): кузов, кабина, двери, окна, колёса, фары.
+   Герой прячется в его тени — машина стоит на улице слева у входа в Сектор 3. */
+function drawVan(ctx, x, gy, lit = true, t = 0) {
+  const px = (v) => Math.round(v);
+  x = px(x); gy = px(gy);
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.beginPath(); ctx.ellipse(x, gy + 1, 88, 7, 0, 0, Math.PI * 2); ctx.fill();
+  /* свет фар по земле */
+  if (lit) {
+    const beam = ctx.createLinearGradient(x + 78, 0, x + 230, 0);
+    beam.addColorStop(0, 'rgba(255,240,170,0.38)');
+    beam.addColorStop(1, 'rgba(255,240,170,0)');
+    ctx.fillStyle = beam;
+    ctx.beginPath();
+    ctx.moveTo(x + 78, gy - 30); ctx.lineTo(x + 230, gy - 62); ctx.lineTo(x + 230, gy + 2); ctx.lineTo(x + 78, gy - 14);
+    ctx.closePath(); ctx.fill();
+  }
+  /* кузов-фургон */
+  ctx.fillStyle = '#1F2D40'; ctx.fillRect(x - 78, gy - 74, 92, 58);
+  ctx.fillStyle = '#2B4160'; ctx.fillRect(x - 78, gy - 74, 92, 10);
+  ctx.fillStyle = '#16212F'; ctx.fillRect(x - 78, gy - 22, 92, 6);
+  ctx.fillStyle = '#0F1722'; ctx.fillRect(x - 36, gy - 72, 2, 54); /* стык створок задних дверей */
+  ctx.fillStyle = '#8895A5'; ctx.fillRect(x - 40, gy - 48, 3, 8); ctx.fillRect(x - 33, gy - 48, 3, 8);
+  /* надпись на борту */
+  ctx.fillStyle = '#FFD166'; ctx.font = 'bold 11px "JetBrains Mono"'; ctx.textAlign = 'center';
+  ctx.fillText('ПРАНК TV', x - 30, gy - 44);
+  ctx.fillStyle = '#FF4D8D'; ctx.fillRect(x - 40, gy - 38, 64, 3);
+  /* кабина */
+  ctx.fillStyle = '#2A3E58';
+  ctx.beginPath();
+  ctx.moveTo(x + 14, gy - 74); ctx.lineTo(x + 52, gy - 74); ctx.lineTo(x + 78, gy - 44); ctx.lineTo(x + 80, gy - 16); ctx.lineTo(x + 14, gy - 16);
+  ctx.closePath(); ctx.fill();
+  /* лобовое и боковое стёкла */
+  ctx.fillStyle = '#7FB3D6';
+  ctx.beginPath(); ctx.moveTo(x + 20, gy - 68); ctx.lineTo(x + 50, gy - 68); ctx.lineTo(x + 71, gy - 46); ctx.lineTo(x + 20, gy - 46); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(x + 24, gy - 66, 6, 18);
+  /* дверь кабины, ручка, зеркало */
+  ctx.strokeStyle = '#121B28'; ctx.lineWidth = 2;
+  ctx.strokeRect(x + 18, gy - 70, 38, 50);
+  ctx.fillStyle = '#C9D3DE'; ctx.fillRect(x + 48, gy - 42, 5, 3);
+  ctx.fillStyle = '#16212F'; ctx.fillRect(x + 72, gy - 52, 6, 8);
+  /* бампер, фара, поворотник, задний фонарь */
+  ctx.fillStyle = '#5A6677'; ctx.fillRect(x + 66, gy - 22, 16, 8); ctx.fillRect(x - 82, gy - 22, 6, 8);
+  ctx.fillStyle = lit ? '#FFF3B0' : '#9A8F5A'; ctx.fillRect(x + 74, gy - 34, 8, 8);
+  ctx.fillStyle = '#FF9F1C'; ctx.fillRect(x + 76, gy - 24, 5, 3);
+  ctx.fillStyle = '#E63946'; ctx.fillRect(x - 80, gy - 40, 4, 12);
+  /* колёса */
+  [-50, 48].forEach((dx) => {
+    ctx.fillStyle = '#0A0D12'; ctx.beginPath(); ctx.arc(x + dx, gy - 10, 14, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#9AA6B4'; ctx.beginPath(); ctx.arc(x + dx, gy - 10, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#2A3340'; ctx.beginPath(); ctx.arc(x + dx, gy - 10, 2.5, 0, Math.PI * 2); ctx.fill();
+  });
+  ctx.restore();
+}
+
 /* 20 укрытий и звуковых бочек по всему миру:
    По любой БОЧКЕ можно СТУКНУТЬ [E / Тап], чтобы приманить всю охрану сектора на звук и обойти их! */
 const HIDING_SPOTS = [
@@ -235,12 +306,13 @@ export class Night {
     /* 24 потолочных светильника (по 8 отсеков на каждом из 3 этажей двух корпусов завода) — изначально ВКЛЮЧЕНЫ! */
     this.lamps = Array.from({ length: 24 }, () => ({ on: true, flicker: 0 }));
     this.streetLampFlicker = 0;
+    /* Бонусы блогера-пранкера: лайки ❤️/👍, просмотры 👁 и кассеты с пранком 📼 (вместо колечек) */
     this.reels = [
-      { floor: 0, x: 165 },
-      { floor: 2, x: 760 },
-      { floor: 1, x: SEC3_X + 410 },
-      { floor: 0, x: SEC3_X + 820 },
-      { floor: 1, x: CORPB_X + 520 },
+      { floor: 0, x: 165, kind: 'like' },
+      { floor: 2, x: 760, kind: 'thumb' },
+      { floor: 1, x: SEC3_X + 410, kind: 'view' },
+      { floor: 0, x: SEC3_X + 820, kind: 'tape' },
+      { floor: 1, x: CORPB_X + 520, kind: 'like' },
     ];
     this.reelT = 8;
     this.clock = 0;
@@ -653,12 +725,15 @@ export class Night {
   }
 
   triggerSoundLure(lx, lfloor, radius, message) {
+    const ASK = ['Кто стучит в бочке?!', 'Что там за стук?!', 'Слышу стук… иду проверить!'];
     this.enemies.forEach((e) => {
       if (Math.abs(e.x - lx) < radius) {
         e.lureX = lx;
         e.lureFloor = lfloor;
         e.alert = true;
         e.pause = 0;
+        e.say = e.dog ? 'ГАВ! ГАВ!' : ASK[Math.floor(Math.random() * ASK.length)];
+        e.sayT = 3.2;
       }
     });
     if (message) this.note(message, 3.8);
@@ -1346,9 +1421,15 @@ export class Night {
     /* Бобины с киноплёнкой */
     this.reels = this.reels.filter((r) => {
       if (!b.hidden && !b.climbing && r.floor === b.floor && Math.abs(r.x - b.x) < 34) {
-        const g = Math.floor(600 * d);
-        this.points += g;
-        this.floats.push({ x: r.x, y: floorY(r.floor) - 85, txt: `🎞️ +${g}`, life: 1.2 });
+        const PICK = {
+          like: { n: 50, txt: 'ЛАЙКОВ ❤️', color: '#FF4D8D' },
+          thumb: { n: 50, txt: 'ЛАЙКОВ 👍', color: '#FF4D8D' },
+          view: { n: 120, txt: 'ПРОСМОТРОВ 👁', color: '#64DFDF' },
+          tape: { n: 200, txt: 'ПРАНК 📼', color: '#FFD166' },
+        }[r.kind || 'like'];
+        const g = Math.floor(PICK.n * d);
+        this.points += g * 12;
+        this.floats.push({ x: r.x, y: floorY(r.floor) - 85, txt: `+${g} ${PICK.txt}`, life: 1.6, color: PICK.color, size: 24 });
         audio.coin(2);
         return false;
       }
@@ -1398,6 +1479,7 @@ export class Night {
       }
 
       e.y = floorY(e.floor);
+      e.sayT = Math.max(0, (e.sayT || 0) - dt);
       let st = 'walk', target = 0, accel = e.dog ? 950 : 420;
 
       if (e.lureX !== null) {
@@ -1426,6 +1508,8 @@ export class Night {
             e.lureFloor = null;
             e.pause = 8.0; /* Охрана надолго собирается у стучащей бочки (8 секунд), давая игроку обойти всё! */
             e.alert = false;
+            e.say = e.dog ? 'Ррр…' : 'Никого… Показалось.';
+            e.sayT = 3.0;
           } else {
             e.dir = Math.sign(dx);
             target = e.dir * e.speed * 1.4;
@@ -1439,7 +1523,7 @@ export class Night {
         target = e.dir * e.speed * (e.alert ? 1.3 : 1);
         st = e.alert ? 'run' : 'walk';
         if ((e.x < e.minX + 20 && e.dir < 0) || (e.x > e.maxX - 20 && e.dir > 0)) e.dir *= -1;
-        if (!e.alert && Math.random() < dt * 0.08) e.pause = 1.2 + Math.random() * 1.4;
+        if (!e.alert && Math.random() < dt * 0.04) e.pause = 0.8 + Math.random() * 1.0;
       }
 
       /* Враги не заходят в глубокую воду на 1-м ярусе */
@@ -1883,19 +1967,7 @@ export class Night {
 
           const bx = (fz.minX + fz.maxX) * 0.5;
           const by = wTop - 22;
-          ctx.fillStyle = 'rgba(10, 14, 20, 0.94)';
-          ctx.strokeStyle = '#FF595E';
-          ctx.lineWidth = 1.8;
-          ctx.fillRect(bx - 178, by - 16, 356, 24);
-          ctx.strokeRect(bx - 178, by - 16, 356, 24);
-          ctx.fillStyle = '#FFD166';
-          ctx.font = 'bold 10px "JetBrains Mono"';
-          ctx.textAlign = 'center';
-          ctx.fillText(
-            `🌊 В ВОДУ НЕ ВОЙТИ! ПОДНИМИСЬ СЛЕВА, ОБОЙДИ И ЗАКРОЙ ЗАДВИЖКУ №${idx + 1} СПРАВА`,
-            bx,
-            by
-          );
+          outlined(ctx, `🌊 В ВОДУ НЕ ВОЙТИ! ЗАДВИЖКА №${idx + 1} СПРАВА`, bx, by, '#FFD166', 13);
         }
       }
 
@@ -1919,21 +1991,12 @@ export class Night {
       ctx.fill();
       ctx.restore();
 
-      /* Подпись над Задвижкой */
-      ctx.fillStyle = 'rgba(10, 14, 20, 0.94)';
-      ctx.strokeStyle = valveClosed ? '#52B788' : '#FFD166';
-      ctx.lineWidth = 1.6;
-      ctx.fillRect(vx - 102, vy - 48, 204, 22);
-      ctx.strokeRect(vx - 102, vy - 48, 204, 22);
-      ctx.fillStyle = valveClosed ? '#80ED99' : '#FFD166';
-      ctx.font = 'bold 10px "JetBrains Mono"';
-      ctx.textAlign = 'center';
-      const p = this.actPrompt();
-      ctx.fillText(
-        valveClosed ? `✓ ЗАДВИЖКА №${idx + 1}: ВОДА СЛИТА` : `⚙️ ЗАДВИЖКА №${idx + 1} ${p} (СЛИТЬ ВОДУ)`,
-        vx,
-        vy - 33
-      );
+      /* Подпись над Задвижкой — только вблизи, без рамки */
+      const nearValve = !this.boy.climbing && Math.abs(this.boy.x - vx) < 130;
+      if (nearValve) {
+        const p = this.actPrompt();
+        outlined(ctx, valveClosed ? `✓ ЗАДВИЖКА №${idx + 1}: ВОДА СЛИТА` : `⚙️ ЗАДВИЖКА №${idx + 1} ${p}`, vx, vy - 33, valveClosed ? '#80ED99' : '#FFD166', 12);
+      }
       ctx.restore();
     });
 
@@ -1955,12 +2018,13 @@ export class Night {
         ctx.fillRect(sx - 40, SKY_H + sw.floor * FH, 520, FH);
       }
 
-      /* Корпус электрощита с рычагом рубильника */
+      /* Корпус электрощита с рычагом рубильника (без цветной рамки) */
       ctx.fillStyle = '#1C2530';
-      ctx.strokeStyle = isOff ? '#52B788' : '#FFD166';
-      ctx.lineWidth = 2;
       ctx.fillRect(sx - 16, sy - 22, 32, 42);
-      ctx.strokeRect(sx - 16, sy - 22, 32, 42);
+      ctx.fillStyle = '#2C3846';
+      ctx.fillRect(sx - 16, sy - 22, 32, 4);
+      ctx.fillStyle = isOff ? '#52B788' : '#E63946';
+      ctx.fillRect(sx - 3, sy + 12, 6, 4);
 
       /* Рычаг (вверх = СВЕТ ВКЛ / ОПАСНО, вниз = СВЕТ ОТКЛЮЧЁН / ТЕМНОТА) */
       ctx.strokeStyle = isOff ? '#80ED99' : '#FF595E';
@@ -1970,20 +2034,10 @@ export class Night {
       ctx.lineTo(sx + (isOff ? -10 : 10), sy + (isOff ? 14 : -14));
       ctx.stroke();
 
-      /* Плашка над Рубильником */
-      ctx.fillStyle = 'rgba(10, 14, 20, 0.94)';
-      ctx.strokeStyle = isOff ? '#52B788' : '#FFD166';
-      ctx.lineWidth = 1.5;
-      ctx.fillRect(sx - 118, sy - 48, 236, 20);
-      ctx.strokeRect(sx - 118, sy - 48, 236, 20);
-      ctx.fillStyle = isOff ? '#80ED99' : '#FFD166';
-      ctx.font = 'bold 9.5px "JetBrains Mono"';
-      ctx.textAlign = 'center';
-      ctx.fillText(
-        isOff ? `🌑 СВЕТ №${sw.id} ОТКЛЮЧЁН (ПУТЬ В ТЕМНОТЕ)` : `⚡ РУБИЛЬНИК №${sw.id}: ОТКЛЮЧИТЬ СВЕТ ${pAct}`,
-        sx,
-        sw.floor === 0 ? sy - 34 : sy - 34
-      );
+      /* Подсказка над рубильником — только вблизи и без рамки */
+      if (!this.boy.climbing && this.boy.floor === sw.floor && Math.abs(this.boy.x - sx) < 120) {
+        outlined(ctx, isOff ? `🌑 СВЕТ №${sw.id} ОТКЛЮЧЁН` : `⚡ ОТКЛЮЧИТЬ СВЕТ ${pAct}`, sx, sy - 34, isOff ? '#80ED99' : '#FFD166', 12);
+      }
       ctx.restore();
     });
 
@@ -2017,15 +2071,9 @@ export class Night {
       ctx.fillRect(kx + 12, ky + 3, 4, 6);
       ctx.fillRect(kx + 17, ky + 3, 4, 8);
 
-      ctx.fillStyle = 'rgba(10, 14, 20, 0.92)';
-      ctx.strokeStyle = '#FFD166';
-      ctx.lineWidth = 1.4;
-      ctx.fillRect(kx - 96, ky - 38, 192, 19);
-      ctx.strokeRect(kx - 96, ky - 38, 192, 19);
-      ctx.fillStyle = '#FFD166';
-      ctx.font = 'bold 9.5px "JetBrains Mono"';
-      ctx.textAlign = 'center';
-      ctx.fillText(k.label, kx, ky - 25);
+      if (!this.boy.climbing && this.boy.floor === k.floor && Math.abs(this.boy.x - kx) < 120) {
+        outlined(ctx, k.label, kx, ky - 30, '#FFD166', 12);
+      }
       ctx.restore();
     });
 
@@ -2034,34 +2082,24 @@ export class Night {
 
     /* 20 укрытий и ЗВУКОВЫХ БОЧЕК (по любой бочке можно СТУКНУТЬ [E / Тап], чтобы приманить охрану на звук!) */
     const sh = sheets.barrels;
+    const bNow = this.boy;
     HIDING_SPOTS.forEach((s) => {
       const sy = floorY(s.floor);
+      const heroNear = !bNow.climbing && bNow.floor === s.floor && Math.abs(bNow.x - s.x) < 95;
       if (s.type === 'barrel') {
         if (sh) drawFrame(ctx, sh, barrelRect(sh, s.key), s.x, sy, barrelH);
         drawBarrelWrappedLabel(ctx, s.x, sy, barrelH, s.name);
-        ctx.save();
-        ctx.fillStyle = 'rgba(10, 16, 24, 0.88)';
-        ctx.strokeStyle = '#64C8FF';
-        ctx.lineWidth = 1.2;
-        ctx.fillRect(s.x - 52, sy - barrelH - 18, 104, 15);
-        ctx.strokeRect(s.x - 52, sy - barrelH - 18, 104, 15);
-        ctx.fillStyle = '#90E0EF';
-        ctx.font = 'bold 8.5px "JetBrains Mono"';
-        ctx.textAlign = 'center';
-        ctx.fillText(`🔊 СТУК НА ЗВУК ${pAct}`, s.x, sy - barrelH - 7);
-        ctx.restore();
-      } else if (!(s.id === 'h3' && !this.quests.key1)) {
-        ctx.save();
-        ctx.fillStyle = 'rgba(12,18,24,0.82)';
-        ctx.strokeStyle = 'rgba(74,122,140,0.85)';
-        ctx.lineWidth = 1;
-        ctx.fillRect(s.x - 32, sy - barrelH - 16, 64, 15);
-        ctx.strokeRect(s.x - 32, sy - barrelH - 16, 64, 15);
-        ctx.fillStyle = '#A8D0E6';
-        ctx.font = 'bold 9px "JetBrains Mono"';
-        ctx.textAlign = 'center';
-        ctx.fillText(`🛡️ ${s.name}`, s.x, sy - barrelH - 5);
-        ctx.restore();
+        /* Подсказка [E] — только когда герой рядом, а охрана отошла от бочки; поднята выше голов */
+        const guardNear = this.enemies.some((e) => e.floor === s.floor && Math.abs(e.x - s.x) < 150);
+        if (heroNear && !guardNear && !bNow.hidden) {
+          outlined(ctx, `${this.actPrompt()} СТУКНУТЬ ПО БОЧКЕ`, s.x, sy - barrelH - 46, '#90E0EF', 12);
+        }
+      } else if (s.type === 'car') {
+        const dark = this.t < this.quests.blackoutUntil;
+        drawVan(ctx, s.x, sy, !dark, this.t);
+        if (heroNear && !bNow.hidden) outlined(ctx, '[H] ПРЯТАТЬСЯ ЗА МАШИНОЙ', s.x, sy - 146, '#A8D0E6', 12);
+      } else if (!(s.id === 'h3' && !this.quests.key1) && heroNear && !bNow.hidden) {
+        outlined(ctx, `🛡️ ${s.name} [H]`, s.x, sy - barrelH - 22, '#A8D0E6', 11);
       }
     });
 
@@ -2099,21 +2137,11 @@ export class Night {
           ctx.lineWidth = 3;
           ctx.fillRect(d.x - 10, dy - 135, 20, 135);
           ctx.strokeRect(d.x - 10, dy - 135, 20, 135);
-          ctx.fillStyle = 'rgba(10, 14, 20, 0.94)';
-          ctx.fillRect(d.x - 78, dy - 162, 156, 22);
-          ctx.strokeRect(d.x - 78, dy - 162, 156, 22);
-          ctx.fillStyle = '#FFD166';
-          ctx.font = 'bold 10px "JetBrains Mono"';
-          ctx.textAlign = 'center';
-          ctx.fillText(`🔒 БОЧКА: КЛЮЧИ ${kCount}/3`, d.x, dy - 147);
+          if (Math.abs(this.boy.x - d.x) < 160) outlined(ctx, `🔒 КЛЮЧИ ${kCount}/3`, d.x, dy - 147, '#FFD166', 12);
         } else {
-          ctx.strokeStyle = '#80ED99';
-          ctx.lineWidth = 2.5;
-          ctx.strokeRect(d.x - 6, dy - 135, 12, 135);
-          ctx.fillStyle = '#80ED99';
-          ctx.font = 'bold 10px "JetBrains Mono"';
-          ctx.textAlign = 'center';
-          ctx.fillText('🔓 ОТКРЫТО!', d.x, dy - 142);
+          ctx.fillStyle = 'rgba(128,237,153,0.10)';
+          ctx.fillRect(d.x - 6, dy - 135, 12, 135);
+          if (Math.abs(this.boy.x - d.x) < 160) outlined(ctx, '🔓 ОТКРЫТО', d.x, dy - 142, '#80ED99', 12);
         }
       } else if (d.closed) {
         ctx.fillStyle = '#3B2318';
@@ -2259,15 +2287,17 @@ export class Night {
 
     /* 4. Бобины киноплёнки */
     this.reels.forEach((r) => {
-      const ry = floorY(r.floor) - 12;
-      ctx.fillStyle = '#D49A45';
-      ctx.beginPath();
-      ctx.arc(r.x, ry, 9, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#070A0E';
-      ctx.beginPath();
-      ctx.arc(r.x, ry, 3.5, 0, Math.PI * 2);
-      ctx.fill();
+      const ry = floorY(r.floor) - 22 + Math.sin(this.t * 3 + r.x) * 4;
+      const ICON = { like: ['❤️', '#FF2E7E'], thumb: ['👍', '#FF4D8D'], view: ['👁', '#38E1FF'], tape: ['📼', '#FFD166'] }[r.kind || 'like'];
+      ctx.save();
+      ctx.shadowColor = ICON[1];
+      ctx.shadowBlur = 18;
+      ctx.font = '26px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = ICON[1];
+      ctx.fillText(ICON[0], r.x, ry);
+      ctx.restore();
     });
 
     /* 5. Активная звуковая приманка */
@@ -2318,6 +2348,12 @@ export class Night {
         ctx.textAlign = 'center';
         ctx.fillText(e.lureX !== null ? '?!' : '!', e.x, e.y - h - 6);
       }
+      if (e.sayT > 0 && e.say) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, e.sayT * 1.5);
+        outlined(ctx, e.say, e.x, e.y - h - 26, '#E6E8EA', 12);
+        ctx.restore();
+      }
     });
 
     /* 9. Главный герой (Пацан) с плавной вертикальной координатой b.y и визуальным погружением в Бочку */
@@ -2367,12 +2403,24 @@ export class Night {
     } else if (b.hidden) {
       if (this.finale.stage !== 'captured_cutscene') {
         const spotName = b.hideSpot ? b.hideSpot.name : 'БОЧКА';
-        ctx.fillStyle = '#4A7A8C';
-        ctx.fillRect(b.x - 24, by - barrelH - 26, 48 * (b.air / 100), 5);
-        ctx.fillStyle = '#ECE4D2';
-        ctx.font = 'bold 10px "JetBrains Mono"';
-        ctx.textAlign = 'center';
-        ctx.fillText(`👁️ СПРЯТАН (${spotName})`, b.x, by - barrelH - 32);
+        if (b.hideSpot && b.hideSpot.type === 'car') {
+          /* Герой присел за кузовом: фургон перекрывает его, враги не видят */
+          const cy = floorY(b.hideSpot.floor);
+          ctx.save();
+          ctx.translate(b.x - 30, cy);
+          ctx.scale(1, 0.58);
+          this.boyActor.draw(ctx, 0, 0, charH);
+          ctx.restore();
+          drawVan(ctx, b.hideSpot.x, cy, true, this.t);
+          outlined(ctx, '🕶 ПРИСЕЛ ЗА МАШИНОЙ — НЕ ВИДЕН', b.x, cy - 110, '#80ED99', 11);
+        } else {
+          ctx.fillStyle = '#4A7A8C';
+          ctx.fillRect(b.x - 24, by - barrelH - 26, 48 * (b.air / 100), 5);
+          ctx.fillStyle = '#ECE4D2';
+          ctx.font = 'bold 10px "JetBrains Mono"';
+          ctx.textAlign = 'center';
+          ctx.fillText(`👁️ СПРЯТАН (${spotName})`, b.x, by - barrelH - 32);
+        }
       }
     } else {
       if (!b.climbing && this.finale.stage !== 'captured_cutscene') drawShadow(ctx, b.x, by, 22);
@@ -2441,10 +2489,13 @@ export class Night {
 
     /* Всплывающие тексты */
     ctx.textAlign = 'center';
-    ctx.font = 'bold 16px "JetBrains Mono"';
     this.floats.forEach((f) => {
       ctx.globalAlpha = Math.min(1, f.life * 2);
-      ctx.fillStyle = '#FFD166';
+      ctx.font = `bold ${f.size || 18}px "JetBrains Mono"`;
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = 'rgba(4,6,10,0.92)';
+      ctx.strokeText(f.txt, f.x, f.y);
+      ctx.fillStyle = f.color || '#FFD166';
       ctx.fillText(f.txt, f.x, f.y);
     });
     ctx.globalAlpha = 1;
@@ -2463,45 +2514,26 @@ export class Night {
       ctx.restore();
     }
 
-    /* ---------- КОМПАКТНАЯ ВЕРХНЯЯ ПАНЕЛЬ ЗАДАНИЯ И ЧЕК-ЛИСТА (ВВЕРХУ ЭКРАНА, ЧТОБЫ НИЗ И ПЕРСОНАЖ БЫЛИ ПОЛНОСТЬЮ ОТКРЫТЫ!) ---------- */
-    const qSteps = [
-      this.quests.key1 ? '✓Ключ1' : '○Ключ1',
-      this.quests.sec3LightOff ? '✓Свет1' : '○Свет1',
-      this.quests.valve1Closed ? '✓Задв1' : '○Задв1',
-      this.quests.key2 ? '✓Ключ2' : '○Ключ2',
-      this.quests.corpbLightOff ? '✓Свет2' : '○Свет2',
-      this.quests.valve2Closed ? '✓Задв2' : '○Задв2',
-      this.quests.key3 ? '✓Ключ3' : '○Ключ3',
-      this.finale.hits > 0 ? `🛢️${this.finale.hits}/${this.finale.maxHits}` : '○Бочка',
-    ].join(' · ');
+  }
 
-    const narrow = v.w < 620;
-    const cx = v.x + v.w / 2;
-    const topOffset = narrow ? (S.godMode ? 208 : 158) : (S.godMode ? 68 : 48);
-    const barW = Math.min(740, v.w - 16);
-    ctx.save();
-    const activeBanner = (this.msgT > 0 && this.msg) ? this.msg : this.currentObjectiveText();
-    if (activeBanner) {
-      ctx.fillStyle = 'rgba(7,10,14,0.88)';
-      ctx.fillRect(cx - barW / 2, v.y + topOffset, barW, 20);
-      ctx.strokeStyle = 'rgba(255,209,102,0.82)';
-      ctx.lineWidth = 1.2;
-      ctx.strokeRect(cx - barW / 2, v.y + topOffset, barW, 20);
-      ctx.fillStyle = '#FFD166';
-      ctx.font = narrow ? 'bold 8.5px "JetBrains Mono"' : 'bold 9.5px "JetBrains Mono"';
-      ctx.textAlign = 'center';
-      ctx.fillText(activeBanner, cx, v.y + topOffset + 13.5, barW - 12);
-    }
+  /* Одиночная атмосферная цель для угла экрана (DOM-плашка #goalTxt) вместо спойлер-чеклиста */
+  goalShort() {
+    const q = this.quests; const p = this.actPrompt();
+    if (this.finale.stage === 'captured_cutscene' || this.caughtAnim) return this.currentObjectiveText();
+    if (this.finale.stage === 'tapping_barrel') return `Стучи по Главной Бочке ${p}! ${this.finale.hits}/${this.finale.maxHits}`;
+    if (!q.key1) return `Забери ключ у Алтаря в церкви ${p}`;
+    if (!q.sec3LightOff && !q.valve1Closed) return 'Отвлеки Пастора стуком по бочке и выруби рубильник Света №1';
+    if (!q.valve1Closed) return 'Проскользни мимо охраны и закрой задвижку воды №1';
+    if (!q.key2) return 'Спустись в осушенный коллектор за вторым ключом';
+    if (!q.corpbLightOff && !q.valve2Closed) return 'В Корпусе Б выруби рубильник Света №2 — охрана на звуке';
+    if (!q.valve2Closed) return 'Отвлеки стуком охрану и закрой задвижку воды №2';
+    if (!q.key3) return 'Забери третий ключ в осушенной Насосной';
+    if (!q.finalDoorOpen) return 'Открой дверь в помещение с Бочкой';
+    return 'Зайди в помещение и стучи по Главной Бочке';
+  }
 
-    ctx.fillStyle = 'rgba(7,10,14,0.82)';
-    ctx.strokeStyle = 'rgba(212,168,67,0.5)';
-    ctx.lineWidth = 1;
-    ctx.fillRect(cx - barW / 2, v.y + topOffset + 22, barW, 17);
-    ctx.strokeRect(cx - barW / 2, v.y + topOffset + 22, barW, 17);
-    ctx.fillStyle = '#ECE4D2';
-    ctx.font = narrow ? '8px "JetBrains Mono", monospace' : '9px "JetBrains Mono", monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(qSteps, cx, v.y + topOffset + 33.5, barW - 10);
-    ctx.restore();
+  goalBanner() {
+    if (this.msgT > 0 && this.msg && this.msg.length < 110) return this.msg;
+    return 'ЦЕЛЬ: ' + this.goalShort();
   }
 }
