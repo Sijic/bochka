@@ -2206,6 +2206,13 @@ export class Tapper {
     this.chainLinks.forEach((c) => { c.x += c.vx * dt; c.y += c.vy * dt; c.vy += 620 * dt; c.rot += c.vr * dt; });
     this.skillBeams = (this.skillBeams || []).filter((bm) => (bm.life -= dt) > 0);
     this.shake = Math.max(0, this.shake - dt * 4);
+    this.dripT = (this.dripT || 0) - dt;
+    this.drips = (this.drips || []).filter((d) => (d.life -= dt) > 0);
+    this.drips.forEach((d) => { d.vy += 900 * dt; d.y += d.vy * dt; });
+    if (this.dripT <= 0 && this.view && !this.isOcean) {
+      this.dripT = 0.22 + Math.random() * 0.3;
+      this.drips.push({ x: this.view.x + Math.random() * this.view.w, y: this.view.y + 46, vy: 30, life: 0.8 });
+    }
     this.barrels.forEach((b) => { b.x += (b.tx - b.x) * Math.min(1, dt * 6); b.y += (b.ty - b.y) * Math.min(1, dt * 6); b.shake = Math.max(0, b.shake - dt * 3); b.lid = Math.max(0, b.lid - dt); });
     if (this.prankLure && this.prankLure.timer > 0) {
       this.prankLure.timer = Math.max(0, this.prankLure.timer - dt);
@@ -2378,6 +2385,9 @@ export class Tapper {
       if (tb) {
         tb.shake = 1;
         audio.knock(((tb.x - this.view.x) / this.view.w) * 2 - 1, 0.5);
+        if (this.light && Math.hypot(this.light.x - tb.x, this.light.y - (tb.y - this.bh * 0.5)) < this.bh * 0.75) {
+          window.tgHaptic?.('impact', 'light');
+        }
         if (this.betweenDog && Math.random() < 0.35) {
           this.betweenDog.dir = tb.x >= this.betweenDog.x ? 1 : -1;
           this.betweenDog.barkT = 0.7;
@@ -2467,6 +2477,9 @@ export class Tapper {
   }
 
   spawnBrokenChains(x, y, count = 12) {
+    this.shake = Math.max(this.shake, 0.8);
+    window.tgHaptic?.('impact', 'heavy');
+    for (let i = 0; i < Math.min(3, Math.ceil(count / 4)); i++) this.spark(x, y);
     for (let i = 0; i < count; i++) {
       this.chainLinks.push({
         x: x + (Math.random() - 0.5) * 44,
@@ -2778,6 +2791,8 @@ export class Tapper {
 
     this.idle = 0; if (!S.godMode) S.energy -= 1; S.taps++;
     b.shake = 1.2; this.spark(b.x, b.y - bh * 0.5);
+    this.shake = Math.max(this.shake, 0.45);
+    window.tgHaptic?.('impact', 'heavy');
     const pan = ((b.x - this.view.x) / this.view.w) * 2 - 1;
 
     /* 2. Если именно на эту бочку сейчас светит фонариком Отец или другой персонаж — ПОПАЛСЯ! */
@@ -5023,8 +5038,62 @@ export class Tapper {
       }
     }
 
-    /* Плашка игровой механики уровня показывается только первые 4.2 сек старта, чтобы не загораживать экран */
-    if (this.cfg && this.cfg.mechanicTitle && this.t < 4.2) {
+    /* Капли воды с потолка цеха */
+    if (this.drips && this.drips.length) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(150, 205, 238, 0.7)';
+      this.drips.forEach((d) => ctx.fillRect(d.x, d.y, 2, 7));
+      ctx.restore();
+    }
+
+    /* Красная пульсация краёв экрана, когда заканчивается воздух или время */
+    if (this.active && !this.isOcean) {
+      const timeLow = this.time != null && this.time < 12 ? (12 - this.time) / 12 : 0;
+      const airLow = this.air < 35 ? (35 - this.air) / 35 : 0;
+      const danger = Math.max(timeLow, airLow);
+      if (danger > 0.05) {
+        const pulse = 0.55 + Math.sin(this.t * (6 + danger * 6)) * 0.45;
+        const cxv = v.x + v.w / 2, cyv = v.y + v.h / 2;
+        const vg = ctx.createRadialGradient(cxv, cyv, Math.min(v.w, v.h) * 0.30, cxv, cyv, Math.max(v.w, v.h) * 0.65);
+        vg.addColorStop(0, 'rgba(190, 20, 24, 0)');
+        vg.addColorStop(1, `rgba(190, 20, 24, ${(0.6 * danger * pulse).toFixed(3)})`);
+        ctx.save();
+        ctx.fillStyle = vg;
+        ctx.fillRect(v.x - 400, v.y - 400, v.w + 800, v.h + 800);
+        ctx.restore();
+      }
+    }
+
+    /* Крупная контрастная плашка подсказок (механика уровня + таблица орудий для цепей) — читается на смартфоне */
+    if (this.cfg && this.cfg.mechanicTitle && this.t < 7) {
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, (7 - this.t) * 1.2);
+      const narrow = v.w < 620;
+      const lines = [
+        this.cfg.mechanicTitle,
+        '⛓ ЦЕПЬ: Болторез=1 · Кувалда=3 · Монтажка=8 · Молоток=30',
+      ];
+      const fs = narrow ? 12 : 15;
+      ctx.font = `bold ${fs}px "JetBrains Mono"`;
+      const mw = Math.min(v.w - 16, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 28);
+      const mh = lines.length * (fs + 8) + 12;
+      const mx = v.x + v.w * 0.5 - mw / 2;
+      const my = v.y + v.h - mh - 14;
+      ctx.fillStyle = 'rgba(4,6,10,0.96)';
+      ctx.fillRect(mx, my, mw, mh);
+      ctx.strokeStyle = '#FFD166';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(mx, my, mw, mh);
+      ctx.textAlign = 'center';
+      lines.forEach((l, i) => {
+        ctx.fillStyle = i === 0 ? '#FFFFFF' : '#FFD166';
+        ctx.fillText(l, v.x + v.w * 0.5, my + 10 + (i + 1) * (fs + 8) - 6, mw - 16);
+      });
+      ctx.restore();
+    }
+
+    /* Плашка игровой механики уровня (старая компактная — отключена, заменена крупной выше) */
+    if (false && this.cfg && this.cfg.mechanicTitle && this.t < 4.2) {
       ctx.save();
       ctx.globalAlpha = Math.min(1, (4.2 - this.t) * 1.2);
       const narrow = v.w < 620;

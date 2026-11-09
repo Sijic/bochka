@@ -50,6 +50,19 @@ function syncTelegramSafeArea() {
   if (safeBottom > 0) root.style.setProperty('--tg-safe-bottom', `${safeBottom}px`);
 }
 
+window.tgHaptic = tgHaptic;
+
+/* Игрок из Telegram: имя и ID для рейтинга и реферальной ссылки (?ref=user_id) */
+function applyTelegramUser(tg) {
+  const u = tg?.initDataUnsafe?.user;
+  if (!u || !u.id) return;
+  const name = [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.username || `Игрок ${u.id}`;
+  S.tgId = String(u.id);
+  S.alias = name.slice(0, 24);
+  S.refCode = String(u.id);
+  save();
+}
+
 function initTelegramMiniApp() {
   syncTelegramSafeArea();
   const tg = window.Telegram?.WebApp;
@@ -58,9 +71,10 @@ function initTelegramMiniApp() {
     tg.ready?.();
     tg.expand?.();
     tg.disableVerticalSwipes?.();
-    tg.setHeaderColor?.('#08090B');
+    tg.setHeaderColor?.('#0b0b0b');
     tg.setBackgroundColor?.('#08090B');
     tg.setBottomBarColor?.('#08090B');
+    applyTelegramUser(tg);
     tg.onEvent?.('viewportChanged', () => { syncTelegramSafeArea(); resize(); });
     tg.onEvent?.('safeAreaChanged', () => { syncTelegramSafeArea(); resize(); });
     tg.onEvent?.('contentSafeAreaChanged', () => { syncTelegramSafeArea(); resize(); });
@@ -596,7 +610,7 @@ function triggerLobbyBarrelKnock(idx, isRub = false) {
       sub: `+${pts} ОЧКОВ`,
       life: 1.85,
     });
-    tgHaptic('impact', 'light');
+    tgHaptic('impact', 'heavy');
   }
 }
 
@@ -1162,6 +1176,18 @@ canvas.addEventListener('pointermove', (e) => {
   const [x, y] = canvasPoint(e);
   tapper.light = { x, y };
   preGameLobby.light = { x, y };
+  /* Лёгкая вибрация, когда палец проходит над бочкой, которая стучит изнутри */
+  if (!started) {
+    const kb = preGameLobby.barrels[preGameLobby.activeKnockIdx];
+    if (kb) {
+      const p = getLobbyBarrelPos(kb);
+      const nowMs = performance.now();
+      if (Math.abs(x - p.x) < p.bw * 0.6 && y < p.y && y > p.y - p.bh && nowMs - (preGameLobby.lastHapticT || 0) > 350) {
+        preGameLobby.lastHapticT = nowMs;
+        tgHaptic('impact', 'light');
+      }
+    }
+  }
   if (!started && (e.buttons > 0 || e.pointerType === 'touch')) {
     hitPreGameLobby(x, y, true);
   }
@@ -1283,6 +1309,28 @@ function boot() {
     renderSections();
   };
   window.bochkaFriendArrived = handleFriendVerified;
+
+  /* ---------- РЕЖИМ БОГА: скрыт от обычных игроков (?god=1 или 5 кликов подряд по логотипу «БОЧКА») ---------- */
+  const unlockGod = () => {
+    document.body.classList.add('god-unlocked');
+    try { sessionStorage.setItem('bochka_god_ok', '1'); } catch { /* ignore */ }
+  };
+  let godOk = new URLSearchParams(location.search).get('god') === '1';
+  try { if (sessionStorage.getItem('bochka_god_ok') === '1') godOk = true; } catch { /* ignore */ }
+  if (godOk) unlockGod();
+  else if (S.godMode) { S.godMode = false; save(); }
+  let logoClicks = 0, logoLastT = 0;
+  document.querySelector('.top__logo')?.addEventListener('click', () => {
+    const now = Date.now();
+    logoClicks = now - logoLastT < 1500 ? logoClicks + 1 : 1;
+    logoLastT = now;
+    if (logoClicks >= 5) {
+      logoClicks = 0;
+      unlockGod();
+      syncGodModeUI();
+      toast('🔓 Тестовая панель разработчика открыта');
+    }
+  });
 
   /* ---------- РЕЖИМ БОГА (ВРЕМЕННАЯ КНОПКА И ТЕСТ-ПАНЕЛЬ УРОВНЕЙ) ---------- */
   const syncGodModeUI = () => {

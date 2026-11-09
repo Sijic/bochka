@@ -1485,6 +1485,7 @@ function getSquarePosterCrop(img, center, boxWFrac) {
 }
 
 export function showScreamer(text, cb) {
+  try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('error'); } catch { /* ignore */ }
   const box = $('screamer'), c = $('screamerCanvas');
   if (!box || !c) { cb && cb(); return; }
 

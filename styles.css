@@ -835,3 +835,16 @@ body.is-modal-open {
   .barrel-pill { font-size: 8px; padding: 2px 5px; }
   .barrel-hero-card__actions { grid-template-columns: 1fr; gap: 5px; margin-top: 8px; }
 }
+
+/* ---------- v62: Telegram / чистый первый экран / тест-панель скрыта ---------- */
+.god-toggle-btn { display: none !important; }
+body.god-unlocked .god-toggle-btn { display: inline-block !important; }
+body:not(.god-unlocked) .god-bar { display: none !important; }
+body:not(.god-unlocked).is-god-mode .hero__actions { top: 48px; }
+.lobby-spacer { flex: 0 0 264px; }
+.lobby-corner--left { width: 264px; }
+@media (max-width: 820px) {
+  .lobby-spacer { display: none; }
+  .lobby-corner--left { width: 100%; }
+}
+.top__logo { cursor: pointer; user-select: none; -webkit-user-select: none; }

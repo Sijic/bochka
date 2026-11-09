@@ -647,8 +647,8 @@ export function applyServerState(srv, profile) {
     }
     if (srv.comboClaimed === srv.comboDay) combo.done = true;
   }
-  if (profile?.refCode) S.refCode = profile.refCode;
-  if (profile?.alias) S.alias = profile.alias;
+  if (profile?.refCode && !S.tgId) S.refCode = profile.refCode;
+  if (profile?.alias && !S.tgId) S.alias = profile.alias;
   save();
 }
 

@@ -17,8 +17,8 @@
   <link rel="preload" as="image" href="assets/keyed/girl.webp" type="image/webp">
   <link rel="preload" as="image" href="assets/keyed/father.webp" type="image/webp">
   <link rel="preload" as="image" href="assets/keyed/director.webp" type="image/webp">
-  <link rel="stylesheet" href="./styles.css?v=61">
-  <script src="https://telegram.org/js/telegram-web-app.js" async></script>
+  <link rel="stylesheet" href="./styles.css?v=62">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
   <div class="grain"></div>
@@ -32,7 +32,6 @@
       <a href="#dossier" data-i18n="navDossier">ДОСЬЕ</a>
       <a href="#upgrade" data-i18n="tab2">ПРОКАЧКА</a>
       <a href="#friends" data-i18n="ratingTitle">РЕЙТИНГ</a>
-      <a href="https://www.kinopoisk.ru/film/11226275/?socialAlias=MzcwNjU0MjQ%3D" target="_blank" rel="noopener" style="color:var(--gold);font-weight:700">🎬 КИНОПОИСК ↗</a>
     </nav>
     <div class="lang">
       <button type="button" class="btn god-toggle-btn" id="btnGodMode" title="Временная кнопка Режима Бога для тестирования всех уровней и механик">⚡ РЕЖИМ БОГА</button>
@@ -79,8 +78,6 @@
     <div class="hero__tc"><span class="rec">REC ●</span> CAM_04 · <span id="timecode">00:00:00:00</span></div>
 
     <div class="hero__actions">
-      <a class="btn hero__qbtn" href="https://www.kinopoisk.ru/film/11226275/?socialAlias=MzcwNjU0MjQ%3D" target="_blank" rel="noopener" style="border-color:#FF6B00;color:#FFD166">🎬 КИНОПОИСК</a>
-      <button class="btn hero__qbtn" id="btnPrankVoice" title="Прослушать голосовые записи пранка (4 аудио)">🎙️ ПРАНК</button>
       <button class="btn hero__qbtn" id="btnSound">🔊 <span data-i18n="sound">ЗВУК</span>: <span id="soundState">ВКЛ</span></button>
       <button class="btn hero__qbtn" id="btnRules">? <span data-i18n="rules">ПРАВИЛА</span></button>
       <button class="btn hero__qbtn hero__qbtn--icon" id="btnHud" aria-label="menu">☰</button>
@@ -133,19 +130,12 @@
             <button type="button" class="btn btn--gold" id="btnSplashMute" title="Включить или выключить звук фонового трейлера">🔊 ЗВУК ТРЕЙЛЕРА: ВКЛ</button>
             <a class="btn btn--gold" href="#trailer">🎬 ТРЕЙЛЕР (YOUTUBE)</a>
             <a class="btn" href="https://www.kinopoisk.ru/film/11226275/?socialAlias=MzcwNjU0MjQ%3D" target="_blank" rel="noopener" style="border-color:#FF6B00;color:#FFD166">🎟️ КИНОПОИСК ↗</a>
+            <button type="button" class="btn" id="btnSplashPrank">🎙️ ПРАНК</button>
             <a class="btn" href="#logline">📄 О ФИЛЬМЕ</a>
             <button type="button" class="btn" id="btnSplashShareTrailer" title="Поделиться трейлером (+1 ❤️ жизнь и +5 000 очков)">📲 ПОДЕЛИТЬСЯ (+1 ❤️)</button>
           </div>
         </div>
-
-        <div class="lobby-corner lobby-corner--right">
-          <div class="plate__h" style="margin-bottom:4px">УПРАВЛЕНИЕ</div>
-          <div class="lobby-corner__txt">Мышь / палец — осмотреться.<br>Клик по бочке — постучать.</div>
-          <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
-            <button type="button" class="btn" id="btnSplashPrank" style="padding:5px 8px;font-size:8.5px">🎙️ ПРАНК</button>
-            <a class="btn" href="https://youtu.be/EZFDcXeLTzQ?si=-NIU0mFyayaYjHnf" target="_blank" rel="noopener" style="padding:5px 8px;font-size:8.5px">▶️ YOUTUBE ↗</a>
-          </div>
-        </div>
+        <div class="lobby-spacer" aria-hidden="true"></div>
       </div>
     </div>
 
@@ -415,6 +405,6 @@
 
   <div class="screamer is-hidden" id="screamer"><div class="screamer__role" id="screamerRole"></div><canvas id="screamerCanvas" width="640" height="640"></canvas><div class="screamer__txt" id="screamerTxt"></div></div>
 
-  <script type="module" src="./main.js?v=61"></script>
+  <script type="module" src="./main.js?v=62"></script>
 </body>
 </html>

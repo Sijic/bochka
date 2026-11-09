@@ -327,9 +327,11 @@ export class Night {
   viewSize() {
     const v = this.view || { x: 0, y: 0, w: BASE_W, h: BASE_H };
     const aspect = (v.w || BASE_W) / (v.h || BASE_H);
-    const vh = aspect < 1
+    /* Камера приближена в 1.7 раза на герое с фонариком — без огромных пустых чёрных полей сверху и снизу */
+    const ZOOM = 1.7;
+    const vh = Math.round((aspect < 1
       ? (this.overviewZoom ? 1380 : 1080)
-      : (this.overviewZoom ? 980 : 720);
+      : (this.overviewZoom ? 980 : 720)) / (this.overviewZoom ? 1.25 : ZOOM));
     const vw = Math.round(vh * aspect);
     return { vw, vh };
   }
@@ -459,7 +461,8 @@ export class Night {
     b.hidden = false;
     b.hideSpot = null;
     this.boyActor.play('action');
-    this.shake = 0.55;
+    this.shake = 0.9;
+    window.tgHaptic?.('impact', 'heavy');
     const sy = floorY(spot.floor);
     this.spawnSparks(spot.x, sy - 42, 14);
     audio.knockTone(1, 1.2);
@@ -869,6 +872,15 @@ export class Night {
     this.t += dt;
     this.msgT -= dt;
     this.shake = Math.max(0, this.shake - dt * 2.8);
+    this.dripT = (this.dripT || 0) - dt;
+    this.drips = (this.drips || []).filter((d) => (d.life -= dt) > 0);
+    this.drips.forEach((d) => { d.vy += 900 * dt; d.y += d.vy * dt; });
+    if (this.dripT <= 0 && this.active) {
+      this.dripT = 0.18 + Math.random() * 0.25;
+      const cv = this.view || { x: 0, y: 0, w: BASE_W, h: BASE_H };
+      const sz = this.viewSize();
+      this.drips.push({ x: this.camX + Math.random() * sz.vw, y: this.camY + 4, vy: 40, life: 0.7 });
+    }
     this.finale.barrelShake = Math.max(0, this.finale.barrelShake - dt * 3.0);
     this.lureCooldown = Math.max(0, this.lureCooldown - dt);
     this.quests.bellCooldown = Math.max(0, this.quests.bellCooldown - dt);
@@ -2423,6 +2435,9 @@ export class Night {
     /* Искры от ударов по Главной Бочке и задвижкам */
     ctx.fillStyle = '#FFD166';
     this.sparks.forEach((s) => ctx.fillRect(s.x, s.y, 4, 4));
+    /* Капли воды с потолка цеха */
+    ctx.fillStyle = 'rgba(140, 200, 235, 0.75)';
+    (this.drips || []).forEach((d) => ctx.fillRect(d.x, d.y, 2, 6));
 
     /* Всплывающие тексты */
     ctx.textAlign = 'center';
@@ -2434,6 +2449,19 @@ export class Night {
     });
     ctx.globalAlpha = 1;
     ctx.restore();
+
+    /* Красная пульсация краёв экрана, когда воздух кончается или охрана вот-вот заметит */
+    const danger = Math.max(b.air < 35 ? (35 - b.air) / 35 : 0, Math.min(1, b.seen || 0) * 0.8);
+    if (danger > 0.05) {
+      const pulse = 0.55 + Math.sin(this.t * 7) * 0.45;
+      const vg = ctx.createRadialGradient(v.x + v.w / 2, v.y + v.h / 2, Math.min(v.w, v.h) * 0.30, v.x + v.w / 2, v.y + v.h / 2, Math.max(v.w, v.h) * 0.65);
+      vg.addColorStop(0, 'rgba(190, 20, 24, 0)');
+      vg.addColorStop(1, `rgba(190, 20, 24, ${(0.55 * danger * pulse).toFixed(3)})`);
+      ctx.save();
+      ctx.fillStyle = vg;
+      ctx.fillRect(v.x, v.y, v.w, v.h);
+      ctx.restore();
+    }
 
     /* ---------- КОМПАКТНАЯ ВЕРХНЯЯ ПАНЕЛЬ ЗАДАНИЯ И ЧЕК-ЛИСТА (ВВЕРХУ ЭКРАНА, ЧТОБЫ НИЗ И ПЕРСОНАЖ БЫЛИ ПОЛНОСТЬЮ ОТКРЫТЫ!) ---------- */
     const qSteps = [
