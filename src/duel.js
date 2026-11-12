@@ -37,8 +37,9 @@ export class WorkshopDuelController {
     this.phase = 'idle'; // 'lobby' | 'countdown' | 'claim' | 'reveal' | 'finished'
     this.roundKey = '';
     this.antePaidForRound = '';
-    this.barrelCount = 6;
+    this.barrelCount = 10;
     this.safeIndices = [];
+    this.openedIndices = []; // уже вскрытые в текущей партии бочки (не закрываются, пока не откроют все!)
     this.claims = {}; // { [barrelIndex]: { uid, name, avatar, ts } }
     this.claimTimeLeft = 3.0;
 
@@ -80,6 +81,7 @@ export class WorkshopDuelController {
     this.phase = 'lobby';
     this.roundKey = '';
     this.antePaidForRound = '';
+    this.openedIndices = [];
     this.claims = {};
     this.spectatorUids = [];
 
@@ -111,7 +113,7 @@ export class WorkshopDuelController {
     }
 
     this.scene.resetRound({
-      barrelCount: 6,
+      barrelCount: 10,
       targetIndex: 0,
       golden: false,
     });
@@ -351,7 +353,10 @@ export class WorkshopDuelController {
   }
 
   /**
-   * Запуск раунда (первичный с анте 1 ❤️ либо бесплатная перезарядка / Суперфинал 1х1 на 2 бочках)
+   * Запуск волны за столом «На счёт три!»:
+   * В цеху стоят все 10 бочек (5 живых, 5 со скримерами).
+   * Вскрытые бочки НЕ обновляются между волнами ничьей и Суперфинала 1х1 — игроки добивают оставшиеся
+   * закрытые бочки, и только когда закрытых бочек остаётся меньше числа бьющихся игроков, выкатывается новая партия 10 бочек!
    */
   async hostInitiateRound({ isFreeRerack = false, suddenDeathContenders = null } = {}) {
     if (this.players.length < 2) {
@@ -360,25 +365,45 @@ export class WorkshopDuelController {
     }
 
     const contenders = suddenDeathContenders || this.players.map((p) => p.uid);
-    const barrelCount = contenders.length === 2 && suddenDeathContenders ? 2 : 6;
-    const safeCount = barrelCount === 2 ? 1 : 3;
+    const barrelCount = 10;
+    const safeCount = 5;
 
-    const indices = Array.from({ length: barrelCount }, (_, i) => i);
-    for (let i = indices.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [indices[i], indices[j]] = [indices[j], indices[i]];
+    const prevOpened = isFreeRerack ? [...this.openedIndices] : [];
+    const closedRemaining = Array.from({ length: barrelCount }, (_, i) => i).filter(
+      (i) => !prevOpened.includes(i)
+    );
+
+    // Обновляем партию из 10 бочек ТОЛЬКО на старте новой игры или когда добили все закрытые бочки!
+    const needFreshRack = !isFreeRerack || closedRemaining.length < contenders.length || !this.safeIndices.length;
+
+    let safeIndices = this.safeIndices;
+    let openedIndices = prevOpened;
+
+    if (needFreshRack) {
+      const indices = Array.from({ length: barrelCount }, (_, i) => i);
+      for (let i = indices.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [indices[i], indices[j]] = [indices[j], indices[i]];
+      }
+      safeIndices = indices.slice(0, safeCount);
+      openedIndices = [];
     }
-    const safeIndices = indices.slice(0, safeCount);
-    const roundKey = isFreeRerack && this.roundKey ? this.roundKey : `rk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+
+    const roundKey =
+      isFreeRerack && this.roundKey
+        ? this.roundKey
+        : `rk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 
     const payload = {
       roundKey,
       isFreeRerack: Boolean(isFreeRerack),
+      resetRack: needFreshRack,
       isSuddenDeath: Boolean(suddenDeathContenders),
       contenderUids: contenders,
       spectatorUids: this.players.map((p) => p.uid).filter((u) => !contenders.includes(u)),
       barrelCount,
       safeIndices,
+      openedIndices,
     };
 
     this.broadcast('duel_start', payload);
@@ -392,8 +417,9 @@ export class WorkshopDuelController {
     this.roundKey = payload.roundKey;
     this.contenderUids = payload.contenderUids || this.players.map((p) => p.uid);
     this.spectatorUids = payload.spectatorUids || [];
-    this.barrelCount = payload.barrelCount || 6;
-    this.safeIndices = payload.safeIndices || [0, 2, 4];
+    this.barrelCount = payload.barrelCount || 10;
+    this.safeIndices = payload.safeIndices || [0, 2, 4, 6, 8];
+    this.openedIndices = Array.isArray(payload.openedIndices) ? [...payload.openedIndices] : [];
     this.claims = {};
 
     document.getElementById('duel-result-box')?.setAttribute('hidden', '');
@@ -421,13 +447,24 @@ export class WorkshopDuelController {
 
     this.renderLobbyUI();
 
-    // Готовим 3D сцену (6 бочек в 1-м туре, либо 2 бочки в Суперфинале 1 на 1!)
-    this.scene.resetRound({
-      barrelCount: this.barrelCount,
-      targetIndex: this.safeIndices[0] ?? 0,
-      golden: this.players.length >= 3,
-    });
+    // Вскрытые бочки НЕ закрываются обратно, пока игроки не откроют всю партию из 10 бочек!
+    if (payload.resetRack !== false || this.openedIndices.length === 0) {
+      this.scene.resetRound({
+        barrelCount: this.barrelCount,
+        targetIndex: this.safeIndices[0] ?? 0,
+        golden: this.players.length >= 3,
+      });
+    } else {
+      this.scene.setActiveBarrelCount(this.barrelCount);
+      for (const idx of this.openedIndices) {
+        if (!this.scene.barrels?.[idx]?.struck) {
+          this.scene.triggerEmptyBarrelOpen(idx);
+        }
+      }
+    }
     this.scene.setInteractive(false);
+
+    const closedLeft = Math.max(0, this.barrelCount - this.openedIndices.length);
 
     // Обратный отсчёт: РАЗ... ДВА... ТРИ — БЕЙ!
     this.phase = 'countdown';
@@ -437,11 +474,17 @@ export class WorkshopDuelController {
     banner?.removeAttribute('hidden');
 
     if (bannerSub) {
-      bannerSub.textContent = payload.isSuddenDeath
-        ? '⚡ СУПЕРФИНАЛ 1 НА 1: ДВЕ БОЧКИ — ВЫЖИВЕТ ОДИН!'
-        : payload.isFreeRerack
-          ? '🔄 НИЧЬЯ! БЕСПЛАТНАЯ ПЕРЕЗАРЯДКА ЦЕХА!'
-          : 'ПРИГОТОВЬСЯ ХВАТАТЬ СВОЮ БОЧКУ!';
+      if (payload.isSuddenDeath) {
+        bannerSub.textContent = payload.resetRack
+          ? '⚡ СУПЕРФИНАЛ 1 НА 1: ВСЕ БОЧКИ ВСКРЫТЫ — НОВЫЕ 10 БОЧЕК!'
+          : `⚡ СУПЕРФИНАЛ 1 НА 1 · ОСТАЛОСЬ ${closedLeft} ЗАКРЫТЫХ БОЧЕК ИЗ ${this.barrelCount}!`;
+      } else if (payload.isFreeRerack) {
+        bannerSub.textContent = payload.resetRack
+          ? '🔄 ВСЕ 10 БОЧЕК ВСКРЫТЫ! НОВАЯ ПАРТИЯ БЕЗ СПИСАНИЯ ЖИЗНЕЙ!'
+          : `🔥 НИЧЬЯ! БОЧКИ НЕ ОБНОВЛЯЮТСЯ — ОСТАЛОСЬ ${closedLeft} ЗАКРЫТЫХ!`;
+      } else {
+        bannerSub.textContent = `В ЦЕХУ ${this.barrelCount} ЗАКРЫТЫХ БОЧЕК — ПРИГОТОВЬСЯ ХВАТАТЬ СВОЮ!`;
+      }
     }
 
     const steps = ['РАЗ...', 'ДВА...', 'ТРИ — БЕЙ!'];
@@ -474,7 +517,7 @@ export class WorkshopDuelController {
     const bannerText = document.getElementById('duel-countdown-text');
     const bannerSub = document.getElementById('duel-countdown-sub');
 
-    // Если за столом есть песочные боты (/testbog/) — они захватывают свободные бочки через 0.5..1.7с
+    // Если за столом есть песочные боты (/testbog/) — они захватывают только ЗАКРЫТЫЕ свободные бочки
     this.players
       .filter((p) => p.isBot && this.contenderUids.includes(p.uid))
       .forEach((bot, idx) => {
@@ -483,7 +526,7 @@ export class WorkshopDuelController {
           if (!this.active || this.phase !== 'claim') return;
           const free = [];
           for (let b = 0; b < this.barrelCount; b++) {
-            if (!this.claims[b]) free.push(b);
+            if (!this.openedIndices.includes(b) && !this.claims[b]) free.push(b);
           }
           if (!free.length) return;
           const pick = free[Math.floor(Math.random() * free.length)];
@@ -511,6 +554,7 @@ export class WorkshopDuelController {
       }, 1100);
     }
 
+    const closedLeft = Math.max(0, this.barrelCount - this.openedIndices.length);
     let lastTs = performance.now();
     this.claimInterval = window.setInterval(() => {
       if (!this.active || this.phase !== 'claim') return;
@@ -526,7 +570,7 @@ export class WorkshopDuelController {
           ? 'Ты в нокауте — жми «Погреметь цепями» внизу!'
           : myLocked
             ? '✓ Твоя бочка захвачена! Ждём вскрытия...'
-            : 'Успей кликнуть по свободной бочке!';
+            : `Выбирай из ${closedLeft} закрытых бочек!`;
       }
 
       const claimedCount = new Set(Object.values(this.claims).map((c) => c.uid)).size;
@@ -551,6 +595,12 @@ export class WorkshopDuelController {
       return true;
     }
 
+    if (this.openedIndices.includes(barrelIndex) || this.scene.barrels?.[barrelIndex]?.struck) {
+      Haptics.light();
+      this.onToast?.('🛢 Эта бочка уже вскрыта в прошлом заходе! Бей по закрытой!');
+      return true;
+    }
+
     // Если я уже захватил бочку в этом раунде — игнорируем повторный клик
     const alreadyMine = Object.entries(this.claims).find(([, c]) => c.uid === this.myUid);
     if (alreadyMine) return true;
@@ -558,7 +608,7 @@ export class WorkshopDuelController {
     const existing = this.claims[barrelIndex];
     if (existing && existing.uid !== this.myUid) {
       Haptics.error();
-      this.onToast?.(`⛔ Занято (${existing.name})! Быстрее бей соседнюю бочку!`);
+      this.onToast?.(`⛔ Занято (${existing.name})! Быстрее бей соседнюю закрытую бочку!`);
       return true;
     }
 
@@ -581,6 +631,7 @@ export class WorkshopDuelController {
   applyBarrelClaim(claim, shouldBroadcast = false) {
     const idx = Number(claim.barrelIndex);
     if (idx < 0 || idx >= this.barrelCount) return;
+    if (this.openedIndices.includes(idx)) return;
 
     const cur = this.claims[idx];
     if (cur && cur.ts <= claim.ts && cur.uid !== claim.uid) {
@@ -604,12 +655,12 @@ export class WorkshopDuelController {
   finalizeClaimsAndBroadcastReveal() {
     if (this.phase !== 'claim') return;
 
-    // Если кто-то замешкался за 3.0 сек — назначаем ему свободную бочку автоматически
+    // Если кто-то замешкался за 3.0 сек — назначаем ему свободную ЗАКРЫТУЮ бочку автоматически
     for (const uid of this.contenderUids) {
       const hasClaim = Object.values(this.claims).some((c) => c.uid === uid);
       if (!hasClaim) {
         for (let b = 0; b < this.barrelCount; b++) {
-          if (!this.claims[b]) {
+          if (!this.openedIndices.includes(b) && !this.claims[b]) {
             const p = this.players.find((x) => x.uid === uid);
             this.claims[b] = {
               uid,
@@ -628,6 +679,7 @@ export class WorkshopDuelController {
       roundKey: this.roundKey,
       claims: this.claims,
       safeIndices: this.safeIndices,
+      openedIndices: this.openedIndices,
       contenderUids: this.contenderUids,
     };
 
@@ -643,6 +695,9 @@ export class WorkshopDuelController {
 
     this.claims = payload.claims || this.claims;
     this.safeIndices = payload.safeIndices || this.safeIndices;
+    if (Array.isArray(payload.openedIndices)) {
+      this.openedIndices = [...payload.openedIndices];
+    }
     this.renderBarrelClaimBadges();
 
     const bannerText = document.getElementById('duel-countdown-text');
@@ -656,6 +711,9 @@ export class WorkshopDuelController {
       const bIdx = Number(bStr);
       const isSafe = this.safeIndices.includes(bIdx);
       this.scene.triggerEmptyBarrelOpen(bIdx);
+      if (!this.openedIndices.includes(bIdx)) {
+        this.openedIndices.push(bIdx);
+      }
       if (isSafe) {
         survivors.push(claim);
       } else {
@@ -701,12 +759,17 @@ export class WorkshopDuelController {
       return;
     }
 
-    // СЦЕНАРИЙ 2: СУПЕРФИНАЛ (из 3 игроков выжили двое — 3-й уходит в зрители с цепями, а 2 бьются на 2 бочках!)
+    const closedLeftAfter = Math.max(0, this.barrelCount - this.openedIndices.length);
+
+    // СЦЕНАРИЙ 2: СУПЕРФИНАЛ 1 НА 1 (из 3 игроков выжили двое — вскрытые бочки остаются открытыми!)
     if (survivors.length === 2 && this.contenderUids.length === 3) {
       const outPlayer = eliminated[0];
       if (bannerText) bannerText.textContent = 'СУПЕРФИНАЛ 1 НА 1!';
       if (bannerSub) {
-        bannerSub.textContent = `${outPlayer?.name || '3-й игрок'} в нокауте! Две бочки для двоих финалистов!`;
+        bannerSub.textContent =
+          closedLeftAfter >= 2
+            ? `${outPlayer?.name || '3-й игрок'} в нокауте! Добиваем оставшиеся ${closedLeftAfter} закрытых бочек!`
+            : `${outPlayer?.name || '3-й игрок'} в нокауте! Все бочки открыты — выкатываем новые 10!`;
       }
       this.scheduleTimeout(() => {
         if (!this.active || !this.isHost()) return;
@@ -718,9 +781,14 @@ export class WorkshopDuelController {
       return;
     }
 
-    // СЦЕНАРИЙ 3: НИЧЬЯ (все промахнулись ИЛИ все выжили) -> мгновенная бесплатная перезарядка!
+    // СЦЕНАРИЙ 3: НИЧЬЯ (все промахнулись ИЛИ все выжили) -> добиваем оставшиеся закрытые бочки!
     if (bannerText) bannerText.textContent = '⚡ НИЧЬЯ!';
-    if (bannerSub) bannerSub.textContent = 'Перезарядка цеха без списания жизней — ещё раз на счёт три!';
+    if (bannerSub) {
+      bannerSub.textContent =
+        closedLeftAfter >= this.contenderUids.length
+          ? `Бочки не обновляются — бьёмся дальше на оставшихся ${closedLeftAfter} закрытых (0 ❤️)!`
+          : 'Все 10 бочек вскрыты! Выкатываем новую партию без списания жизней!';
+    }
     this.scheduleTimeout(() => {
       if (!this.active || !this.isHost()) return;
       this.hostInitiateRound({
