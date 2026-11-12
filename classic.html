@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#08090B">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="format-detection" content="telephone=no">
+  <title>БОЧКА: Достучаться до небес</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2308090B'/%3E%3Crect x='7' y='4' width='18' height='24' rx='2' fill='%235c2c16' stroke='%23D4A843' stroke-width='2'/%3E%3Cline x1='7' y1='11' x2='25' y2='11' stroke='%23D4A843' stroke-width='1.5'/%3E%3Cline x1='7' y1='21' x2='25' y2='21' stroke='%23D4A843' stroke-width='1.5'/%3E%3C/svg%3E">
+  <link rel="preload" as="image" href="assets/keyed/barrels.webp" type="image/webp" fetchpriority="high">
+  <link rel="preload" as="image" href="assets/keyed/priest.webp" type="image/webp">
+  <link rel="preload" as="image" href="assets/keyed/capguy.webp" type="image/webp">
+  <link rel="preload" as="image" href="assets/keyed/boy.webp" type="image/webp">
+  <link rel="preload" as="image" href="assets/keyed/girl.webp" type="image/webp">
+  <link rel="preload" as="image" href="assets/keyed/father.webp" type="image/webp">
+  <link rel="preload" as="image" href="assets/keyed/director.webp" type="image/webp">
+  <link rel="stylesheet" href="./styles.css?v=63">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <div class="grain"></div>
+
+  <header class="top">
+    <a class="top__logo" href="#hero" data-i18n="title">БОЧКА</a>
+    <nav class="top__nav">
+      <a href="#hero" data-i18n="navShop">ЦЕХ</a>
+      <a href="#logline" data-i18n="navLogline">О ФИЛЬМЕ</a>
+      <a href="#trailer" data-i18n="navTrailer">ТРЕЙЛЕР</a>
+      <a href="#dossier" data-i18n="navDossier">ДОСЬЕ</a>
+      <a href="#upgrade" data-i18n="tab2">ПРОКАЧКА</a>
+      <a href="#friends" data-i18n="ratingTitle">РЕЙТИНГ</a>
+    </nav>
+    <div class="lang">
+      <button type="button" class="btn god-toggle-btn" id="btnGodMode" title="Временная кнопка Режима Бога для тестирования всех уровней и механик">⚡ РЕЖИМ БОГА</button>
+      <button class="lang__btn is-active" data-lang="ru">RU</button>
+      <button class="lang__btn" data-lang="kz">KZ</button>
+      <button class="lang__btn" data-lang="en">EN</button>
+    </div>
+  </header>
+
+  <div class="god-bar is-hidden" id="godModeBar">
+    <span class="god-bar__lbl">⚡ ТЕСТ УРОВНЕЙ:</span>
+    <button type="button" class="btn god-bar__btn" data-god-lvl="1">Ур.1 Отец</button>
+    <button type="button" class="btn god-bar__btn" data-god-lvl="2">Ур.2 Конвейер</button>
+    <button type="button" class="btn god-bar__btn" data-god-lvl="3">Ур.3 Вспышка</button>
+    <button type="button" class="btn god-bar__btn" data-god-lvl="4">Ур.4 Овчарка</button>
+    <button type="button" class="btn god-bar__btn" data-god-lvl="5">Ур.5 Пастор</button>
+    <button type="button" class="btn god-bar__btn" data-god-lvl="6">Ур.6 Алтарь</button>
+    <button type="button" class="btn god-bar__btn" data-god-lvl="7">Ур.7 Море (Тиль)</button>
+    <button type="button" class="btn god-bar__btn" data-god-lvl="8">Ур.8 Секретный</button>
+    <button type="button" class="btn god-bar__btn god-bar__btn--win" id="btnGodWin">🏆 Выиграть ур.</button>
+    <button type="button" class="btn god-bar__btn" id="btnGodDirector">🎬 Видео реж.</button>
+    <button type="button" class="btn god-bar__btn" id="btnGodFriend">🤝 +1 Друг (Бочка)</button>
+  </div>
+
+  <section class="hero" id="hero">
+    <div class="lobby-yt-wrap" id="lobbyYtWrap">
+      <iframe
+        id="lobbyYtIframe"
+        src="https://www.youtube.com/embed/EZFDcXeLTzQ?autoplay=1&mute=0&controls=0&rel=0&modestbranding=1&playsinline=1&enablejsapi=1&loop=1&playlist=EZFDcXeLTzQ"
+        title="БОЧКА — Официальный трейлер (YouTube)"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowfullscreen
+      ></iframe>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="hero__copy">
+      <div class="hero__tag" data-i18n="heroTag"># 01 / ЦЕХ, КОРПУС Б — ВХОД ВОСПРЕЩЁН</div>
+      <h1 class="hero__title"><span class="hero__l1" data-i18n="heroL1">А ТЫ ВЫДЕРЖИШЬ</span><span class="hero__l2" data-i18n="heroL2">90 МИНУТ ВНУТРИ?</span></h1>
+      <p class="hero__sub" data-i18n="slogan1">«Бочка: стучите, и отворят вам»</p>
+      <p class="hero__sub2" data-i18n="slogan2">«На небесах только и говорят, что о твоём последнем пранке»</p>
+    </div>
+
+    <div class="hero__tc"><span class="rec">REC ●</span> CAM_04 · <span id="timecode">00:00:00:00</span></div>
+
+    <div class="hero__actions">
+      <button class="btn hero__qbtn" id="btnSound">🔊 <span data-i18n="sound">ЗВУК</span>: <span id="soundState">ВКЛ</span></button>
+      <button class="btn hero__qbtn" id="btnRules">? <span data-i18n="rules">ПРАВИЛА</span></button>
+      <button class="btn hero__qbtn hero__qbtn--icon" id="btnHud" aria-label="menu">☰</button>
+    </div>
+
+    <div class="plate plate--bl hud">
+      <div class="hud__row">
+        <div class="cap cap--air" title="Воздух">
+          <span class="cap__ic">💨</span>
+          <div class="cap__bar"><div class="cap__fill air__fill" id="airFill"></div><span class="cap__txt" id="airPct">100%</span></div>
+        </div>
+        <div class="cap cap--score" title="Очки пранка (лайки)">
+          <span class="cap__ic">❤️</span>
+          <span class="cap__val" id="scoreBig">0</span>
+        </div>
+        <div class="cap cap--energy" title="Энергия ударов">
+          <span class="cap__ic">⚡</span>
+          <div class="cap__bar"><div class="cap__fill cap__fill--energy air__fill" id="hudEnergyFill"></div><span class="cap__txt" id="energyPct">100%</span></div>
+        </div>
+        <button type="button" class="cap cap--btn" id="btnDrawer" aria-label="Инвентарь">🧰 <span>ИНВЕНТАРЬ</span></button>
+      </div>
+      <div class="hud__sub">
+        <div class="sqs" id="lives"></div>
+        <div class="air__bar air__bar--gold hud__prog"><div class="air__fill air__fill--gold" id="progFill"></div></div>
+        <div class="plate__stat" id="statTxt">УРОВЕНЬ 01 // БАЛЛЫ: 0</div>
+        <button type="button" class="btn hud__exit" id="btnExitLobby" title="Вернуться в тёмный зал с бочками актёров">✕ В ЗАЛ</button>
+        <button class="btn btn--blood plate__wide is-hidden" id="btnInvite" data-i18n="inviteBtn">ПРИГЛАСИТЬ ДРУГА — ВЕРНУТЬ ПОПЫТКИ</button>
+      </div>
+      <div class="plate__txt is-hidden" id="hintTxt"></div>
+    </div>
+
+    <div class="drawer" id="invDrawer" aria-hidden="true">
+      <div class="drawer__head"><span>🧰 ИНВЕНТАРЬ: Болторез · Кувалда · Монтажка · Молоток · Фонарь · Магнит</span><button type="button" class="drawer__close" id="btnDrawerClose" aria-label="Закрыть">✕</button></div>
+      <div class="drawer__tools" id="drawerTools"></div>
+      <div class="hud-tool" id="hudToolWrap">
+        <button type="button" class="hud-tool__btn" id="btnToolPrev" aria-label="prev tool">◀</button>
+        <span class="hud-tool__txt" id="hudToolTxt">✊ УР.1 РУКА</span>
+        <button type="button" class="hud-tool__btn" id="btnToolNext" aria-label="next tool">▶</button>
+      </div>
+      <div class="hud-skills" id="hudSkillsBar"></div>
+    </div>
+
+    <div class="plate plate--br">
+      <div class="plate__h" data-i18n="controls">УПРАВЛЕНИЕ</div>
+      <div class="plate__txt" id="ctlTxt" data-i18n="controlsText">Мышь / палец — осмотреться (луч фонаря). Клик по бочке — постучать.</div>
+      <div class="plate__row plate__row--mode">
+        <button class="btn is-on" id="btnModeTap" data-i18n="modeShop">01–06 ЦЕХ</button>
+        <button class="btn" id="btnModeOcean" data-i18n="modeOceanShort">07 МОРЕ · ТИЛЬ</button>
+        <button class="btn" id="btnModeNight" data-i18n="modeNightShort" disabled>08 НОЧНАЯ СМЕНА</button>
+      </div>
+    </div>
+
+    <div class="hero__enter" id="enterBox">
+      <div class="lobby-dock">
+        <div class="lobby-corner lobby-corner--left" id="btnLobbyPoster" title="Нажми, чтобы открыть постер и описание фильма">
+          <img src="photo_2026-11-08_00-00-26.jpg" alt="Постер фильма БОЧКА" class="lobby-poster-thumb">
+          <div class="lobby-corner__body">
+            <div class="plate__h" style="margin-bottom:4px">ПОПЫТКИ</div>
+            <div class="sqs" style="margin-bottom:6px">
+              <div class="sq is-on"></div><div class="sq is-on"></div><div class="sq is-on"></div>
+            </div>
+            <div class="lobby-corner__txt">Прислушайся: одна из бочек стучит изнутри. Покрути пальцем и постучи по бочкам с именами актёров.</div>
+          </div>
+        </div>
+
+        <div class="lobby-center">
+          <button class="btn btn--gold splash-start-btn" id="btnEnter" data-i18n="enter">▶ СТАРТ ИГРЫ ◀</button>
+          <div class="lobby-subbtns">
+            <button type="button" class="btn btn--gold" id="btnSplashMute" title="Включить или выключить звук фонового трейлера">🔊 ЗВУК ТРЕЙЛЕРА: ВКЛ</button>
+            <a class="btn btn--gold" href="#trailer">🎬 ТРЕЙЛЕР (YOUTUBE)</a>
+            <a class="btn" href="https://www.kinopoisk.ru/film/11226275/?socialAlias=MzcwNjU0MjQ%3D" target="_blank" rel="noopener" style="border-color:#FF6B00;color:#FFD166">🎟️ КИНОПОИСК ↗</a>
+            <button type="button" class="btn" id="btnSplashPrank">🎙️ ПРАНК</button>
+            <a class="btn" href="#logline">📄 О ФИЛЬМЕ</a>
+            <button type="button" class="btn" id="btnSplashShareTrailer" title="Поделиться трейлером (+1 ❤️ жизнь и +5 000 очков)">📲 ПОДЕЛИТЬСЯ (+1 ❤️)</button>
+          </div>
+        </div>
+        <div class="lobby-spacer" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    <div class="goal is-hidden" id="goalTxt"></div>
+
+    <div class="touch" id="touchCtl">
+      <button class="touch__btn" data-k="left" title="Влево (A / ←)">◀ <kbd class="touch__key">[A/←]</kbd></button>
+      <button class="touch__btn" data-k="up" title="Вверх по лестнице (W / ↑)">▲ <kbd class="touch__key">[W/↑]</kbd></button>
+      <button class="touch__btn" data-k="down" title="Вниз по лестнице (S / ↓)">▼ <kbd class="touch__key">[S/↓]</kbd></button>
+      <button class="touch__btn" data-k="right" title="Вправо (D / →)">▶ <kbd class="touch__key">[D/→]</kbd></button>
+      <button class="touch__btn touch__btn--act" data-k="run" title="Рывок / Бег (Shift)">⚡ БЕГ <kbd class="touch__key">[SHIFT]</kbd></button>
+      <button class="touch__btn touch__btn--act" data-k="act" title="Действие: свет, вентиль, ключ, стук по бочке (E / Enter)">🔧 ДЕЙСТВИЕ <kbd class="touch__key">[E]</kbd></button>
+      <button class="touch__btn touch__btn--hide" data-k="hide" title="Спрятаться в бочку / укрытие (H / Пробел)">🛢️ В БОЧКУ <kbd class="touch__key">[H/ПРОБЕЛ]</kbd></button>
+      <button class="touch__btn touch__btn--act" data-k="lure" title="Бросить звонящий телефон-приманку (F)">📱 ПРИМАНКА <kbd class="touch__key">[F]</kbd></button>
+      <button class="touch__btn touch__btn--act" data-k="door" title="Запереть стальную дверь на засов (Q)">🚪 ЗАСОВ <kbd class="touch__key">[Q]</kbd></button>
+      <button class="touch__btn touch__btn--act" data-k="zoom" title="Переключить масштаб камеры: Весь завод / Крупно (Z)">🔍 ОБЗОР <kbd class="touch__key">[Z]</kbd></button>
+    </div>
+
+    <a class="hero__down" href="#upgrade" data-i18n="down">ВНИЗ</a>
+  </section>
+
+  <section class="sec" id="upgrade" data-need="1">
+    <div class="sec__lock"><span id="lockUpgrade"></span></div>
+    <div class="sec__inner">
+      <div class="sec__num"># 01.5 / <span data-i18n="upgradeTitle">ПРОКАЧКА ПЛОЩАДКИ</span></div>
+      <h2 class="sec__title" data-i18n="upgradeTitle">ПРОКАЧКА ПЛОЩАДКИ</h2>
+      <p class="sec__hint" data-i18n="upgradeHint"></p>
+
+      <div class="upg-stats">
+        <div class="upg-card">
+          <div class="upg-card__top">
+            <span data-i18n="balance">БАЛАНС / ОЧКИ</span>
+            <span class="upg-badge"><span data-i18n="profitHour">ПРИБЫЛЬ В ЧАС</span>: +<b id="upgProfit">0</b> <span data-i18n="perHour">/ ч</span></span>
+          </div>
+          <div class="upg-card__val" id="upgBalance">0</div>
+          <div class="upg-card__sub" id="upgLeague"></div>
+          <button class="btn btn--gold plate__wide" id="btnClaim">
+            <span data-i18n="claim">ЗАБРАТЬ ДОХОД</span> [ +<span id="claimVal">0</span> ]
+          </button>
+        </div>
+
+        <div class="upg-card">
+          <div class="upg-card__top">
+            <span>⚡ <span data-i18n="energy">ЭНЕРГИЯ</span>: <b id="upgEnergyTxt">1000 / 1000</b></span>
+            <span>⏱ <span data-i18n="regen">РЕГЕН</span>: <b id="upgRegenTxt">00:00:00</b></span>
+          </div>
+          <div class="air__bar air__bar--gold upg-ebar">
+            <div class="air__fill air__fill--gold" id="upgEnergyBar"></div>
+          </div>
+          <div class="upg-streak">
+            <div class="upg-card__top">
+              <span data-i18n="streakLabel">СТРИК 30 ДНЕЙ</span>
+              <b id="upgStreakTxt">0 / 30</b>
+            </div>
+            <div class="streak-grid" id="streakGrid"></div>
+          </div>
+          <button class="btn plate__wide" id="btnDaily" data-i18n="daily">ЕЖЕДНЕВНАЯ НАГРАДА</button>
+        </div>
+      </div>
+
+      <div class="upg-combo">
+        <div class="upg-combo__head">
+          <div>
+            <h3 class="sec__sub" style="margin:0 0 6px" data-i18n="comboTitle">ЕЖЕДНЕВНОЕ КОМБО</h3>
+            <p class="sec__hint" style="margin:0" data-i18n="comboHint"></p>
+          </div>
+          <div class="upg-combo__meta">
+            <span class="upg-badge" id="comboStatus">0 / 3</span>
+            <button class="btn" id="btnCipher" data-i18n="cipherBtn">ПРОСТУЧАТЬ ШИФР ДНЯ</button>
+          </div>
+        </div>
+        <div class="combo-slots" id="comboSlots"></div>
+        <div class="cipher-pad is-hidden" id="cipherPad">
+          <div class="cipher-pad__hint" id="cipherHintTxt" data-i18n="cipherHint">Повтори ритм из 4 ударов по бочкам 1–3</div>
+          <canvas class="rhythm-stage-canvas" id="cipherCanvas" width="500" height="210"></canvas>
+          <div class="cipher-pad__row" id="cipherBarrels">
+            <button class="btn cipher-barrel" data-cidx="0">🐕 #01 · ЛАЙ (ИГОРЬ)</button>
+            <button class="btn cipher-barrel" data-cidx="1">📖 #02 · ТИЛЬ (ДАНИЯР)</button>
+            <button class="btn cipher-barrel" data-cidx="2">🔦 #03 · ОТЕЦ (МАРК)</button>
+          </div>
+          <div style="display:flex;justify-content:center;gap:8px;margin-top:8px;flex-wrap:wrap">
+            <a href="#hero" class="btn btn--gold" onclick="document.getElementById('cipherPad')?.classList.add('is-hidden')">▶ ДАЛЬШЕ ИГРАТЬ (НАВЕРХ К БОЧКАМ)</a>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sec__sub">🏆 ГЛАВНАЯ КАРТОЧКА «БОЧКА» — ШАНС НА ЗАКРЫТЫЙ ПОКАЗ ФИЛЬМА</h3>
+      <div id="barrelCardHeroMount"></div>
+
+      <h3 class="sec__sub" data-i18n="boostsTitle">БУСТЫ И УСИЛЕНИЯ</h3>
+      <div class="boosts-grid" id="boostsGrid"></div>
+
+      <h3 class="sec__sub">🃏 КАРТОЧКИ НАВЫКОВ ВЫЖИВАНИЯ (ПРОКАЧКА И ВЗЯТЬ В РУКУ)</h3>
+      <p class="sec__hint">Прокачивай карточки навыков, бери их в руку вместо молотка и направляй прямо на охрану или на бочки за энергию ⚡! Каждая карточка также приносит пассивный доход очков в час.</p>
+      <div class="cards-grid" id="cardsGrid"></div>
+    </div>
+  </section>
+
+  <section class="sec" id="logline" data-need="1">
+    <div class="sec__lock"><span id="lockLogline"></span></div>
+    <div class="sec__inner">
+      <div class="sec__num"># 02 / <span data-i18n="navLogline">О ФИЛЬМЕ · ПРЕСС-РЕЛИЗ</span></div>
+      <h2 class="sec__title">БОЧКА: ДОСТУЧАТЬСЯ ДО НЕБЕС</h2>
+      <p class="sec__hint" style="color:var(--gold);font-family:var(--font-mono);font-size:12px;letter-spacing:0.08em;max-width:920px;margin-bottom:18px">
+        🏆 УЧАСТНИК МЕЖДУНАРОДНОГО КИНОФЕСТИВАЛЯ <b>CINEQUEST (КАЛИФОРНИЯ, США, МАРТ 2026)</b> · ПРАВА ПРИОБРЕТЕНЫ <b>APPLE TV</b> И <b>AMAZON</b> · В КИНОТЕАТРАХ С <b>17 ДЕКАБРЯ 2026</b>
+      </p>
+
+      <div class="press-grid">
+        <div class="press-posters">
+          <div class="press-poster-card">
+            <img src="photo_2026-11-08_00-00-26.jpg" alt="Официальный постер фильма БОЧКА (Тиль Швайгер, реж. Алексей Звонцов)" class="press-poster-img">
+            <div class="press-poster-cap">ОФИЦИАЛЬНЫЙ ПОСТЕР · КИНОЦЕХ / БИГСКРИНПРОДАКШН</div>
+          </div>
+          <div class="press-poster-card">
+            <img src="photo_2026-11-08_00-00-14.jpg" alt="Горизонтальный баннер фильма БОЧКА — 17 декабря 2026" class="press-poster-img">
+            <div class="press-poster-cap">ПРЕМЬЕРА В КИНО — 17 ДЕКАБРЯ 2026</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+            <a class="btn btn--gold" href="https://www.kinopoisk.ru/film/11226275/?socialAlias=MzcwNjU0MjQ%3D" target="_blank" rel="noopener" style="font-size:11.5px;padding:12px 16px;font-weight:700;border-color:#FF6B00;color:#FFD166">
+              🎬 СТРАНИЦА НА КИНОПОИСКЕ · БУДУ СМОТРЕТЬ ↗
+            </a>
+            <a class="btn" href="https://youtu.be/EZFDcXeLTzQ?si=-NIU0mFyayaYjHnf" target="_blank" rel="noopener" style="font-size:11px;padding:10px 16px">
+              ▶️ СМОТРЕТЬ ОФИЦИАЛЬНЫЙ ТРЕЙЛЕР НА YOUTUBE ↗
+            </a>
+          </div>
+        </div>
+
+        <div class="press-body">
+          <p class="logline" data-i18n="loglineText" style="margin-bottom:18px"></p>
+
+          <div class="press-text">
+            <p><b>Достучаться до небес: Тиль Швайгер снялся в одной из главных ролей в белорусско-российском проекте. Психологический триллер «Бочка» выйдет на большие экраны 17 декабря 2026 года.</b></p>
+            <p>Напряжённый триллер расскажет о взаимном непонимании отцов и детей, испытании силы, веры и родительской любви. По сюжету юный пранкер приходит в себя в запертой бочке на заброшенном заводе. Рядом — прикованный к столбу отец, с которым он давно потерял общий язык. Чтобы выбраться, им придётся научиться доверять друг другу, пока не стало поздно.</p>
+            <p>Режиссёром выступил <b>Алексей Звонцов</b>, для которого картина станет дебютом в большом кино. За производство отвечают компании <b>«Киноцех»</b> (<i>«На деревню дедушке», «Не одна дома», «Запретная зона», продакшн-сервис «Уроки Фарси»</i>) и <b>«БигСкринПродакшн»</b>. Идея фильма и разработка сценария принадлежат кинематографистам из Владивостока (<b>Александр Бережной, Дмитрий Борисов</b>) — первый проект команд, полностью снятый на английском языке с дубляжем на русский.</p>
+          </div>
+
+          <div class="press-quotes">
+            <blockquote class="press-quote">
+              «Тиль Швайгер согласился с нами работать, как только прочитал сценарий. Отдельное спасибо сценаристам за драматургию его роли. Участие актёра такого уровня — это невероятная удача и большая ответственность. До нашей картины Тиль снимался у Гая Ричи и Квентина Тарантино, что для любого автора особенно ценно».
+              <footer>— Алексей Звонцов, режиссёр фильма «Бочка»</footer>
+            </blockquote>
+            <blockquote class="press-quote">
+              «Мы всегда экспериментируем, и „Бочка“ — это один из таких экспериментов. То, что Тиль Швайгер приехал к нам на съёмки, ещё раз доказывает, что всё возможно. Это многое значит и даёт смелость двигаться дальше».
+              <footer>— Андрей Липов, продюсер</footer>
+            </blockquote>
+            <blockquote class="press-quote">
+              «Команда ребят из Владивостока разработала идею, которая поначалу казалась камерной и негромкой, но в процессе съёмок выросла до большого психологического триллера, где дискурс вокруг вечной темы отцов и детей превращается в накал выживания и каждое неосторожное слово и действие — фатальны».
+              <footer>— Максим Максимов, продюсер</footer>
+            </blockquote>
+          </div>
+
+          <div class="press-credits">
+            <div class="press-credits__row"><span>ЖАНР:</span><b>Психологический триллер (полнометражный фильм)</b></div>
+            <div class="press-credits__row"><span>ПРОИЗВОДСТВО:</span><b>«БигСкринПродакшн», «Киноцех»</b></div>
+            <div class="press-credits__row"><span>КИНОПРОКАТ:</span><b>Cinema Park Distribution и «Киноцех дистрибьюшн»</b></div>
+            <div class="press-credits__row"><span>ПРОДЮСЕРЫ:</span><b>Андрей Липов, Макс Максимов</b></div>
+            <div class="press-credits__row"><span>РЕЖИССЁР:</span><b>Алексей Звонцов</b></div>
+            <div class="press-credits__row"><span>АВТОРЫ СЦЕНАРИЯ:</span><b>Алексей Звонцов, Александр Бережной, Дмитрий Борисов, Майкл Пэйт</b></div>
+            <div class="press-credits__row"><span>ОПЕРАТОР:</span><b>Вадим Потеев</b></div>
+            <div class="press-credits__row"><span>В РОЛЯХ:</span><b>Тиль Швайгер, Филипп Рейнхардт, Натан Пол-Коллис, Ола Кейру, Ирина Кобзева</b></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cd" style="margin-top:28px">
+        <div class="cd__cell"><div class="cd__n" id="cdD">000</div><div class="cd__l" data-i18n="cdDays">ДНЕЙ</div></div>
+        <div class="cd__cell"><div class="cd__n" id="cdH">00</div><div class="cd__l" data-i18n="cdHours">ЧАСОВ</div></div>
+        <div class="cd__cell"><div class="cd__n" id="cdM">00</div><div class="cd__l" data-i18n="cdMin">МИНУТ</div></div>
+        <div class="cd__cell"><div class="cd__n" id="cdS">00</div><div class="cd__l" data-i18n="cdSec">СЕКУНД</div></div>
+      </div>
+      <div class="premiere" data-i18n="premiere">17 ДЕКАБРЯ 2026 — В КИНОТЕАТРАХ</div>
+    </div>
+  </section>
+
+  <section class="sec" id="trailer" data-need="1">
+    <div class="sec__lock"><span id="lockTrailer"></span></div>
+    <div class="sec__inner">
+      <div class="sec__num"># 03 / <span data-i18n="navTrailer">ТРЕЙЛЕР</span></div>
+      <h2 class="sec__title" data-i18n="trailerTitle">ОФИЦИАЛЬНЫЙ ТРЕЙЛЕР</h2>
+      <div class="trailer" id="trailerMount"></div>
+      <div class="trailer__note" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-top:12px">
+        <span><span data-i18n="director">РЕЖИССЁР — АЛЕКСЕЙ ЗВОНЦОВ</span> · <span data-i18n="starring">В РОЛЯХ — ТИЛЬ ШВАЙГЕР, ФИЛИПП РЕЙНХАРДТ</span></span>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <button type="button" class="btn btn--gold" id="btnShareTrailerSec">🎬 ПОДЕЛИТЬСЯ ТРЕЙЛЕРОМ (+1 ❤️ ЖИЗНЬ И +5 000 ОЧКОВ)</button>
+          <a class="btn btn--gold" href="https://www.kinopoisk.ru/film/11226275/?socialAlias=MzcwNjU0MjQ%3D" target="_blank" rel="noopener" style="border-color:#FF6B00;color:#FFD166">🎟️ КИНОПОИСК ↗</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="dossier" data-need="1">
+    <div class="sec__lock"><span id="lockDossier"></span></div>
+    <div class="sec__inner">
+      <div class="sec__num"># 04 / <span data-i18n="navDossier">ДОСЬЕ</span></div>
+      <h2 class="sec__title" data-i18n="dossierTitle">ДОСЬЕ</h2>
+      <p class="sec__hint" data-i18n="dossierHint"></p>
+      <div class="cast" id="cast"></div>
+      <h3 class="sec__sub" data-i18n="archiveTitle">СЕКРЕТНЫЙ АРХИВ</h3>
+      <div class="archive" id="archive"></div>
+    </div>
+  </section>
+
+  <section class="sec" id="friends" data-need="1">
+    <div class="sec__lock"><span id="lockFriends"></span></div>
+    <div class="sec__inner">
+      <div class="sec__num"># 05 / <span data-i18n="friendsTitle">ДРУЗЬЯ</span> · <span data-i18n="ratingTitle">РЕЙТИНГ</span></div>
+      <div class="two">
+        <div>
+          <h2 class="sec__title" data-i18n="friendsTitle">ДРУЗЬЯ</h2>
+          <p class="sec__hint" data-i18n="inviteNote"></p>
+          <div id="barrelCardFriendsMount" style="margin-bottom:14px"></div>
+          <code class="link" id="refLink"></code>
+          <div class="sec__num" style="margin:14px 0 8px;color:var(--gold)">🎙️ ГОЛОСОВЫЕ АУДИО ПРАНКА (ПРОСЛУШАТЬ)</div>
+          <div class="msg-grid" id="friendsPrankAudioGrid" style="margin-bottom:14px">
+            <button type="button" class="btn btn--gold" data-prank-idx="0">▶️ ПРАНК #1 (MP3)</button>
+            <button type="button" class="btn btn--gold" data-prank-idx="1">▶️ ПРАНКЕР #2 (MP3)</button>
+          </div>
+          <div class="msg-grid" id="friendsMsgGrid">
+            <button class="btn btn--gold" data-mch="tg">✈️ TELEGRAM</button>
+            <button class="btn" data-mch="wa">💬 WHATSAPP</button>
+            <button class="btn" data-mch="ig">📸 INSTAGRAM</button>
+            <button class="btn" data-mch="max">🟣 MAX (МАКС)</button>
+            <button class="btn" data-mch="threads">🧵 THREADS</button>
+            <button class="btn" data-mch="tiktok">🎵 TIKTOK</button>
+            <button class="btn" data-mch="vk">💙 VK</button>
+            <button class="btn" id="btnCopy" data-mch="copy" data-i18n="copy">КОПИРОВАТЬ</button>
+          </div>
+          <div class="sec__num" style="margin-top:28px"><span data-i18n="invited">ПРИГЛАШЕНО</span>: <span id="refCount">0</span></div>
+          <ul class="list" id="refList"></ul>
+        </div>
+        <div>
+          <h2 class="sec__title" data-i18n="prizesTitle">ПРИЗЫ И РЕЙТИНГ</h2>
+          <div class="prize"><b>TOP-10</b><span data-i18n="prize1"></span></div>
+          <div class="prize"><b>TOP-1</b><span data-i18n="prize2"></span></div>
+          <p class="sec__hint" style="margin-top:10px;color:#FFD166">
+            🏆 <b>КАК ОПРЕДЕЛЯЮТСЯ ПОБЕДИТЕЛИ:</b> На закрытый показ проходят <b>не только победители розыгрыша купонов</b>, но и игроки, у которых <b>круче общая скорость в рейтинге (⚡) ПЛЮС выше прокачана карточка «БОЧКА»</b>! До 7-го уровня Бочка качается за очки или друзей, а <b>выше 7-го уровня (с 8 до 200 ур.) — ТОЛЬКО ДРУЗЬЯМИ</b> (+1 друг = +1 уровень Бочки)!
+          </p>
+          <div class="plate__row" id="leaderTabs" style="margin-top:12px">
+            <button class="btn is-on" data-lb="all" data-i18n="lbAll">ОБЩИЙ</button>
+            <button class="btn" data-lb="month" data-i18n="lbMonth">МЕСЯЦ</button>
+            <button class="btn" data-lb="week" data-i18n="lbWeek">НЕДЕЛЯ</button>
+          </div>
+          <ol class="leaders" id="leaders"></ol>
+          <div class="plate__row"><button class="btn" id="btnSurvey" data-i18n="survey">АНКЕТА УЧАСТНИКА</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <div class="foot__left"><span class="age">18+</span><span data-i18n="footerShare">Поделись результатом мини-игры</span></div>
+    <div class="cinemas"><span>КАРО</span><span>КИНОМАКС</span><span>СИНЕМА ПАРК</span></div>
+    <div class="social">
+      <a class="btn" href="https://youtu.be/EZFDcXeLTzQ?si=-NIU0mFyayaYjHnf" target="_blank" rel="noopener" id="linkYoutube">▶️ YOUTUBE ТРЕЙЛЕР</a>
+      <a class="btn btn--gold" href="https://www.kinopoisk.ru/film/11226275/?socialAlias=MzcwNjU0MjQ%3D" target="_blank" rel="noopener" style="border-color:#FF6B00;color:#FFD166">🎬 КИНОПОИСК</a>
+      <button class="btn" id="btnShareResult" data-i18n="shareResult">ПОДЕЛИТЬСЯ РЕЗУЛЬТАТОМ</button>
+      <a class="btn btn--gold" href="https://www.kinopoisk.ru/film/11226275/?socialAlias=MzcwNjU0MjQ%3D" target="_blank" rel="noopener" id="btnTickets" data-i18n="tickets">🎟️ КУПИТЬ БИЛЕТ</a>
+    </div>
+  </footer>
+
+  <div class="modal-bg is-hidden" id="modal">
+    <div class="modal">
+      <h3 class="modal__title" id="modalTitle"></h3>
+      <div class="modal__sep"><span>✚</span></div>
+      <div class="modal__content" id="modalBody"></div>
+      <div class="modal__actions" id="modalActions"></div>
+    </div>
+  </div>
+
+  <div class="screamer is-hidden" id="screamer"><div class="screamer__role" id="screamerRole"></div><canvas id="screamerCanvas" width="640" height="640"></canvas><div class="screamer__txt" id="screamerTxt"></div></div>
+
+  <script type="module" src="./main.js?v=63"></script>
+</body>
+</html>
