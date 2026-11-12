@@ -16,7 +16,7 @@
   <meta property="og:url" content="https://bochka.quest/" />
   <meta property="og:title" content="БОЧКА — Кто-то заварил тебя в цеху. Найдёшь за 3 попытки?" />
   <meta property="og:description" content="Надень наушники: сквозь сталь пробивается стук и знакомый голос. Триллер «Бочка» — в кино с 17 декабря." />
-  <meta property="og:image" content="https://bochka.quest/photo_2026-11-08_00-00-14.jpg" />
+  <meta property="og:image" content="https://bochka.quest/og.jpg" />
   <meta name="twitter:card" content="summary_large_image" />
 
   <!-- Telegram Mini App SDK -->
@@ -237,29 +237,59 @@
     <div class="ocean-sky-bg" aria-hidden="true"></div>
 
     <div class="ocean-waves-wrap" aria-hidden="true">
-      <img src="./assets/keyed/ocean_panorama.webp" alt="" class="ocean-panorama-img" />
+      <img src="./assets/keyed/ocean_beach_bg.webp" alt="" class="ocean-panorama-img" />
       <div class="ocean-surf-shimmer"></div>
     </div>
 
-    <div class="ocean-hero-wrap" aria-hidden="true">
-      <img src="./assets/keyed/ocean_till_barrel.webp" alt="" class="ocean-till-img" />
-      <div class="ocean-foam-ring"></div>
+    <!-- Берег из фильма: Тиль сидит у прибоя слева, справа лежит ржавая бочка для тапов на время -->
+    <div class="ocean-beach-stage">
+      <div class="ocean-till-seat" aria-hidden="true">
+        <img src="./assets/keyed/ocean_till_sitting.webp" alt="" class="ocean-till-sitting-img" />
+      </div>
+
+      <button type="button" class="ocean-barrel-tap-target" id="btn-ocean-tap-barrel" aria-label="Стучать по бочке на берегу">
+        <img
+          src="./assets/keyed/ocean_barrel_closed.webp"
+          alt="Ржавая бочка на берегу"
+          class="ocean-barrel-lying-img"
+          id="ocean-barrel-img"
+        />
+        <span class="ocean-tap-prompt-badge" id="ocean-tap-prompt">👊 СТУЧИ НА ВРЕМЯ!</span>
+      </button>
     </div>
 
     <div class="ocean-ui-layer">
       <div class="ocean-top-box">
-        <span class="mono-tag ocean-tag" data-i18n="oceanTag">СЕКРЕТНЫЙ ВЫХОД ИЗ ЦЕХА // СЕВЕРНОЕ МОРЕ</span>
+        <span class="mono-tag ocean-tag" data-i18n="oceanTag">СЕКРЕТНЫЙ УРОВЕНЬ // СЕВЕРНОЕ МОРЕ · 19·97</span>
         <p class="ocean-quote-line">
           <span id="ocean-typewriter"></span><span class="typewriter-caret" id="ocean-caret">|</span>
         </p>
+
+        <!-- Интерактивная мини-игра: настучать максимум ударов за 10 секунд ради жизней и билета для друга -->
+        <div class="ocean-tapper-hud" id="ocean-tapper-hud">
+          <div class="ocean-tapper-stats">
+            <span>⏱ ВРЕМЯ: <strong id="ocean-tap-timer">10.0</strong> СЕК</span>
+            <span>👊 УДАРОВ: <strong id="ocean-tap-count">0</strong></span>
+            <span class="ocean-tier-hint">20+ → +4 ❤️ · 40+ → 🎟 БИЛЕТ ДРУГУ!</span>
+          </div>
+          <div class="ocean-tapper-bar-track">
+            <div class="ocean-tapper-bar-fill" id="ocean-tap-fill"></div>
+          </div>
+        </div>
       </div>
 
       <div class="ocean-bottom-card">
         <div class="ocean-bonus-pill" id="ocean-bonus-pill" data-i18n="oceanBonusBadge">
-          🌊 СЕКРЕТ ОТКРЫТ: +3 ЖИЗНИ НАЧИСЛЕНО
+          🌊 ТАПАЙ ПО БОЧКЕ НА БЕРЕГУ (10 СЕК): ВЫБЕЙ ДО +5 ❤️ И БИЛЕТ ДРУГУ!
         </div>
         <div class="ocean-actions">
-          <button type="button" class="btn-primary btn-full" id="btn-ocean-story" data-i18n="btnOceanDownloadStory">
+          <button type="button" class="btn-primary btn-full" id="btn-ocean-start-tap">
+            👊 СТУЧАТЬ ПО БОЧКЕ (СТАРТ 10 СЕК)
+          </button>
+          <button type="button" class="btn-primary btn-full" id="btn-ocean-claim-gift" hidden>
+            🎟 ВЫБИТ БИЛЕТ ДРУГУ! ОФОРМИТЬ ПОДАРОК (+×2 ЖИЗНЕЙ) →
+          </button>
+          <button type="button" class="btn-secondary btn-full" id="btn-ocean-story" data-i18n="btnOceanDownloadStory">
             СКАЧАТЬ ОТКРЫТКУ СТОРИС 9:16 (БЕЗ СПОЙЛЕРА КОДА)
           </button>
           <button type="button" class="btn-ghost btn-full" id="btn-ocean-back" data-i18n="btnOceanBackWorkshop">
@@ -271,16 +301,17 @@
   </section>
 
   <!-- ====================================================================
-       ЭКРАН ЗАЩИЩЁННОГО ИМЕННОГО ВЕБ-ПРОПУСКА В КИНОТЕАТР (?pass=ID)
+       ЭКРАН ПОДАРОЧНОГО БИЛЕТА ДРУГУ (startapp=gift_<id> / ?gift=<id>)
+       Верификация номера через request_contact + выписка продюсером в /admin
        ==================================================================== -->
   <section class="screen screen-scroll" id="screen-pass" hidden>
     <div class="panel-sheet pass-sheet">
       <div class="pass-holo-ribbon" aria-hidden="true">
-        <span>БОЧКА · 17 ДЕКАБРЯ · ЖИВОЙ ПРОПУСК · СКРИНШОТ НЕДЕЙСТВИТЕЛЕН · БОЧКА · 17 ДЕКАБРЯ · </span>
+        <span>БОЧКА · 17 ДЕКАБРЯ · ПОДАРОЧНЫЙ БИЛЕТ · ВЕРИФИКАЦИЯ TELEGRAM · БОЧКА · 17 ДЕКАБРЯ · </span>
       </div>
 
       <div class="finale-top-bar">
-        <span class="mono-tag accent-tag" data-i18n="passScreenTag">ЗАЩИЩЁННЫЙ ВЕБ-ПРОПУСК // АНТИ-СКРИНШОТ КОНТРОЛЬ</span>
+        <span class="mono-tag accent-tag" data-i18n="passScreenTag">ПОДАРОЧНЫЙ БИЛЕТ ДРУГУ // КОНТРОЛЬ НОМЕРА TELEGRAM</span>
         <span class="premiere-pill" data-i18n="premiereBadge">В КИНО С 17 ДЕКАБРЯ</span>
       </div>
 
@@ -290,44 +321,81 @@
       <div class="pass-live-clock-bar">
         <div class="live-clock-left">
           <span class="live-pulse-dot"></span>
-          <span class="live-clock-caption" data-i18n="passLiveClockLabel">ЖИВОЕ ВРЕМЯ СЕРВЕРА · СКРИНШОТ НЕДЕЙСТВИТЕЛЕН</span>
+          <span class="live-clock-caption" data-i18n="passLiveClockLabel">ЖИВОЕ ВРЕМЯ СЕРВЕРА · 1 НОМЕР = 1 БИЛЕТ</span>
         </div>
         <strong class="live-clock-digits" id="pass-live-clock">00:00:00.0</strong>
       </div>
 
-      <!-- Крупное светлое фото лица получателя + ФИО для сверки контролёром -->
+      <!-- Карточка получателя и отправителя -->
       <div class="pass-identity-card">
         <div class="pass-photo-frame">
           <img id="pass-holder-photo" alt="Фото владельца билета" />
           <div class="pass-scan-line" aria-hidden="true"></div>
         </div>
         <div class="pass-identity-meta">
-          <span class="mono-label" data-i18n="passHolderLabel">ВЛАДЕЛЕЦ ПРОПУСКА (ФЕЙС-КОНТРОЛЬ НА КАССЕ):</span>
+          <span class="mono-label" data-i18n="passHolderLabel">ПОЛУЧАТЕЛЬ ПОДАРКА:</span>
           <strong class="pass-holder-name" id="pass-holder-name">—</strong>
           <span class="pass-sender-credit" id="pass-sender-line">Подарок из цеха «Бочки»</span>
         </div>
       </div>
 
-      <!-- Блокировка, если отправитель открыл собственную ссылку -->
+      <!-- Блокировка самовыкупа (receiver_tg_id == sender_tg_id) -->
       <div class="rescue-error-box" id="pass-self-warning" hidden data-i18n="passSelfClaimBlocked">
-        ⛔ Это выпущенный тобой подарочный пропуск! Забрать его себе нельзя — отправь ссылку другу, чьё лицо на фото, чтобы получить ×2 жизней.
+        ⛔ Это твоя собственная подарочная ссылка! Забрать подарок себе нельзя — перешли её другу в Telegram, чтобы мгновенно получить ×2 жизней.
       </div>
 
-      <!-- Кнопка активации подарка получателем (умножает жизни отправителю ×2 и открывает код) -->
-      <button type="button" class="btn-primary btn-full" id="btn-accept-gift-pass" hidden>
-        <span data-i18n="btnAcceptGiftPass">🎟 ПРИНЯТЬ ПОДАРОК И ОТКРЫТЬ БИЛЕТ (ДРУГУ ×2 ЖИЗНЕЙ)</span>
-      </button>
+      <!-- Форма подтверждения контакта Telegram + Город/кинотеатр -->
+      <div class="pass-claim-form" id="pass-claim-form" hidden>
+        <p class="modal-hint pass-claim-desc">
+          Подтверди свой номер системной кнопкой Telegram (защита от мультиаккаунтов) и укажи удобный кинотеатр в своём городе. Другу сразу начислится <strong>×2 жизней</strong>, а продюсеры пришлют электронный билет в <strong>@bochka_film_bot</strong>!
+        </p>
 
-      <!-- Активированный промокод киносети / верификация через Telegram-бота -->
+        <div class="pass-contact-step">
+          <button type="button" class="btn-secondary btn-full" id="btn-verify-tg-contact">
+            📱 1. ПОДТВЕРДИТЬ НОМЕР ЧЕРЕЗ TELEGRAM (REQUEST CONTACT)
+          </button>
+          <button type="button" class="btn-ghost btn-full pass-refresh-contact-btn" id="btn-refresh-tg-contact" hidden>
+            ↻ Я ОТПРАВИЛ КОНТАКТ В БОТА — ПРОВЕРИТЬ СТАТУС
+          </button>
+          <div class="kp-screen-feedback is-ok" id="pass-verified-phone-badge" hidden></div>
+        </div>
+
+        <div class="pass-city-step">
+          <label class="mono-label" for="input-pass-city-cinema">2. ТВОЙ ГОРОД И ЖЕЛАЕМЫЙ КИНОТЕАТР:</label>
+          <input
+            type="text"
+            id="input-pass-city-cinema"
+            maxlength="110"
+            class="industrial-input"
+            placeholder="Например: Москва, КАРО Октябрь / Алматы, Chaplin Mega"
+          />
+        </div>
+
+        <p class="rescue-error-box" id="pass-claim-error" hidden></p>
+
+        <button type="button" class="btn-primary btn-full" id="btn-accept-gift-pass">
+          <span>🎟 ОТПРАВИТЬ ЗАЯВКУ ПРОДЮСЕРАМ (ДРУГУ ×2 ЖИЗНЕЙ)</span>
+        </button>
+      </div>
+
+      <!-- Статус принятой заявки / готовый электронный билет от продюсера -->
       <div class="golden-winner-box pass-code-box" id="pass-ticket-code-box" hidden>
-        <span class="mono-tag accent-tag">ПРОМОКОД АКТИВИРОВАН // ПОКАЖИ НА КАССЕ ВМЕСТЕ С ЭКРАНОМ</span>
-        <div class="share-url-row pass-code-row">
+        <span class="mono-tag accent-tag" id="pass-order-status-tag">ЗАЯВКА ПЕРЕДАНА ПРОДЮСЕРАМ // ОЖИДАЕТ ВЫПИСКИ</span>
+        <p class="golden-winner-contact" id="pass-ticket-contact">
+          Заявка передана продюсерам! Электронный билет придёт на твой подтверждённый номер и прямо в этот бот @bochka_film_bot.
+        </p>
+
+        <div class="share-url-row pass-code-row" id="pass-booking-row" hidden>
           <input type="text" id="pass-ticket-code" class="industrial-input ticket-code-input" readonly />
           <button type="button" class="btn-primary" id="btn-copy-pass-code" data-i18n="btnCopyLink">КОПИРОВАТЬ</button>
         </div>
-        <p class="golden-winner-contact" id="pass-ticket-contact"></p>
-        <button type="button" class="btn-secondary btn-full pass-bot-btn" id="btn-pass-verify-bot" hidden>
-          <span data-i18n="btnPassVerifyBot">ПОДТВЕРДИТЬ ПРОПУСК В TELEGRAM-БОТЕ ↗</span>
+
+        <a class="btn-primary btn-full pass-bot-btn" id="btn-download-ticket-file" href="#" target="_blank" rel="noopener noreferrer" hidden>
+          ⬇ ОТКРЫТЬ QR / ЭЛЕКТРОННЫЙ БИЛЕТ
+        </a>
+
+        <button type="button" class="btn-secondary btn-full pass-bot-btn" id="btn-pass-verify-bot">
+          <span>ОТКРЫТЬ ЧАТ С БОТОМ @BOCHKA_FILM_BOT ↗</span>
         </button>
       </div>
 
@@ -370,7 +438,7 @@
           <div class="barrel-mouth-preview">
             <img id="pack-preview-img" alt="Портрет на дне бочки" />
           </div>
-          <span class="webp-size-tag" id="pack-size-tag">512×512 WEBP</span>
+          <span class="webp-size-tag" id="pack-size-tag">320×320 WEBP</span>
         </div>
 
         <div class="pack-photo-controls">
@@ -717,20 +785,20 @@
         </button>
       </div>
 
-      <!-- Форма оформления Именного пропуска с фейс-контролем (Путь Б) -->
+      <!-- Форма оформления подарочной ссылки startapp=gift_<id> (Путь Б) -->
       <div class="gift-pass-form" id="gift-pass-form" hidden>
         <p class="gift-face-warn" data-i18n="giftFaceWarn">
-          ⚠ ФЕЙС-КОНТРОЛЬ В КИНОТЕАТРЕ: загрузи реальное светлое фото лица друга и впиши его имя. На контроле сверят живой пропуск с лицом друга!
+          🎟 Друг откроет спецссылку в Telegram, подтвердит свой номер (`request_contact`) и выберет кинотеатр в своём городе — тебе сразу начислится ×2 жизней, а продюсеры оформят ему электронный билет!
         </p>
 
         <div class="gift-photo-row">
           <div class="gift-photo-thumb-wrap">
             <img id="gift-friend-photo-preview" alt="Фото друга" hidden />
-            <span class="gift-photo-placeholder" id="gift-photo-placeholder">ФОТО<br/>ЛИЦА</span>
+            <span class="gift-photo-placeholder" id="gift-photo-placeholder">ФОТО<br/>ДРУГА</span>
           </div>
           <div class="gift-form-inputs">
             <label class="btn-secondary btn-compact file-label">
-              <span data-i18n="giftUploadFriendPhoto">ЗАГРУЗИТЬ РЕАЛЬНОЕ ФОТО ДРУГА</span>
+              <span data-i18n="giftUploadFriendPhoto">ДОБАВИТЬ ФОТО ДРУГА (ПО ЖЕЛАНИЮ)</span>
               <input type="file" id="input-gift-friend-photo" accept="image/*" hidden />
             </label>
             <input
@@ -739,17 +807,17 @@
               maxlength="40"
               class="industrial-input input-compact"
               data-i18n-placeholder="giftFriendNamePlaceholder"
-              placeholder="Имя друга (для сверки на контроле)"
+              placeholder="Имя друга (для именной открытки билета)"
             />
           </div>
         </div>
 
         <p class="rescue-error-box" id="gift-form-error" hidden>
-          Загрузи чёткое фото лица друга и укажи его настоящее имя (минимум 2 буквы)!
+          Укажи имя друга (минимум 2 буквы), чтобы выпустить именную подарочную ссылку!
         </p>
 
         <button type="button" class="btn-primary btn-full" id="btn-issue-gift-pass">
-          <span data-i18n="btnIssueGiftPass">ВЫПУСТИТЬ ИМЕННОЙ ВЕБ-ПРОПУСК ДРУГУ</span>
+          <span data-i18n="btnIssueGiftPass">СОЗДАТЬ ПОДАРОЧНУЮ ССЫЛКУ В TELEGRAM (+×2 ЖИЗНЕЙ)</span>
         </button>
       </div>
 

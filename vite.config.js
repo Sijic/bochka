@@ -5,6 +5,8 @@ import path from 'node:path';
 const RUNTIME_ASSETS = [
   'CNAME',
   '.nojekyll',
+  'og.jpg',
+  'bochka_og_1280x720.jpg',
   'photo_2026-11-08_00-00-14.jpg',
   'photo_2026-11-08_00-00-26.jpg',
   'hf_20261017_093522_42c309d3-daf2-486e-9539-a8dcb422167c.mp4',
@@ -21,6 +23,10 @@ const RUNTIME_ASSETS = [
   'assets/keyed/screamer_blogger.webp',
   'assets/keyed/ocean_panorama.webp',
   'assets/keyed/ocean_till_barrel.webp',
+  'assets/keyed/ocean_beach_bg.webp',
+  'assets/keyed/ocean_till_sitting.webp',
+  'assets/keyed/ocean_barrel_closed.webp',
+  'assets/keyed/ocean_barrel_arm.webp',
   'assets/sfx/barrel_hit_high.mp3',
   'assets/sfx/barrel_hit_low.mp3',
   'assets/sfx/barrel_hit_mid.mp3',
@@ -76,6 +82,10 @@ export default defineConfig({
     sourcemap: false,
     chunkSizeWarningLimit: 900,
     rollupOptions: {
+      input: {
+        main: path.resolve(process.cwd(), 'index.html'),
+        admin: path.resolve(process.cwd(), 'admin/index.html'),
+      },
       output: {
         manualChunks: {
           three: ['three'],

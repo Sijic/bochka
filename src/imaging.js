@@ -97,7 +97,7 @@ export async function processPortraitToWebP(source, frameStyle = 'flashlight') {
     sh = img.naturalHeight || img.height;
   }
 
-  const SIZE = 512;
+  const SIZE = 320;
   const canvas = document.createElement('canvas');
   canvas.width = SIZE;
   canvas.height = SIZE;
@@ -121,15 +121,15 @@ export async function processPortraitToWebP(source, frameStyle = 'flashlight') {
   applyColdRustGrade(ctx, SIZE);
   drawBarrelInteriorFX(ctx, SIZE, frameStyle);
 
-  // Сжатие в WebP строго <= 60 КБ (512x512)
-  let quality = 0.76;
+  // Экономия 1 ГБ бесплатного Supabase Storage: 320x320 WebP (~18 КБ, строго <= 38 КБ)
+  let quality = 0.72;
   let blob = await canvasToBlob(canvas, 'image/webp', quality);
-  while (blob && blob.size > 58 * 1024 && quality > 0.30) {
-    quality -= 0.09;
+  while (blob && blob.size > 36 * 1024 && quality > 0.28) {
+    quality -= 0.08;
     blob = await canvasToBlob(canvas, 'image/webp', quality);
   }
-  if (!blob || blob.size > 60 * 1024) {
-    blob = await canvasToBlob(canvas, 'image/jpeg', 0.56);
+  if (!blob || blob.size > 40 * 1024) {
+    blob = await canvasToBlob(canvas, 'image/webp', 0.35);
   }
 
   const dataUrl = await blobToDataUrl(blob);
@@ -340,7 +340,8 @@ export async function verifyKinopoiskScreenshot(file) {
     const looksLikeAppUi = uiRatio >= 0.22;
 
     if (hasActiveBadge && looksLikeAppUi) {
-      return { ok: true, orangeScore: kpOrangePixels };
+      const kpBlob = await canvasToBlob(c, 'image/webp', 0.72);
+      return { ok: true, orangeScore: kpOrangePixels, blob: kpBlob };
     }
     return { ok: false, reason: 'badge_not_found' };
   } catch {
@@ -616,30 +617,34 @@ export async function generateOceanEasterEggStoriesPNG() {
   ctx.fillRect(0, 0, W, H);
 
   try {
-    const seaImg = await loadImageElement('./assets/keyed/ocean_panorama.webp');
+    const seaImg = await loadImageElement('./assets/keyed/ocean_beach_bg.webp');
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(seaImg, 0, 560, W, 820);
+    ctx.drawImage(seaImg, 0, 520, W, 940);
   } catch { /* fallback gradient */ }
 
   // Мягкий морской туман сверху и снизу панорамы
-  const topMist = ctx.createLinearGradient(0, 520, 0, 720);
+  const topMist = ctx.createLinearGradient(0, 500, 0, 690);
   topMist.addColorStop(0, '#364551');
   topMist.addColorStop(1, 'rgba(54, 69, 81, 0)');
   ctx.fillStyle = topMist;
-  ctx.fillRect(0, 520, W, 200);
+  ctx.fillRect(0, 500, W, 190);
 
-  const botMist = ctx.createLinearGradient(0, 1220, 0, 1420);
+  const botMist = ctx.createLinearGradient(0, 1300, 0, 1470);
   botMist.addColorStop(0, 'rgba(13, 16, 20, 0)');
   botMist.addColorStop(1, '#0d1014');
   ctx.fillStyle = botMist;
-  ctx.fillRect(0, 1220, W, 210);
+  ctx.fillRect(0, 1300, W, 180);
 
   try {
-    const tillImg = await loadImageElement('./assets/keyed/ocean_till_barrel.webp');
+    const tillSit = await loadImageElement('./assets/keyed/ocean_till_sitting.webp');
     ctx.imageSmoothingEnabled = false;
-    const sw = 440;
-    const sh = 605;
-    ctx.drawImage(tillImg, (W - sw) * 0.5, 790, sw, sh);
+    ctx.drawImage(tillSit, 135, 965, 290, 376);
+  } catch { /* ignore */ }
+
+  try {
+    const barrelArm = await loadImageElement('./assets/keyed/ocean_barrel_arm.webp');
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(barrelArm, 455, 1085, 495, 255);
   } catch { /* ignore */ }
 
   // Пена прибоя вокруг ржавой бочки

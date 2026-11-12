@@ -2,6 +2,8 @@ import { ENV } from './env.js';
 import { initI18n, setLang, t, applyDomTranslations, onLangChange } from './i18n.js';
 import {
   initTelegram,
+  isAdminModeRequested,
+  requestTelegramContact,
   openTelegramShare,
   shareNativeOrFallback,
   copyToClipboard,
@@ -23,6 +25,7 @@ import {
   getViewerUid,
   createBarrelPack,
   loadBarrelPack,
+  recordFunnelEvent,
   recordBarrelResult,
   sendCinemaInviteReply,
   isPremiereRaceUnlocked,
@@ -32,8 +35,8 @@ import {
   burnRegularTicketForX2Lives,
   createGiftTicketPass,
   loadGiftTicketPass,
-  acceptGiftTicketPass,
-  claimEasterEgg1997Bonus,
+  submitGiftTicketOrder,
+  claimOceanTapperReward,
   markTrailerCompleted,
   markKinopoiskVisited,
   markKpScreenshotVerified,
@@ -133,11 +136,23 @@ const state = {
     customEdited: false,
   },
 
-  // Состояние оформления подарочного билета с фейс-контролем (Путь Б)
+  // Состояние оформления подарочного билета в Telegram (Путь Б)
   giftPass: {
     processedPhoto: null,
     lastPassUrl: '',
     recipientName: '',
+  },
+
+  verifiedContactPhone: '',
+
+  // Состояние 10-секундного таппера по бочке на берегу моря (Секрет 19·97)
+  oceanTapper: {
+    running: false,
+    finished: false,
+    taps: 0,
+    timeLeft: 10.0,
+    timer: null,
+    lastTapAt: 0,
   },
 
   cameraStream: null,
@@ -151,6 +166,11 @@ let scene = null;
 let voiceRecorder = null;
 
 async function bootstrap() {
+  if (isAdminModeRequested()) {
+    window.location.replace('./admin/');
+    return;
+  }
+
   state.tg = initTelegram();
   state.incomingParam = state.tg.startParam || '';
   state.incomingPassId = state.tg.passParam || '';
@@ -256,7 +276,7 @@ function showScreen(name) {
   if (name === 'modeA') {
     const shortcut = document.getElementById('btn-mode-a-premiere');
     if (shortcut) {
-      if (isPremiereRaceUnlocked()) shortcut.removeAttribute('hidden');
+      if (isPremiereRaceUnlocked(getQuestState(), state.profile)) shortcut.removeAttribute('hidden');
       else shortcut.setAttribute('hidden', '');
     }
   }
@@ -271,6 +291,11 @@ function showScreen(name) {
     if (state.oceanTypeTimer) {
       clearInterval(state.oceanTypeTimer);
       state.oceanTypeTimer = null;
+    }
+    if (state.oceanTapper.timer) {
+      clearInterval(state.oceanTapper.timer);
+      state.oceanTapper.timer = null;
+      state.oceanTapper.running = false;
     }
   }
 
@@ -399,9 +424,17 @@ async function startViralFriendRound(pack) {
    ГЛАВНАЯ СУПЕРИГРА v3.0: «ГОНКА ЗА ПРЕМЬЕРОЙ (0..100)» + ЗОЛОТЫЕ БОЧКИ
    ============================================================================ */
 async function startPremiereRaceRound() {
-  if (!isPremiereRaceUnlocked()) {
+  const q = getQuestState();
+  if (!isPremiereRaceUnlocked(q, state.profile)) {
     showToast(t('premiereLockedHint'));
-    showScreen('pack');
+    const hasPacked = (q.packedCount || 0) >= 1 || (state.profile.packedCount || 0) >= 1;
+    if (!hasPacked) {
+      showScreen('pack');
+    } else {
+      await populateFinaleScreen();
+      showScreen('finale');
+      document.getElementById('golden-hunt-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
     return;
   }
 
@@ -720,23 +753,14 @@ async function triggerOceanEasterEggScene() {
   scene.setInteractive(false);
   Haptics.success();
 
+  recordFunnelEvent('ocean_opens', state.tg?.user).catch(() => {});
+  resetOceanTapperUI();
+
   const mist = document.getElementById('mist-dissolve-overlay');
   if (mist) {
     mist.removeAttribute('hidden');
     void mist.offsetWidth;
     mist.classList.add('is-active');
-  }
-
-  const bonus = await claimEasterEgg1997Bonus(state.tg?.user);
-  state.profile.easterEggClaimed = true;
-  if (typeof bonus.lives === 'number') {
-    state.profile.lives = bonus.lives;
-  }
-  updatePremiereBarsUI();
-
-  const pill = document.getElementById('ocean-bonus-pill');
-  if (pill) {
-    pill.textContent = bonus.alreadyClaimed ? t('oceanBonusAlready') : t('oceanBonusBadge');
   }
 
   window.setTimeout(() => {
@@ -749,6 +773,182 @@ async function triggerOceanEasterEggScene() {
       window.setTimeout(() => mist.setAttribute('hidden', ''), 950);
     }
   }, 860);
+}
+
+function resetOceanTapperUI() {
+  if (state.oceanTapper.timer) {
+    clearInterval(state.oceanTapper.timer);
+  }
+  state.oceanTapper = {
+    running: false,
+    finished: false,
+    taps: 0,
+    timeLeft: 10.0,
+    timer: null,
+    lastTapAt: 0,
+  };
+
+  const barrelImg = document.getElementById('ocean-barrel-img');
+  const timerEl = document.getElementById('ocean-tap-timer');
+  const countEl = document.getElementById('ocean-tap-count');
+  const fillEl = document.getElementById('ocean-tap-fill');
+  const promptEl = document.getElementById('ocean-tap-prompt');
+  const startBtn = document.getElementById('btn-ocean-start-tap');
+  const giftBtn = document.getElementById('btn-ocean-claim-gift');
+  const pill = document.getElementById('ocean-bonus-pill');
+
+  if (barrelImg) barrelImg.src = './assets/keyed/ocean_barrel_closed.webp';
+  if (timerEl) timerEl.textContent = '10.0';
+  if (countEl) countEl.textContent = '0';
+  if (fillEl) fillEl.style.width = '0%';
+  if (promptEl) {
+    promptEl.removeAttribute('hidden');
+    promptEl.textContent = '👊 СТУЧИ НА ВРЕМЯ!';
+  }
+  if (startBtn) {
+    startBtn.disabled = false;
+    startBtn.textContent = '👊 СТУЧАТЬ ПО БОЧКЕ (СТАРТ 10 СЕК)';
+  }
+  if (giftBtn) {
+    if (state.profile.hasPendingTicket) giftBtn.removeAttribute('hidden');
+    else giftBtn.setAttribute('hidden', '');
+  }
+  if (pill) {
+    pill.textContent = state.profile.easterEggClaimed ? t('oceanBonusAlready') : t('oceanBonusBadge');
+  }
+}
+
+function startOceanTapperCountdown() {
+  if (state.oceanTapper.running) return;
+  if (state.oceanTapper.timer) clearInterval(state.oceanTapper.timer);
+
+  state.oceanTapper.running = true;
+  state.oceanTapper.finished = false;
+  state.oceanTapper.taps = 0;
+  state.oceanTapper.timeLeft = 10.0;
+  state.oceanTapper.lastTapAt = 0;
+
+  const barrelImg = document.getElementById('ocean-barrel-img');
+  const timerEl = document.getElementById('ocean-tap-timer');
+  const countEl = document.getElementById('ocean-tap-count');
+  const fillEl = document.getElementById('ocean-tap-fill');
+  const promptEl = document.getElementById('ocean-tap-prompt');
+  const startBtn = document.getElementById('btn-ocean-start-tap');
+
+  if (barrelImg) barrelImg.src = './assets/keyed/ocean_barrel_closed.webp';
+  if (timerEl) timerEl.textContent = '10.0';
+  if (countEl) countEl.textContent = '0';
+  if (fillEl) fillEl.style.width = '0%';
+  if (promptEl) promptEl.textContent = '👊 ЖМИ БЫСТРЕЕ! 40+ = БИЛЕТ!';
+  if (startBtn) startBtn.textContent = '👊 СТУЧИ! УДАРИТЬ ЕЩЁ РАЗ!';
+
+  let lastTs = performance.now();
+  state.oceanTapper.timer = window.setInterval(() => {
+    const now = performance.now();
+    const dt = (now - lastTs) / 1000;
+    lastTs = now;
+    state.oceanTapper.timeLeft = Math.max(0, state.oceanTapper.timeLeft - dt);
+    if (timerEl) timerEl.textContent = state.oceanTapper.timeLeft.toFixed(1);
+
+    if (state.oceanTapper.timeLeft <= 0) {
+      finishOceanTapperGame();
+    }
+  }, 80);
+}
+
+function handleOceanBarrelTap() {
+  const now = performance.now();
+  if (now - state.oceanTapper.lastTapAt < 25) return;
+  state.oceanTapper.lastTapAt = now;
+
+  if (!state.oceanTapper.running) {
+    if (state.oceanTapper.finished) return;
+    startOceanTapperCountdown();
+  }
+
+  state.oceanTapper.taps += 1;
+  const taps = state.oceanTapper.taps;
+
+  audio.playStrike((taps % 3) + 1);
+  if (taps === 20 || taps === 40) Haptics.heavy();
+  else Haptics.light();
+
+  const targetBtn = document.getElementById('btn-ocean-tap-barrel');
+  if (targetBtn) {
+    targetBtn.classList.remove('is-knock-hit');
+    void targetBtn.offsetWidth;
+    targetBtn.classList.add('is-knock-hit');
+  }
+
+  const countEl = document.getElementById('ocean-tap-count');
+  const fillEl = document.getElementById('ocean-tap-fill');
+  const barrelImg = document.getElementById('ocean-barrel-img');
+  const promptEl = document.getElementById('ocean-tap-prompt');
+
+  if (countEl) countEl.textContent = String(taps);
+  if (fillEl) fillEl.style.width = `${Math.min(100, (taps / 40) * 100)}%`;
+
+  if (taps === 20 && barrelImg) {
+    barrelImg.src = './assets/keyed/ocean_barrel_arm.webp';
+    audio.playLidBlowOff(true);
+  }
+  if (promptEl) {
+    if (taps >= 40) promptEl.textContent = '🎟 40+ УДАРОВ! БИЛЕТ ВЫБИТ!';
+    else if (taps >= 20) promptEl.textContent = '🖐 РУКА ПОКАЗАЛАСЬ! ЖМИ ДО 40!';
+  }
+}
+
+async function finishOceanTapperGame() {
+  if (state.oceanTapper.timer) {
+    clearInterval(state.oceanTapper.timer);
+    state.oceanTapper.timer = null;
+  }
+  if (!state.oceanTapper.running && state.oceanTapper.finished) return;
+  state.oceanTapper.running = false;
+  state.oceanTapper.finished = true;
+
+  const taps = state.oceanTapper.taps;
+  const startBtn = document.getElementById('btn-ocean-start-tap');
+  const pill = document.getElementById('ocean-bonus-pill');
+  const giftBtn = document.getElementById('btn-ocean-claim-gift');
+  const promptEl = document.getElementById('ocean-tap-prompt');
+
+  if (startBtn) {
+    startBtn.disabled = true;
+    startBtn.textContent = 'СВЕРКА УДАРОВ С СЕРВЕРОМ...';
+  }
+
+  const reward = await claimOceanTapperReward(state.tg?.user, Math.max(1, taps));
+  state.profile.easterEggClaimed = true;
+  if (typeof reward.lives === 'number') state.profile.lives = reward.lives;
+  if (reward.hasPendingTicket || reward.giftAwarded) state.profile.hasPendingTicket = true;
+  updatePremiereBarsUI();
+
+  if (pill) {
+    if (reward.giftAwarded) {
+      pill.textContent = `🎉 РЕКОРД ${taps} УДАРОВ! +${reward.livesAwarded} ❤️ И ВЫБИТ ПОДАРОЧНЫЙ БИЛЕТ ДРУГУ!`;
+      Haptics.success();
+    } else if (reward.livesAwarded > 0) {
+      pill.textContent = `🌊 НАСТУЧАЛ ${taps} УДАРОВ: +${reward.livesAwarded} ❤️ ЖИЗНЕЙ НАЧИСЛЕНО! (40+ = билет другу)`;
+      Haptics.success();
+    } else {
+      pill.textContent = `🌊 РЕЗУЛЬТАТ: ${taps} УДАРОВ (выбей 40+ ударов за 10 сек, чтобы забрать билет для друга!)`;
+    }
+  }
+
+  if (promptEl) {
+    promptEl.textContent = taps >= 40 ? '🎟 БИЛЕТ ДРУГУ РАЗБЛОКИРОВАН!' : `ИТОГ: ${taps} УДАРОВ`;
+  }
+
+  if (giftBtn && (reward.giftAwarded || state.profile.hasPendingTicket)) {
+    giftBtn.removeAttribute('hidden');
+  }
+
+  if (startBtn) {
+    startBtn.disabled = false;
+    startBtn.textContent = '↻ СТУЧАТЬ ЕЩЁ РАЗ НА РЕКОРД (10 СЕК)';
+    state.oceanTapper.finished = false;
+  }
 }
 
 function startOceanTypewriter(fullText) {
@@ -770,8 +970,29 @@ function startOceanTypewriter(fullText) {
   }, 58);
 }
 
-function handleReturnFromOcean() {
+async function handleReturnFromOcean(openGiftModalAfter = false) {
+  if (state.oceanTapper.timer) {
+    clearInterval(state.oceanTapper.timer);
+    state.oceanTapper.timer = null;
+  }
+  if (state.oceanTapper.running || (!state.profile.easterEggClaimed && state.oceanTapper.taps === 0)) {
+    state.oceanTapper.running = false;
+    const reward = await claimOceanTapperReward(state.tg?.user, Math.max(1, state.oceanTapper.taps));
+    state.profile.easterEggClaimed = true;
+    if (typeof reward.lives === 'number') state.profile.lives = reward.lives;
+    if (reward.hasPendingTicket || reward.giftAwarded) state.profile.hasPendingTicket = true;
+    updatePremiereBarsUI();
+  }
+
   audio.stopOceanEasterEggAudio();
+
+  if (openGiftModalAfter && state.profile.hasPendingTicket) {
+    await populateFinaleScreen();
+    showScreen('finale');
+    openGoldenTicketForkModal();
+    return;
+  }
+
   if (state.round.modeType === 'premiere') {
     startPremiereRaceRound();
     return;
@@ -1121,7 +1342,7 @@ async function handleGiftFriendPhotoChange(file) {
 async function handleIssueGiftPassClick() {
   const recipientName = (document.getElementById('input-gift-friend-name')?.value || '').trim();
   const errEl = document.getElementById('gift-form-error');
-  if (recipientName.length < 2 || !state.giftPass.processedPhoto?.blob) {
+  if (recipientName.length < 2) {
     errEl?.removeAttribute('hidden');
     Haptics.error();
     return;
@@ -1178,7 +1399,7 @@ function openNearMissModal(score) {
 
 async function openIncomingPassScreen(passId) {
   state.entered = true;
-  const passData = await loadGiftTicketPass(passId);
+  const passData = await loadGiftTicketPass(passId, state.tg?.user);
   if (!passData) {
     showScreen('modeA');
     return;
@@ -1189,7 +1410,10 @@ async function openIncomingPassScreen(passId) {
   const nameEl = document.getElementById('pass-holder-name');
   const senderEl = document.getElementById('pass-sender-line');
   const selfWarn = document.getElementById('pass-self-warning');
-  const acceptBtn = document.getElementById('btn-accept-gift-pass');
+  const claimForm = document.getElementById('pass-claim-form');
+  const claimErr = document.getElementById('pass-claim-error');
+  const phoneBadge = document.getElementById('pass-verified-phone-badge');
+  const refreshContactBtn = document.getElementById('btn-refresh-tg-contact');
   const codeBox = document.getElementById('pass-ticket-code-box');
 
   if (photoEl) photoEl.src = passData.recipientPhotoUrl || DEMO_PORTRAITS[0];
@@ -1200,48 +1424,156 @@ async function openIncomingPassScreen(passId) {
       : 'Именной подарочный билет · Триллер «Бочка» (17 декабря)';
   }
 
+  claimErr?.setAttribute('hidden', '');
+
   const viewerUid = getViewerUid(state.tg?.user);
-  const isOwnPass = Boolean(passData.senderUid && passData.senderUid === viewerUid);
+  const isOwnPass = Boolean(
+    (passData.senderUid && passData.senderUid === viewerUid) ||
+      (passData.senderTgId && state.tg?.user?.id && String(passData.senderTgId) === String(state.tg.user.id))
+  );
 
   if (isOwnPass) {
     selfWarn?.removeAttribute('hidden');
-    acceptBtn?.setAttribute('hidden', '');
+    claimForm?.setAttribute('hidden', '');
     codeBox?.setAttribute('hidden', '');
-  } else if (passData.accepted) {
+  } else if (
+    passData.status === 'claimed' ||
+    passData.status === 'sent' ||
+    passData.orderStatus === 'pending' ||
+    passData.orderStatus === 'sent'
+  ) {
     selfWarn?.setAttribute('hidden', '');
-    acceptBtn?.setAttribute('hidden', '');
-    renderRevealedPassTicket(passData.ticketCode, passData.contact, passData.id);
+    claimForm?.setAttribute('hidden', '');
+    renderPassOrderStatusBox(passData);
   } else {
     selfWarn?.setAttribute('hidden', '');
     codeBox?.setAttribute('hidden', '');
-    acceptBtn?.removeAttribute('hidden');
+    claimForm?.removeAttribute('hidden');
+
+    if (passData.hasVerifiedPhone && passData.verifiedPhone) {
+      state.verifiedContactPhone = passData.verifiedPhone;
+      if (phoneBadge) {
+        phoneBadge.textContent = `✓ Номер подтверждён в Telegram: ${passData.verifiedPhone}`;
+        phoneBadge.removeAttribute('hidden');
+      }
+      refreshContactBtn?.setAttribute('hidden', '');
+    } else {
+      phoneBadge?.setAttribute('hidden', '');
+    }
   }
 
   startLivePassClock(passData.serverOffsetMs || 0);
   showScreen('pass');
 }
 
-function renderRevealedPassTicket(ticketCode, contactText, passId) {
+function renderPassOrderStatusBox(passData) {
   const codeBox = document.getElementById('pass-ticket-code-box');
-  const codeIn = document.getElementById('pass-ticket-code');
+  const statusTag = document.getElementById('pass-order-status-tag');
   const contactEl = document.getElementById('pass-ticket-contact');
+  const bookingRow = document.getElementById('pass-booking-row');
+  const codeIn = document.getElementById('pass-ticket-code');
+  const fileBtn = document.getElementById('btn-download-ticket-file');
   const botBtn = document.getElementById('btn-pass-verify-bot');
 
   codeBox?.removeAttribute('hidden');
-  if (codeIn) codeIn.value = ticketCode || 'PASS-VERIFIED';
-  if (contactEl) {
-    contactEl.textContent =
-      contactText || 'Покажи этот живой экран с идущими часами и своим лицом контролёру кинотеатра.';
+
+  const isSent = passData.orderStatus === 'sent' || Boolean(passData.bookingCode || passData.ticketFileUrl);
+  if (statusTag) {
+    statusTag.textContent = isSent
+      ? 'ЭЛЕКТРОННЫЙ БИЛЕТ ВЫПИСАН // ПРОВЕРЬ @BOCHKA_FILM_BOT'
+      : 'ЗАЯВКА ПЕРЕДАНА ПРОДЮСЕРАМ // ОЖИДАЕТ ВЫПИСКИ';
   }
+
+  if (contactEl) {
+    const cityNote = passData.cityCinema ? ` (${passData.cityCinema})` : '';
+    contactEl.textContent = isSent
+      ? `Твой электронный билет${cityNote} оформлен продюсерами и продублирован в чат @bochka_film_bot!`
+      : `Заявка${cityNote} передана продюсерам! Другу уже начислено ×2 жизней, а электронный билет придёт на твой подтверждённый номер прямо в @bochka_film_bot.`;
+  }
+
+  if (passData.bookingCode && bookingRow && codeIn) {
+    bookingRow.removeAttribute('hidden');
+    codeIn.value = passData.bookingCode;
+  } else {
+    bookingRow?.setAttribute('hidden', '');
+  }
+
+  if (passData.ticketFileUrl && fileBtn) {
+    fileBtn.href = passData.ticketFileUrl;
+    fileBtn.removeAttribute('hidden');
+  } else {
+    fileBtn?.setAttribute('hidden', '');
+  }
+
   if (botBtn) {
-    if (ENV.tgBotUsername) {
-      botBtn.removeAttribute('hidden');
-      botBtn.onclick = () => {
-        openExternalLink(`https://t.me/${ENV.tgBotUsername}?start=verify_${encodeURIComponent(passId)}`);
-      };
-    } else {
-      botBtn.setAttribute('hidden', '');
+    const bot = ENV.tgBotUsername || 'bochka_film_bot';
+    botBtn.onclick = () => {
+      openExternalLink(`https://t.me/${bot}`);
+    };
+  }
+}
+
+async function handleVerifyPassContactClick() {
+  const giftId = state.activePassData?.id || state.incomingPassId;
+  const errEl = document.getElementById('pass-claim-error');
+  const phoneBadge = document.getElementById('pass-verified-phone-badge');
+  const refreshBtn = document.getElementById('btn-refresh-tg-contact');
+  errEl?.setAttribute('hidden', '');
+
+  const res = await requestTelegramContact({ giftId });
+  if (res.ok) {
+    if (res.phone) state.verifiedContactPhone = res.phone;
+    window.setTimeout(async () => {
+      const fresh = await loadGiftTicketPass(giftId, state.tg?.user);
+      if (fresh?.verifiedPhone) state.verifiedContactPhone = fresh.verifiedPhone;
+      if (phoneBadge) {
+        const numTxt = state.verifiedContactPhone ? `: ${state.verifiedContactPhone}` : '';
+        phoneBadge.textContent = `✓ Контакт Telegram подтверждён${numTxt}! Теперь введи город и кинотеатр ниже.`;
+        phoneBadge.removeAttribute('hidden');
+      }
+    }, 650);
+    if (phoneBadge) {
+      const numTxt = res.phone ? `: ${res.phone}` : '';
+      phoneBadge.textContent = `✓ Контакт Telegram подтверждён${numTxt}! Теперь введи город и кинотеатр ниже.`;
+      phoneBadge.removeAttribute('hidden');
     }
+    refreshBtn?.setAttribute('hidden', '');
+    Haptics.success();
+    return;
+  }
+
+  if (res.reason === 'opened_bot_chat') {
+    refreshBtn?.removeAttribute('hidden');
+    if (phoneBadge) {
+      phoneBadge.textContent =
+        'В открывшемся чате @bochka_film_bot нажми кнопку «📱 Подтвердить мой номер телефона» и затем нажми «↻ Проверить статус»!';
+      phoneBadge.removeAttribute('hidden');
+    }
+  }
+}
+
+async function handleRefreshPassContactClick() {
+  const giftId = state.activePassData?.id || state.incomingPassId;
+  const errEl = document.getElementById('pass-claim-error');
+  const phoneBadge = document.getElementById('pass-verified-phone-badge');
+  const refreshBtn = document.getElementById('btn-refresh-tg-contact');
+  errEl?.setAttribute('hidden', '');
+
+  const fresh = await loadGiftTicketPass(giftId, state.tg?.user);
+  if (fresh?.hasVerifiedPhone) {
+    state.activePassData = fresh;
+    state.verifiedContactPhone = fresh.verifiedPhone || '';
+    if (phoneBadge) {
+      phoneBadge.textContent = `✓ Номер подтверждён в Telegram: ${fresh.verifiedPhone}`;
+      phoneBadge.removeAttribute('hidden');
+    }
+    refreshBtn?.setAttribute('hidden', '');
+    Haptics.success();
+  } else if (errEl) {
+    errEl.textContent =
+      'Контакт пока не найден. Открой эту подарочную ссылку внутри Telegram (@bochka_film_bot) и нажми кнопку отправки своего номера!';
+    errEl.removeAttribute('hidden');
+    Haptics.error();
   }
 }
 
@@ -1263,22 +1595,61 @@ function startLivePassClock(serverOffsetMs = 0) {
 
 async function handleAcceptIncomingPass() {
   if (!state.activePassData?.id) return;
+  const errEl = document.getElementById('pass-claim-error');
+  const cityCinema = (document.getElementById('input-pass-city-cinema')?.value || '').trim();
+  errEl?.setAttribute('hidden', '');
+
+  if (cityCinema.length < 3) {
+    if (errEl) {
+      errEl.textContent = 'Укажи свой город и желаемый кинотеатр (минимум 3 символа)!';
+      errEl.removeAttribute('hidden');
+    }
+    Haptics.error();
+    return;
+  }
+
   const btn = document.getElementById('btn-accept-gift-pass');
   if (btn) btn.disabled = true;
 
   try {
-    const res = await acceptGiftTicketPass(state.activePassData.id, state.tg?.user);
+    const res = await submitGiftTicketOrder({
+      giftId: state.activePassData.id,
+      tgUser: state.tg?.user,
+      cityCinema,
+      fallbackPhone: state.verifiedContactPhone,
+    });
+
     if (!res.ok) {
-      if (res.error === 'cannot_claim_own_ticket') {
+      if (res.reason === 'self_claim_blocked') {
         document.getElementById('pass-self-warning')?.removeAttribute('hidden');
-        btn?.setAttribute('hidden', '');
+        document.getElementById('pass-claim-form')?.setAttribute('hidden', '');
+      } else if (res.reason === 'already_claimed') {
+        await openIncomingPassScreen(state.activePassData.id);
+      } else if (errEl) {
+        const messages = {
+          telegram_required:
+            'Открой эту подарочную ссылку внутри Telegram (@bochka_film_bot), чтобы подтвердить аккаунт и получить электронный билет в бот!',
+          contact_not_verified:
+            'Сначала подтверди свой номер телефона кнопкой «📱 1. Подтвердить номер через Telegram» выше!',
+          phone_already_used:
+            'На этот номер телефона уже выписывался подарочный билет в рамках акции (1 уникальный номер = 1 билет)!',
+          city_required: 'Укажи свой город и желаемый кинотеатр!',
+        };
+        errEl.textContent =
+          messages[res.reason] || 'Не удалось отправить заявку. Проверь интернет и открой ссылку в @bochka_film_bot.';
+        errEl.removeAttribute('hidden');
       }
       Haptics.error();
       return;
     }
 
-    btn?.setAttribute('hidden', '');
-    renderRevealedPassTicket(res.ticketCode, res.contact, state.activePassData.id);
+    document.getElementById('pass-claim-form')?.setAttribute('hidden', '');
+    renderPassOrderStatusBox({
+      id: state.activePassData.id,
+      orderStatus: 'pending',
+      cityCinema: res.cityCinema || cityCinema,
+      verifiedPhone: res.verifiedPhone || state.verifiedContactPhone,
+    });
     Haptics.success();
   } finally {
     if (btn) btn.disabled = false;
@@ -1341,6 +1712,7 @@ function evaluateKinopoiskReturn() {
 
   state.kpSync.verified = true;
   markKinopoiskVisited();
+  recordFunnelEvent('kp_clicks', state.tg?.user).catch(() => {});
   refreshQuestUI();
   document.getElementById('rescue-kp-error')?.setAttribute('hidden', '');
   document.getElementById('btn-rescue-kp-claim')?.removeAttribute('hidden');
@@ -1547,7 +1919,7 @@ async function rebuildPackPortraitPreview(newSource = undefined) {
     const previewImg = document.getElementById('pack-preview-img');
     const sizeTag = document.getElementById('pack-size-tag');
     if (previewImg) previewImg.src = processed.dataUrl;
-    if (sizeTag) sizeTag.textContent = `512×512 WEBP · ${processed.sizeKb} КБ`;
+    if (sizeTag) sizeTag.textContent = `320×320 WEBP · ${processed.sizeKb} КБ`;
   } catch {
     const fallback = await processPortraitToWebP(null, state.pack.frameStyle);
     state.pack.processed = fallback;
@@ -1795,7 +2167,7 @@ async function refreshQuestUI() {
   const enterBtn = document.getElementById('btn-enter-night-shift');
   const cdText = document.getElementById('night-shift-cooldown-text');
   if (enterBtn) {
-    const unlocked = isPremiereRaceUnlocked(synced);
+    const unlocked = isPremiereRaceUnlocked(synced, state.profile);
     enterBtn.disabled = !unlocked;
     if (!unlocked) {
       if (cdText) {
@@ -1822,6 +2194,7 @@ async function handleKinopoiskScreenshotUpload(file) {
 
   if (result.ok) {
     markKpScreenshotVerified();
+    recordFunnelEvent('kp_screenshot_verified', state.tg?.user, result.blob || null).catch(() => {});
     fb.className = 'kp-screen-feedback is-ok';
     fb.textContent = t('kpScreenSuccess');
     Haptics.success();
@@ -2074,6 +2447,7 @@ async function unlockTrailerReward() {
   if (claimBtn) claimBtn.disabled = false;
 
   markTrailerCompleted();
+  recordFunnelEvent('trailer_completions', state.tg?.user).catch(() => {});
   await refreshQuestUI();
   Haptics.success();
 
@@ -2203,6 +2577,7 @@ function bindUIEvents() {
 
   document.getElementById('nav-kinopoisk')?.addEventListener('click', async () => {
     markKinopoiskVisited();
+    recordFunnelEvent('kp_clicks', state.tg?.user).catch(() => {});
     await refreshQuestUI();
   });
 
@@ -2224,7 +2599,7 @@ function bindUIEvents() {
     state.entered = true;
     await audio.unlock(true);
     refreshSoundButtonLabel();
-    if (isPremiereRaceUnlocked()) {
+    if (isPremiereRaceUnlocked(getQuestState(), state.profile)) {
       startPremiereRaceRound();
     } else {
       await populateFinaleScreen();
@@ -2257,11 +2632,25 @@ function bindUIEvents() {
     showScreen('pack');
   });
 
-  // Секретная пасхалка «Достучаться до небес» (Экран моря)
+  // Секретная пасхалка «Достучаться до небес» (Экран моря + 10-сек таппер по бочке)
+  document.getElementById('btn-ocean-tap-barrel')?.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    handleOceanBarrelTap();
+  });
+  document.getElementById('btn-ocean-start-tap')?.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    if (!state.oceanTapper.running) {
+      startOceanTapperCountdown();
+    }
+    handleOceanBarrelTap();
+  });
+  document.getElementById('btn-ocean-claim-gift')?.addEventListener('click', () => {
+    handleReturnFromOcean(true);
+  });
   document.getElementById('btn-ocean-story')?.addEventListener('click', () => handleDownloadOceanPostcard());
-  document.getElementById('btn-ocean-back')?.addEventListener('click', () => handleReturnFromOcean());
+  document.getElementById('btn-ocean-back')?.addEventListener('click', () => handleReturnFromOcean(false));
 
-  // Вилка «Золотая бочка: Чужой билет с фейс-контролем»
+  // Вилка «Золотая бочка: Чужой билет в Telegram»
   document.getElementById('btn-close-golden-fork')?.addEventListener('click', () => closeGoldenTicketForkModal());
   document.getElementById('btn-reopen-golden-fork')?.addEventListener('click', () => openGoldenTicketForkModal());
   document.getElementById('btn-burn-ticket-x2')?.addEventListener('click', () => handleBurnTicketChoice());
@@ -2282,8 +2671,8 @@ function bindUIEvents() {
   document.getElementById('btn-share-gift-native')?.addEventListener('click', async () => {
     if (!state.giftPass.lastPassUrl) return;
     const res = await shareNativeOrFallback({
-      title: 'Именной билет в кино — БОЧКА (17 декабря)',
-      text: `🎟 Дарю тебе именной пропуск в кино на триллер «Бочка»! На кассе сверят по фото (${state.giftPass.recipientName}):`,
+      title: 'Подарочный билет в кино — БОЧКА (17 декабря)',
+      text: `🎟 Выбил в цеху «БОЧКИ» настоящий билет в кино на твоё имя (${state.giftPass.recipientName})! Подтверди номер в Telegram и выбери кинотеатр в своём городе:`,
       url: state.giftPass.lastPassUrl,
     });
     if (res === 'copied') showToast(t('copiedToast'));
@@ -2292,7 +2681,7 @@ function bindUIEvents() {
     if (!state.giftPass.lastPassUrl) return;
     openTelegramShare(
       state.giftPass.lastPassUrl,
-      `🎟 Выбил в цеху «БОЧКИ» настоящий билет в кино и оформил пропуск на твоё имя (${state.giftPass.recipientName})! Активируй по ссылке:`
+      `🎟 Выбил в цеху «БОЧКИ» настоящий билет в кино на твоё имя (${state.giftPass.recipientName})! Подтверди номер и выбери кинотеатр по ссылке:`
     );
   });
   document.getElementById('btn-done-gift-pass')?.addEventListener('click', () => closeGoldenTicketForkModal());
@@ -2309,7 +2698,9 @@ function bindUIEvents() {
     showScreen('pack');
   });
 
-  // Защищённый экран Именного пропуска кинотеатра (?pass=ID)
+  // Экран активации Подарочного билета (?gift=ID / startapp=gift_ID)
+  document.getElementById('btn-verify-tg-contact')?.addEventListener('click', () => handleVerifyPassContactClick());
+  document.getElementById('btn-refresh-tg-contact')?.addEventListener('click', () => handleRefreshPassContactClick());
   document.getElementById('btn-accept-gift-pass')?.addEventListener('click', () => handleAcceptIncomingPass());
   document.getElementById('btn-copy-pass-code')?.addEventListener('click', async () => {
     const code = document.getElementById('pass-ticket-code')?.value || '';
@@ -2572,6 +2963,7 @@ function bindUIEvents() {
 
   const goKinopoiskAction = async () => {
     markKinopoiskVisited();
+    recordFunnelEvent('kp_clicks', state.tg?.user).catch(() => {});
     await refreshQuestUI();
     openExternalLink(ENV.kinopoiskUrl);
   };

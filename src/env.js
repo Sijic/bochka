@@ -9,14 +9,22 @@ function pick(key, fallback = '') {
   return fallback;
 }
 
+// ВНИМАНИЕ: Здесь находятся ТОЛЬКО публичные клиентские константы (URL и anon key, защищённые RLS + SECURITY DEFINER RPC).
+// Секретные ключи (TELEGRAM_BOT_TOKEN, SUPABASE_SERVICE_ROLE_KEY, пароли админки) НИКОГДА не попадают в клиентский JS!
 export const ENV = {
-  supabaseUrl: pick('VITE_SUPABASE_URL', ''),
-  supabaseAnonKey: pick('VITE_SUPABASE_ANON_KEY', ''),
-  supabaseBucket: pick('VITE_SUPABASE_BUCKET', 'barrel-portraits'),
-  tgBotToken: pick('VITE_TG_BOT_TOKEN', ''),
-  tgBotUsername: pick('VITE_TG_BOT_USERNAME', ''),
-  tgAppName: pick('VITE_TG_APP_NAME', 'app'),
-  tgNotifyWebhook: pick('VITE_TG_NOTIFY_WEBHOOK', ''),
+  supabaseUrl: pick('VITE_SUPABASE_URL', 'https://cevcmsypwohmpethybzf.supabase.co'),
+  supabaseAnonKey: pick(
+    'VITE_SUPABASE_ANON_KEY',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNldmNtc3lwd29obXBldGh5YnpmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ0OTU0OTksImV4cCI6MjExMDA3MTQ5OX0.YOCD9vaqv9-FV2X28xLnzYt1x_NOGRW6wqsCBcw34Bk'
+  ),
+  supabaseBucket: pick('VITE_SUPABASE_BUCKET', 'barrel-media'),
+  supabasePassesBucket: pick('VITE_SUPABASE_PASSES_BUCKET', 'cinema-passes'),
+  tgBotUsername: pick('VITE_TG_BOT_USERNAME', 'bochka_film_bot'),
+  tgAppName: pick('VITE_TG_APP_NAME', 'play'),
+  tgNotifyWebhook: pick(
+    'VITE_TG_NOTIFY_WEBHOOK',
+    'https://cevcmsypwohmpethybzf.supabase.co/functions/v1/tg-webhook'
+  ),
   publicUrl: pick('VITE_PUBLIC_URL', 'https://bochka.quest'),
   kinopoiskUrl: pick('VITE_KINOPOISK_URL', 'https://www.kinopoisk.ru/film/11226275/'),
   kinopoiskTrailerUrl: pick('VITE_KINOPOISK_TRAILER_URL', 'https://www.kinopoisk.ru/film/11226275/video/210300/'),

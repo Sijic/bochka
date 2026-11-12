@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { ENV } from './env.js';
 import { saveLocalPackMedia, loadLocalPackMedia } from './voice.js';
+import { isTelegramMiniApp } from './telegram.js';
 
 const PACKS_STORAGE_KEY = 'bochka_v2_packs';
 const PASSES_STORAGE_KEY = 'bochka_v3_passes';
@@ -41,7 +42,7 @@ export function randomShortId(len = 7) {
 }
 
 /**
- * Оставлено ТОЛЬКО для обратной совместимости со старыми ссылками прототипа (.eyJ...)
+ * Оставлено ТОЛЬКО для обратной совместимости на чтение со старыми ссылками прототипа (.eyJ...)
  */
 function decodeLegacyBase64Url(b64) {
   try {
@@ -70,10 +71,10 @@ function resolveShareBaseUrl() {
 }
 
 /**
- * Создаёт упакованную бочку:
- * - грузит портрет 512x512 WebP (<= 60 КБ) и голосовое Opus/WebM (<= 40 КБ) в Supabase Storage,
- * - сохраняет запись в public.barrels с коротким 7-буквенным ID,
- * - ВСЕГДА возвращает чистую короткую ссылку вида https://bochka.quest/?b=jakaqgx (без base64!).
+ * Создаёт заваренную бочку:
+ * - грузит портрет 320x320 WebP (~18 КБ) и голос Opus 16kbps (~10 КБ) в бакет `barrel-media` с `cacheControl: '31536000'`,
+ * - сохраняет запись через `create_barrel_pack_rpc`,
+ * - внутри ТГ отдаёт `https://t.me/bochka_film_bot/play?startapp=<short_id>`, а для веба — `https://bochka.quest/?b=<short_id>`.
  */
 export async function createBarrelPack({
   mode = 'friend',
@@ -88,6 +89,7 @@ export async function createBarrelPack({
   const targetIndex = Math.floor(Math.random() * 6);
   const senderUid = getViewerUid(tgUser);
   const senderTgId = tgUser?.id || '';
+  const senderUsername = tgUser?.username || '';
   const cleanMsg = (message || '').trim().slice(0, 45);
   const cleanSender = (senderName || tgUser?.name || '').trim().slice(0, 28);
 
@@ -103,8 +105,8 @@ export async function createBarrelPack({
           .from(ENV.supabaseBucket)
           .upload(photoPath, processedImage.blob, {
             contentType: processedImage.blob.type || 'image/webp',
-            cacheControl: '604800',
-            upsert: true,
+            cacheControl: '31536000',
+            upsert: false,
           });
 
         if (!upErr) {
@@ -120,8 +122,8 @@ export async function createBarrelPack({
           .from(ENV.supabaseBucket)
           .upload(voicePath, recordedVoice.blob, {
             contentType: recordedVoice.mimeType || 'audio/webm',
-            cacheControl: '604800',
-            upsert: true,
+            cacheControl: '31536000',
+            upsert: false,
           });
 
         if (!vErr) {
@@ -130,20 +132,21 @@ export async function createBarrelPack({
         }
       }
 
-      const { error: insErr } = await supabase.from('barrels').insert({
-        id,
-        mode,
-        message: cleanMsg,
-        photo_url: remotePhotoUrl,
-        voice_url: remoteVoiceUrl,
-        frame_style: frameStyle,
-        target_index: targetIndex,
-        sender_uid: senderUid,
-        sender_tg_id: senderTgId || null,
-        sender_name: cleanSender,
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('create_barrel_pack_rpc', {
+        p_short_id: id,
+        p_mode: mode,
+        p_message: cleanMsg,
+        p_frame_style: frameStyle,
+        p_sender_uid: senderUid,
+        p_sender_tg_id: senderTgId || null,
+        p_sender_username: senderUsername || null,
+        p_sender_name: cleanSender,
+        p_photo_url: remotePhotoUrl,
+        p_voice_url: remoteVoiceUrl,
+        p_target_index: targetIndex,
       });
 
-      if (!insErr) {
+      if (!rpcErr && rpcRes?.ok) {
         storedInCloud = true;
       }
     } catch {
@@ -199,7 +202,8 @@ export async function createBarrelPack({
     id,
     targetIndex,
     storedInCloud,
-    shareUrl: tgMiniAppUrl,
+    shareUrl: isTelegramMiniApp() ? tgMiniAppUrl : webUrl,
+    tgUrl: tgMiniAppUrl,
     webUrl,
     pack: localPacks[id],
   };
@@ -218,13 +222,11 @@ export async function loadBarrelPack(rawParam) {
 
   if (supabase && id) {
     try {
-      const { data, error } = await supabase
-        .from('barrels')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle();
+      const { data, error } = await supabase.rpc('get_barrel_pack_rpc', {
+        p_short_id: id,
+      });
 
-      if (!error && data) {
+      if (!error && data?.ok) {
         let photoUrl = data.photo_url || '';
         let voiceUrl = data.voice_url || '';
         if (!photoUrl || !voiceUrl) {
@@ -243,7 +245,7 @@ export async function loadBarrelPack(rawParam) {
           senderUid: data.sender_uid || '',
           senderTgId: data.sender_tg_id || '',
           senderName: data.sender_name || '',
-          openedCount: data.opened_count || 0,
+          openedCount: 0,
         };
       }
     } catch { /* fallback below */ }
@@ -294,9 +296,40 @@ export async function loadBarrelPack(rawParam) {
 }
 
 /**
- * Фиксирует финал раунда получателя, начисляет +2 жизни отправителю на сервере
- * и шлёт живой пуш в Telegram-бот.
+ * Записывает шаг воронки (kp_clicks, trailer_completions, cinema_clicks, ocean_opens, kp_screenshot_verified)
  */
+export async function recordFunnelEvent(event, tgUser = null, kpScreenshotBlob = null) {
+  const uid = getViewerUid(tgUser);
+  if (!supabase) return false;
+
+  let kpUrl = '';
+  try {
+    if (kpScreenshotBlob) {
+      const path = `kp/${uid}_${Date.now()}.webp`;
+      const { error: upErr } = await supabase.storage
+        .from(ENV.supabasePassesBucket)
+        .upload(path, kpScreenshotBlob, {
+          contentType: 'image/webp',
+          cacheControl: '31536000',
+          upsert: false,
+        });
+      if (!upErr) {
+        const { data: pub } = supabase.storage.from(ENV.supabasePassesBucket).getPublicUrl(path);
+        kpUrl = pub?.publicUrl || '';
+      }
+    }
+
+    await supabase.rpc('record_funnel_event_rpc', {
+      p_event: event,
+      p_uid: uid,
+      p_kp_screenshot_url: kpUrl || null,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function recordBarrelResult(pack, { survived, attemptsUsed, timeLeft, viewerTgUser = null }) {
   if (!pack || !pack.id) return { notified: false };
 
@@ -307,115 +340,68 @@ export async function recordBarrelResult(pack, { survived, attemptsUsed, timeLef
 
   safeWrite(openedGuardKey, '1');
 
-  const nextOpenedCount = !alreadyOpenedByMe && !isSelfOpen ? (pack.openedCount || 0) + 1 : (pack.openedCount || 0);
-  let senderBonusCredited = 0;
+  let senderBonusCredited = false;
+  let senderTgId = pack.senderTgId || '';
 
-  if (supabase) {
+  if (supabase && !alreadyOpenedByMe) {
     try {
-      await supabase
-        .from('barrels')
-        .update({
-          opened_count: nextOpenedCount,
-          survived,
-          attempts_used: attemptsUsed,
-          time_left: Number(timeLeft.toFixed(1)),
-          last_opened_at: new Date().toISOString(),
-        })
-        .eq('id', pack.id);
-
-      if (!alreadyOpenedByMe && !isSelfOpen) {
-        const { data: cred } = await supabase.rpc('credit_friend_opened_lives', {
-          p_barrel_id: pack.id,
-          p_viewer_uid: viewerUid,
-        });
-        senderBonusCredited = cred?.credited || 0;
-      }
+      const { data: cred } = await supabase.rpc('credit_friend_opened_lives', {
+        p_barrel_id: pack.id,
+        p_sender_uid: pack.senderUid || '',
+        p_opener_uid: viewerUid,
+      });
+      senderBonusCredited = Boolean(cred?.credited);
+      if (cred?.sender_tg_id) senderTgId = cred.sender_tg_id;
     } catch { /* ignore */ }
   }
 
   const localPacks = readLocalPacks();
   if (localPacks[pack.id]) {
-    localPacks[pack.id].openedCount = nextOpenedCount;
+    localPacks[pack.id].openedCount = (localPacks[pack.id].openedCount || 0) + (!alreadyOpenedByMe && !isSelfOpen ? 1 : 0);
     localPacks[pack.id].survived = survived;
     localPacks[pack.id].attemptsUsed = attemptsUsed;
     localPacks[pack.id].timeLeft = Number(timeLeft.toFixed(1));
     safeWriteJson(PACKS_STORAGE_KEY, localPacks);
   }
 
-  const readerName = viewerTgUser?.name || 'Твой друг';
-  const bonusTail = !isSelfOpen ? ' Тебе начислено +2 жизни в Гонке за Премьерой!' : '';
-  const notifyText = survived
-    ? `🛢 БОЧКА: ${readerName} пробил цех и вскрыл твою бочку с ${attemptsUsed}-й попытки!${bonusTail}`
-    : `💀 БОЧКА: ${readerName} остался в тёмном цеху Корпуса Б!${bonusTail}`;
-
   const notified = await sendTelegramPing({
-    chatId: pack.senderTgId,
-    text: notifyText,
-    event: 'barrel_opened',
+    clientAction: 'barrel_opened',
+    senderTgId,
+    openerName: viewerTgUser?.name || '',
     barrelId: pack.id,
     survived,
-    attemptsUsed,
-    timeLeft,
-    senderBonusCredited,
   });
 
   return { notified, senderBonusCredited };
 }
 
 export async function sendCinemaInviteReply(pack, viewerTgUser = null) {
-  if (pack?.id && supabase) {
-    try {
-      await supabase.from('barrels').update({ replied_cinema: true }).eq('id', pack.id);
-    } catch { /* ignore */ }
-  }
-
-  const readerName = viewerTgUser?.name || 'Друг';
-  const text = `🎬 БОЧКА (17 декабря): ${readerName} ответил из цеха — «Идём в кино 17 декабря! Бери билеты!»`;
+  await recordFunnelEvent('cinema_clicks', viewerTgUser);
 
   return sendTelegramPing({
-    chatId: pack?.senderTgId || '',
-    text,
-    event: 'cinema_reply',
+    clientAction: 'cinema_accept',
+    senderTgId: pack?.senderTgId || '',
+    openerName: viewerTgUser?.name || '',
     barrelId: pack?.id || '',
   });
 }
 
 async function sendTelegramPing(payload) {
-  if (ENV.tgNotifyWebhook) {
-    try {
-      const res = await fetch(ENV.tgNotifyWebhook, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) return true;
-    } catch { /* fallback below */ }
+  if (!ENV.tgNotifyWebhook) return false;
+  try {
+    const res = await fetch(ENV.tgNotifyWebhook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return res.ok;
+  } catch {
+    return false;
   }
-
-  if (ENV.tgBotToken && payload.chatId) {
-    try {
-      const res = await fetch(`https://api.telegram.org/bot${ENV.tgBotToken}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: payload.chatId,
-          text: payload.text,
-          disable_web_page_preview: true,
-        }),
-      });
-      return res.ok;
-    } catch {
-      return false;
-    }
-  }
-  return false;
 }
 
 /* ============================================================================
-   ГЛАВНАЯ СУПЕРИГРА v3.0: ГОНКА ЗА ПРЕМЬЕРОЙ (0..100) + ПРАВИЛО «ЧУЖОГО БИЛЕТА»
-   На продакшене вся математика и лимиты считаются СТРОГО на сервере в Supabase RPC.
-   Если ключи Supabase ещё не подключены, работает безопасное превью с потолком 99.9
-   без выдачи реальных кодов кинотеатра.
+   СУПЕРИГРА «ГОНКА ЗА ПРЕМЬЕРОЙ (0..100)» И ПОДАРОЧНЫЙ БИЛЕТ ДРУГУ (startapp=gift_ID)
    ============================================================================ */
 
 function getLocalPreviewProfile() {
@@ -426,10 +412,15 @@ function getLocalPreviewProfile() {
     rawSharesToday: 0,
     rawSharesDay: today,
     easterEggClaimed: false,
+    easterEggBestTaps: 0,
+    easterEggGiftWon: false,
     premiereWon: false,
+    premiereConfirmed: false,
     premiereCode: '',
     hasPendingTicket: false,
-    demoStrikes: 0,
+    kpVerified: false,
+    packedCount: 0,
+    friendsBrought: 0,
   };
   const saved = safeReadJson(PROFILE_STORAGE_KEY, null);
   const prof = saved ? { ...def, ...saved } : def;
@@ -445,27 +436,49 @@ function saveLocalPreviewProfile(prof) {
   safeWriteJson(PROFILE_STORAGE_KEY, prof);
 }
 
-export function isPremiereRaceUnlocked(state = getQuestState()) {
-  return Boolean((state.packedCount || 0) >= 1);
+/**
+ * ШАГ 5: Суперигра «Гонка за Премьерой» открывается после того, как игрок
+ * сам упаковал друга И подтвердил скриншот с оранжевой кнопкой «Буду смотреть» на Кинопоиске!
+ */
+export function isPremiereRaceUnlocked(questState = getQuestState(), profile = null) {
+  const packedOk = (questState?.packedCount || 0) >= 1 || (profile?.packedCount || 0) >= 1;
+  const kpOk = Boolean(questState?.kpScreenshotVerified || profile?.kpVerified);
+  return Boolean(packedOk && kpOk);
 }
 
 export async function fetchPlayerProfile(tgUser = null) {
   const uid = getViewerUid(tgUser);
   if (supabase) {
     try {
-      const { data, error } = await supabase.rpc('get_player_profile', {
-        p_user_id: uid,
+      const { data, error } = await supabase.rpc('get_or_create_player_profile', {
+        p_uid: uid,
+        p_tg_id: tgUser?.id || null,
+        p_tg_username: tgUser?.username || null,
+        p_display_name: tgUser?.name || '',
       });
       if (!error && data?.ok) {
         const mapped = {
           premiereScore: Number(data.premiere_score || 0),
           lives: Number(data.lives ?? 3),
-          rawSharesToday: Number(data.raw_shares_today || 0),
+          rawSharesToday: Number(data.daily_shares_count || 0),
           easterEggClaimed: Boolean(data.easter_egg_claimed),
+          easterEggBestTaps: Number(data.easter_egg_best_taps || 0),
+          easterEggGiftWon: Boolean(data.easter_egg_gift_won),
           premiereWon: Boolean(data.premiere_won),
+          premiereConfirmed: Boolean(data.premiere_confirmed),
           premiereCode: data.premiere_code || '',
           hasPendingTicket: Boolean(data.has_pending_ticket),
+          kpVerified: Boolean(data.kp_verified),
+          packedCount: Number(data.packed_count || 0),
+          friendsBrought: Number(data.friends_brought || 0),
         };
+        if (mapped.kpVerified) markKpScreenshotVerified();
+        if (mapped.packedCount > 0) {
+          const q = getQuestState();
+          q.packedCount = Math.max(q.packedCount || 0, mapped.packedCount);
+          q.friendsOpened = Math.max(q.friendsOpened || 0, mapped.friendsBrought);
+          saveQuestState(q);
+        }
         saveLocalPreviewProfile({ ...getLocalPreviewProfile(), ...mapped });
         return mapped;
       }
@@ -480,12 +493,12 @@ export async function playPremiereStrike(tgUser = null) {
   if (supabase) {
     try {
       const { data, error } = await supabase.rpc('play_premiere_strike', {
-        p_user_id: uid,
+        p_uid: uid,
       });
       if (!error && data) {
         return {
           ok: Boolean(data.ok),
-          status: data.status || 'ok',
+          status: data.reason || 'ok',
           outcome: data.outcome || 'empty_screamer',
           delta: Number(data.delta || 0),
           premiereScore: Number(data.premiere_score || 0),
@@ -493,7 +506,7 @@ export async function playPremiereStrike(tgUser = null) {
           nearMiss: Boolean(data.near_miss),
           hasPendingTicket: Boolean(data.has_pending_ticket),
           premiereCode: data.premiere_code || '',
-          contact: data.contact || '',
+          contact: 'Напиши @bochka_film_bot и отправь свой VIP-код для подтверждения в списках гостей Закрытой Премьеры.',
         };
       }
       return { ok: false, status: 'rpc_error' };
@@ -502,88 +515,22 @@ export async function playPremiereStrike(tgUser = null) {
     }
   }
 
-  // Безопасный оффлайн-превью режим (до подключения .env Supabase): потолок строго 99.9, реальных промокодов нет!
-  const prof = getLocalPreviewProfile();
-  if (prof.lives <= 0) {
-    return {
-      ok: false,
-      status: 'no_lives',
-      premiereScore: prof.premiereScore,
-      lives: 0,
-    };
-  }
-
-  prof.lives = Math.max(0, prof.lives - 1);
-  prof.demoStrikes = (prof.demoStrikes || 0) + 1;
-
-  // На 4-м ударе превью показываем механику «Золотой бочки с чужим билетом»
-  if (!prof.hasPendingTicket && prof.demoStrikes === 4) {
-    prof.hasPendingTicket = true;
-    saveLocalPreviewProfile(prof);
-    return {
-      ok: true,
-      outcome: 'golden_ticket',
-      delta: 0,
-      premiereScore: prof.premiereScore,
-      lives: prof.lives,
-      hasPendingTicket: true,
-    };
-  }
-
-  let emptyProb = 0.18;
-  let delta = 35.0;
-  const s = prof.premiereScore;
-  if (s < 35) { emptyProb = 0.14; delta = 45.0; }
-  else if (s < 70) { emptyProb = 0.20; delta = 30.0; }
-  else if (s < 90) { emptyProb = 0.26; delta = 16.0; }
-  else if (s < 95) { emptyProb = 0.66; delta = 3.0; }
-  else if (s < 98) { emptyProb = 0.70; delta = 1.5; }
-  else if (s < 98.8) { emptyProb = 0.74; delta = 0.4; }
-  else { emptyProb = 0.78; delta = 0.1; }
-
-  if (Math.random() < emptyProb) {
-    saveLocalPreviewProfile(prof);
-    return {
-      ok: true,
-      outcome: 'empty_screamer',
-      delta: 0,
-      premiereScore: prof.premiereScore,
-      lives: prof.lives,
-      nearMiss: prof.premiereScore >= 90 && prof.lives === 0,
-    };
-  }
-
-  const nextScore = Math.min(99.9, Number((prof.premiereScore + delta).toFixed(1)));
-  const realDelta = Number((nextScore - prof.premiereScore).toFixed(1));
-  prof.premiereScore = nextScore;
-  saveLocalPreviewProfile(prof);
-
-  return {
-    ok: true,
-    outcome: 'score_hit',
-    delta: realDelta,
-    premiereScore: prof.premiereScore,
-    lives: prof.lives,
-    nearMiss: prof.premiereScore >= 90 && prof.lives === 0,
-  };
+  return { ok: false, status: 'offline' };
 }
 
-/**
- * Начисляет +1 жизнь сразу за отправку ссылки с бочкой другу (максимум 3 раза в сутки)
- */
 export async function claimShareBonusLife(tgUser = null) {
   const uid = getViewerUid(tgUser);
   if (supabase) {
     try {
       const { data, error } = await supabase.rpc('claim_share_life', {
-        p_user_id: uid,
+        p_uid: uid,
       });
-      if (!error && data?.ok) {
+      if (!error && data) {
         return {
-          granted: Number(data.granted || 0),
+          granted: data.ok ? 1 : 0,
           lives: Number(data.lives || 0),
-          rawSharesToday: Number(data.raw_shares_today || 0),
-          capped: data.reason === 'daily_share_cap',
+          rawSharesToday: Number(data.daily_shares_count || 0),
+          capped: data.reason === 'daily_limit',
         };
       }
     } catch { /* fallback below */ }
@@ -591,288 +538,245 @@ export async function claimShareBonusLife(tgUser = null) {
 
   const prof = getLocalPreviewProfile();
   if (prof.rawSharesToday >= 3) {
-    return {
-      granted: 0,
-      lives: prof.lives,
-      rawSharesToday: prof.rawSharesToday,
-      capped: true,
-    };
+    return { granted: 0, lives: prof.lives, rawSharesToday: prof.rawSharesToday, capped: true };
   }
   prof.rawSharesToday += 1;
   prof.lives += 1;
   saveLocalPreviewProfile(prof);
-  return {
-    granted: 1,
-    lives: prof.lives,
-    rawSharesToday: prof.rawSharesToday,
-    capped: false,
-  };
+  return { granted: 1, lives: prof.lives, rawSharesToday: prof.rawSharesToday, capped: false };
 }
 
 /**
- * ПУТЬ А (Азарт): Сжечь выпавший обычный билет в топке цеха в обмен на множитель ×2 жизней!
+ * ПУТЬ А: Сжечь выпавший билет в обмен на множитель ×2 жизней!
  */
 export async function burnRegularTicketForX2Lives(tgUser = null) {
   const uid = getViewerUid(tgUser);
   if (supabase) {
     try {
-      const { data, error } = await supabase.rpc('burn_regular_ticket', {
-        p_user_id: uid,
+      const { data, error } = await supabase.rpc('burn_ticket_for_x2_lives', {
+        p_uid: uid,
       });
       if (!error && data?.ok) {
-        return { ok: true, lives: Number(data.lives || 4) };
+        return { ok: true, lives: Number(data.lives || 2) };
       }
       return { ok: false };
     } catch {
       return { ok: false };
     }
   }
-
-  const prof = getLocalPreviewProfile();
-  if (!prof.hasPendingTicket) return { ok: false };
-  prof.hasPendingTicket = false;
-  prof.lives = Math.max(4, prof.lives * 2);
-  saveLocalPreviewProfile(prof);
-  return { ok: true, lives: prof.lives };
+  return { ok: false };
 }
 
 /**
- * ПУТЬ Б (Подарок с фейс-контролем): Создать именной веб-пропуск для друга (?pass=ID).
- * Самому игроку промокод НЕ показывается — только получателю при активации пропуска!
+ * ПУТЬ Б: Сформировать специальную подарочную ссылку `https://t.me/bochka_film_bot/play?startapp=gift_<id>`
+ * Промокод отправителю НЕ показывается — билет оформляется на верифицированный телефон друга через кабинет продюсера!
  */
 export async function createGiftTicketPass({
   tgUser = null,
   senderName = '',
   recipientName = '',
-  processedPassPhoto,
+  processedPassPhoto = null,
 }) {
-  const passId = randomShortId(8);
+  const giftId = randomShortId(8);
   const uid = getViewerUid(tgUser);
-  const cleanRecipient = (recipientName || '').trim().slice(0, 40);
+  const cleanRecipient = (recipientName || '').trim().slice(0, 45);
   const cleanSender = (senderName || tgUser?.name || '').trim().slice(0, 32);
 
-  if (cleanRecipient.length < 2 || !processedPassPhoto?.blob) {
-    return { ok: false, error: 'missing_fields' };
-  }
-
   let remotePhotoUrl = '';
-  let storedInCloud = false;
-
   if (supabase) {
     try {
-      const photoPath = `passes/${passId}.webp`;
-      const { error: upErr } = await supabase.storage
-        .from(ENV.supabaseBucket)
-        .upload(photoPath, processedPassPhoto.blob, {
-          contentType: processedPassPhoto.blob.type || 'image/webp',
-          cacheControl: '604800',
-          upsert: true,
-        });
-
-      if (!upErr) {
-        const { data: pubData } = supabase.storage.from(ENV.supabaseBucket).getPublicUrl(photoPath);
-        remotePhotoUrl = pubData?.publicUrl || '';
+      if (processedPassPhoto?.blob) {
+        const photoPath = `passes/${giftId}.webp`;
+        const { error: upErr } = await supabase.storage
+          .from(ENV.supabasePassesBucket)
+          .upload(photoPath, processedPassPhoto.blob, {
+            contentType: processedPassPhoto.blob.type || 'image/webp',
+            cacheControl: '31536000',
+            upsert: false,
+          });
+        if (!upErr) {
+          const { data: pubData } = supabase.storage.from(ENV.supabasePassesBucket).getPublicUrl(photoPath);
+          remotePhotoUrl = pubData?.publicUrl || '';
+        }
       }
 
-      const { data, error } = await supabase.rpc('create_gift_ticket_pass', {
-        p_user_id: uid,
-        p_pass_id: passId,
-        p_recipient_name: cleanRecipient,
-        p_recipient_photo_url: remotePhotoUrl || 'local://pass',
-        p_sender_name: cleanSender,
+      const { data, error } = await supabase.rpc('issue_gift_ticket_link', {
+        p_short_id: giftId,
+        p_sender_uid: uid,
         p_sender_tg_id: tgUser?.id || null,
+        p_sender_username: tgUser?.username || null,
+        p_sender_name: cleanSender,
+        p_recipient_name: cleanRecipient,
+        p_recipient_photo_url: remotePhotoUrl || null,
       });
 
-      if (!error && data?.ok) {
-        storedInCloud = true;
-      } else {
-        return { ok: false, error: data?.error || 'rpc_error' };
+      if (error || !data?.ok) {
+        return { ok: false, error: data?.reason || 'rpc_error' };
       }
     } catch {
       return { ok: false, error: 'network_error' };
     }
-  } else {
-    const prof = getLocalPreviewProfile();
-    prof.hasPendingTicket = false;
-    saveLocalPreviewProfile(prof);
   }
-
-  await saveLocalPackMedia(`pass_${passId}`, {
-    photoBlob: processedPassPhoto.blob,
-    voiceBlob: null,
-  });
-
-  const localPasses = safeReadJson(PASSES_STORAGE_KEY, {}) || {};
-  localPasses[passId] = {
-    id: passId,
-    recipientName: cleanRecipient,
-    recipientPhotoUrl: remotePhotoUrl || '',
-    senderName: cleanSender,
-    senderUid: uid,
-    senderTgId: tgUser?.id || '',
-    accepted: false,
-    createdAt: Date.now(),
-  };
-  safeWriteJson(PASSES_STORAGE_KEY, localPasses);
 
   const baseOrigin = resolveShareBaseUrl();
   const sep = baseOrigin.includes('?') ? '&' : '?';
-  const webUrl = `${baseOrigin}${sep}pass=${encodeURIComponent(passId)}`;
-  const tgUrl =
-    ENV.tgBotUsername && storedInCloud
-      ? `https://t.me/${ENV.tgBotUsername}/${ENV.tgAppName}?startapp=${encodeURIComponent('pass_' + passId)}`
-      : webUrl;
+  const webUrl = `${baseOrigin}${sep}gift=${encodeURIComponent(giftId)}`;
+  const tgUrl = `https://t.me/${ENV.tgBotUsername || 'bochka_film_bot'}/${ENV.tgAppName || 'play'}?startapp=${encodeURIComponent('gift_' + giftId)}`;
 
   return {
     ok: true,
-    passId,
+    passId: giftId,
     shareUrl: tgUrl,
+    tgUrl,
     webUrl,
   };
 }
 
 /**
- * Загружает данные Именного пропуска кинотеатра по ?pass=ID + смещение живых серверных часов
+ * Загружает данные подарочной ссылки `startapp=gift_<id>` / `?gift=<id>`
  */
-export async function loadGiftTicketPass(passId) {
-  if (!passId) return null;
-  const cleanId = passId.trim();
+export async function loadGiftTicketPass(giftId, viewerTgUser = null) {
+  if (!giftId) return null;
+  const cleanId = giftId.trim();
 
   if (supabase) {
     try {
-      const { data, error } = await supabase.rpc('get_gift_ticket_pass', {
-        p_pass_id: cleanId,
+      const { data, error } = await supabase.rpc('get_gift_pass_public', {
+        p_short_id: cleanId,
+        p_viewer_tg_id: viewerTgUser?.id || null,
       });
       if (!error && data?.ok) {
-        let photoUrl = data.recipient_photo_url || '';
-        if (!photoUrl || photoUrl.startsWith('local://')) {
-          const media = await loadLocalPackMedia(`pass_${cleanId}`);
-          if (media?.photoObjectUrl) photoUrl = media.photoObjectUrl;
-        }
         const serverNowMs = Number(data.server_now_ms || Date.now());
         return {
-          id: data.id,
-          recipientName: data.recipient_name,
-          recipientPhotoUrl: photoUrl,
+          id: data.gift_id,
+          status: data.status || 'issued',
+          orderStatus: data.order_status || '',
+          recipientName: data.recipient_name || '',
+          recipientPhotoUrl: data.recipient_photo_url || '',
           senderName: data.sender_name || '',
           senderUid: data.sender_uid || '',
           senderTgId: data.sender_tg_id || '',
-          accepted: Boolean(data.accepted),
-          ticketCode: data.ticket_code || '',
-          contact: data.contact || '',
+          hasVerifiedPhone: Boolean(data.has_verified_phone),
+          verifiedPhone: data.verified_phone || '',
+          cityCinema: data.city_cinema || '',
+          bookingCode: data.booking_code || '',
+          ticketFileUrl: data.ticket_file_url || '',
           serverOffsetMs: serverNowMs - Date.now(),
         };
       }
-    } catch { /* fallback below */ }
+    } catch { /* ignore */ }
   }
-
-  const localPasses = safeReadJson(PASSES_STORAGE_KEY, {}) || {};
-  const entry = localPasses[cleanId];
-  if (!entry) return null;
-
-  let photoUrl = entry.recipientPhotoUrl || '';
-  if (!photoUrl) {
-    const media = await loadLocalPackMedia(`pass_${cleanId}`);
-    if (media?.photoObjectUrl) photoUrl = media.photoObjectUrl;
-  }
-
-  return {
-    ...entry,
-    recipientPhotoUrl: photoUrl,
-    ticketCode: entry.accepted ? 'DEMO-PASS-CONNECT-SUPABASE' : '',
-    contact: 'Предъяви этот живой именной пропуск с часами контролёру или в боте фильма.',
-    serverOffsetMs: 0,
-  };
+  return null;
 }
 
 /**
- * Получатель активирует свой Именной билет -> отправителю начисляется множитель ×2 жизней!
+ * ШАГ 7: Получатель подтверждает телефон через Telegram `request_contact` и вводит Город/кинотеатр.
+ * Заявка уходит в `ticket_orders` (`pending`), отправителю мгновенно начисляется ×2 жизней,
+ * а бот уведомляет обоих игроков и чат продюсеров!
  */
-export async function acceptGiftTicketPass(passId, tgUser = null) {
+export async function submitGiftTicketOrder({
+  giftId,
+  tgUser,
+  cityCinema,
+  fallbackPhone = '',
+}) {
   const viewerUid = getViewerUid(tgUser);
+  if (!supabase) return { ok: false, reason: 'offline' };
 
-  if (supabase) {
-    try {
-      const { data, error } = await supabase.rpc('accept_gift_ticket_pass', {
-        p_pass_id: passId,
-        p_recipient_uid: viewerUid,
-      });
-      if (!error && data?.ok) {
-        if (data.sender_tg_id) {
-          await sendTelegramPing({
-            chatId: data.sender_tg_id,
-            text: `🎟 БОЧКА: Друг активировал твой именной билет в кино! Твои жизни умножены ×2 (сейчас: ${data.sender_lives})!`,
-            event: 'gift_pass_accepted',
-            passId,
-          });
-        }
-        return {
-          ok: true,
-          ticketCode: data.ticket_code || '',
-          contact: data.contact || '',
-          serverOffsetMs: Number(data.server_now_ms || Date.now()) - Date.now(),
-        };
-      }
-      return { ok: false, error: data?.error || 'rpc_error' };
-    } catch {
-      return { ok: false, error: 'network_error' };
+  try {
+    const { data, error } = await supabase.rpc('submit_gift_ticket_order', {
+      p_gift_id: giftId,
+      p_receiver_uid: viewerUid,
+      p_receiver_tg_id: tgUser?.id || '',
+      p_receiver_username: tgUser?.username || '',
+      p_receiver_name: tgUser?.name || '',
+      p_city_cinema: cityCinema,
+      p_fallback_phone: fallbackPhone || null,
+    });
+
+    if (error || !data?.ok) {
+      return { ok: false, reason: data?.reason || 'rpc_error' };
     }
-  }
 
-  const localPasses = safeReadJson(PASSES_STORAGE_KEY, {}) || {};
-  const entry = localPasses[passId];
-  if (!entry) return { ok: false, error: 'not_found' };
-  if (entry.senderUid === viewerUid) {
-    return { ok: false, error: 'cannot_claim_own_ticket' };
-  }
-  entry.accepted = true;
-  safeWriteJson(PASSES_STORAGE_KEY, localPasses);
+    await sendTelegramPing({
+      clientAction: 'gift_order_created',
+      senderTgId: data.sender_tg_id || '',
+      receiverTgId: tgUser?.id || '',
+      receiverName: tgUser?.name || '',
+      receiverUsername: tgUser?.username || '',
+      phone: data.verified_phone || fallbackPhone,
+      cityCinema: data.city_cinema || cityCinema,
+    });
 
-  return {
-    ok: true,
-    ticketCode: 'DEMO-PASS-CONNECT-SUPABASE',
-    contact: 'Демо-пропуск активирован (подключите Supabase для выдачи реальных кодов киносети).',
-    serverOffsetMs: 0,
-  };
+    return {
+      ok: true,
+      orderId: data.order_id,
+      verifiedPhone: data.verified_phone,
+      cityCinema: data.city_cinema,
+    };
+  } catch {
+    return { ok: false, reason: 'network_error' };
+  }
 }
 
 /**
- * Секретная пасхалка «Достучаться до небес» (19 -> 97 -> 3 быстрых удара): разовый бонус +3 жизни!
+ * ШАГ 6 + Таппер с Тилем на берегу моря (10 сек стука по бочке):
+ * Начисляет +3..+5 жизней, а за 40+ ударов за 10 сек открывает Подарочный билет для друга!
  */
-export async function claimEasterEgg1997Bonus(tgUser = null) {
+export async function claimOceanTapperReward(tgUser = null, taps = 1) {
   const uid = getViewerUid(tgUser);
-
   if (supabase) {
     try {
-      const { data, error } = await supabase.rpc('claim_easter_egg_1997', {
-        p_user_id: uid,
+      const { data, error } = await supabase.rpc('claim_ocean_tapper_reward', {
+        p_uid: uid,
+        p_taps: Math.max(0, Math.round(taps)),
       });
       if (!error && data?.ok) {
         const prof = getLocalPreviewProfile();
         prof.easterEggClaimed = true;
         prof.lives = Number(data.lives ?? prof.lives);
+        prof.hasPendingTicket = Boolean(data.has_pending_ticket);
+        prof.easterEggBestTaps = Number(data.best_taps || taps);
         saveLocalPreviewProfile(prof);
         return {
-          granted: Number(data.granted || 0),
+          ok: true,
+          livesAwarded: Number(data.lives_awarded || 0),
+          giftAwarded: Boolean(data.gift_awarded),
           alreadyClaimed: Boolean(data.already_claimed),
           lives: Number(data.lives || 0),
+          bestTaps: Number(data.best_taps || taps),
+          hasPendingTicket: Boolean(data.has_pending_ticket),
         };
       }
     } catch { /* fallback below */ }
   }
 
   const prof = getLocalPreviewProfile();
-  if (prof.easterEggClaimed) {
-    return { granted: 0, alreadyClaimed: true, lives: prof.lives };
-  }
+  const giftAwarded = taps >= 40 && !prof.easterEggGiftWon;
+  const livesAwarded = prof.easterEggClaimed ? 0 : (taps >= 40 ? 5 : taps >= 20 ? 4 : 3);
   prof.easterEggClaimed = true;
-  prof.lives += 3;
+  prof.easterEggGiftWon = prof.easterEggGiftWon || giftAwarded;
+  prof.hasPendingTicket = prof.hasPendingTicket || giftAwarded;
+  prof.lives += livesAwarded;
   saveLocalPreviewProfile(prof);
-  return { granted: 3, alreadyClaimed: false, lives: prof.lives };
+  return {
+    ok: true,
+    livesAwarded,
+    giftAwarded,
+    alreadyClaimed: livesAwarded === 0 && !giftAwarded,
+    lives: prof.lives,
+    bestTaps: taps,
+    hasPendingTicket: prof.hasPendingTicket,
+  };
+}
+
+// Совместимость со старым вызовом
+export async function claimEasterEgg1997Bonus(tgUser = null) {
+  return claimOceanTapperReward(tgUser, 1);
 }
 
 /* ============================================================================
-   УПРАВЛЕНИЕ КВЕСТ-СОСТОЯНИЕМ И ЖЕТОНАМИ «КРЫШКИ»
+   УПРАВЛЕНИЕ КВЕСТ-СОСТОЯНИЕМ И ЖЕТОНАМИ
    ============================================================================ */
 export function getQuestState() {
   const def = {
@@ -918,32 +822,12 @@ export function markKinopoiskVisited() {
 }
 
 export async function syncFriendsOpenedTokens(tgUser = null) {
+  const prof = await fetchPlayerProfile(tgUser);
   const s = getQuestState();
-  const uid = getViewerUid(tgUser);
-  const prevFriends = s.friendsOpened || 0;
-
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from('barrels')
-        .select('opened_count')
-        .eq('sender_uid', uid);
-
-      if (!error && Array.isArray(data)) {
-        const openedBarrels = data.reduce((acc, row) => acc + Math.min(5, row.opened_count || 0), 0);
-        s.friendsOpened = Math.max(prevFriends, openedBarrels);
-        saveQuestState(s);
-      }
-    } catch { /* ignore */ }
-  } else {
-    const localPacks = readLocalPacks();
-    let localOpened = 0;
-    for (const id of s.myBarrelIds || []) {
-      if (localPacks[id]?.openedCount > 0) localOpened += localPacks[id].openedCount;
-    }
-    s.friendsOpened = Math.max(prevFriends, localOpened);
-    saveQuestState(s);
-  }
+  s.friendsOpened = Math.max(s.friendsOpened || 0, prof.friendsBrought || 0);
+  s.packedCount = Math.max(s.packedCount || 0, prof.packedCount || 0);
+  if (prof.kpVerified) s.kpScreenshotVerified = true;
+  saveQuestState(s);
 
   return {
     ...s,

@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#0b0c0e" />
+  <title>БОЧКА — Закрытый кабинет продюсера</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&family=Oswald:wght@600;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <link rel="stylesheet" href="../src/admin.css" />
+
+  <script type="importmap">
+    {
+      "imports": {
+        "@supabase/supabase-js": "../vendor/supabase.esm.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div class="admin-shell">
+    <!-- ==================================================================
+         ЭКРАН АВТОРИЗАЦИИ ПРОДЮСЕРА (Supabase Auth + RLS public.admins)
+         ================================================================== -->
+    <section class="auth-gate" id="admin-auth-gate">
+      <div class="auth-card">
+        <div class="auth-tag">ЗАКРЫТЫЙ КОНТУР // ПРОДЮСЕРСКИЙ ПУЛЬТ</div>
+        <h1 class="auth-title">БОЧКА · КАБИНЕТ ПРОДЮСЕРА</h1>
+        <p class="auth-sub">
+          Доступ защищён серверной авторизацией Supabase Auth и политиками RLS (<code>public.is_admin()</code>).
+        </p>
+
+        <form id="admin-login-form" class="auth-form" autocomplete="on">
+          <div class="field-group">
+            <label for="admin-email">СЛУЖЕБНЫЙ ЛОГИН (EMAIL)</label>
+            <input
+              type="email"
+              id="admin-email"
+              name="email"
+              value="producer@bochka.quest"
+              required
+              autocomplete="username"
+              class="adm-input"
+            />
+          </div>
+
+          <div class="field-group">
+            <label for="admin-password">СЕКРЕТНЫЙ ПАРОЛЬ ПРОДЮСЕРА</label>
+            <input
+              type="password"
+              id="admin-password"
+              name="password"
+              placeholder="Введите секретный пароль..."
+              required
+              autocomplete="current-password"
+              class="adm-input"
+            />
+          </div>
+
+          <div class="auth-error" id="admin-auth-error" hidden></div>
+
+          <button type="submit" class="adm-btn adm-btn-gold adm-btn-full" id="btn-admin-login">
+            ВОЙТИ В КАБИНЕТ ПРОДЮСЕРА →
+          </button>
+        </form>
+
+        <a href="../" class="auth-back-link">← Вернуться на витрину игры bochka.quest</a>
+      </div>
+    </section>
+
+    <!-- ==================================================================
+         ОСНОВНАЯ ПАНЕЛЬ УПРАВЛЕНИЯ ПРОМО-КАМПАНИЕЙ «БОЧКА» (4 ВКЛАДКИ)
+         ================================================================== -->
+    <main class="dashboard-wrap" id="admin-dashboard" hidden>
+      <header class="adm-topbar">
+        <div class="adm-brand">
+          <span class="adm-badge-gold">PRODUCERHQ</span>
+          <div>
+            <strong>БОЧКА · ПУЛЬТ ПРОМО-КАМПАНИИ</strong>
+            <span class="adm-subline" id="adm-last-sync">Синхронизация с Supabase...</span>
+          </div>
+        </div>
+
+        <div class="adm-top-actions">
+          <a href="../" target="_blank" rel="noopener noreferrer" class="adm-btn adm-btn-ghost">Открыть игру ↗</a>
+          <button type="button" class="adm-btn adm-btn-secondary" id="btn-adm-refresh">↻ Обновить</button>
+          <button type="button" class="adm-btn adm-btn-ghost" id="btn-adm-logout">Выйти</button>
+        </div>
+      </header>
+
+      <!-- Навигация по 4 вкладкам -->
+      <nav class="adm-tabs" role="tablist">
+        <button type="button" class="adm-tab is-active" data-adm-tab="analytics">
+          1. Аналитика и Воронка
+        </button>
+        <button type="button" class="adm-tab" data-adm-tab="orders">
+          2. Выписка билетов <span class="tab-pill" id="tab-pending-count">0</span>
+        </button>
+        <button type="button" class="adm-tab" data-adm-tab="premiere">
+          3. Гонка за Премьерой (Топ-50)
+        </button>
+        <button type="button" class="adm-tab" data-adm-tab="limits">
+          4. Управление лимитами
+        </button>
+      </nav>
+
+      <!-- ================================================================
+           ВКЛАДКА 1: АНАЛИТИКА И ВОРОНКА + ПОСУТОЧНЫЙ ГРАФИК
+           ================================================================ -->
+      <section class="adm-pane is-active" id="pane-analytics">
+        <div class="kpi-grid" id="kpi-grid">
+          <div class="kpi-card">
+            <span class="kpi-label">УНИКАЛЬНЫХ ИГРОКОВ</span>
+            <strong class="kpi-val" id="kpi-players">0</strong>
+            <span class="kpi-foot" id="kpi-hits-note">Ударов в Суперигре: 0</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">ЗАВАРЕНО БОЧЕК ДРУЗЬЯМ</span>
+            <strong class="kpi-val" id="kpi-barrels-created">0</strong>
+            <span class="kpi-foot">Короткие ссылки ?b= / startapp=</span>
+          </div>
+          <div class="kpi-card kpi-accent">
+            <span class="kpi-label">ОТКРЫТО БОЧЕК ДРУЗЬЯМИ</span>
+            <strong class="kpi-val" id="kpi-barrels-opened">0</strong>
+            <span class="kpi-foot" id="kpi-kfactor">K-factor виральности: 0.00</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">ПЕРЕХОДЫ НА КИНОПОИСК</span>
+            <strong class="kpi-val" id="kpi-kp-clicks">0</strong>
+            <span class="kpi-foot">Кнопка «Буду смотреть» + скриншоты</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">ДОСМОТРЫ ТРЕЙЛЕРА (40+ СЕК)</span>
+            <strong class="kpi-val" id="kpi-trailers">0</strong>
+            <span class="kpi-foot">Честный плеер без перемотки</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">НАЖАЛИ «ИДЁМ В КИНО 17.12»</span>
+            <strong class="kpi-val" id="kpi-cinema-clicks">0</strong>
+            <span class="kpi-foot">Прямой ответ другу в Telegram</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">МОРСКОЙ СЕКРЕТ ТИЛЯ (19·97)</span>
+            <strong class="kpi-val" id="kpi-ocean-opens">0</strong>
+            <span class="kpi-foot">Нашёл пасхалку и стучал на берегу</span>
+          </div>
+          <div class="kpi-card kpi-gold">
+            <span class="kpi-label">ЭКОНОМИКА БИЛЕТОВ</span>
+            <strong class="kpi-val" id="kpi-tickets-summary">0 / 0</strong>
+            <span class="kpi-foot" id="kpi-burned-note">Сожжено ради ×2 жизней: 0</span>
+          </div>
+        </div>
+
+        <div class="adm-two-col">
+          <div class="adm-panel">
+            <div class="panel-head">
+              <h2>Конверсионная воронка промо-кампании</h2>
+              <span class="mono-muted">ЖИВЫЕ ДАННЫЕ</span>
+            </div>
+            <div class="funnel-bars" id="funnel-bars"></div>
+          </div>
+
+          <div class="adm-panel">
+            <div class="panel-head">
+              <h2>Динамика по дням (последние 21 день)</h2>
+              <span class="mono-muted">ИГРОКИ · БОЧКИ · ЗАЯВКИ</span>
+            </div>
+            <div class="daily-chart-box" id="daily-chart-box"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================
+           ВКЛАДКА 2: ВЫПИСКА БИЛЕТОВ ДРУЗЬЯМ (ЗАЯВКИ + ОТПРАВКА В БОТ)
+           ================================================================ -->
+      <section class="adm-pane" id="pane-orders" hidden>
+        <div class="adm-panel">
+          <div class="panel-head panel-head-wrap">
+            <div>
+              <h2>Заявки на подарочные билеты в кино</h2>
+              <p class="panel-sub">
+                Каждая заявка прошла системную верификацию номера <code>request_contact</code> в Telegram (1 телефон = макс. 1 билет).
+              </p>
+            </div>
+
+            <div class="orders-toolbar">
+              <div class="filter-pills">
+                <button type="button" class="pill-btn is-active" data-order-filter="all">Все</button>
+                <button type="button" class="pill-btn" data-order-filter="pending">Ожидают</button>
+                <button type="button" class="pill-btn" data-order-filter="sent">Отправлены</button>
+                <button type="button" class="pill-btn" data-order-filter="rejected">Отклонены</button>
+              </div>
+              <button type="button" class="adm-btn adm-btn-gold" id="btn-export-csv">
+                ⬇ Скачать выписку CSV (Excel)
+              </button>
+            </div>
+          </div>
+
+          <div class="orders-list" id="orders-list"></div>
+        </div>
+      </section>
+
+      <!-- ================================================================
+           ВКЛАДКА 3: ГОНКА ЗА ПРЕМЬЕРОЙ (ТОП-50 И ФИНАЛИСТЫ 100/100)
+           ================================================================ -->
+      <section class="adm-pane" id="pane-premiere" hidden>
+        <div class="adm-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Лидерборд «Гонки за закрытой Премьерой» (Топ-50)</h2>
+              <p class="panel-sub">
+                Ручная верификация финалистов со съёмочной группой и отправка персонального VIP-приглашения в бот <code>@bochka_film_bot</code>.
+              </p>
+            </div>
+            <span class="mono-muted" id="premiere-quota-badge">Выдано мест: 0 / 20</span>
+          </div>
+
+          <div class="adm-table-wrap">
+            <table class="adm-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Игрок / Telegram</th>
+                  <th>Шкала Премьеры</th>
+                  <th>Друзей привёл</th>
+                  <th>Закатано бочек</th>
+                  <th>Скриншот КП</th>
+                  <th>Статус / VIP-код</th>
+                  <th>Действие продюсера</th>
+                </tr>
+              </thead>
+              <tbody id="leaders-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================
+           ВКЛАДКА 4: УПРАВЛЕНИЕ ЛИМИТАМИ (ЖИВАЯ ЭКОНОМИКА)
+           ================================================================ -->
+      <section class="adm-pane" id="pane-limits" hidden>
+        <div class="adm-two-col">
+          <div class="adm-panel">
+            <div class="panel-head">
+              <h2>Настройка экономики розыгрыша на лету</h2>
+              <span class="mono-muted">БЕЗ ПРАВКИ КОДА</span>
+            </div>
+
+            <form id="limits-form" class="limits-form">
+              <div class="field-group">
+                <label for="cfg-win-every">
+                  ЧАСТОТА ВЫПАДЕНИЯ ЗОЛОТОЙ БОЧКИ (<code>WIN_EVERY_N_HITS</code>)
+                </label>
+                <input type="number" id="cfg-win-every" min="5" max="100000" step="1" class="adm-input" />
+                <span class="field-hint">
+                  Какой по счёту глобальный удар по серверу выбрасывает билет в кино (например, 100 = каждый 100-й удар).
+                </span>
+              </div>
+
+              <div class="field-group">
+                <label for="cfg-max-daily">
+                  СУТОЧНЫЙ ПОТОЛОК БИЛЕТОВ В КИНО (<code>MAX_DAILY_TICKETS</code>)
+                </label>
+                <input type="number" id="cfg-max-daily" min="0" max="1000" step="1" class="adm-input" />
+                <span class="field-hint">
+                  Максимум подарочных билетов в сутки на весь сервер (сверх лимита игрокам выпадают только очки шкалы).
+                </span>
+              </div>
+
+              <div class="field-group">
+                <label for="cfg-max-premiere">
+                  ОБЩИЙ ЛИМИТ МЕСТ НА ЗАКРЫТУЮ ПРЕМЬЕРУ (<code>MAX_PREMIERE_WINNERS</code>)
+                </label>
+                <input type="number" id="cfg-max-premiere" min="0" max="500" step="1" class="adm-input" />
+                <span class="field-hint">
+                  Общее число пригласительных на показ со съёмочной группой 17 декабря (при исчерпании квоты шкала замирает на 99.9).
+                </span>
+              </div>
+
+              <label class="pause-toggle-row" for="cfg-is-paused">
+                <input type="checkbox" id="cfg-is-paused" />
+                <div>
+                  <strong>Поставить выдачу новых билетов на паузу (<code>is_paused</code>)</strong>
+                  <span>Игра, вирусные бочки и шкала продолжают работать, но новые призовые билеты временно не выпадают.</span>
+                </div>
+              </label>
+
+              <button type="submit" class="adm-btn adm-btn-gold adm-btn-full" id="btn-save-limits">
+                💾 СОХРАНИТЬ ЛИМИТЫ ЭКОНОМИКИ
+              </button>
+            </form>
+          </div>
+
+          <div class="adm-panel">
+            <div class="panel-head">
+              <h2>Интеграция с Telegram-ботом @bochka_film_bot</h2>
+              <span class="mono-muted">LIVE WEBHOOK</span>
+            </div>
+            <div class="bot-guide-list">
+              <div class="bot-guide-item">
+                <strong>1. Автоматические пуши в чат продюсеров</strong>
+                <p>
+                  Чтобы новые заявки с номерами телефонов мгновенно дублировались в рабочий чат продюсеров, добавьте бота
+                  <code>@bochka_film_bot</code> в группу или откройте личку и отправьте команду <code>/admin_id</code> — бот пришлёт ID чата для секрета <code>ADMIN_TG_CHAT_ID</code>.
+                </p>
+              </div>
+              <div class="bot-guide-item">
+                <strong>2. Доставка электронного билета в 1 клик</strong>
+                <p>
+                  Во вкладке «Выписка билетов» прикрепите QR-код / PDF купленного билета (или впишите код брони) и нажмите
+                  <strong>«Отправить билет в бот»</strong> — зритель мгновенно получит файл и уведомление от <code>@bochka_film_bot</code>.
+                </p>
+              </div>
+              <div class="bot-guide-item">
+                <strong>3. Автоочистка временного медиа (5 дней)</strong>
+                <p>
+                  Расписание <code>pg_cron</code> ежедневно в <code>04:00 UTC</code> очищает старые селфи и голосовые пранки в бакете
+                  <code>barrel-media</code>, сохраняя скриншоты Кинопоиска и билеты в <code>cinema-passes</code> нетронутыми.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="adm-toast" id="adm-toast" hidden></div>
+
+  <script type="module" src="../src/admin.js"></script>
+</body>
+</html>

@@ -24,3 +24,5 @@ firebase.json
 firestore.rules
 database.rules.json
 storage.rules
+supabase/.temp/
+ui_ux.md

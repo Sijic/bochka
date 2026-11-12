@@ -69,7 +69,7 @@ export class BarrelVoiceRecorder {
     }
 
     const { mimeType, ext } = pickSupportedAudioMime();
-    const opts = { audioBitsPerSecond: 40000 };
+    const opts = { audioBitsPerSecond: 16000 };
     if (mimeType) opts.mimeType = mimeType;
 
     try {

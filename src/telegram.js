@@ -1,3 +1,5 @@
+import { ENV } from './env.js';
+
 function getWebApp() {
   const tg = typeof window !== 'undefined' ? window.Telegram?.WebApp : null;
   if (!tg) return null;
@@ -9,16 +11,41 @@ export function isTelegramMiniApp() {
   return Boolean(tg && tg.initData && tg.initData.length > 0);
 }
 
+export function buildTelegramStartAppUrl(param = '') {
+  const bot = ENV.tgBotUsername || 'bochka_film_bot';
+  const app = ENV.tgAppName || 'play';
+  const base = `https://t.me/${bot}/${app}`;
+  return param ? `${base}?startapp=${encodeURIComponent(param)}` : base;
+}
+
+export function isAdminModeRequested() {
+  try {
+    const sp = new URLSearchParams(window.location.search);
+    return sp.get('mode') === 'admin' || sp.get('admin') === '1';
+  } catch {
+    return false;
+  }
+}
+
 export function initTelegram() {
   const tg = getWebApp();
+  const rawUrlStart = extractUrlBarrelParam();
+  const urlGift = extractUrlPassParam();
+
+  const parseStartTokens = (raw) => {
+    if (!raw) return { barrelParam: '', passParam: '' };
+    if (raw.startsWith('gift_')) return { barrelParam: '', passParam: raw.slice(5) };
+    if (raw.startsWith('pass_')) return { barrelParam: '', passParam: raw.slice(5) };
+    return { barrelParam: raw, passParam: '' };
+  };
+
   if (!tg) {
-    const rawStart = extractUrlBarrelParam();
-    const passParam = extractUrlPassParam();
+    const parsed = parseStartTokens(rawUrlStart);
     return {
       inTelegram: false,
       user: null,
-      startParam: rawStart.startsWith('pass_') ? '' : rawStart,
-      passParam: passParam || (rawStart.startsWith('pass_') ? rawStart.slice(5) : ''),
+      startParam: parsed.barrelParam,
+      passParam: urlGift || parsed.passParam,
     };
   }
 
@@ -34,9 +61,8 @@ export function initTelegram() {
   }
 
   const u = tg.initDataUnsafe?.user || null;
-  const rawStart = tg.initDataUnsafe?.start_param || extractUrlBarrelParam();
-  const urlPass = extractUrlPassParam();
-  const isPassStart = rawStart.startsWith('pass_');
+  const rawStart = tg.initDataUnsafe?.start_param || rawUrlStart;
+  const parsed = parseStartTokens(rawStart);
 
   return {
     inTelegram: Boolean(tg.initData && tg.initData.length > 0),
@@ -49,15 +75,15 @@ export function initTelegram() {
           lang: u.language_code || '',
         }
       : null,
-    startParam: isPassStart ? '' : rawStart,
-    passParam: urlPass || (isPassStart ? rawStart.slice(5) : ''),
+    startParam: parsed.barrelParam,
+    passParam: urlGift || parsed.passParam,
   };
 }
 
 export function extractUrlPassParam() {
   try {
     const sp = new URLSearchParams(window.location.search);
-    const p = sp.get('pass') || '';
+    const p = sp.get('gift') || sp.get('pass') || '';
     if (p) return p.trim();
   } catch {
     /* ignore */
@@ -78,6 +104,54 @@ export function extractUrlBarrelParam() {
     /* ignore */
   }
   return '';
+}
+
+/**
+ * Запрашивает верифицированный контакт игрока через системное окно Telegram `requestContact`.
+ * В Telegram Mini App 6.9+ вызывает системный попап и автоматически доставляет контакт в @bochka_film_bot вебхук.
+ * На старых клиентах или вне ТГ открывает @bochka_film_bot?start=verify_<giftId>.
+ */
+export function requestTelegramContact({ giftId = '' } = {}) {
+  return new Promise((resolve) => {
+    const tg = getWebApp();
+    const canNative =
+      tg &&
+      isTelegramMiniApp() &&
+      typeof tg.requestContact === 'function' &&
+      (typeof tg.isVersionAtLeast !== 'function' || tg.isVersionAtLeast('6.9'));
+
+    if (canNative) {
+      try {
+        tg.requestContact((shared, eventData) => {
+          if (!shared) {
+            resolve({ ok: false, reason: 'cancelled' });
+            return;
+          }
+          const rawPhone =
+            eventData?.responseUnsafe?.contact?.phone_number ||
+            eventData?.contact?.phone_number ||
+            '';
+          resolve({
+            ok: true,
+            mode: 'webapp_native',
+            phone: rawPhone ? (rawPhone.startsWith('+') ? rawPhone : `+${rawPhone}`) : '',
+          });
+        });
+        return;
+      } catch {
+        /* fallback to bot chat below */
+      }
+    }
+
+    const bot = ENV.tgBotUsername || 'bochka_film_bot';
+    const verifyUrl = `https://t.me/${bot}?start=verify_${encodeURIComponent(giftId || 'ticket')}`;
+    if (tg && typeof tg.openTelegramLink === 'function') {
+      tg.openTelegramLink(verifyUrl);
+    } else {
+      window.open(verifyUrl, '_blank', 'noopener,noreferrer');
+    }
+    resolve({ ok: false, reason: 'opened_bot_chat', verifyUrl });
+  });
 }
 
 export const Haptics = {
@@ -144,7 +218,7 @@ export function openTelegramShare(shareUrl, shareText) {
 }
 
 export async function shareNativeOrFallback({ title, text, url }) {
-  if (navigator.share) {
+  if (navigator.share && !isTelegramMiniApp()) {
     try {
       await navigator.share({ title, text, url });
       return 'shared';
