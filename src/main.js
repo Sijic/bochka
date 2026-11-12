@@ -3,6 +3,8 @@ import { initI18n, setLang, t, applyDomTranslations, onLangChange } from './i18n
 import {
   initTelegram,
   isAdminModeRequested,
+  isTestBogRequested,
+  isTestBogSessionActive,
   requestTelegramContact,
   openTelegramShare,
   shareNativeOrFallback,
@@ -42,7 +44,9 @@ import {
   markKpScreenshotVerified,
   syncFriendsOpenedTokens,
   getQuestState,
+  patchTestBogProfile,
 } from './backend.js';
+import { mountTestBogHUD } from './testbog.js';
 
 const AIR_DURATION_SEC = 30.0;
 const KP_MIN_AWAY_SEC = 15.0;
@@ -171,6 +175,11 @@ async function bootstrap() {
     return;
   }
 
+  if (isTestBogRequested() && !isTestBogSessionActive()) {
+    window.location.replace('./testbog/');
+    return;
+  }
+
   state.tg = initTelegram();
   state.incomingParam = state.tg.startParam || '';
   state.incomingPassId = state.tg.passParam || '';
@@ -235,6 +244,106 @@ async function bootstrap() {
   // Если открыта ссылка защищённого Именного пропуска (?pass=ID) — сразу показываем экран кассового контроля!
   if (state.incomingPassId) {
     await openIncomingPassScreen(state.incomingPassId);
+  }
+
+  // Если активирована сессия «ТЕСТ-БОГА» (/testbog/) — монтируем плавающий пульт песочницы (0 запросов в БД)
+  if (isTestBogSessionActive()) {
+    mountTestBogHUD({
+      getState: () => state,
+      toast: (msg) => showToast(msg),
+      syncProfile: (nextProf) => {
+        state.profile = { ...state.profile, ...nextProf };
+        if (state.round.modeType === 'premiere') {
+          state.round.attemptsLeft = state.profile.lives;
+        }
+        updatePremiereBarsUI();
+      },
+      setAir: (sec) => {
+        state.round.airLeft = sec;
+        updateAirHUD(sec);
+        showToast(`⚡ Кислород установлен: ${sec.toFixed(1)} сек`);
+      },
+      crackTargetBarrel: async () => {
+        if (state.activeScreen !== 'workshop' || !state.round.running) {
+          state.entered = true;
+          await audio.unlock(true);
+          refreshSoundButtonLabel();
+          await startDemoRound();
+        }
+        const idx = state.round.targetIndex;
+        const b = scene?.barrels?.[idx];
+        if (b) handleBarrelStrike(idx, b.group.position.clone());
+      },
+      jumpTo: async (target) => {
+        document.querySelectorAll('.modal-backdrop').forEach((m) => m.setAttribute('hidden', ''));
+        state.round.pausedForModal = false;
+
+        if (target === 'gate') {
+          stopAirTimer();
+          state.round.running = false;
+          showScreen('gate');
+          return;
+        }
+
+        state.entered = true;
+        await audio.unlock(true);
+        refreshSoundButtonLabel();
+
+        if (target === 'demo') {
+          await startDemoRound();
+        } else if (target === 'viral') {
+          const mockPack = {
+            id: 'tbog_viral',
+            mode: 'friend',
+            message: 'Тестовая бочка друга (проверка 5-ходовки КП + Трейлер)',
+            photoUrl: DEMO_PORTRAITS[0],
+            voiceUrl: '',
+            frameStyle: 'flashlight',
+            targetIndex: 2,
+            senderUid: 'sandbox_friend',
+            senderName: 'Кент (Sandbox)',
+          };
+          state.incomingPack = mockPack;
+          await startViralFriendRound(mockPack);
+        } else if (target === 'pack') {
+          stopAirTimer();
+          state.round.running = false;
+          showScreen('pack');
+        } else if (target === 'premiere') {
+          if ((state.profile.lives || 0) <= 0) {
+            state.profile = patchTestBogProfile({ lives: 5 });
+            updatePremiereBarsUI();
+          }
+          await startPremiereRaceRound();
+        } else if (target === 'ocean') {
+          await triggerOceanEasterEggScene();
+        } else if (target === 'fork') {
+          state.profile = patchTestBogProfile({ hasPendingTicket: true });
+          updatePremiereBarsUI();
+          if (state.activeScreen === 'gate') showScreen('modeA');
+          openGoldenTicketForkModal();
+        } else if (target === 'pass') {
+          stopAirTimer();
+          state.round.running = false;
+          await openIncomingPassScreen(`testbog_demo_${Date.now().toString(36)}`);
+        } else if (target === 'nearmiss') {
+          state.profile = patchTestBogProfile({ premiereScore: 98.9, lives: 0 });
+          updatePremiereBarsUI();
+          if (state.activeScreen === 'gate') showScreen('modeA');
+          openNearMissModal(98.9);
+        } else if (target === 'win100') {
+          const vipCode = 'TESTBOG-VIP-17DEC';
+          state.profile = patchTestBogProfile({
+            premiereScore: 100,
+            premiereWon: true,
+            premiereCode: vipCode,
+          });
+          updatePremiereBarsUI();
+          state.round.portraitDataUrl = createGoldenTicketPortraitDataUrl(vipCode);
+          await finishPremiereRound(true, { premiereCode: vipCode });
+        }
+      },
+    });
   }
 }
 

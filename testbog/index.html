@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#090a0c" />
+  <title>БОЧКА — Режим Тест-Бога (Sandbox)</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&family=Oswald:wght@600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="../src/admin.css" />
+</head>
+<body>
+  <div class="admin-shell">
+    <section class="auth-gate">
+      <div class="auth-card">
+        <div class="auth-tag">⚡ SANDBOX GOD MODE // 0 ЗАПРОСОВ В БАЗУ SUPABASE</div>
+        <h1 class="auth-title">БОЧКА · РЕЖИМ «ТЕСТ-БОГ»</h1>
+        <p class="auth-sub">
+          Полная тестовая песочница всей игры: любые экраны, морская пасхалка Тиля, вилка Золотой бочки, накрутка жизней и шкалы 100/100 в 1 клик.
+          <strong>База данных, Storage и Telegram-бот полностью отключены</strong> — статистика продюсеров остаётся идеально чистой.
+        </p>
+
+        <form id="testbog-login-form" class="auth-form" autocomplete="off">
+          <div class="field-group">
+            <label for="testbog-pass">ПАРОЛЬ РЕЖИМА ТЕСТ-БОГА</label>
+            <input
+              type="password"
+              id="testbog-pass"
+              inputmode="numeric"
+              placeholder="Введите пароль тест-бога..."
+              required
+              autofocus
+              class="adm-input"
+            />
+          </div>
+
+          <div class="auth-error" id="testbog-error" hidden>
+            Неверный пароль режима Тест-Бога.
+          </div>
+
+          <button type="submit" class="adm-btn adm-btn-gold adm-btn-full">
+            ⚡ ВКЛЮЧИТЬ ТЕСТ-БОГА И ВОЙТИ В ЦЕХ →
+          </button>
+        </form>
+
+        <a href="../" class="auth-back-link">← Открыть обычную боевую версию bochka.quest</a>
+      </div>
+    </section>
+  </div>
+
+  <script type="module" src="../src/testbog-gate.js"></script>
+</body>
+</html>

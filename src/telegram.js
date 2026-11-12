@@ -27,6 +27,26 @@ export function isAdminModeRequested() {
   }
 }
 
+export function isTestBogRequested() {
+  try {
+    const sp = new URLSearchParams(window.location.search);
+    return sp.get('mode') === 'testbog' || sp.get('testbog') === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function isTestBogSessionActive() {
+  try {
+    return (
+      sessionStorage.getItem('bochka_testbog_unlocked') === '1' &&
+      sessionStorage.getItem('bochka_testbog_mode') === '1'
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function initTelegram() {
   const tg = getWebApp();
   const rawUrlStart = extractUrlBarrelParam();
@@ -113,6 +133,15 @@ export function extractUrlBarrelParam() {
  */
 export function requestTelegramContact({ giftId = '' } = {}) {
   return new Promise((resolve) => {
+    if (isTestBogSessionActive()) {
+      resolve({
+        ok: true,
+        mode: 'testbog_sandbox',
+        phone: '+79990001712',
+      });
+      return;
+    }
+
     const tg = getWebApp();
     const canNative =
       tg &&

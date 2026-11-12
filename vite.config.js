@@ -85,6 +85,7 @@ export default defineConfig({
       input: {
         main: path.resolve(process.cwd(), 'index.html'),
         admin: path.resolve(process.cwd(), 'admin/index.html'),
+        testbog: path.resolve(process.cwd(), 'testbog/index.html'),
       },
       output: {
         manualChunks: {

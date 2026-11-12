@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { ENV } from './env.js';
 import { saveLocalPackMedia, loadLocalPackMedia } from './voice.js';
-import { isTelegramMiniApp } from './telegram.js';
+import { isTelegramMiniApp, isTestBogSessionActive } from './telegram.js';
 
 const PACKS_STORAGE_KEY = 'bochka_v2_packs';
 const PASSES_STORAGE_KEY = 'bochka_v3_passes';
@@ -16,8 +16,21 @@ export const supabase =
       })
     : null;
 
+export function isTestBogActive() {
+  return isTestBogSessionActive();
+}
+
+/**
+ * В режиме ТЕСТ-БОГА (песочница `/testbog/`) жёстко отключает клиент Supabase:
+ * ни один тестовый удар, скриншот, фото, голос или билет не попадает в базу и бакеты!
+ */
+function getCloudDb() {
+  if (isTestBogActive()) return null;
+  return supabase;
+}
+
 export function isSupabaseActive() {
-  return Boolean(supabase);
+  return Boolean(getCloudDb());
 }
 
 export function getViewerUid(tgUser = null) {
@@ -96,12 +109,13 @@ export async function createBarrelPack({
   let remotePhotoUrl = '';
   let remoteVoiceUrl = '';
   let storedInCloud = false;
+  const db = getCloudDb();
 
-  if (supabase) {
+  if (db) {
     try {
       if (processedImage?.blob) {
         const photoPath = `portraits/${id}.webp`;
-        const { error: upErr } = await supabase.storage
+        const { error: upErr } = await db.storage
           .from(ENV.supabaseBucket)
           .upload(photoPath, processedImage.blob, {
             contentType: processedImage.blob.type || 'image/webp',
@@ -110,7 +124,7 @@ export async function createBarrelPack({
           });
 
         if (!upErr) {
-          const { data: pubData } = supabase.storage.from(ENV.supabaseBucket).getPublicUrl(photoPath);
+          const { data: pubData } = db.storage.from(ENV.supabaseBucket).getPublicUrl(photoPath);
           remotePhotoUrl = pubData?.publicUrl || '';
         }
       }
@@ -118,7 +132,7 @@ export async function createBarrelPack({
       if (recordedVoice?.blob) {
         const ext = recordedVoice.ext || 'webm';
         const voicePath = `voices/${id}.${ext}`;
-        const { error: vErr } = await supabase.storage
+        const { error: vErr } = await db.storage
           .from(ENV.supabaseBucket)
           .upload(voicePath, recordedVoice.blob, {
             contentType: recordedVoice.mimeType || 'audio/webm',
@@ -127,12 +141,12 @@ export async function createBarrelPack({
           });
 
         if (!vErr) {
-          const { data: vPub } = supabase.storage.from(ENV.supabaseBucket).getPublicUrl(voicePath);
+          const { data: vPub } = db.storage.from(ENV.supabaseBucket).getPublicUrl(voicePath);
           remoteVoiceUrl = vPub?.publicUrl || '';
         }
       }
 
-      const { data: rpcRes, error: rpcErr } = await supabase.rpc('create_barrel_pack_rpc', {
+      const { data: rpcRes, error: rpcErr } = await db.rpc('create_barrel_pack_rpc', {
         p_short_id: id,
         p_mode: mode,
         p_message: cleanMsg,
@@ -192,9 +206,10 @@ export async function createBarrelPack({
 
   const baseOrigin = resolveShareBaseUrl();
   const sep = baseOrigin.includes('?') ? '&' : '?';
-  const webUrl = `${baseOrigin}${sep}b=${encodeURIComponent(id)}`;
+  const bogFlag = isTestBogActive() ? 'testbog=1&' : '';
+  const webUrl = `${baseOrigin}${sep}${bogFlag}b=${encodeURIComponent(id)}`;
   const tgMiniAppUrl =
-    ENV.tgBotUsername && storedInCloud
+    ENV.tgBotUsername && storedInCloud && !isTestBogActive()
       ? `https://t.me/${ENV.tgBotUsername}/${ENV.tgAppName}?startapp=${encodeURIComponent(id)}`
       : webUrl;
 
@@ -220,9 +235,10 @@ export async function loadBarrelPack(rawParam) {
   const id = (dotIdx > 0 ? decodedParam.slice(0, dotIdx) : decodedParam).trim();
   const legacyToken = dotIdx > 0 ? decodedParam.slice(dotIdx + 1) : '';
 
-  if (supabase && id) {
+  const db = getCloudDb();
+  if (db && id) {
     try {
-      const { data, error } = await supabase.rpc('get_barrel_pack_rpc', {
+      const { data, error } = await db.rpc('get_barrel_pack_rpc', {
         p_short_id: id,
       });
 
@@ -300,13 +316,14 @@ export async function loadBarrelPack(rawParam) {
  */
 export async function recordFunnelEvent(event, tgUser = null, kpScreenshotBlob = null) {
   const uid = getViewerUid(tgUser);
-  if (!supabase) return false;
+  const db = getCloudDb();
+  if (!db) return true;
 
   let kpUrl = '';
   try {
     if (kpScreenshotBlob) {
       const path = `kp/${uid}_${Date.now()}.webp`;
-      const { error: upErr } = await supabase.storage
+      const { error: upErr } = await db.storage
         .from(ENV.supabasePassesBucket)
         .upload(path, kpScreenshotBlob, {
           contentType: 'image/webp',
@@ -314,12 +331,12 @@ export async function recordFunnelEvent(event, tgUser = null, kpScreenshotBlob =
           upsert: false,
         });
       if (!upErr) {
-        const { data: pub } = supabase.storage.from(ENV.supabasePassesBucket).getPublicUrl(path);
+        const { data: pub } = db.storage.from(ENV.supabasePassesBucket).getPublicUrl(path);
         kpUrl = pub?.publicUrl || '';
       }
     }
 
-    await supabase.rpc('record_funnel_event_rpc', {
+    await db.rpc('record_funnel_event_rpc', {
       p_event: event,
       p_uid: uid,
       p_kp_screenshot_url: kpUrl || null,
@@ -342,10 +359,11 @@ export async function recordBarrelResult(pack, { survived, attemptsUsed, timeLef
 
   let senderBonusCredited = false;
   let senderTgId = pack.senderTgId || '';
+  const db = getCloudDb();
 
-  if (supabase && !alreadyOpenedByMe) {
+  if (db && !alreadyOpenedByMe) {
     try {
-      const { data: cred } = await supabase.rpc('credit_friend_opened_lives', {
+      const { data: cred } = await db.rpc('credit_friend_opened_lives', {
         p_barrel_id: pack.id,
         p_sender_uid: pack.senderUid || '',
         p_opener_uid: viewerUid,
@@ -387,6 +405,7 @@ export async function sendCinemaInviteReply(pack, viewerTgUser = null) {
 }
 
 async function sendTelegramPing(payload) {
+  if (isTestBogActive()) return true;
   if (!ENV.tgNotifyWebhook) return false;
   try {
     const res = await fetch(ENV.tgNotifyWebhook, {
@@ -441,6 +460,7 @@ function saveLocalPreviewProfile(prof) {
  * сам упаковал друга И подтвердил скриншот с оранжевой кнопкой «Буду смотреть» на Кинопоиске!
  */
 export function isPremiereRaceUnlocked(questState = getQuestState(), profile = null) {
+  if (isTestBogActive()) return true;
   const packedOk = (questState?.packedCount || 0) >= 1 || (profile?.packedCount || 0) >= 1;
   const kpOk = Boolean(questState?.kpScreenshotVerified || profile?.kpVerified);
   return Boolean(packedOk && kpOk);
@@ -448,9 +468,10 @@ export function isPremiereRaceUnlocked(questState = getQuestState(), profile = n
 
 export async function fetchPlayerProfile(tgUser = null) {
   const uid = getViewerUid(tgUser);
-  if (supabase) {
+  const db = getCloudDb();
+  if (db) {
     try {
-      const { data, error } = await supabase.rpc('get_or_create_player_profile', {
+      const { data, error } = await db.rpc('get_or_create_player_profile', {
         p_uid: uid,
         p_tg_id: tgUser?.id || null,
         p_tg_username: tgUser?.username || null,
@@ -489,10 +510,11 @@ export async function fetchPlayerProfile(tgUser = null) {
 
 export async function playPremiereStrike(tgUser = null) {
   const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
 
-  if (supabase) {
+  if (db) {
     try {
-      const { data, error } = await supabase.rpc('play_premiere_strike', {
+      const { data, error } = await db.rpc('play_premiere_strike', {
         p_uid: uid,
       });
       if (!error && data) {
@@ -515,14 +537,124 @@ export async function playPremiereStrike(tgUser = null) {
     }
   }
 
+  // Полная офлайн-песочница для режима ТЕСТ-БОГ (0 запросов к Supabase!)
+  if (isTestBogActive()) {
+    const prof = getLocalPreviewProfile();
+    if (prof.lives <= 0) {
+      return {
+        ok: false,
+        status: 'no_lives',
+        premiereScore: prof.premiereScore,
+        lives: 0,
+        nearMiss: prof.premiereScore >= 90,
+      };
+    }
+
+    prof.lives = Math.max(0, prof.lives - 1);
+    let forced = '';
+    try {
+      forced = sessionStorage.getItem('bochka_testbog_force_hit') || '';
+      if (forced) sessionStorage.removeItem('bochka_testbog_force_hit');
+    } catch { /* ignore */ }
+
+    if (forced === 'premiere_win') {
+      const delta = Math.max(0.1, Number((100 - prof.premiereScore).toFixed(1)));
+      prof.premiereScore = 100;
+      prof.premiereWon = true;
+      prof.premiereCode = 'TESTBOG-VIP-17DEC';
+      saveLocalPreviewProfile(prof);
+      return {
+        ok: true,
+        status: 'ok',
+        outcome: 'premiere_win',
+        delta,
+        premiereScore: 100,
+        lives: prof.lives,
+        nearMiss: false,
+        hasPendingTicket: prof.hasPendingTicket,
+        premiereCode: prof.premiereCode,
+      };
+    }
+
+    if (forced === 'golden_ticket' || (!forced && !prof.hasPendingTicket && Math.random() < 0.18)) {
+      prof.hasPendingTicket = true;
+      saveLocalPreviewProfile(prof);
+      return {
+        ok: true,
+        status: 'ok',
+        outcome: 'golden_ticket',
+        delta: 0,
+        premiereScore: prof.premiereScore,
+        lives: prof.lives,
+        nearMiss: false,
+        hasPendingTicket: true,
+        premiereCode: '',
+      };
+    }
+
+    if (forced === 'empty_screamer' || (!forced && Math.random() < 0.34)) {
+      saveLocalPreviewProfile(prof);
+      return {
+        ok: true,
+        status: 'ok',
+        outcome: 'empty_screamer',
+        delta: 0,
+        premiereScore: prof.premiereScore,
+        lives: prof.lives,
+        nearMiss: prof.lives <= 0 && prof.premiereScore >= 90,
+        hasPendingTicket: prof.hasPendingTicket,
+        premiereCode: '',
+      };
+    }
+
+    let delta = 0.4;
+    if (prof.premiereScore < 60) delta = 18 + Math.round(Math.random() * 8);
+    else if (prof.premiereScore < 85) delta = 7 + Math.round(Math.random() * 5);
+    else if (prof.premiereScore < 95) delta = Number((2.2 + Math.random() * 2.2).toFixed(1));
+    else delta = Number((0.2 + Math.random() * 0.5).toFixed(1));
+
+    prof.premiereScore = Number(Math.min(100, prof.premiereScore + delta).toFixed(1));
+    if (prof.premiereScore >= 100) {
+      prof.premiereScore = 100;
+      prof.premiereWon = true;
+      prof.premiereCode = 'TESTBOG-VIP-17DEC';
+      saveLocalPreviewProfile(prof);
+      return {
+        ok: true,
+        status: 'ok',
+        outcome: 'premiere_win',
+        delta,
+        premiereScore: 100,
+        lives: prof.lives,
+        nearMiss: false,
+        hasPendingTicket: prof.hasPendingTicket,
+        premiereCode: prof.premiereCode,
+      };
+    }
+
+    saveLocalPreviewProfile(prof);
+    return {
+      ok: true,
+      status: 'ok',
+      outcome: 'score_hit',
+      delta,
+      premiereScore: prof.premiereScore,
+      lives: prof.lives,
+      nearMiss: prof.lives <= 0 && prof.premiereScore >= 90,
+      hasPendingTicket: prof.hasPendingTicket,
+      premiereCode: '',
+    };
+  }
+
   return { ok: false, status: 'offline' };
 }
 
 export async function claimShareBonusLife(tgUser = null) {
   const uid = getViewerUid(tgUser);
-  if (supabase) {
+  const db = getCloudDb();
+  if (db) {
     try {
-      const { data, error } = await supabase.rpc('claim_share_life', {
+      const { data, error } = await db.rpc('claim_share_life', {
         p_uid: uid,
       });
       if (!error && data) {
@@ -537,7 +669,7 @@ export async function claimShareBonusLife(tgUser = null) {
   }
 
   const prof = getLocalPreviewProfile();
-  if (prof.rawSharesToday >= 3) {
+  if (prof.rawSharesToday >= 3 && !isTestBogActive()) {
     return { granted: 0, lives: prof.lives, rawSharesToday: prof.rawSharesToday, capped: true };
   }
   prof.rawSharesToday += 1;
@@ -551,9 +683,10 @@ export async function claimShareBonusLife(tgUser = null) {
  */
 export async function burnRegularTicketForX2Lives(tgUser = null) {
   const uid = getViewerUid(tgUser);
-  if (supabase) {
+  const db = getCloudDb();
+  if (db) {
     try {
-      const { data, error } = await supabase.rpc('burn_ticket_for_x2_lives', {
+      const { data, error } = await db.rpc('burn_ticket_for_x2_lives', {
         p_uid: uid,
       });
       if (!error && data?.ok) {
@@ -563,6 +696,13 @@ export async function burnRegularTicketForX2Lives(tgUser = null) {
     } catch {
       return { ok: false };
     }
+  }
+  if (isTestBogActive()) {
+    const prof = getLocalPreviewProfile();
+    prof.hasPendingTicket = false;
+    prof.lives = Math.max(2, (prof.lives || 1) * 2);
+    saveLocalPreviewProfile(prof);
+    return { ok: true, lives: prof.lives };
   }
   return { ok: false };
 }
@@ -583,11 +723,12 @@ export async function createGiftTicketPass({
   const cleanSender = (senderName || tgUser?.name || '').trim().slice(0, 32);
 
   let remotePhotoUrl = '';
-  if (supabase) {
+  const db = getCloudDb();
+  if (db) {
     try {
       if (processedPassPhoto?.blob) {
         const photoPath = `passes/${giftId}.webp`;
-        const { error: upErr } = await supabase.storage
+        const { error: upErr } = await db.storage
           .from(ENV.supabasePassesBucket)
           .upload(photoPath, processedPassPhoto.blob, {
             contentType: processedPassPhoto.blob.type || 'image/webp',
@@ -595,12 +736,12 @@ export async function createGiftTicketPass({
             upsert: false,
           });
         if (!upErr) {
-          const { data: pubData } = supabase.storage.from(ENV.supabasePassesBucket).getPublicUrl(photoPath);
+          const { data: pubData } = db.storage.from(ENV.supabasePassesBucket).getPublicUrl(photoPath);
           remotePhotoUrl = pubData?.publicUrl || '';
         }
       }
 
-      const { data, error } = await supabase.rpc('issue_gift_ticket_link', {
+      const { data, error } = await db.rpc('issue_gift_ticket_link', {
         p_short_id: giftId,
         p_sender_uid: uid,
         p_sender_tg_id: tgUser?.id || null,
@@ -616,12 +757,36 @@ export async function createGiftTicketPass({
     } catch {
       return { ok: false, error: 'network_error' };
     }
+  } else if (isTestBogActive()) {
+    const passes = safeReadJson(PASSES_STORAGE_KEY, {}) || {};
+    passes[giftId] = {
+      id: giftId,
+      status: 'issued',
+      orderStatus: '',
+      recipientName: cleanRecipient || 'Тестовый Друг',
+      recipientPhotoUrl: processedPassPhoto?.dataUrl || '',
+      senderName: cleanSender || 'Тест-Бог',
+      senderUid: 'sandbox_friend_sender',
+      senderTgId: '',
+      hasVerifiedPhone: false,
+      verifiedPhone: '',
+      cityCinema: '',
+      bookingCode: '',
+      ticketFileUrl: '',
+    };
+    safeWriteJson(PASSES_STORAGE_KEY, passes);
+    const prof = getLocalPreviewProfile();
+    prof.hasPendingTicket = false;
+    saveLocalPreviewProfile(prof);
   }
 
   const baseOrigin = resolveShareBaseUrl();
   const sep = baseOrigin.includes('?') ? '&' : '?';
-  const webUrl = `${baseOrigin}${sep}gift=${encodeURIComponent(giftId)}`;
-  const tgUrl = `https://t.me/${ENV.tgBotUsername || 'bochka_film_bot'}/${ENV.tgAppName || 'play'}?startapp=${encodeURIComponent('gift_' + giftId)}`;
+  const bogFlag = isTestBogActive() ? 'testbog=1&' : '';
+  const webUrl = `${baseOrigin}${sep}${bogFlag}gift=${encodeURIComponent(giftId)}`;
+  const tgUrl = isTestBogActive()
+    ? webUrl
+    : `https://t.me/${ENV.tgBotUsername || 'bochka_film_bot'}/${ENV.tgAppName || 'play'}?startapp=${encodeURIComponent('gift_' + giftId)}`;
 
   return {
     ok: true,
@@ -638,10 +803,11 @@ export async function createGiftTicketPass({
 export async function loadGiftTicketPass(giftId, viewerTgUser = null) {
   if (!giftId) return null;
   const cleanId = giftId.trim();
+  const db = getCloudDb();
 
-  if (supabase) {
+  if (db) {
     try {
-      const { data, error } = await supabase.rpc('get_gift_pass_public', {
+      const { data, error } = await db.rpc('get_gift_pass_public', {
         p_short_id: cleanId,
         p_viewer_tg_id: viewerTgUser?.id || null,
       });
@@ -666,6 +832,29 @@ export async function loadGiftTicketPass(giftId, viewerTgUser = null) {
       }
     } catch { /* ignore */ }
   }
+
+  if (isTestBogActive()) {
+    const passes = safeReadJson(PASSES_STORAGE_KEY, {}) || {};
+    if (passes[cleanId]) {
+      return { ...passes[cleanId], serverOffsetMs: 0 };
+    }
+    return {
+      id: cleanId,
+      status: 'issued',
+      orderStatus: '',
+      recipientName: 'АЛЕКСЕЙ (ТЕСТ ПОЛУЧАТЕЛЯ)',
+      recipientPhotoUrl: '',
+      senderName: 'Друг из Цеха (Sandbox)',
+      senderUid: 'sandbox_other_sender',
+      senderTgId: '',
+      hasVerifiedPhone: false,
+      verifiedPhone: '',
+      cityCinema: '',
+      bookingCode: '',
+      ticketFileUrl: '',
+      serverOffsetMs: 0,
+    };
+  }
   return null;
 }
 
@@ -681,10 +870,37 @@ export async function submitGiftTicketOrder({
   fallbackPhone = '',
 }) {
   const viewerUid = getViewerUid(tgUser);
-  if (!supabase) return { ok: false, reason: 'offline' };
+  const db = getCloudDb();
+
+  if (!db) {
+    if (isTestBogActive()) {
+      const phone = fallbackPhone || '+79990001712';
+      const passes = safeReadJson(PASSES_STORAGE_KEY, {}) || {};
+      passes[giftId] = {
+        ...(passes[giftId] || { id: giftId, recipientName: 'ТЕСТ ПОЛУЧАТЕЛЯ' }),
+        status: 'claimed',
+        orderStatus: 'pending',
+        hasVerifiedPhone: true,
+        verifiedPhone: phone,
+        cityCinema,
+      };
+      safeWriteJson(PASSES_STORAGE_KEY, passes);
+
+      const prof = getLocalPreviewProfile();
+      prof.lives = Math.max(2, (prof.lives || 1) * 2);
+      saveLocalPreviewProfile(prof);
+      return {
+        ok: true,
+        orderId: 777,
+        verifiedPhone: phone,
+        cityCinema,
+      };
+    }
+    return { ok: false, reason: 'offline' };
+  }
 
   try {
-    const { data, error } = await supabase.rpc('submit_gift_ticket_order', {
+    const { data, error } = await db.rpc('submit_gift_ticket_order', {
       p_gift_id: giftId,
       p_receiver_uid: viewerUid,
       p_receiver_tg_id: tgUser?.id || '',
@@ -725,9 +941,10 @@ export async function submitGiftTicketOrder({
  */
 export async function claimOceanTapperReward(tgUser = null, taps = 1) {
   const uid = getViewerUid(tgUser);
-  if (supabase) {
+  const db = getCloudDb();
+  if (db) {
     try {
-      const { data, error } = await supabase.rpc('claim_ocean_tapper_reward', {
+      const { data, error } = await db.rpc('claim_ocean_tapper_reward', {
         p_uid: uid,
         p_taps: Math.max(0, Math.round(taps)),
       });
@@ -856,9 +1073,39 @@ function hashCode(str) {
   return h;
 }
 
+export function patchTestBogProfile(patch = {}) {
+  const prof = { ...getLocalPreviewProfile(), ...patch };
+  saveLocalPreviewProfile(prof);
+  return prof;
+}
+
+export function resetTestBogSandbox() {
+  try {
+    const keys = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (k && k.startsWith('tbog_')) keys.push(k);
+    }
+    keys.forEach((k) => sessionStorage.removeItem(k));
+    sessionStorage.removeItem('bochka_testbog_force_hit');
+  } catch { /* ignore */ }
+}
+
+function getActiveStorage() {
+  try {
+    return isTestBogActive() ? sessionStorage : localStorage;
+  } catch {
+    return localStorage;
+  }
+}
+
+function resolveKey(k) {
+  return isTestBogActive() ? `tbog_${k}` : k;
+}
+
 function safeRead(k, fallback = '') {
   try {
-    return localStorage.getItem(k) ?? fallback;
+    return getActiveStorage().getItem(resolveKey(k)) ?? fallback;
   } catch {
     return fallback;
   }
@@ -866,13 +1113,13 @@ function safeRead(k, fallback = '') {
 
 function safeWrite(k, v) {
   try {
-    localStorage.setItem(k, v);
+    getActiveStorage().setItem(resolveKey(k), v);
   } catch { /* ignore */ }
 }
 
 function safeReadJson(k, fallback = null) {
   try {
-    const raw = localStorage.getItem(k);
+    const raw = getActiveStorage().getItem(resolveKey(k));
     return raw ? JSON.parse(raw) : fallback;
   } catch {
     return fallback;
@@ -881,6 +1128,6 @@ function safeReadJson(k, fallback = null) {
 
 function safeWriteJson(k, obj) {
   try {
-    localStorage.setItem(k, JSON.stringify(obj));
+    getActiveStorage().setItem(resolveKey(k), JSON.stringify(obj));
   } catch { /* ignore */ }
 }
