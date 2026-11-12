@@ -1341,6 +1341,410 @@ body {
   color: var(--rust);
 }
 
+/* ==========================================================================
+   V2.5: ГОЛОСОВУХА В БОЧКЕ, 5-ХОДОВОЙ РЕСКЬЮ-КАПКАН, MP4 ПЛЕЕР И ЗОЛОТАЯ БОЧКА
+   ========================================================================== */
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed !important;
+  filter: grayscale(0.35);
+}
+
+.danger-tag {
+  color: var(--danger);
+}
+
+.btn-kp-orange {
+  font-family: var(--font-display);
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 13px 16px;
+  border-radius: 2px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(90deg, #ff5500 0%, #ff7300 100%);
+  color: #ffffff;
+  border: 1px solid #ff8c38;
+  box-shadow: 0 8px 26px rgba(255, 85, 0, 0.32);
+  transition: transform 0.1s, filter 0.15s;
+}
+.btn-kp-orange:hover {
+  filter: brightness(1.08);
+}
+
+/* Блок записи голоса в Конструкторе (Экран 4) */
+.voice-pack-box {
+  margin-bottom: 16px;
+  padding: 13px 14px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--line);
+}
+
+.voice-hint-text {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.42;
+  color: var(--text-muted);
+}
+
+.voice-rec-btn {
+  position: relative;
+}
+.voice-rec-btn.is-recording {
+  border-color: var(--danger);
+  background: rgba(239, 68, 68, 0.16);
+  color: #fecaca;
+}
+
+.rec-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.8);
+  flex-shrink: 0;
+}
+.voice-rec-btn.is-recording .rec-dot {
+  animation: recBlink 0.55s infinite alternate;
+}
+@keyframes recBlink {
+  from { opacity: 0.25; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1.2); }
+}
+
+.voice-rec-bar {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+}
+
+.voice-rec-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #fca5a5;
+  margin-bottom: 6px;
+}
+
+.voice-meter-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.voice-meter-fill {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--danger) 100%);
+  transition: width 0.07s linear;
+}
+
+.voice-ready-row {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px dashed var(--line-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.voice-meta-tag {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #4ade80;
+}
+
+.voice-ready-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.chip-danger {
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #f87171;
+}
+
+/* 5-ходовая модалка Спасения (Кинопоиск >= 15 сек + Трейлер 40 сек) */
+.rescue-modal-card {
+  position: relative;
+  width: min(520px, 100%);
+  padding: 22px 20px;
+  border: 1px solid var(--accent);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.94);
+}
+
+.rescue-title {
+  margin-top: 6px;
+  margin-bottom: 10px;
+}
+
+.rescue-sync-box {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--accent);
+}
+
+.sync-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(234, 179, 8, 0.28);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin360 0.8s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin360 {
+  to { transform: rotate(360deg); }
+}
+
+.rescue-error-box {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid var(--danger);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.42;
+  color: #fca5a5;
+}
+
+.rescue-claim-btn {
+  margin-top: 12px;
+}
+
+.rescue-done-pill {
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 4px 10px;
+  background: rgba(34, 197, 94, 0.14);
+  border: 1px solid rgba(74, 222, 128, 0.5);
+  color: #4ade80;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+/* Кастомный MP4 плеер трейлера без перемотки вперёд */
+.trailer-modal-card {
+  width: min(680px, 100%);
+}
+
+.video-aspect video,
+.yt-fallback-slot {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  background: #000;
+}
+
+.trailer-custom-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 7px 9px;
+  background: #090a0c;
+  border: 1px solid var(--line-subtle);
+}
+
+.trailer-progress-track {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.trailer-progress-fill {
+  width: 0%;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.15s linear;
+}
+
+.trailer-time-readout {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.trailer-rescue-box {
+  margin-bottom: 12px;
+  padding: 11px 12px;
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid var(--accent);
+}
+
+.trailer-rescue-status {
+  margin: 0 0 8px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--accent);
+}
+
+/* Финал: кнопка повтора голоса + Золотая Бочка («Ночная смена») */
+.finale-voice-row {
+  display: flex;
+  justify-content: center;
+  margin: 4px 0 10px;
+}
+
+.btn-compact {
+  font-size: 13px;
+  padding: 8px 14px;
+}
+
+.golden-winner-box {
+  margin-bottom: 16px;
+  padding: 15px;
+  background: linear-gradient(180deg, rgba(234, 179, 8, 0.18) 0%, rgba(120, 53, 15, 0.18) 100%);
+  border: 2px solid var(--accent);
+  text-align: center;
+}
+
+.golden-winner-title {
+  margin: 6px 0 10px;
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--accent);
+}
+
+.ticket-code-input {
+  text-align: center;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+.golden-winner-contact {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #e5dec9;
+}
+
+.golden-hunt-card {
+  margin-bottom: 16px;
+  padding: 15px;
+  background: linear-gradient(180deg, rgba(234, 179, 8, 0.09) 0%, rgba(18, 16, 12, 0.92) 100%);
+  border: 1.5px solid var(--accent);
+  box-shadow: inset 0 0 28px rgba(234, 179, 8, 0.07);
+}
+
+.golden-hunt-title {
+  margin: 5px 0 6px;
+  font-family: var(--font-display);
+  font-size: 20px;
+  letter-spacing: 0.05em;
+  color: #fde047;
+  text-transform: uppercase;
+}
+
+.golden-hunt-desc {
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #d6cfc2;
+}
+
+.golden-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.golden-req-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--line-subtle);
+}
+
+.req-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-muted);
+  flex-shrink: 0;
+}
+.req-status-dot.is-done {
+  background: #4ade80;
+  border-color: #4ade80;
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.65);
+}
+
+.req-label {
+  flex: 1;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.golden-kp-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.kp-link-btn {
+  text-decoration: none;
+  border-color: #ff6600;
+  color: #ff8533;
+}
+
+.kp-screen-feedback {
+  margin: 2px 0 0;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  border: 1px solid var(--line);
+}
+.kp-screen-feedback.is-ok {
+  border-color: rgba(74, 222, 128, 0.55);
+  background: rgba(34, 197, 94, 0.12);
+  color: #4ade80;
+}
+.kp-screen-feedback.is-err {
+  border-color: var(--danger);
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+}
+
+.night-shift-cooldown-text {
+  margin: 8px 0 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--rust);
+}
+
 .toast {
   position: fixed;
   bottom: calc(22px + var(--safe-bottom));
@@ -1412,7 +1816,8 @@ body {
   .hud-hint-text {
     font-size: 9.5px;
   }
-  .secret-bonus-card {
+  .secret-bonus-card,
+  .golden-req-row {
     flex-direction: column;
     align-items: stretch;
   }

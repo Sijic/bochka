@@ -7,6 +7,8 @@ const SFX_PATHS = {
   hitLow: './assets/sfx/barrel_hit_low.mp3',
   drop1: './assets/sfx/water_drop_1.mp3',
   drop2: './assets/sfx/water_drop_2.mp3',
+  chain1: './assets/sfx/chain_clink_1.mp3',
+  chain2: './assets/sfx/chain_clink_2.mp3',
   bark: './assets/sfx/dog_bark_1.mp3',
   scream: './assets/sfx/scream_1.mp3',
   whisper: './assets/sfx/voices/screamer_0.mp3',
@@ -30,6 +32,16 @@ class WorkshopAudio {
     this.breathTimer = null;
     this.ambientStarted = false;
     this.noiseBuffer = null;
+
+    // Голосовое послание отправителя (глухая петля в бочке + чистое раскрытие в финале)
+    this.senderVoiceUrl = '';
+    this.senderVoiceBuffer = null;
+    this.muffledLoopTimer = null;
+    this.muffledActiveSrc = null;
+    this.muffledChainGain = null;
+    this.muffledLoopRunning = false;
+    this.cleanVoiceSrc = null;
+    this.cleanFallbackAudio = null;
   }
 
   async unlock(withSound = true) {
@@ -63,6 +75,10 @@ class WorkshopAudio {
     if (this.enabled && !this.ambientStarted) {
       this._startAmbientBed();
     }
+
+    if (this.senderVoiceUrl && !this.senderVoiceBuffer) {
+      await this.setSenderVoiceUrl(this.senderVoiceUrl);
+    }
   }
 
   async toggleSound() {
@@ -82,6 +98,7 @@ class WorkshopAudio {
     this.master.gain.setTargetAtTime(this.enabled ? 0.92 : 0.0, this.ctx.currentTime, 0.05);
     if (!this.enabled) {
       this.stopListening();
+      this.stopMuffledVoiceLoop();
     }
     return this.enabled;
   }
@@ -99,6 +116,247 @@ class WorkshopAudio {
   updateListenerCamera(camPos) {
     if (!this.ctx) return;
     this._setupListener(camPos.x, camPos.y, camPos.z);
+  }
+
+  /**
+   * Загружает и декодирует записанную голосовуху отправителя (<= 40 КБ Opus/WebM)
+   */
+  async setSenderVoiceUrl(url) {
+    this.stopMuffledVoiceLoop();
+    this.stopCleanVoice();
+    this.senderVoiceUrl = url || '';
+    this.senderVoiceBuffer = null;
+
+    if (!url) return false;
+    if (!this.ctx) return false;
+
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return false;
+      const arr = await res.arrayBuffer();
+      this.senderVoiceBuffer = await this.ctx.decodeAudioData(arr.slice(0));
+      return true;
+    } catch {
+      this.senderVoiceBuffer = null;
+      return false;
+    }
+  }
+
+  hasSenderVoice() {
+    return Boolean(this.senderVoiceUrl);
+  }
+
+  /**
+   * Запускает тихую жуткую петлю голоса друга сквозь заваренную стальную бочку:
+   * BiquadFilterNode (bandpass 400 Hz) + искажение стальной трубы + короткий металлический резонанс.
+   */
+  startMuffledVoiceLoop() {
+    this.stopMuffledVoiceLoop();
+    if (!this.ctx || !this.enabled || !this.senderVoiceBuffer) return;
+
+    this.muffledLoopRunning = true;
+
+    const triggerOnce = () => {
+      if (!this.muffledLoopRunning || !this.ctx || !this.enabled || !this.senderVoiceBuffer) return;
+
+      const now = this.ctx.currentTime;
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.senderVoiceBuffer;
+      src.playbackRate.value = 0.97 + Math.random() * 0.04;
+
+      // 1. Узкая голосовая полоса 400 Гц (срезаем все высокие частоты как сквозь 2-мм сталь)
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.setValueAtTime(400, now);
+      bp.Q.setValueAtTime(2.35, now);
+
+      // 2. Лёгкое нелинейное насыщение + гулкая металлическая труба (comb feedback 29 мс)
+      const shaper = this.ctx.createWaveShaper();
+      shaper.curve = this._getTubeSaturationCurve();
+
+      const pipeDelay = this.ctx.createDelay(0.1);
+      pipeDelay.delayTime.setValueAtTime(0.028, now);
+      const pipeFb = this.ctx.createGain();
+      pipeFb.gain.setValueAtTime(0.44, now);
+      pipeDelay.connect(pipeFb);
+      pipeFb.connect(pipeDelay);
+
+      // 3. Финальный глухой срез верхов заваренной крышки
+      const lp = this.ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(690, now);
+
+      const envGain = this.ctx.createGain();
+      // Если игрок сейчас прослушивает бочку — глухой голос чуть отчётливее
+      const peakGain = this.activeBarrel >= 0 ? 0.56 : 0.34;
+      const dur = this.senderVoiceBuffer.duration;
+
+      envGain.gain.setValueAtTime(0.001, now);
+      envGain.gain.linearRampToValueAtTime(peakGain, now + 0.14);
+      envGain.gain.setValueAtTime(peakGain, now + Math.max(0.16, dur - 0.18));
+      envGain.gain.exponentialRampToValueAtTime(0.001, now + dur + 0.12);
+
+      const dest = this.panners[this.targetIndex] || this.master;
+
+      src.connect(bp);
+      bp.connect(shaper);
+      shaper.connect(lp);
+      shaper.connect(pipeDelay);
+      pipeDelay.connect(lp);
+      lp.connect(envGain);
+      envGain.connect(dest);
+
+      this.muffledActiveSrc = src;
+      this.muffledChainGain = envGain;
+      try {
+        src.start(now);
+      } catch { /* ignore */ }
+
+      const pauseMs = Math.round((dur + 1.35 + Math.random() * 0.65) * 1000);
+      this.muffledLoopTimer = window.setTimeout(triggerOnce, pauseMs);
+    };
+
+    this.muffledLoopTimer = window.setTimeout(triggerOnce, 420);
+  }
+
+  stopMuffledVoiceLoop() {
+    this.muffledLoopRunning = false;
+    if (this.muffledLoopTimer) {
+      clearTimeout(this.muffledLoopTimer);
+      this.muffledLoopTimer = null;
+    }
+    if (this.muffledActiveSrc) {
+      try { this.muffledActiveSrc.stop(); } catch { /* ignore */ }
+      this.muffledActiveSrc = null;
+    }
+    this.muffledChainGain = null;
+  }
+
+  /**
+   * В финале после срыва крышки снимает фильтр бочки и включает чистый голос друга!
+   */
+  async playCleanSenderVoice(overrideUrl = '') {
+    this.stopMuffledVoiceLoop();
+    this.stopCleanVoice();
+
+    const urlToPlay = overrideUrl || this.senderVoiceUrl;
+    if (!urlToPlay) return false;
+
+    if (this.ctx && this.enabled) {
+      if (this.ctx.state === 'suspended') {
+        try { await this.ctx.resume(); } catch { /* ignore */ }
+      }
+      let buf = !overrideUrl ? this.senderVoiceBuffer : null;
+      if (!buf) {
+        try {
+          const res = await fetch(urlToPlay);
+          const arr = await res.arrayBuffer();
+          buf = await this.ctx.decodeAudioData(arr.slice(0));
+        } catch {
+          buf = null;
+        }
+      }
+      if (buf) {
+        const src = this.ctx.createBufferSource();
+        src.buffer = buf;
+        const g = this.ctx.createGain();
+        g.gain.value = 1.15;
+        src.connect(g).connect(this.master);
+        this.cleanVoiceSrc = src;
+        src.start(0);
+        return true;
+      }
+    }
+
+    // Fallback через HTMLAudioElement (например в конструкторе до входа в цех)
+    try {
+      const el = new Audio(urlToPlay);
+      el.volume = 1.0;
+      this.cleanFallbackAudio = el;
+      await el.play();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Однократное предпрослушивание записанной голосовухи с эффектом заваренной бочки (для Конструктора)
+   */
+  async playOneShotMuffledPreview(url) {
+    if (!url) return false;
+    await this.unlock(true);
+    if (!this.ctx) return false;
+    this.stopCleanVoice();
+
+    try {
+      const res = await fetch(url);
+      const arr = await res.arrayBuffer();
+      const buf = await this.ctx.decodeAudioData(arr.slice(0));
+      const now = this.ctx.currentTime;
+
+      const src = this.ctx.createBufferSource();
+      src.buffer = buf;
+
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.setValueAtTime(400, now);
+      bp.Q.setValueAtTime(2.35, now);
+
+      const shaper = this.ctx.createWaveShaper();
+      shaper.curve = this._getTubeSaturationCurve();
+
+      const pipeDelay = this.ctx.createDelay(0.1);
+      pipeDelay.delayTime.setValueAtTime(0.028, now);
+      const pipeFb = this.ctx.createGain();
+      pipeFb.gain.setValueAtTime(0.44, now);
+      pipeDelay.connect(pipeFb);
+      pipeFb.connect(pipeDelay);
+
+      const lp = this.ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(690, now);
+
+      const g = this.ctx.createGain();
+      g.gain.value = 0.92;
+
+      src.connect(bp);
+      bp.connect(shaper);
+      shaper.connect(lp);
+      shaper.connect(pipeDelay);
+      pipeDelay.connect(lp);
+      lp.connect(g);
+      g.connect(this.master);
+
+      this.cleanVoiceSrc = src;
+      src.start(now);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  stopCleanVoice() {
+    if (this.cleanVoiceSrc) {
+      try { this.cleanVoiceSrc.stop(); } catch { /* ignore */ }
+      this.cleanVoiceSrc = null;
+    }
+    if (this.cleanFallbackAudio) {
+      try { this.cleanFallbackAudio.pause(); } catch { /* ignore */ }
+      this.cleanFallbackAudio = null;
+    }
+  }
+
+  _getTubeSaturationCurve() {
+    if (this._satCurve) return this._satCurve;
+    const n = 256;
+    const curve = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = (i * 2) / n - 1;
+      curve[i] = Math.tanh(x * 2.1);
+    }
+    this._satCurve = curve;
+    return curve;
   }
 
   _setupListener(x, y, z) {
@@ -155,6 +413,10 @@ class WorkshopAudio {
     this.activeBarrel = index;
     if (index < 0 || index >= 6) return;
 
+    if (this.muffledChainGain && this.ctx) {
+      this.muffledChainGain.gain.setTargetAtTime(0.58, this.ctx.currentTime, 0.08);
+    }
+
     const isTarget = index === this.targetIndex;
     if (isTarget) {
       this._triggerTargetCycle(index);
@@ -173,6 +435,9 @@ class WorkshopAudio {
 
   stopListening() {
     this.activeBarrel = -1;
+    if (this.muffledChainGain && this.ctx) {
+      this.muffledChainGain.gain.setTargetAtTime(0.32, this.ctx.currentTime, 0.12);
+    }
     if (this.listenTimer) {
       clearInterval(this.listenTimer);
       this.listenTimer = null;
@@ -229,7 +494,6 @@ class WorkshopAudio {
       src.start(now);
     }
 
-    // Резонанс стальной стенки 200-литровой бочки от удара ладонью изнутри
     const osc = this.ctx.createOscillator();
     const g = this.ctx.createGain();
     const bp = this.ctx.createBiquadFilter();
@@ -324,6 +588,82 @@ class WorkshopAudio {
     osc.stop(now + 0.1);
   }
 
+  /**
+   * Пространственный металлический звон капли с потолка о мокрый бетон / крышку (сбивает со следа)
+   */
+  playSpatialCeilingDrip(x = 0, z = 0) {
+    if (!this.ctx || !this.enabled) return;
+    const now = this.ctx.currentTime;
+
+    const pan = this.ctx.createPanner();
+    pan.panningModel = 'equalpower';
+    pan.distanceModel = 'inverse';
+    pan.refDistance = 2.5;
+    pan.maxDistance = 14;
+    if (pan.positionX) {
+      pan.positionX.value = x;
+      pan.positionY.value = 0.12;
+      pan.positionZ.value = z;
+    } else {
+      pan.setPosition(x, 0.12, z);
+    }
+    pan.connect(this.master);
+
+    const buf = this.buffers.get(Math.random() > 0.5 ? 'drop1' : 'drop2');
+    if (buf) {
+      const src = this.ctx.createBufferSource();
+      src.buffer = buf;
+      src.playbackRate.value = 0.82 + Math.random() * 0.38;
+      const g = this.ctx.createGain();
+      g.gain.value = 0.22 + Math.random() * 0.14;
+      src.connect(g).connect(pan);
+      src.onended = () => {
+        try { pan.disconnect(); } catch { /* ignore */ }
+      };
+      src.start(now);
+      return;
+    }
+
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(920 + Math.random() * 280, now);
+    osc.frequency.exponentialRampToValueAtTime(1550, now + 0.05);
+    g.gain.setValueAtTime(0.09, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.085);
+    osc.connect(g).connect(pan);
+    osc.onended = () => {
+      try { pan.disconnect(); } catch { /* ignore */ }
+    };
+    osc.start(now);
+    osc.stop(now + 0.09);
+  }
+
+  /**
+   * Лязг раскачивающихся ржавых цепей на кафельных колоннах после удара
+   */
+  playChainRattle(intensity = 1.0) {
+    if (!this.ctx || !this.enabled) return;
+    const now = this.ctx.currentTime;
+
+    const playSingle = (key, delay, rate, vol) => {
+      const buf = this.buffers.get(key);
+      if (!buf) return;
+      const src = this.ctx.createBufferSource();
+      src.buffer = buf;
+      src.playbackRate.value = rate;
+      const g = this.ctx.createGain();
+      g.gain.value = Math.min(0.85, vol * intensity);
+      src.connect(g).connect(this.master);
+      src.start(now + delay);
+    };
+
+    if (this.buffers.has('chain1') || this.buffers.has('chain2')) {
+      playSingle('chain1', 0.06, 0.94 + Math.random() * 0.14, 0.42);
+      playSingle('chain2', 0.24, 0.90 + Math.random() * 0.18, 0.28);
+    }
+  }
+
   playStrike(index) {
     Haptics.heavy();
     if (!this.ctx || !this.enabled) return;
@@ -342,7 +682,6 @@ class WorkshopAudio {
       src.start(now);
     }
 
-    // Хлёсткий металлический лязг с вмятиной (FM + sub impact)
     const sub = this.ctx.createOscillator();
     const subG = this.ctx.createGain();
     sub.type = 'sine';
@@ -373,6 +712,8 @@ class WorkshopAudio {
     clang.start(now);
     mod.stop(now + 0.37);
     clang.stop(now + 0.37);
+
+    this.playChainRattle(0.95);
   }
 
   playMiniScreamer(variant = 0) {
@@ -394,7 +735,6 @@ class WorkshopAudio {
       src.stop(now + 0.46);
     }
 
-    // Резкий 0.4-секундный хоррор-стрингер
     const osc = this.ctx.createOscillator();
     const g = this.ctx.createGain();
     osc.type = 'sawtooth';
@@ -413,7 +753,6 @@ class WorkshopAudio {
     if (!this.ctx || !this.enabled) return;
     const now = this.ctx.currentTime;
 
-    // Срыв стальной крышки + глубокий кинематографический браам
     const boom = this.ctx.createOscillator();
     const boomG = this.ctx.createGain();
     boom.type = 'sawtooth';
@@ -431,6 +770,8 @@ class WorkshopAudio {
     boom.connect(lp).connect(boomG).connect(this.master);
     boom.start(now);
     boom.stop(now + 1.4);
+
+    this.playChainRattle(1.2);
   }
 
   playWeldSeal() {
@@ -475,7 +816,6 @@ class WorkshopAudio {
     this.ambientStarted = true;
     const now = this.ctx.currentTime;
 
-    // Низкий индустриальный гул цеха Корпуса Б
     const drone = this.ctx.createOscillator();
     const drone2 = this.ctx.createOscillator();
     const lp = this.ctx.createBiquadFilter();

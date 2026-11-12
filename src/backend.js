@@ -1,9 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 import { ENV } from './env.js';
+import { saveLocalPackMedia, loadLocalPackMedia } from './voice.js';
 
 const PACKS_STORAGE_KEY = 'bochka_v2_packs';
 const QUEST_STORAGE_KEY = 'bochka_v2_quest';
 const UID_STORAGE_KEY = 'bochka_v2_uid';
+const NIGHT_SHIFT_COOLDOWN_MS = 10 * 60 * 1000; // 10 минут между бесплатными сменами (либо мгновенно за друга)
 
 export const supabase =
   ENV.supabaseUrl && ENV.supabaseAnonKey
@@ -37,19 +39,10 @@ export function randomShortId(len = 7) {
   return out;
 }
 
-function encodeBase64Url(obj) {
-  try {
-    const json = JSON.stringify(obj);
-    const bytes = new TextEncoder().encode(json);
-    let bin = '';
-    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  } catch {
-    return '';
-  }
-}
-
-function decodeBase64Url(b64) {
+/**
+ * Оставлено ТОЛЬКО для обратной совместимости со старыми ссылками прототипа (.eyJ...)
+ */
+function decodeLegacyBase64Url(b64) {
   try {
     const padded = b64.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((b64.length + 3) % 4);
     const bin = atob(padded);
@@ -63,8 +56,11 @@ function decodeBase64Url(b64) {
 }
 
 /**
- * Создаёт упакованную бочку: загружает сжатый 600x600 WebP (< 80 КБ) в Supabase Storage
- * и пишет метаданные в таблицу `barrels`, либо прозрачно работает через localStorage + base64url.
+ * Создаёт упакованную бочку:
+ * - грузит портрет 512x512 WebP (<= 60 КБ) и голосовое Opus/WebM (<= 40 КБ) в Supabase Storage,
+ * - сохраняет запись в public.barrels с коротким 7-буквенным ID,
+ * - дублирует медиа в IndexedDB для мгновенного локального теста,
+ * - ВСЕГДА возвращает чистую короткую ссылку вида https://bochka.quest/?b=jakaqgx (без base64-хвостов!).
  */
 export async function createBarrelPack({
   mode = 'friend',
@@ -73,6 +69,7 @@ export async function createBarrelPack({
   senderName = '',
   tgUser = null,
   processedImage,
+  recordedVoice = null,
 }) {
   const id = randomShortId(7);
   const targetIndex = Math.floor(Math.random() * 6);
@@ -82,29 +79,50 @@ export async function createBarrelPack({
   const cleanSender = (senderName || tgUser?.name || '').trim().slice(0, 28);
 
   let remotePhotoUrl = '';
+  let remoteVoiceUrl = '';
   let storedInCloud = false;
 
-  if (supabase && processedImage?.blob) {
+  if (supabase) {
     try {
-      const filePath = `${id}.webp`;
-      const { error: upErr } = await supabase.storage
-        .from(ENV.supabaseBucket)
-        .upload(filePath, processedImage.blob, {
-          contentType: processedImage.blob.type || 'image/webp',
-          cacheControl: '604800',
-          upsert: true,
-        });
+      if (processedImage?.blob) {
+        const photoPath = `portraits/${id}.webp`;
+        const { error: upErr } = await supabase.storage
+          .from(ENV.supabaseBucket)
+          .upload(photoPath, processedImage.blob, {
+            contentType: processedImage.blob.type || 'image/webp',
+            cacheControl: '604800',
+            upsert: true,
+          });
 
-      if (!upErr) {
-        const { data: pubData } = supabase.storage.from(ENV.supabaseBucket).getPublicUrl(filePath);
-        remotePhotoUrl = pubData?.publicUrl || '';
+        if (!upErr) {
+          const { data: pubData } = supabase.storage.from(ENV.supabaseBucket).getPublicUrl(photoPath);
+          remotePhotoUrl = pubData?.publicUrl || '';
+        }
+      }
+
+      if (recordedVoice?.blob) {
+        const ext = recordedVoice.ext || 'webm';
+        const voicePath = `voices/${id}.${ext}`;
+        const { error: vErr } = await supabase.storage
+          .from(ENV.supabaseBucket)
+          .upload(voicePath, recordedVoice.blob, {
+            contentType: recordedVoice.mimeType || 'audio/webm',
+            cacheControl: '604800',
+            upsert: true,
+          });
+
+        if (!vErr) {
+          const { data: vPub } = supabase.storage.from(ENV.supabaseBucket).getPublicUrl(voicePath);
+          remoteVoiceUrl = vPub?.publicUrl || '';
+        }
       }
 
       const { error: insErr } = await supabase.from('barrels').insert({
         id,
         mode,
         message: cleanMsg,
-        photo_url: remotePhotoUrl || processedImage.microDataUrl || '',
+        photo_url: remotePhotoUrl,
+        voice_url: remoteVoiceUrl,
         frame_style: frameStyle,
         target_index: targetIndex,
         sender_uid: senderUid,
@@ -120,13 +138,21 @@ export async function createBarrelPack({
     }
   }
 
-  // Всегда сохраняем локальную копию в localStorage (для мгновенного локального теста и учёта своих бочек)
+  // Бинарные блобы фото и голоса кладём в IndexedDB (для локальной проверки без раздутия localStorage)
+  await saveLocalPackMedia(id, {
+    photoBlob: processedImage?.blob || null,
+    voiceBlob: recordedVoice?.blob || null,
+  });
+
+  // Компактные метаданные в localStorage
   const localPacks = readLocalPacks();
   localPacks[id] = {
     id,
     mode,
     message: cleanMsg,
-    photoUrl: remotePhotoUrl || processedImage?.dataUrl || '',
+    photoUrl: remotePhotoUrl || '',
+    voiceUrl: remoteVoiceUrl || '',
+    hasLocalMedia: true,
     frameStyle,
     targetIndex,
     senderUid,
@@ -135,42 +161,27 @@ export async function createBarrelPack({
     openedCount: 0,
     createdAt: Date.now(),
   };
-  // Храним последние 12 бочек, чтобы не переполнять квоту localStorage
+
   const keys = Object.keys(localPacks);
-  if (keys.length > 12) {
+  if (keys.length > 20) {
     keys
       .sort((a, b) => (localPacks[a].createdAt || 0) - (localPacks[b].createdAt || 0))
-      .slice(0, keys.length - 12)
+      .slice(0, keys.length - 20)
       .forEach((oldKey) => delete localPacks[oldKey]);
   }
   safeWriteJson(PACKS_STORAGE_KEY, localPacks);
 
-  // Отмечаем в прогрессе квеста, что игрок закатал друга (разблокирует эксклюзивный видеокружок!)
+  // Фиксируем упаковку друга (шаг 1 для разблокировки Золотой бочки + видеокружка со съёмок + доп. смена)
   const q = getQuestState();
   q.packedCount = (q.packedCount || 0) + 1;
+  q.bonusShifts = (q.bonusShifts || 0) + 1;
   q.myBarrelIds = Array.from(new Set([...(q.myBarrelIds || []), id])).slice(-25);
   saveQuestState(q);
 
-  // Формируем короткую или самодостаточную fallback-ссылку
+  // СТРОГО чистая короткая ссылка вида https://bochka.quest/?b=jakaqgx (никакого base64 в URL!)
   const baseOrigin = resolveShareBaseUrl();
-  let shareParam = id;
-  if (!storedInCloud) {
-    const compactPayload = encodeBase64Url({
-      m: mode === 'self' ? 's' : 'f',
-      msg: cleanMsg,
-      t: targetIndex,
-      f: frameStyle,
-      sn: cleanSender,
-      stg: senderTgId,
-      su: senderUid,
-      img: processedImage?.microDataUrl || '',
-    });
-    if (compactPayload) {
-      shareParam = `${id}.${compactPayload}`;
-    }
-  }
-
-  const webUrl = `${baseOrigin}${baseOrigin.includes('?') ? '&' : '?'}b=${encodeURIComponent(shareParam)}`;
+  const sep = baseOrigin.includes('?') ? '&' : '?';
+  const webUrl = `${baseOrigin}${sep}b=${encodeURIComponent(id)}`;
   const tgMiniAppUrl =
     ENV.tgBotUsername && storedInCloud
       ? `https://t.me/${ENV.tgBotUsername}/${ENV.tgAppName}?startapp=${encodeURIComponent(id)}`
@@ -189,7 +200,10 @@ export async function createBarrelPack({
 function resolveShareBaseUrl() {
   if (typeof window !== 'undefined') {
     const loc = window.location;
-    if (loc.hostname === 'localhost' || loc.hostname === '127.0.0.1' || loc.protocol.startsWith('http')) {
+    if (loc.hostname === 'localhost' || loc.hostname === '127.0.0.1') {
+      return `${loc.origin}${loc.pathname}`;
+    }
+    if (loc.protocol.startsWith('http') && loc.hostname) {
       return `${loc.origin}${loc.pathname}`;
     }
   }
@@ -197,7 +211,8 @@ function resolveShareBaseUrl() {
 }
 
 /**
- * Загружает данные загаданной бочки по параметру ?b=ID или startapp=ID
+ * Загружает данные загаданной бочки по параметру ?b=jakaqgx или startapp=jakaqgx
+ * (поддерживает и старые ссылки с точкой для обратной совместимости)
  */
 export async function loadBarrelPack(rawParam) {
   if (!rawParam) return null;
@@ -207,10 +222,10 @@ export async function loadBarrelPack(rawParam) {
   } catch { /* keep as is */ }
 
   const dotIdx = decodedParam.indexOf('.');
-  const id = dotIdx > 0 ? decodedParam.slice(0, dotIdx) : decodedParam;
-  const inlineToken = dotIdx > 0 ? decodedParam.slice(dotIdx + 1) : '';
+  const id = (dotIdx > 0 ? decodedParam.slice(0, dotIdx) : decodedParam).trim();
+  const legacyToken = dotIdx > 0 ? decodedParam.slice(dotIdx + 1) : '';
 
-  // 1. Пробуем получить из Supabase таблицы `barrels`
+  // 1. Запрос в Supabase `public.barrels` по short_id
   if (supabase && id) {
     try {
       const { data, error } = await supabase
@@ -220,11 +235,19 @@ export async function loadBarrelPack(rawParam) {
         .maybeSingle();
 
       if (!error && data) {
+        let photoUrl = data.photo_url || '';
+        let voiceUrl = data.voice_url || '';
+        if (!photoUrl || !voiceUrl) {
+          const localMedia = await loadLocalPackMedia(id);
+          if (!photoUrl && localMedia?.photoObjectUrl) photoUrl = localMedia.photoObjectUrl;
+          if (!voiceUrl && localMedia?.voiceObjectUrl) voiceUrl = localMedia.voiceObjectUrl;
+        }
         return {
           id: data.id,
           mode: data.mode || 'friend',
           message: data.message || '',
-          photoUrl: data.photo_url || '',
+          photoUrl,
+          voiceUrl,
           frameStyle: data.frame_style || 'flashlight',
           targetIndex: Number.isInteger(data.target_index) ? data.target_index : 0,
           senderUid: data.sender_uid || '',
@@ -236,21 +259,26 @@ export async function loadBarrelPack(rawParam) {
     } catch { /* fallback below */ }
   }
 
-  // 2. Проверяем локальное хранилище (даёт полное качество 600x600 WebP при локальном тесте)
+  // 2. Локальное хранилище + IndexedDB (полноразмерный 512x512 WebP + записанный голос при локальном тесте)
   const localPacks = readLocalPacks();
   if (localPacks[id]) {
-    return { ...localPacks[id] };
+    const entry = { ...localPacks[id] };
+    const media = await loadLocalPackMedia(id);
+    if (!entry.photoUrl && media?.photoObjectUrl) entry.photoUrl = media.photoObjectUrl;
+    if (!entry.voiceUrl && media?.voiceObjectUrl) entry.voiceUrl = media.voiceObjectUrl;
+    return entry;
   }
 
-  // 3. Декодируем base64url-параметр из ссылки (работает между разными устройствами даже без ключей БД!)
-  if (inlineToken) {
-    const payload = decodeBase64Url(inlineToken);
+  // 3. Обратная совместимость со старыми длинными ссылками v2.0 (.eyJ...)
+  if (legacyToken) {
+    const payload = decodeLegacyBase64Url(legacyToken);
     if (payload) {
       return {
         id,
-        mode: payload.m === 's' ? 'self' : 'friend',
+        mode: payload.m === 's' ? 's' : 'friend',
         message: payload.msg || '',
         photoUrl: payload.img || '',
+        voiceUrl: '',
         frameStyle: payload.f || 'flashlight',
         targetIndex: typeof payload.t === 'number' && payload.t >= 0 && payload.t < 6 ? payload.t : 2,
         senderUid: payload.su || '',
@@ -261,13 +289,14 @@ export async function loadBarrelPack(rawParam) {
     }
   }
 
-  // 4. Если передан произвольный короткий демо-ID (например ?b=test), создаём тестовую капсулу
+  // 4. Гостевая демо-капсула по произвольному короткому коду (?b=jakaqgx без записи в БД)
   const fallbackTarget = Math.abs(hashCode(id)) % 6;
   return {
     id,
     mode: 'friend',
     message: 'Вытащишь меня — идём на «Бочку» 17 декабря',
     photoUrl: '',
+    voiceUrl: '',
     frameStyle: 'flashlight',
     targetIndex: fallbackTarget,
     senderUid: 'demo_sender',
@@ -307,7 +336,6 @@ export async function recordBarrelResult(pack, { survived, attemptsUsed, timeLef
     } catch { /* ignore */ }
   }
 
-  // Обновляем локальный кеш
   const localPacks = readLocalPacks();
   if (localPacks[pack.id]) {
     localPacks[pack.id].openedCount = nextOpenedCount;
@@ -319,8 +347,8 @@ export async function recordBarrelResult(pack, { survived, attemptsUsed, timeLef
 
   const readerName = viewerTgUser?.name || 'Твой друг';
   const notifyText = survived
-    ? `🛢 БОЧКА: ${readerName} открыл бочку с ${attemptsUsed}-й попытки! (Воздуха оставалось: ${Math.ceil(timeLeft)} сек.)`
-    : `💀 БОЧКА: ${readerName} вскрыл 3 пустые бочки и остался в цеху Корпуса Б!`;
+    ? `🛢 БОЧКА: ${readerName} пробил все преграды и вскрыл твою бочку с ${attemptsUsed}-й попытки!`
+    : `💀 БОЧКА: ${readerName} остался в тёмном цеху Корпуса Б!`;
 
   const notified = await sendTelegramPing({
     chatId: pack.senderTgId,
@@ -357,7 +385,6 @@ export async function sendCinemaInviteReply(pack, viewerTgUser = null) {
 }
 
 async function sendTelegramPing(payload) {
-  // 1. Предпочтительный продакшн-путь: серверный webhook / Supabase Edge Function
   if (ENV.tgNotifyWebhook) {
     try {
       const res = await fetch(ENV.tgNotifyWebhook, {
@@ -369,7 +396,6 @@ async function sendTelegramPing(payload) {
     } catch { /* fallback below */ }
   }
 
-  // 2. Прямой вызов Telegram Bot API (если передан sender chat_id и токен бота в .env)
   if (ENV.tgBotToken && payload.chatId) {
     try {
       const res = await fetch(`https://api.telegram.org/bot${ENV.tgBotToken}/sendMessage`, {
@@ -389,15 +415,64 @@ async function sendTelegramPing(payload) {
   return false;
 }
 
+/* ============================================================================
+   ЗАКРЫТАЯ ОХОТА ЗА НАСТОЯЩИМ БИЛЕТОМ В КИНО («НОЧНАЯ СМЕНА»)
+   Вся проверка выигрыша выполняется ИСКЛЮЧИТЕЛЬНО на сервере через RPC `try_win_ticket`.
+   В клиентском коде НЕТ ни формул выигрыша, ни промокодов!
+   ============================================================================ */
+export async function tryWinCinemaTicket(tgUser = null) {
+  if (!supabase) {
+    return {
+      won: false,
+      status: 'backend_not_configured',
+    };
+  }
+
+  const uid = getViewerUid(tgUser);
+  try {
+    const { data, error } = await supabase.rpc('try_win_ticket', {
+      user_id: uid,
+    });
+
+    if (error || !data) {
+      return { won: false, status: 'rpc_error' };
+    }
+
+    if (data.won === true && data.ticket_code) {
+      const q = getQuestState();
+      q.wonTicketCode = data.ticket_code;
+      q.wonTicketContact = data.contact || '';
+      saveQuestState(q);
+      return {
+        won: true,
+        ticketCode: data.ticket_code,
+        contact: data.contact || '',
+      };
+    }
+
+    return {
+      won: false,
+      status: data.status || 'empty',
+    };
+  } catch {
+    return { won: false, status: 'network_error' };
+  }
+}
+
 /**
- * Управление жетонами цеха («Крышки») с защитой от накруток
+ * Управление прогрессом квеста, верификацией скриншота Кинопоиска и доступом к «Ночной смене»
  */
 export function getQuestState() {
   const def = {
     trailerDone: false,
     kinopoiskDone: false,
+    kpScreenshotVerified: false,
     friendsOpened: 0,
     packedCount: 0,
+    bonusShifts: 0,
+    lastNightShiftAt: 0,
+    wonTicketCode: '',
+    wonTicketContact: '',
     myBarrelIds: [],
   };
   const saved = safeReadJson(QUEST_STORAGE_KEY, null);
@@ -406,6 +481,49 @@ export function getQuestState() {
 
 function saveQuestState(state) {
   safeWriteJson(QUEST_STORAGE_KEY, state);
+}
+
+export function isGoldenHuntUnlocked(state = getQuestState()) {
+  return Boolean((state.packedCount || 0) >= 1 && state.kpScreenshotVerified);
+}
+
+export function markKpScreenshotVerified() {
+  const s = getQuestState();
+  s.kpScreenshotVerified = true;
+  s.kinopoiskDone = true;
+  saveQuestState(s);
+  return s;
+}
+
+export function getNightShiftAvailability() {
+  const s = getQuestState();
+  if (!isGoldenHuntUnlocked(s)) {
+    return { unlocked: false, canPlayNow: false, waitSec: 0, bonusShifts: 0 };
+  }
+  if ((s.bonusShifts || 0) > 0) {
+    return { unlocked: true, canPlayNow: true, waitSec: 0, bonusShifts: s.bonusShifts };
+  }
+  const elapsed = Date.now() - (s.lastNightShiftAt || 0);
+  if (elapsed >= NIGHT_SHIFT_COOLDOWN_MS) {
+    return { unlocked: true, canPlayNow: true, waitSec: 0, bonusShifts: 0 };
+  }
+  return {
+    unlocked: true,
+    canPlayNow: false,
+    waitSec: Math.ceil((NIGHT_SHIFT_COOLDOWN_MS - elapsed) / 1000),
+    bonusShifts: 0,
+  };
+}
+
+export function consumeNightShiftEntry() {
+  const s = getQuestState();
+  if ((s.bonusShifts || 0) > 0) {
+    s.bonusShifts -= 1;
+  } else {
+    s.lastNightShiftAt = Date.now();
+  }
+  saveQuestState(s);
+  return s;
 }
 
 export function markTrailerCompleted() {
@@ -429,6 +547,7 @@ export function markKinopoiskVisited() {
 export async function syncFriendsOpenedTokens(tgUser = null) {
   const s = getQuestState();
   const uid = getViewerUid(tgUser);
+  const prevFriends = s.friendsOpened || 0;
 
   if (supabase) {
     try {
@@ -439,7 +558,10 @@ export async function syncFriendsOpenedTokens(tgUser = null) {
 
       if (!error && Array.isArray(data)) {
         const openedBarrels = data.reduce((acc, row) => acc + Math.min(5, row.opened_count || 0), 0);
-        s.friendsOpened = Math.max(s.friendsOpened || 0, openedBarrels);
+        if (openedBarrels > prevFriends) {
+          s.bonusShifts = (s.bonusShifts || 0) + (openedBarrels - prevFriends);
+        }
+        s.friendsOpened = Math.max(prevFriends, openedBarrels);
         saveQuestState(s);
       }
     } catch { /* ignore */ }
@@ -449,7 +571,10 @@ export async function syncFriendsOpenedTokens(tgUser = null) {
     for (const id of s.myBarrelIds || []) {
       if (localPacks[id]?.openedCount > 0) localOpened += localPacks[id].openedCount;
     }
-    s.friendsOpened = Math.max(s.friendsOpened || 0, localOpened);
+    if (localOpened > prevFriends) {
+      s.bonusShifts = (s.bonusShifts || 0) + (localOpened - prevFriends);
+    }
+    s.friendsOpened = Math.max(prevFriends, localOpened);
     saveQuestState(s);
   }
 
@@ -463,6 +588,7 @@ export function computeTotalTokens(state = getQuestState()) {
   let total = 0;
   if (state.trailerDone) total += 1;
   if (state.kinopoiskDone) total += 1;
+  if (state.kpScreenshotVerified) total += 1;
   total += (state.friendsOpened || 0) * 2;
   return total;
 }

@@ -4,9 +4,11 @@ import path from 'node:path';
 
 const RUNTIME_ASSETS = [
   'CNAME',
+  '.nojekyll',
   'photo_2026-11-08_00-00-14.jpg',
   'photo_2026-11-08_00-00-26.jpg',
   'hf_20261017_093522_42c309d3-daf2-486e-9539-a8dcb422167c.mp4',
+  'video/trailer.mp4',
   'assets/images.jpg',
   'assets/images_2.jpg',
   'assets/images_3.jpg',
@@ -18,6 +20,8 @@ const RUNTIME_ASSETS = [
   'assets/sfx/barrel_hit_low.mp3',
   'assets/sfx/barrel_hit_mid.mp3',
   'assets/sfx/barrel_knock_inside.mp3',
+  'assets/sfx/chain_clink_1.mp3',
+  'assets/sfx/chain_clink_2.mp3',
   'assets/sfx/dog_bark_1.mp3',
   'assets/sfx/factory_hum.mp3',
   'assets/sfx/scream_1.mp3',
@@ -34,8 +38,6 @@ function stripStaticImportMapAndCopyAssets() {
       outDir = config.build.outDir;
     },
     transformIndexHtml(html) {
-      // При запуске через Vite (dev / build) зависимости резолвятся из node_modules,
-      // поэтому статический importmap для прямого GitHub Pages аккуратно убирается.
       return html.replace(/<script type="importmap">[\s\S]*?<\/script>\s*/i, '');
     },
     closeBundle() {

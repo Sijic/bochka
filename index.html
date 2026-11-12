@@ -9,13 +9,13 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0d0d'/%3E%3Crect x='8' y='4' width='16' height='24' rx='2' fill='none' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='11' x2='25' y2='11' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='21' x2='25' y2='21' stroke='%23eab308' stroke-width='2'/%3E%3C/svg%3E" />
   <title>БОЧКА — Упакуй друга | В кино с 17 декабря</title>
-  <meta name="description" content="Шесть заваренных стальных бочек в тёмном цеху. Три попытки и 30 секунд воздуха. Прислушайся к стуку изнутри или закатай друга до премьеры 17 декабря." />
+  <meta name="description" content="Шесть заваренных стальных бочек в тёмном цеху. Запиши фото и голос на дно бочки, проверь интуицию друга и выиграй билеты в кино на 17 декабря." />
 
   <!-- Open Graph / Telegram Link Preview -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://bochka.quest/" />
   <meta property="og:title" content="БОЧКА — Кто-то заварил тебя в цеху. Найдёшь за 3 попытки?" />
-  <meta property="og:description" content="Надень наушники. 6 глухих бочек, 30 секунд воздуха и послание на дне. Триллер «Бочка» — в кино с 17 декабря." />
+  <meta property="og:description" content="Надень наушники: сквозь сталь пробивается стук и знакомый голос. Триллер «Бочка» — в кино с 17 декабря." />
   <meta property="og:image" content="https://bochka.quest/photo_2026-11-08_00-00-14.jpg" />
   <meta name="twitter:card" content="summary_large_image" />
 
@@ -57,7 +57,7 @@
     <nav class="topbar-nav" aria-label="Навигация">
       <button type="button" class="nav-link is-active" id="nav-workshop" data-i18n="navWorkshop">ЦЕХ</button>
       <button type="button" class="nav-link" id="nav-trailer" data-i18n="navTrailer">ТРЕЙЛЕР</button>
-      <a class="nav-link" id="nav-kinopoisk" href="https://www.kinopoisk.ru/film/11226275/?socialAlias=MzcwNjU0MjQ%3D" target="_blank" rel="noopener noreferrer" data-i18n="navKinopoisk">КИНОПОИСК</a>
+      <a class="nav-link" id="nav-kinopoisk" href="https://www.kinopoisk.ru/film/11226275/" target="_blank" rel="noopener noreferrer" data-i18n="navKinopoisk">КИНОПОИСК</a>
       <button type="button" class="nav-link nav-prize" id="nav-prize">
         <span data-i18n="navPrize">РОЗЫГРЫШ</span>
         <span class="cap-badge" id="top-caps-count">0</span>
@@ -90,7 +90,7 @@
       <p class="gate-subtitle" data-i18n="gateSubtitle">ПСИХОЛОГИЧЕСКИЙ ТРИЛЛЕР · 200 ЛИТРОВ ТЕМНОТЫ</p>
 
       <p class="gate-teaser" data-i18n="gateTeaser">
-        Мокрый бетон, холодная сталь и шесть заваренных бочек под лучом прожектора. Надень наушники: внутри одной из них кто-то стучит ладонями по металлу и теряет воздух.
+        Мокрый бетон, кафельные колонны с ржавыми цепями и шесть заваренных бочек под лучом прожектора. Надень наушники: внутри одной из них стучат ладонями и зовут сквозь сталь.
       </p>
 
       <div class="gate-actions">
@@ -123,7 +123,7 @@
       <span class="mono-tag" data-i18n="modeATag">СЕКТОР 04 // ДЕМО-ПРОТОКОЛ</span>
       <h2 class="section-title" data-i18n="modeATitle">В ОДНОЙ ИЗ ШЕСТИ БОЧЕК ЗАПЕРТ ГЕРОЙ ФИЛЬМА</h2>
       <p class="mode-desc" data-i18n="modeADesc">
-        Прислушайся к металлу и найди живую бочку за 3 удара — или сразу закатай друга и отправь ему ссылку с таймером воздуха.
+        Прислушайся к металлу и найди живую бочку за 3 удара — или сразу закатай фото и голос друга в стальную бочку и отправь короткую ссылку.
       </p>
 
       <div class="mode-actions">
@@ -142,7 +142,6 @@
        ЭКРАН 3: ГЕЙМПЛЕЙ ЦЕХА (6 БОЧЕК, ТАЙМЕР 30 СЕК, 3 ПОПЫТКИ)
        ==================================================================== -->
   <section class="screen screen-hud" id="screen-workshop" hidden>
-    <!-- Верхняя тревожная панель и таймер кислорода -->
     <div class="hud-top">
       <div class="hud-alert-box">
         <span class="mono-tag" id="hud-mode-tag">ЦЕХ, КОРПУС Б // СЕКТОР 04</span>
@@ -162,7 +161,6 @@
       </div>
     </div>
 
-    <!-- Плавающий технический прицел прослушки над бочкой -->
     <div class="barrel-reticle" id="barrel-reticle" hidden>
       <span class="reticle-id" id="reticle-id">БОЧКА №01</span>
       <span class="reticle-wave" id="reticle-wave">
@@ -170,7 +168,6 @@
       </span>
     </div>
 
-    <!-- Нижняя панель: слева ПОПЫТКИ (3 жёлтых квадрата), справа управление и звук -->
     <div class="hud-bottom">
       <div class="hud-attempts-panel">
         <span class="hud-panel-label" data-i18n="hudAttempts">ПОПЫТКИ</span>
@@ -204,7 +201,7 @@
   </div>
 
   <!-- ====================================================================
-       ЭКРАН 4: КОНСТРУКТОР ПРАНКА «УПАКОВАТЬ В БОЧКУ»
+       ЭКРАН 4: КОНСТРУКТОР ПРАНКА «УПАКОВАТЬ В БОЧКУ» (ФОТО + ГОЛОС ДО 5 СЕК)
        ==================================================================== -->
   <section class="screen screen-scroll" id="screen-pack" hidden>
     <div class="panel-sheet">
@@ -217,7 +214,7 @@
       </div>
 
       <p class="sheet-sub" data-i18n="packSub">
-        Скрипт сожмёт портрет в холодный тон фонаря (600×600 WebP &lt; 80 КБ) и заварит внутри одной из 6 бочек.
+        Скрипт сожмёт портрет в холодный тон фонаря (512×512 WebP ≤ 60 КБ), запишет голос (≤ 40 КБ) и создаст короткую ссылку bochka.quest/?b=...
       </p>
 
       <!-- 1. Переключатель смысла -->
@@ -236,7 +233,7 @@
           <div class="barrel-mouth-preview">
             <img id="pack-preview-img" alt="Портрет на дне бочки" />
           </div>
-          <span class="webp-size-tag" id="pack-size-tag">600×600 WEBP</span>
+          <span class="webp-size-tag" id="pack-size-tag">512×512 WEBP</span>
         </div>
 
         <div class="pack-photo-controls">
@@ -267,7 +264,39 @@
         </div>
       </div>
 
-      <!-- 3. Выбор готовой дерзкой фразы из 5 пресетов или свой текст до 45 символов -->
+      <!-- 3. ГОЛОСОВУХА С ЭФФЕКТОМ ЗАВАРЕННОЙ БОЧКИ (MediaRecorder <= 5 сек, <= 40 КБ) -->
+      <div class="voice-pack-box" id="voice-pack-box">
+        <span class="mono-label" data-i18n="voiceLabel">ГОЛОС ИЗ ЗАВАРЕННОЙ БОЧКИ (ДО 5 СЕК · ОПЦИОНАЛЬНО)</span>
+        <p class="voice-hint-text" data-i18n="voiceHint">
+          Во время поиска твой голос глухо звучит сквозь сталь (400 Гц), а при вскрытии крышки включается чисто.
+        </p>
+
+        <button type="button" class="btn-secondary btn-full voice-rec-btn" id="btn-record-voice">
+          <span class="rec-dot" id="voice-rec-dot"></span>
+          <span id="btn-record-voice-text" data-i18n="btnRecordVoice">ЗАПИСАТЬ ГОЛОС (ДО 5 СЕК)</span>
+        </button>
+
+        <div class="voice-rec-bar" id="voice-rec-bar" hidden>
+          <div class="voice-rec-meta">
+            <span data-i18n="voiceRecProgress">ИДЁТ ЗАПИСЬ В БОЧКУ:</span>
+            <strong id="voice-rec-timer">5.0s</strong>
+          </div>
+          <div class="voice-meter-track">
+            <div class="voice-meter-fill" id="voice-meter-fill"></div>
+          </div>
+        </div>
+
+        <div class="voice-ready-row" id="voice-ready-row" hidden>
+          <span class="voice-meta-tag" id="voice-meta-tag">ГОЛОС ЗАПИСАН · 3.2 СЕК · 18 КБ</span>
+          <div class="voice-ready-actions">
+            <button type="button" class="chip is-active" id="btn-play-voice-muffled" data-i18n="btnVoiceMuffled">🛢 В БОЧКЕ</button>
+            <button type="button" class="chip" id="btn-play-voice-clean" data-i18n="btnVoiceClean">▶ ЧИСТО</button>
+            <button type="button" class="chip chip-danger" id="btn-clear-voice" aria-label="Удалить голос">✕</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Выбор готовой дерзкой фразы из 5 пресетов или свой текст до 45 символов -->
       <div class="phrase-section">
         <span class="mono-label" data-i18n="presetLabel">ВЫБЕРИ ФРАЗУ ИЛИ ВВЕДИ СВОЮ (ДО 45 СИМВ.)</span>
         <div class="preset-list" id="preset-list"></div>
@@ -294,7 +323,7 @@
         />
       </div>
 
-      <!-- 4. Кнопка сварки и блок шеринга -->
+      <!-- 5. Кнопка сварки и блок шеринга -->
       <button type="button" class="btn-primary btn-full" id="btn-seal-barrel">
         <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg>
         <span id="btn-seal-text" data-i18n="btnSealBarrel">ЗАВАРИТЬ КРЫШКУ И СОЗДАТЬ ССЫЛКУ</span>
@@ -302,9 +331,9 @@
 
       <div class="share-result-box" id="share-result-box" hidden>
         <div class="share-result-head">
-          <span class="mono-tag accent-tag" data-i18n="shareReadyTitle">БОЧКА ЗАВАРЕНА // ССЫЛКА ГОТОВА</span>
+          <span class="mono-tag accent-tag" data-i18n="shareReadyTitle">БОЧКА ЗАВАРЕНА // КОРОТКАЯ ССЫЛКА ГОТОВА</span>
           <p class="share-hint" data-i18n="shareReadyHint">
-            Как только друг вскроет бочку (или задохнётся), результат запишется, а в Telegram прилетит отчёт.
+            Как только друг пройдёт цех и сорвёт крышку, результат запишется, а в Telegram прилетит отчёт.
           </p>
         </div>
 
@@ -324,7 +353,6 @@
           </button>
         </div>
 
-        <!-- Секретный бонус за упаковку друга: эксклюзивный видеокружок со съёмок -->
         <div class="secret-bonus-card" id="secret-bonus-card">
           <div class="secret-bonus-info">
             <span class="mono-tag accent-tag" data-i18n="secretUnlockTag">СЕКРЕТНЫЙ БОНУС ОТКРЫТ</span>
@@ -339,7 +367,7 @@
   </section>
 
   <!-- ====================================================================
-       ЭКРАН 5: ФИНАЛ РАУНДА, ОБРАТНАЯ СВЯЗЬ И КОНВЕРСИЯ В КИНО
+       ЭКРАН 5: ФИНАЛ РАУНДА, ГОЛОС, ЗОЛОТАЯ БОЧКА И КОНВЕРСИЯ В КИНО
        ==================================================================== -->
   <section class="screen screen-scroll" id="screen-finale" hidden>
     <div class="panel-sheet finale-sheet">
@@ -348,40 +376,54 @@
         <span class="premiere-pill" data-i18n="premiereBadge">В КИНО С 17 ДЕКАБРЯ</span>
       </div>
 
-      <!-- Открытая круглая горловина бочки с портретом, лучом фонаря и каплями -->
+      <!-- Победный блок при выигрыше реального промокода билета в «Ночной смене» -->
+      <div class="golden-winner-box" id="golden-winner-box" hidden>
+        <span class="mono-tag accent-tag">ПРОТОКОЛ ПОБЕДИТЕЛЯ // ЗОЛОТАЯ БОЧКА</span>
+        <h3 class="golden-winner-title" data-i18n="nightShiftWonTitle">🎉 ТЫ ВЫБИЛ НАСТОЯЩИЙ БИЛЕТ В КИНО!</h3>
+        <div class="share-url-row">
+          <input type="text" id="output-ticket-code" class="industrial-input ticket-code-input" readonly />
+          <button type="button" class="btn-primary" id="btn-copy-ticket-code" data-i18n="btnCopyLink">КОПИРОВАТЬ</button>
+        </div>
+        <p class="golden-winner-contact" id="golden-winner-contact"></p>
+      </div>
+
       <div class="finale-barrel-reveal">
         <div class="barrel-mouth-large">
           <img id="finale-portrait-img" alt="Лицо на дне бочки" />
           <div class="flashlight-sweep" aria-hidden="true"></div>
         </div>
-        <div class="finale-stamp" id="finale-stamp">ВЫЖИЛ С 1-Й ПОПЫТКИ</div>
+        <div class="finale-stamp" id="finale-stamp">ВЫЖИЛ С 5-Й ПОПЫТКИ</div>
       </div>
 
       <blockquote class="finale-message" id="finale-message">
         «Вытащишь меня — идём на Бочку 17 декабря»
       </blockquote>
+
+      <div class="finale-voice-row" id="finale-voice-row" hidden>
+        <button type="button" class="btn-secondary btn-compact" id="btn-finale-replay-voice" data-i18n="finaleReplayVoice">
+          🔊 ВКЛЮЧИТЬ ГОЛОС ИЗ БОЧКИ ЕЩЁ РАЗ
+        </button>
+      </div>
+
       <p class="finale-notify-line" id="finale-notify-line" data-i18n="finaleNotified">
         Отправителю ушёл сигнал о твоём результате.
       </p>
 
-      <!-- 4 главные кнопки конверсии и вирального цикла -->
+      <!-- Главные кнопки конверсии и вирального цикла -->
       <div class="finale-cta-stack">
-        <!-- 1. Ответ отправителю + расписание/трейлер -->
         <button type="button" class="btn-primary btn-full" id="btn-cinema-reply">
           <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v3a2 2 0 0 0 0 4v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-4V8Zm6-1v10"/></svg>
           <span data-i18n="btnGoCinema">ИДЁМ В КИНО 17 ДЕКАБРЯ!</span>
         </button>
 
-        <!-- 2. Виральный цикл: закатать своего кента -->
         <button type="button" class="btn-secondary btn-full btn-with-sub" id="btn-pack-revenge">
           <span class="btn-main-line">
             <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="6" ry="2"/><path d="M6 5v14c0 1.1 2.7 2 6 2s6-.9 6-2V5M6 10c0 1.1 2.7 2 6 2s6-.9 6-2M6 15c0 1.1 2.7 2 6 2s6-.9 6-2"/></svg>
             <span data-i18n="btnPackBack">ЗАКАТАТЬ СВОЕГО КЕНТА</span>
           </span>
-          <small class="btn-sub-line" data-i18n="btnPackBackHint">Откроет секретный видеокружок со съёмок</small>
+          <small class="btn-sub-line" data-i18n="btnPackBackHint">Нужно для допуска к «Золотой бочке» с билетами в кино</small>
         </button>
 
-        <!-- 4. Скачать готовую вертикальную карточку Сторис 1080x1920 + повторить раунд -->
         <div class="finale-dual-row">
           <button type="button" class="btn-ghost" id="btn-download-stories">
             <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="1.5"/><path d="M12 8v6m0 0-2.5-2.5M12 14l2.5-2.5"/></svg>
@@ -393,7 +435,47 @@
         </div>
       </div>
 
-      <!-- 3. Блок квеста за призы («Жетоны цеха» / «Крышки») -->
+      <!-- ==================================================================
+           ОХОТА ЗА БИЛЕТОМ В КИНО В ЗОЛОТОЙ БОЧКЕ («НОЧНАЯ СМЕНА»)
+           ================================================================== -->
+      <div class="golden-hunt-card" id="golden-hunt-card">
+        <div class="golden-hunt-head">
+          <span class="mono-tag accent-tag" data-i18n="goldenTag">СЕКРЕТНЫЙ РЕЖИМ // КАЖДАЯ 100-Я БОЧКА НА СЕРВЕРЕ</span>
+          <h3 class="golden-hunt-title" data-i18n="goldenTitle">НАЙДИ НАСТОЯЩИЙ БИЛЕТ В КИНО В ЗОЛОТОЙ БОЧКЕ</h3>
+          <p class="golden-hunt-desc" data-i18n="goldenDesc">
+            Выполни 2 условия допуска, чтобы выходить в «Ночную смену» и пробивать золотые бочки с реальными промокодами в кино на 17 декабря.
+          </p>
+        </div>
+
+        <div class="golden-checklist" id="golden-checklist">
+          <div class="golden-req-row" id="golden-req-row-pack">
+            <span class="req-status-dot" id="golden-dot-pack"></span>
+            <span class="req-label" data-i18n="goldenReq1">1. Закатать друга в бочку и создать короткую ссылку</span>
+            <button type="button" class="quest-action-btn" id="btn-golden-go-pack" data-i18n="questOpen">ВЫПОЛНИТЬ</button>
+          </div>
+
+          <div class="golden-req-row" id="golden-req-row-kp">
+            <span class="req-status-dot" id="golden-dot-kp"></span>
+            <span class="req-label" data-i18n="goldenReq2">2. Загрузить скриншот Кинопоиска с активной оранжевой кнопкой «Буду смотреть»</span>
+            <div class="golden-kp-actions">
+              <a class="quest-action-btn kp-link-btn" id="link-golden-kp-card" href="https://www.kinopoisk.ru/film/11226275/" target="_blank" rel="noopener noreferrer">КИНОПОИСК ↗</a>
+              <label class="quest-action-btn file-label" id="label-upload-kp-screen">
+                <span id="label-upload-kp-text" data-i18n="btnUploadKpScreen">ЗАГРУЗИТЬ СКРИНШОТ «БУДУ СМОТРЕТЬ»</span>
+                <input type="file" id="input-kp-screenshot" accept="image/*" hidden />
+              </label>
+            </div>
+          </div>
+
+          <p class="kp-screen-feedback" id="kp-screen-feedback" hidden></p>
+        </div>
+
+        <button type="button" class="btn-primary btn-full golden-enter-btn" id="btn-enter-night-shift" disabled>
+          <span data-i18n="btnEnterNightShift">🏆 ВОЙТИ В «НОЧНУЮ СМЕНУ» (3 ЗОЛОТЫХ УДАРА)</span>
+        </button>
+        <p class="night-shift-cooldown-text" id="night-shift-cooldown-text" hidden></p>
+      </div>
+
+      <!-- Жетоны цеха («Крышки») -->
       <div class="quest-box" id="finale-quest-box">
         <div class="quest-head">
           <div>
@@ -412,7 +494,7 @@
           <div class="quest-row">
             <div class="quest-row-text">
               <strong>+1</strong>
-              <span data-i18n="questTrailer">Досмотреть встроенный трейлер до конца</span>
+              <span data-i18n="questTrailer">Досмотреть встроенный трейлер (40+ сек)</span>
             </div>
             <button type="button" class="quest-action-btn" id="quest-btn-trailer" data-i18n="questOpen">ВЫПОЛНИТЬ</button>
           </div>
@@ -438,25 +520,111 @@
   </section>
 
   <!-- ====================================================================
-       МОДАЛКА 1: ТРЕЙЛЕР + БИЛЕТЫ / РАСПИСАНИЕ + РОЗЫГРЫШ
+       МОДАЛКА СПАСЕНИЯ В ЦЕХУ (5-ХОДОВАЯ ВОРОНКА: ШАГ А КИНОПОИСК -> ШАГ Б ТРЕЙЛЕР)
+       ==================================================================== -->
+  <div class="modal-backdrop" id="modal-rescue" hidden>
+    <div class="modal-card rescue-modal-card">
+      <div class="tech-corner tl"></div>
+      <div class="tech-corner tr"></div>
+      <div class="tech-corner bl"></div>
+      <div class="tech-corner br"></div>
+
+      <!-- ШАГ А: 4-я попытка за «Буду смотреть» на Кинопоиске (проверка >= 15 сек отсутствия) -->
+      <div id="rescue-step-1">
+        <span class="mono-tag danger-tag" data-i18n="rescueStep1Tag">КИСЛОРОД 0% // СПАСЕНИЕ №1</span>
+        <h3 class="section-title rescue-title" data-i18n="rescueStep1Title">
+          ВОЗДУХ НА НУЛЕ! СТУК ШЁЛ СОВСЕМ РЯДОМ — ОСТАЛОСЬ 3 БОЧКИ
+        </h3>
+        <p class="modal-hint" data-i18n="rescueStep1Desc">
+          Три крышки сорваны впустую, но внутри одной из 3 оставшихся бочек стучит твой друг. Нажми оранжевую кнопку «Буду смотреть» на Кинопоиске, чтобы получить +1 удар!
+        </p>
+
+        <button type="button" class="btn-kp-orange btn-full" id="btn-rescue-kp-open">
+          <span data-i18n="btnRescueKpOpen">+1 ПОПЫТКА: НАЖАТЬ «БУДУ СМОТРЕТЬ» НА КИНОПОИСКЕ ↗</span>
+        </button>
+
+        <div class="rescue-sync-box" id="rescue-kp-sync" hidden>
+          <span class="sync-spinner" aria-hidden="true"></span>
+          <span data-i18n="rescueKpChecking">Сверка отметки «Буду смотреть» с базой...</span>
+        </div>
+
+        <div class="rescue-error-box" id="rescue-kp-error" hidden data-i18n="rescueKpTooFast">
+          Отметка не обнаружена! Нажми кнопку «Буду смотреть» на странице фильма и дождись сохранения.
+        </div>
+
+        <button type="button" class="btn-primary btn-full rescue-claim-btn" id="btn-rescue-kp-claim" hidden>
+          <span data-i18n="btnRescueKpClaim">Я НАЖАЛ «БУДУ СМОТРЕТЬ» → ЗАБРАТЬ ЖИЗНЬ</span>
+        </button>
+      </div>
+
+      <!-- ШАГ Б: 5-я победная попытка за просмотр собственного MP4-трейлера (40 сек) -->
+      <div id="rescue-step-2" hidden>
+        <div class="rescue-done-pill" data-i18n="rescueKpDoneBadge">✓ ШАГ 1: ОТМЕТКА «БУДУ СМОТРЕТЬ» ЗАЧТЕНО</div>
+        <span class="mono-tag accent-tag" data-i18n="rescueStep2Tag">ПОСЛЕДНИЙ ШАНС // СПАСЕНИЕ №2</span>
+        <h3 class="section-title rescue-title" data-i18n="rescueStep2Title">
+          ПОЧТИ! ОСТАЛОСЬ ВСЕГО ДВЕ ЗАКРЫТЫЕ БОЧКИ!
+        </h3>
+        <p class="modal-hint" data-i18n="rescueStep2Desc">
+          В одной из двух бочек заварен друг. Посмотри эксклюзивный трейлер фильма «Бочка» (40 секунд без перемотки), чтобы забрать финальный победный удар!
+        </p>
+
+        <button type="button" class="btn-primary btn-full" id="btn-rescue-watch-trailer">
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+          <span data-i18n="btnRescueWatchTrailer">+1 ПОПЫТКА: ПОСМОТРЕТЬ ТРЕЙЛЕР ФИЛЬМА</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       МОДАЛКА 1: КАСТОМНЫЙ ИНДУСТРИАЛЬНЫЙ MP4-ПЛЕЕР ТРЕЙЛЕРА (БЕЗ ПЕРЕМОТКИ ВПЕРЁД)
        ==================================================================== -->
   <div class="modal-backdrop" id="modal-trailer" hidden>
-    <div class="modal-card">
+    <div class="modal-card trailer-modal-card">
       <div class="modal-head">
         <span class="mono-tag" data-i18n="trailerModalTitle">ОФИЦИАЛЬНЫЙ ТРЕЙЛЕР · В КИНО С 17 ДЕКАБРЯ</span>
         <button type="button" class="icon-close" id="btn-close-trailer" aria-label="Закрыть">✕</button>
       </div>
 
-      <div class="video-aspect">
-        <div id="yt-player-slot"></div>
+      <div class="video-aspect" id="trailer-video-wrap">
+        <video
+          id="trailer-video"
+          poster="./photo_2026-11-08_00-00-14.jpg"
+          playsinline
+          preload="metadata"
+        ></video>
+        <div id="yt-fallback-slot" class="yt-fallback-slot" hidden></div>
+      </div>
+
+      <!-- Кастомная индустриальная панель управления без возможности перемотки вперёд -->
+      <div class="trailer-custom-bar" id="trailer-custom-bar">
+        <button type="button" class="hud-mini-btn" id="btn-trailer-play">❚❚ ПАУЗА</button>
+        <div class="trailer-progress-track" aria-label="Прогресс просмотра">
+          <div class="trailer-progress-fill" id="trailer-progress-fill"></div>
+        </div>
+        <span class="trailer-time-readout" id="trailer-time-readout">0:00 / 1:31</span>
+        <button type="button" class="hud-mini-btn" id="btn-trailer-mute">ЗВУК</button>
+      </div>
+
+      <!-- Блок разблокировки 5-й попытки (не закрывает плеер насильно после 40 сек!) -->
+      <div class="trailer-rescue-box" id="trailer-rescue-box" hidden>
+        <p class="trailer-rescue-status" id="trailer-rescue-status">
+          До разблокировки +1 удара: 40 сек (перемотка вперёд отключена)
+        </p>
+        <button type="button" class="btn-primary btn-full" id="btn-claim-trailer-life" disabled>
+          <span data-i18n="btnClaimTrailerLife">⚡ ЗАБРАТЬ +1 УДАР И ВСКРЫТЬ БОЧКУ →</span>
+        </button>
       </div>
 
       <p class="modal-hint" id="trailer-token-hint" data-i18n="trailerWatchHint">
-        Досмотри ролик до финала — +1 жетон «Крышка» начислится автоматически.
+        Смотри без перемотки — на 40-й секунде начисляется жетон «Крышка» (и спасённая жизнь в цеху).
       </p>
 
       <div class="modal-cta-row">
-        <button type="button" class="btn-primary" id="btn-modal-kinopoisk" data-i18n="btnKinopoiskGo">
+        <button type="button" class="btn-secondary" id="btn-open-kp-trailer" data-i18n="btnOpenKpTrailer">
+          ОТКРЫТЬ ТРЕЙЛЕР НА КИНОПОИСКЕ ↗
+        </button>
+        <button type="button" class="btn-kp-orange" id="btn-modal-kinopoisk" data-i18n="btnKinopoiskGo">
           БУДУ СМОТРЕТЬ НА КИНОПОИСКЕ ↗
         </button>
         <button type="button" class="btn-ghost" id="btn-modal-calendar" data-i18n="btnCalendarAdd">
@@ -504,23 +672,23 @@
     </div>
   </div>
 
-  <!-- МОДАЛКА 4: РОЗЫГРЫШ / ЖЕТОНЫ ЦЕХА (ИЗ ШАПКИ) -->
+  <!-- МОДАЛКА 4: РОЗЫГРЫШ / ЗОЛОТАЯ БОЧКА (ИЗ ШАПКИ) -->
   <div class="modal-backdrop" id="modal-prize" hidden>
     <div class="modal-card">
       <div class="modal-head">
-        <span class="mono-tag" data-i18n="questTitle">ЖЕТОНЫ ЦЕХА («КРЫШКИ»)</span>
+        <span class="mono-tag accent-tag" data-i18n="goldenTitle">НАЙДИ НАСТОЯЩИЙ БИЛЕТ В КИНО В ЗОЛОТОЙ БОЧКЕ</span>
         <button type="button" class="icon-close" id="btn-close-prize" aria-label="Закрыть">✕</button>
       </div>
-      <p class="modal-hint" data-i18n="questSub">
-        Копи крышки без накруток — участвуй в розыгрыше парных билетов, закрытого предпоказа и чёрной 200-литровой бочки с мерчем.
+      <p class="modal-hint" data-i18n="goldenDesc">
+        Выполни 2 условия допуска, чтобы выходить в «Ночную смену» и пробивать золотые бочки с реальными промокодами в кино на 17 декабря.
       </p>
       <div class="prize-summary-big">
         <strong id="modal-caps-count">0</strong>
         <span>КРЫШЕК ЦЕХА НА СЧЕТУ</span>
       </div>
       <div class="modal-cta-row">
-        <button type="button" class="btn-primary" id="btn-prize-pack" data-i18n="btnPackFriendMain">УПАКОВАТЬ ДРУГА В БОЧКУ</button>
-        <button type="button" class="btn-secondary" id="btn-prize-trailer" data-i18n="navTrailer">ТРЕЙЛЕР</button>
+        <button type="button" class="btn-primary" id="btn-prize-golden" data-i18n="goldenTitle">ЗОЛОТАЯ БОЧКА (ДОПУСК)</button>
+        <button type="button" class="btn-secondary" id="btn-prize-pack" data-i18n="btnPackFriendMain">УПАКОВАТЬ ДРУГА В БОЧКУ</button>
       </div>
     </div>
   </div>
