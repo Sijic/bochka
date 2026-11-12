@@ -1,0 +1,6 @@
+version: 2
+
+# Supabase public browser key ("role": "anon") is intentionally public and protected by PostgreSQL RLS + SECURITY DEFINER RPCs.
+secret:
+  ignored_paths:
+    - 'src/env.js'

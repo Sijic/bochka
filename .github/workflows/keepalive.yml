@@ -10,9 +10,10 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Ping bochka-quest Supabase REST endpoint
         run: |
-          ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNldmNtc3lwd29obXBldGh5YnpmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ0OTU0OTksImV4cCI6MjExMDA3MTQ5OX0.YOCD9vaqv9-FV2X28xLnzYt1x_NOGRW6wqsCBcw34Bk"
+          ANON_KEY=$(node --input-type=module -e "import('./src/env.js').then(m => process.stdout.write(m.ENV.supabaseAnonKey))")
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             -H "apikey: $ANON_KEY" \
             -H "Authorization: Bearer $ANON_KEY" \
