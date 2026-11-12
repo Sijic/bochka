@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0d0d'/%3E%3Crect x='8' y='4' width='16' height='24' rx='2' fill='none' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='11' x2='25' y2='11' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='21' x2='25' y2='21' stroke='%23eab308' stroke-width='2'/%3E%3C/svg%3E" />
   <title>БОЧКА — Упакуй друга | В кино с 17 декабря</title>
-  <meta name="description" content="Шесть заваренных стальных бочек в тёмном цеху. Запиши фото и голос на дно бочки, проверь интуицию друга и выиграй билеты в кино на 17 декабря." />
+  <meta name="description" content="Шесть заваренных стальных бочек в тёмном цеху. Запиши фото и голос на дно бочки, проверь интуицию друга и выиграй допуск на закрытую Премьеру 17 декабря." />
 
   <!-- Open Graph / Telegram Link Preview -->
   <meta property="og:type" content="website" />
@@ -59,7 +59,7 @@
       <button type="button" class="nav-link" id="nav-trailer" data-i18n="navTrailer">ТРЕЙЛЕР</button>
       <a class="nav-link" id="nav-kinopoisk" href="https://www.kinopoisk.ru/film/11226275/" target="_blank" rel="noopener noreferrer" data-i18n="navKinopoisk">КИНОПОИСК</a>
       <button type="button" class="nav-link nav-prize" id="nav-prize">
-        <span data-i18n="navPrize">РОЗЫГРЫШ</span>
+        <span data-i18n="navPrize">ПРЕМЬЕРА</span>
         <span class="cap-badge" id="top-caps-count">0</span>
       </button>
     </nav>
@@ -111,7 +111,7 @@
   </section>
 
   <!-- ====================================================================
-       ЭКРАН 2 (РЕЖИМ А): ЧИСТЫЙ ВХОД БЕЗ ID — ДЕМО ИЛИ УПАКОВАТЬ ДРУГА
+       ЭКРАН 2 (РЕЖИМ А): ЧИСТЫЙ ВХОД БЕЗ ID — ДЕМО / УПАКОВАТЬ / ПРЕМЬЕРА
        ==================================================================== -->
   <section class="screen" id="screen-mode-a" hidden>
     <div class="mode-card">
@@ -135,46 +135,72 @@
           ПРОСТУЧАТЬ ЦЕХ (ДЕМО)
         </button>
       </div>
+
+      <button type="button" class="btn-ghost btn-full mode-premiere-shortcut" id="btn-mode-a-premiere" hidden>
+        <span data-i18n="btnStartPremiereRace">🏆 ВОЙТИ В ЦЕХ: ГОНКА ЗА ПРЕМЬЕРОЙ</span>
+      </button>
     </div>
   </section>
 
   <!-- ====================================================================
-       ЭКРАН 3: ГЕЙМПЛЕЙ ЦЕХА (6 БОЧЕК, ТАЙМЕР 30 СЕК, 3 ПОПЫТКИ)
+       ЭКРАН 3: ГЕЙМПЛЕЙ ЦЕХА (6 БОЧЕК 01·12·17·19·26·97, ВОЗДУХ, ШКАЛА 0/100)
        ==================================================================== -->
   <section class="screen screen-hud" id="screen-workshop" hidden>
-    <div class="hud-top">
-      <div class="hud-alert-box">
-        <span class="mono-tag" id="hud-mode-tag">ЦЕХ, КОРПУС Б // СЕКТОР 04</span>
-        <h2 class="hud-urgent-title" id="hud-urgent-title">
-          КТО-ТО ЗАВАРИЛ ТЕБЯ В ЦЕХУ. НАЙДИ СВОЮ БОЧКУ ЗА 3 ПОПЫТКИ
-        </h2>
+    <div class="hud-top-stack">
+      <!-- Главная шкала Суперигры «Допуск на закрытую Премьеру: 0 / 100» -->
+      <div class="hud-premiere-strip" id="hud-premiere-strip" hidden>
+        <div class="premiere-strip-head">
+          <span class="premiere-strip-title" data-i18n="premiereBarLabel">ДОПУСК НА ПРЕМЬЕРУ</span>
+          <div class="premiere-strip-stats">
+            <span class="premiere-score-pill"><strong id="hud-premiere-score">0.0</strong> / 100</span>
+            <span class="premiere-lives-pill">❤️ <span data-i18n="premiereLivesLabel">ЖИЗНИ</span>: <strong id="hud-premiere-lives">3</strong></span>
+          </div>
+        </div>
+        <div class="premiere-progress-track">
+          <div class="premiere-progress-fill" id="hud-premiere-fill"></div>
+        </div>
       </div>
 
-      <div class="hud-air-module" id="hud-air-module">
-        <div class="air-row">
-          <span class="air-label" data-i18n="hudAir">ВОЗДУХ</span>
-          <span class="air-value"><strong id="air-seconds">30.0</strong> <small data-i18n="hudSec">СЕК</small></span>
+      <div class="hud-top">
+        <div class="hud-alert-box">
+          <span class="mono-tag" id="hud-mode-tag">ЦЕХ, КОРПУС Б // СЕКТОР 04</span>
+          <h2 class="hud-urgent-title" id="hud-urgent-title">
+            КТО-ТО ЗАВАРИЛ ТЕБЯ В ЦЕХУ. НАЙДИ СВОЮ БОЧКУ ЗА 3 ПОПЫТКИ
+          </h2>
         </div>
-        <div class="air-bar-track">
-          <div class="air-bar-fill" id="air-bar-fill"></div>
+
+        <div class="hud-air-module" id="hud-air-module">
+          <div class="air-row">
+            <span class="air-label" data-i18n="hudAir">ВОЗДУХ</span>
+            <span class="air-value"><strong id="air-seconds">30.0</strong> <small data-i18n="hudSec">СЕК</small></span>
+          </div>
+          <div class="air-bar-track">
+            <div class="air-bar-fill" id="air-bar-fill"></div>
+          </div>
         </div>
       </div>
     </div>
 
+    <!-- Всплывающие очки при попадании в Гонке за Премьерой (+45 / +0.4) -->
+    <div class="floating-score-layer" id="floating-score-layer" aria-hidden="true"></div>
+
     <div class="barrel-reticle" id="barrel-reticle" hidden>
-      <span class="reticle-id" id="reticle-id">БОЧКА №01</span>
+      <span class="reticle-id" id="reticle-id">ПАРТИЯ №01</span>
       <span class="reticle-wave" id="reticle-wave">
         <i></i><i></i><i></i><i></i>
       </span>
     </div>
 
     <div class="hud-bottom">
-      <div class="hud-attempts-panel">
-        <span class="hud-panel-label" data-i18n="hudAttempts">ПОПЫТКИ</span>
-        <div class="attempts-squares" id="attempts-squares" aria-label="3 попытки">
+      <div class="hud-attempts-panel" id="hud-attempts-panel">
+        <span class="hud-panel-label" id="hud-attempts-label" data-i18n="hudAttempts">ПОПЫТКИ</span>
+        <div class="attempts-squares" id="attempts-squares" aria-label="Попытки">
           <span class="attempt-sq is-live"></span>
           <span class="attempt-sq is-live"></span>
           <span class="attempt-sq is-live"></span>
+        </div>
+        <div class="premiere-lives-big" id="hud-premiere-lives-big" hidden>
+          <span>❤️ ×</span><strong id="hud-lives-big-num">3</strong>
         </div>
       </div>
 
@@ -194,11 +220,122 @@
     </div>
   </section>
 
-  <!-- Короткий аудио-визуальный мини-скример (0.4 сек) при промахе -->
-  <div class="screamer-overlay" id="screamer-overlay" hidden aria-hidden="true">
-    <img src="./assets/keyed/dog.webp" alt="" class="screamer-img" />
-    <div class="screamer-caption" data-i18n="screamerEmpty">ПУСТАЯ БОЧКА // МИНУС ПОПЫТКА</div>
+  <!-- 4 аутентичных скримера из мира фильма (0.4 сек): Рука / Пастор / Отец / Блогер (БЕЗ СОБАК!) -->
+  <div class="screamer-overlay" id="screamer-overlay" data-variant="hand" hidden aria-hidden="true">
+    <div class="screamer-fx-layer" id="screamer-fx-layer"></div>
+    <img src="./assets/keyed/screamer_hand.webp" alt="" class="screamer-img" id="screamer-img" />
+    <div class="screamer-caption" id="screamer-caption" data-i18n="screamerHand">РУКА ИЗ ГОРЛОВИНЫ // МИНУС ПОПЫТКА</div>
   </div>
+
+  <!-- Белый морской свет растворения стен цеха при вводе секретного кода 19 -> 97 -> 3 удара -->
+  <div class="mist-dissolve-overlay" id="mist-dissolve-overlay" hidden aria-hidden="true"></div>
+
+  <!-- ====================================================================
+       СЕКРЕТНЫЙ УРОВЕНЬ-ПАСХАЛКА «ДОСТУЧАТЬСЯ ДО НЕБЕС» (19 · 97 · СТУК-СТУК-СТУК)
+       ==================================================================== -->
+  <section class="screen screen-ocean" id="screen-ocean" hidden>
+    <div class="ocean-sky-bg" aria-hidden="true"></div>
+
+    <div class="ocean-waves-wrap" aria-hidden="true">
+      <img src="./assets/keyed/ocean_panorama.webp" alt="" class="ocean-panorama-img" />
+      <div class="ocean-surf-shimmer"></div>
+    </div>
+
+    <div class="ocean-hero-wrap" aria-hidden="true">
+      <img src="./assets/keyed/ocean_till_barrel.webp" alt="" class="ocean-till-img" />
+      <div class="ocean-foam-ring"></div>
+    </div>
+
+    <div class="ocean-ui-layer">
+      <div class="ocean-top-box">
+        <span class="mono-tag ocean-tag" data-i18n="oceanTag">СЕКРЕТНЫЙ ВЫХОД ИЗ ЦЕХА // СЕВЕРНОЕ МОРЕ</span>
+        <p class="ocean-quote-line">
+          <span id="ocean-typewriter"></span><span class="typewriter-caret" id="ocean-caret">|</span>
+        </p>
+      </div>
+
+      <div class="ocean-bottom-card">
+        <div class="ocean-bonus-pill" id="ocean-bonus-pill" data-i18n="oceanBonusBadge">
+          🌊 СЕКРЕТ ОТКРЫТ: +3 ЖИЗНИ НАЧИСЛЕНО
+        </div>
+        <div class="ocean-actions">
+          <button type="button" class="btn-primary btn-full" id="btn-ocean-story" data-i18n="btnOceanDownloadStory">
+            СКАЧАТЬ ОТКРЫТКУ СТОРИС 9:16 (БЕЗ СПОЙЛЕРА КОДА)
+          </button>
+          <button type="button" class="btn-ghost btn-full" id="btn-ocean-back" data-i18n="btnOceanBackWorkshop">
+            ВЕРНУТЬСЯ В ЦЕХ
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================================================================
+       ЭКРАН ЗАЩИЩЁННОГО ИМЕННОГО ВЕБ-ПРОПУСКА В КИНОТЕАТР (?pass=ID)
+       ==================================================================== -->
+  <section class="screen screen-scroll" id="screen-pass" hidden>
+    <div class="panel-sheet pass-sheet">
+      <div class="pass-holo-ribbon" aria-hidden="true">
+        <span>БОЧКА · 17 ДЕКАБРЯ · ЖИВОЙ ПРОПУСК · СКРИНШОТ НЕДЕЙСТВИТЕЛЕН · БОЧКА · 17 ДЕКАБРЯ · </span>
+      </div>
+
+      <div class="finale-top-bar">
+        <span class="mono-tag accent-tag" data-i18n="passScreenTag">ЗАЩИЩЁННЫЙ ВЕБ-ПРОПУСК // АНТИ-СКРИНШОТ КОНТРОЛЬ</span>
+        <span class="premiere-pill" data-i18n="premiereBadge">В КИНО С 17 ДЕКАБРЯ</span>
+      </div>
+
+      <h2 class="section-title pass-main-title" data-i18n="passScreenTitle">ИМЕННОЙ БИЛЕТ В КИНО НА «БОЧКУ»</h2>
+
+      <!-- Живые серверные часы с долями секунды против пересылки скриншотов -->
+      <div class="pass-live-clock-bar">
+        <div class="live-clock-left">
+          <span class="live-pulse-dot"></span>
+          <span class="live-clock-caption" data-i18n="passLiveClockLabel">ЖИВОЕ ВРЕМЯ СЕРВЕРА · СКРИНШОТ НЕДЕЙСТВИТЕЛЕН</span>
+        </div>
+        <strong class="live-clock-digits" id="pass-live-clock">00:00:00.0</strong>
+      </div>
+
+      <!-- Крупное светлое фото лица получателя + ФИО для сверки контролёром -->
+      <div class="pass-identity-card">
+        <div class="pass-photo-frame">
+          <img id="pass-holder-photo" alt="Фото владельца билета" />
+          <div class="pass-scan-line" aria-hidden="true"></div>
+        </div>
+        <div class="pass-identity-meta">
+          <span class="mono-label" data-i18n="passHolderLabel">ВЛАДЕЛЕЦ ПРОПУСКА (ФЕЙС-КОНТРОЛЬ НА КАССЕ):</span>
+          <strong class="pass-holder-name" id="pass-holder-name">—</strong>
+          <span class="pass-sender-credit" id="pass-sender-line">Подарок из цеха «Бочки»</span>
+        </div>
+      </div>
+
+      <!-- Блокировка, если отправитель открыл собственную ссылку -->
+      <div class="rescue-error-box" id="pass-self-warning" hidden data-i18n="passSelfClaimBlocked">
+        ⛔ Это выпущенный тобой подарочный пропуск! Забрать его себе нельзя — отправь ссылку другу, чьё лицо на фото, чтобы получить ×2 жизней.
+      </div>
+
+      <!-- Кнопка активации подарка получателем (умножает жизни отправителю ×2 и открывает код) -->
+      <button type="button" class="btn-primary btn-full" id="btn-accept-gift-pass" hidden>
+        <span data-i18n="btnAcceptGiftPass">🎟 ПРИНЯТЬ ПОДАРОК И ОТКРЫТЬ БИЛЕТ (ДРУГУ ×2 ЖИЗНЕЙ)</span>
+      </button>
+
+      <!-- Активированный промокод киносети / верификация через Telegram-бота -->
+      <div class="golden-winner-box pass-code-box" id="pass-ticket-code-box" hidden>
+        <span class="mono-tag accent-tag">ПРОМОКОД АКТИВИРОВАН // ПОКАЖИ НА КАССЕ ВМЕСТЕ С ЭКРАНОМ</span>
+        <div class="share-url-row pass-code-row">
+          <input type="text" id="pass-ticket-code" class="industrial-input ticket-code-input" readonly />
+          <button type="button" class="btn-primary" id="btn-copy-pass-code" data-i18n="btnCopyLink">КОПИРОВАТЬ</button>
+        </div>
+        <p class="golden-winner-contact" id="pass-ticket-contact"></p>
+        <button type="button" class="btn-secondary btn-full pass-bot-btn" id="btn-pass-verify-bot" hidden>
+          <span data-i18n="btnPassVerifyBot">ПОДТВЕРДИТЬ ПРОПУСК В TELEGRAM-БОТЕ ↗</span>
+        </button>
+      </div>
+
+      <button type="button" class="btn-ghost btn-full pass-enter-game-btn" id="btn-pass-go-workshop" data-i18n="btnPassGoWorkshop">
+        ВОЙТИ В ЦЕХ «БОЧКИ»
+      </button>
+    </div>
+  </section>
 
   <!-- ====================================================================
        ЭКРАН 4: КОНСТРУКТОР ПРАНКА «УПАКОВАТЬ В БОЧКУ» (ФОТО + ГОЛОС ДО 5 СЕК)
@@ -333,7 +470,7 @@
         <div class="share-result-head">
           <span class="mono-tag accent-tag" data-i18n="shareReadyTitle">БОЧКА ЗАВАРЕНА // КОРОТКАЯ ССЫЛКА ГОТОВА</span>
           <p class="share-hint" data-i18n="shareReadyHint">
-            Как только друг пройдёт цех и сорвёт крышку, результат запишется, а в Telegram прилетит отчёт.
+            Отправь ссылку другу (+1 жизнь сразу в Гонке за Премьерой и ещё +2 жизни, когда друг вскроет бочку!).
           </p>
         </div>
 
@@ -345,13 +482,17 @@
         <div class="share-buttons-grid">
           <button type="button" class="btn-primary" id="btn-share-native">
             <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13"/></svg>
-            <span data-i18n="btnShareNative">ОТПРАВИТЬ ДРУГУ</span>
+            <span data-i18n="btnShareNative">ОТПРАВИТЬ ДРУГУ (+1 ❤️)</span>
           </button>
           <button type="button" class="btn-secondary" id="btn-share-tg">
             <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m21 3-9 18-3-7-7-3 19-8Z"/></svg>
-            <span data-i18n="btnShareTelegram">В TELEGRAM</span>
+            <span data-i18n="btnShareTelegram">В TELEGRAM (+1 ❤️)</span>
           </button>
         </div>
+
+        <button type="button" class="btn-secondary btn-full share-go-premiere-btn" id="btn-pack-go-premiere">
+          <span data-i18n="btnStartPremiereRace">🏆 ВОЙТИ В ЦЕХ: ГОНКА ЗА ПРЕМЬЕРОЙ</span>
+        </button>
 
         <div class="secret-bonus-card" id="secret-bonus-card">
           <div class="secret-bonus-info">
@@ -367,7 +508,7 @@
   </section>
 
   <!-- ====================================================================
-       ЭКРАН 5: ФИНАЛ РАУНДА, ГОЛОС, ЗОЛОТАЯ БОЧКА И КОНВЕРСИЯ В КИНО
+       ЭКРАН 5: ФИНАЛ РАУНДА, ГОЛОС, ГОНКА ЗА ПРЕМЬЕРОЙ (0 / 100) И КОНВЕРСИЯ
        ==================================================================== -->
   <section class="screen screen-scroll" id="screen-finale" hidden>
     <div class="panel-sheet finale-sheet">
@@ -376,10 +517,10 @@
         <span class="premiere-pill" data-i18n="premiereBadge">В КИНО С 17 ДЕКАБРЯ</span>
       </div>
 
-      <!-- Победный блок при выигрыше реального промокода билета в «Ночной смене» -->
+      <!-- Победный блок при достижении 100.0 / 100 в Гонке за закрытой Премьерой -->
       <div class="golden-winner-box" id="golden-winner-box" hidden>
-        <span class="mono-tag accent-tag">ПРОТОКОЛ ПОБЕДИТЕЛЯ // ЗОЛОТАЯ БОЧКА</span>
-        <h3 class="golden-winner-title" data-i18n="nightShiftWonTitle">🎉 ТЫ ВЫБИЛ НАСТОЯЩИЙ БИЛЕТ В КИНО!</h3>
+        <span class="mono-tag accent-tag">КРАСНАЯ ДОРОЖКА // ЗАКРЫТАЯ ПРЕМЬЕРА 17 ДЕКАБРЯ</span>
+        <h3 class="golden-winner-title" data-i18n="premiereWonGrandTitle">🏆 100 / 100! ТЫ ВЫБИЛ ПРИГЛАСИТЕЛЬНЫЙ НА ЗАКРЫТУЮ ПРЕМЬЕРУ!</h3>
         <div class="share-url-row">
           <input type="text" id="output-ticket-code" class="industrial-input ticket-code-input" readonly />
           <button type="button" class="btn-primary" id="btn-copy-ticket-code" data-i18n="btnCopyLink">КОПИРОВАТЬ</button>
@@ -406,7 +547,7 @@
       </div>
 
       <p class="finale-notify-line" id="finale-notify-line" data-i18n="finaleNotified">
-        Отправителю ушёл сигнал о твоём результате.
+        Отправителю ушёл сигнал о твоём результате (+2 жизни на его счёт!).
       </p>
 
       <!-- Главные кнопки конверсии и вирального цикла -->
@@ -421,7 +562,7 @@
             <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="6" ry="2"/><path d="M6 5v14c0 1.1 2.7 2 6 2s6-.9 6-2V5M6 10c0 1.1 2.7 2 6 2s6-.9 6-2M6 15c0 1.1 2.7 2 6 2s6-.9 6-2"/></svg>
             <span data-i18n="btnPackBack">ЗАКАТАТЬ СВОЕГО КЕНТА</span>
           </span>
-          <small class="btn-sub-line" data-i18n="btnPackBackHint">Нужно для допуска к «Золотой бочке» с билетами в кино</small>
+          <small class="btn-sub-line" data-i18n="btnPackBackHint">Открывает «Гонку за Премьерой (0 / 100)» и даёт жизни для ударов</small>
         </button>
 
         <div class="finale-dual-row">
@@ -436,27 +577,51 @@
       </div>
 
       <!-- ==================================================================
-           ОХОТА ЗА БИЛЕТОМ В КИНО В ЗОЛОТОЙ БОЧКЕ («НОЧНАЯ СМЕНА»)
+           ГЛАВНАЯ СУПЕРИГРА: ГОНКА ЗА ЗАКРЫТОЙ ПРЕМЬЕРОЙ (0 / 100) + ЗОЛОТЫЕ БОЧКИ
            ================================================================== -->
       <div class="golden-hunt-card" id="golden-hunt-card">
         <div class="golden-hunt-head">
-          <span class="mono-tag accent-tag" data-i18n="goldenTag">СЕКРЕТНЫЙ РЕЖИМ // КАЖДАЯ 100-Я БОЧКА НА СЕРВЕРЕ</span>
-          <h3 class="golden-hunt-title" data-i18n="goldenTitle">НАЙДИ НАСТОЯЩИЙ БИЛЕТ В КИНО В ЗОЛОТОЙ БОЧКЕ</h3>
-          <p class="golden-hunt-desc" data-i18n="goldenDesc">
-            Выполни 2 условия допуска, чтобы выходить в «Ночную смену» и пробивать золотые бочки с реальными промокодами в кино на 17 декабря.
+          <span class="mono-tag accent-tag" data-i18n="premiereRaceTag">ГЛАВНАЯ СУПЕРИГРА // КРАСНАЯ ДОРОЖКА 17 ДЕКАБРЯ</span>
+          <h3 class="golden-hunt-title" data-i18n="premiereRaceTitle">ГОНКА ЗА ЗАКРЫТОЙ ПРЕМЬЕРОЙ СО СЪЁМОЧНОЙ ГРУППОЙ</h3>
+          <p class="golden-hunt-desc" data-i18n="premiereRaceDesc">
+            Пробивай бочки в цеху и набери 100 баллов до приглашения на закрытую Премьеру! По пути выпадают «Золотые бочки» с билетами в кино (забрать себе нельзя — сожги ради ×2 жизней или подари другу с фейс-контролем!).
           </p>
+        </div>
+
+        <!-- Крупная шкала 0..100 прямо на карточке Суперигры -->
+        <div class="premiere-card-meter">
+          <div class="premiere-strip-head">
+            <span class="premiere-strip-title" data-i18n="premiereBarLabel">ДОПУСК НА ПРЕМЬЕРУ</span>
+            <div class="premiere-strip-stats">
+              <span class="premiere-score-pill"><strong id="finale-premiere-score">0.0</strong> / 100</span>
+              <span class="premiere-lives-pill">❤️ <span data-i18n="premiereLivesLabel">ЖИЗНИ</span>: <strong id="finale-premiere-lives">3</strong></span>
+            </div>
+          </div>
+          <div class="premiere-progress-track premiere-track-lg">
+            <div class="premiere-progress-fill" id="finale-premiere-fill"></div>
+          </div>
+        </div>
+
+        <!-- Неразыгранный «Чужой билет», если игрок закрыл окно вилки -->
+        <button type="button" class="btn-secondary btn-full pending-ticket-banner" id="btn-reopen-golden-fork" hidden>
+          🎟 У ТЕБЯ НЕРАЗЫГРАННЫЙ БИЛЕТ В КИНО! ВЫБРАТЬ: ×2 ЖИЗНЕЙ ИЛИ ПОДАРОК ДРУГУ →
+        </button>
+
+        <div class="life-economy-rules">
+          <div class="life-rule-item" data-i18n="lifeRuleShare">+1 ЖИЗНЬ СРАЗУ — отправь бочку новому другу (до 3 в сутки)</div>
+          <div class="life-rule-item" data-i18n="lifeRuleOpened">+2 ЖИЗНИ — как только друг откроет ссылку и пройдёт цех</div>
         </div>
 
         <div class="golden-checklist" id="golden-checklist">
           <div class="golden-req-row" id="golden-req-row-pack">
             <span class="req-status-dot" id="golden-dot-pack"></span>
-            <span class="req-label" data-i18n="goldenReq1">1. Закатать друга в бочку и создать короткую ссылку</span>
+            <span class="req-label" data-i18n="goldenReq1">1. Закатать друга в бочку и отправить короткую ссылку (+1 жизнь сразу, +2 за открытие)</span>
             <button type="button" class="quest-action-btn" id="btn-golden-go-pack" data-i18n="questOpen">ВЫПОЛНИТЬ</button>
           </div>
 
           <div class="golden-req-row" id="golden-req-row-kp">
             <span class="req-status-dot" id="golden-dot-kp"></span>
-            <span class="req-label" data-i18n="goldenReq2">2. Загрузить скриншот Кинопоиска с активной оранжевой кнопкой «Буду смотреть»</span>
+            <span class="req-label" data-i18n="goldenReq2">2. Загрузить скриншот Кинопоиска с активной оранжевой кнопкой «Буду смотреть» (+1 Крышка)</span>
             <div class="golden-kp-actions">
               <a class="quest-action-btn kp-link-btn" id="link-golden-kp-card" href="https://www.kinopoisk.ru/film/11226275/" target="_blank" rel="noopener noreferrer">КИНОПОИСК ↗</a>
               <label class="quest-action-btn file-label" id="label-upload-kp-screen">
@@ -470,7 +635,7 @@
         </div>
 
         <button type="button" class="btn-primary btn-full golden-enter-btn" id="btn-enter-night-shift" disabled>
-          <span data-i18n="btnEnterNightShift">🏆 ВОЙТИ В «НОЧНУЮ СМЕНУ» (3 ЗОЛОТЫХ УДАРА)</span>
+          <span data-i18n="btnStartPremiereRace">🏆 ВОЙТИ В ЦЕХ: ГОНКА ЗА ПРЕМЬЕРОЙ</span>
         </button>
         <p class="night-shift-cooldown-text" id="night-shift-cooldown-text" hidden></p>
       </div>
@@ -520,6 +685,134 @@
   </section>
 
   <!-- ====================================================================
+       МОДАЛКА ВИЛКИ «ЗОЛОТАЯ БОЧКА: ЧУЖОЙ БИЛЕТ С ФЕЙС-КОНТРОЛЕМ»
+       Игрок НЕ МОЖЕТ забрать обычный билет себе — только Путь А (×2) или Путь Б (Подарок другу)
+       ==================================================================== -->
+  <div class="modal-backdrop" id="modal-golden-fork" hidden>
+    <div class="modal-card golden-fork-card">
+      <div class="tech-corner tl"></div>
+      <div class="tech-corner tr"></div>
+      <div class="tech-corner bl"></div>
+      <div class="tech-corner br"></div>
+
+      <div class="modal-head">
+        <span class="mono-tag accent-tag" data-i18n="goldenForkTag">ЗОЛОТАЯ БОЧКА ВСКРЫТА // ПРАВИЛО ЧУЖОГО БИЛЕТА</span>
+        <button type="button" class="icon-close" id="btn-close-golden-fork" aria-label="Отложить">✕</button>
+      </div>
+
+      <h3 class="section-title rescue-title" data-i18n="goldenForkTitle">
+        ВНУТРИ НАСТОЯЩИЙ БИЛЕТ В КИНО! СЕБЕ ЗАБРАТЬ НЕЛЬЗЯ
+      </h3>
+      <p class="modal-hint" data-i18n="goldenForkDesc">
+        По закону цеха обычный билет нельзя забрать себе в карман. Решай: сожги его в топке ради двойного запаса ударов к Премьере — или оформи именной билет с фото для друга и тоже получи ×2 жизней!
+      </p>
+
+      <div class="fork-choices-stack" id="fork-choices-stack">
+        <button type="button" class="btn-burn-furnace btn-full" id="btn-burn-ticket-x2">
+          <span data-i18n="btnBurnTicketX2">🔥 ПУТЬ А: СЖЕЧЬ БИЛЕТ В ОБМЕН НА ×2 ЖИЗНЕЙ</span>
+        </button>
+
+        <button type="button" class="btn-primary btn-full" id="btn-gift-ticket-toggle">
+          <span data-i18n="btnGiftTicketToggle">🎟 ПУТЬ Б: ПОДАРИТЬ ИМЕННОЙ БИЛЕТ ДРУГУ (+×2 ЖИЗНЕЙ)</span>
+        </button>
+      </div>
+
+      <!-- Форма оформления Именного пропуска с фейс-контролем (Путь Б) -->
+      <div class="gift-pass-form" id="gift-pass-form" hidden>
+        <p class="gift-face-warn" data-i18n="giftFaceWarn">
+          ⚠ ФЕЙС-КОНТРОЛЬ В КИНОТЕАТРЕ: загрузи реальное светлое фото лица друга и впиши его имя. На контроле сверят живой пропуск с лицом друга!
+        </p>
+
+        <div class="gift-photo-row">
+          <div class="gift-photo-thumb-wrap">
+            <img id="gift-friend-photo-preview" alt="Фото друга" hidden />
+            <span class="gift-photo-placeholder" id="gift-photo-placeholder">ФОТО<br/>ЛИЦА</span>
+          </div>
+          <div class="gift-form-inputs">
+            <label class="btn-secondary btn-compact file-label">
+              <span data-i18n="giftUploadFriendPhoto">ЗАГРУЗИТЬ РЕАЛЬНОЕ ФОТО ДРУГА</span>
+              <input type="file" id="input-gift-friend-photo" accept="image/*" hidden />
+            </label>
+            <input
+              type="text"
+              id="input-gift-friend-name"
+              maxlength="40"
+              class="industrial-input input-compact"
+              data-i18n-placeholder="giftFriendNamePlaceholder"
+              placeholder="Имя друга (для сверки на контроле)"
+            />
+          </div>
+        </div>
+
+        <p class="rescue-error-box" id="gift-form-error" hidden>
+          Загрузи чёткое фото лица друга и укажи его настоящее имя (минимум 2 буквы)!
+        </p>
+
+        <button type="button" class="btn-primary btn-full" id="btn-issue-gift-pass">
+          <span data-i18n="btnIssueGiftPass">ВЫПУСТИТЬ ИМЕННОЙ ВЕБ-ПРОПУСК ДРУГУ</span>
+        </button>
+      </div>
+
+      <!-- Готовая короткая ссылка ?pass=ID для пересылки другу -->
+      <div class="share-result-box" id="gift-pass-share-box" hidden>
+        <p class="share-hint" data-i18n="giftPassReadyLabel">
+          ПРОПУСК ВЫПУЩЕН! Перешли ссылку другу — когда он активирует подарок, твои жизни удвоятся (×2):
+        </p>
+        <div class="share-url-row">
+          <input type="text" id="output-gift-pass-url" class="industrial-input" readonly />
+          <button type="button" class="btn-ghost" id="btn-copy-gift-pass" data-i18n="btnCopyLink">КОПИРОВАТЬ</button>
+        </div>
+        <div class="share-buttons-grid">
+          <button type="button" class="btn-primary" id="btn-share-gift-native" data-i18n="btnShareNative">ОТПРАВИТЬ ДРУГУ</button>
+          <button type="button" class="btn-secondary" id="btn-share-gift-tg" data-i18n="btnShareTelegram">В TELEGRAM</button>
+        </div>
+        <button type="button" class="btn-ghost btn-full gift-done-btn" id="btn-done-gift-pass">
+          ПРОДОЛЖИТЬ ГОНКУ ЗА ПРЕМЬЕРОЙ →
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       МОДАЛКА ЛОВУШКИ ПОСЛЕДНЕГО ПРОЦЕНТА (NEAR-MISS >= 90 / 100 ПРИ 0 ЖИЗНЕЙ)
+       ==================================================================== -->
+  <div class="modal-backdrop" id="modal-near-miss" hidden>
+    <div class="modal-card rescue-modal-card near-miss-card">
+      <div class="tech-corner tl"></div>
+      <div class="tech-corner tr"></div>
+      <div class="tech-corner bl"></div>
+      <div class="tech-corner br"></div>
+
+      <div class="modal-head">
+        <span class="mono-tag danger-tag" data-i18n="nearMissTag">ЖИЗНИ НА НУЛЕ // ЛОВУШКА ПОСЛЕДНЕГО ПРОЦЕНТА</span>
+        <button type="button" class="icon-close" id="btn-close-near-miss" aria-label="Закрыть">✕</button>
+      </div>
+
+      <h3 class="section-title rescue-title" data-i18n="nearMissTitle">
+        ДО ЗАКРЫТОЙ ПРЕМЬЕРЫ ОСТАЛСЯ ОДИН РЫВОК!
+      </h3>
+
+      <div class="premiere-card-meter near-miss-meter">
+        <div class="premiere-strip-head">
+          <span class="premiere-strip-title" data-i18n="premiereBarLabel">ДОПУСК НА ПРЕМЬЕРУ</span>
+          <span class="premiere-score-pill"><strong id="near-miss-score-num">98.9</strong> / 100</span>
+        </div>
+        <div class="premiere-progress-track premiere-track-lg">
+          <div class="premiere-progress-fill" id="near-miss-score-fill" style="width: 98.9%"></div>
+        </div>
+      </div>
+
+      <p class="modal-hint" id="near-miss-desc">
+        На твоей шкале уже 98.9 из 100 баллов — до красной дорожки буквально полшага! Закатай друга в бочку прямо сейчас: получишь +1 удар сразу и ещё +2 жизни, когда он сорвёт крышку.
+      </p>
+
+      <button type="button" class="btn-primary btn-full" id="btn-near-miss-pack">
+        <span data-i18n="btnNearMissPack">⚡ УПАКОВАТЬ ДРУГА (+1 ЖИЗНЬ СРАЗУ И +2 ЗА ОТКРЫТИЕ)</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ====================================================================
        МОДАЛКА СПАСЕНИЯ В ЦЕХУ (5-ХОДОВАЯ ВОРОНКА: ШАГ А КИНОПОИСК -> ШАГ Б ТРЕЙЛЕР)
        ==================================================================== -->
   <div class="modal-backdrop" id="modal-rescue" hidden>
@@ -559,7 +852,7 @@
 
       <!-- ШАГ Б: 5-я победная попытка за просмотр собственного MP4-трейлера (40 сек) -->
       <div id="rescue-step-2" hidden>
-        <div class="rescue-done-pill" data-i18n="rescueKpDoneBadge">✓ ШАГ 1: ОТМЕТКА «БУДУ СМОТРЕТЬ» ЗАЧТЕНО</div>
+        <div class="rescue-done-pill" data-i18n="rescueKpDoneBadge">✓ ШАГ 1: ОТМЕТКА «БУДУ СМОТРЕТЬ» ЗАЧТЕНА</div>
         <span class="mono-tag accent-tag" data-i18n="rescueStep2Tag">ПОСЛЕДНИЙ ШАНС // СПАСЕНИЕ №2</span>
         <h3 class="section-title rescue-title" data-i18n="rescueStep2Title">
           ПОЧТИ! ОСТАЛОСЬ ВСЕГО ДВЕ ЗАКРЫТЫЕ БОЧКИ!
@@ -596,7 +889,6 @@
         <div id="yt-fallback-slot" class="yt-fallback-slot" hidden></div>
       </div>
 
-      <!-- Кастомная индустриальная панель управления без возможности перемотки вперёд -->
       <div class="trailer-custom-bar" id="trailer-custom-bar">
         <button type="button" class="hud-mini-btn" id="btn-trailer-play">❚❚ ПАУЗА</button>
         <div class="trailer-progress-track" aria-label="Прогресс просмотра">
@@ -606,7 +898,6 @@
         <button type="button" class="hud-mini-btn" id="btn-trailer-mute">ЗВУК</button>
       </div>
 
-      <!-- Блок разблокировки 5-й попытки (не закрывает плеер насильно после 40 сек!) -->
       <div class="trailer-rescue-box" id="trailer-rescue-box" hidden>
         <p class="trailer-rescue-status" id="trailer-rescue-status">
           До разблокировки +1 удара: 40 сек (перемотка вперёд отключена)
@@ -672,22 +963,36 @@
     </div>
   </div>
 
-  <!-- МОДАЛКА 4: РОЗЫГРЫШ / ЗОЛОТАЯ БОЧКА (ИЗ ШАПКИ) -->
+  <!-- МОДАЛКА 4: ПРЕМЬЕРА И ЖЕТОНЫ ЦЕХА (ИЗ ШАПКИ) -->
   <div class="modal-backdrop" id="modal-prize" hidden>
     <div class="modal-card">
       <div class="modal-head">
-        <span class="mono-tag accent-tag" data-i18n="goldenTitle">НАЙДИ НАСТОЯЩИЙ БИЛЕТ В КИНО В ЗОЛОТОЙ БОЧКЕ</span>
+        <span class="mono-tag accent-tag" data-i18n="premiereRaceTitle">ГОНКА ЗА ЗАКРЫТОЙ ПРЕМЬЕРОЙ СО СЪЁМОЧНОЙ ГРУППОЙ</span>
         <button type="button" class="icon-close" id="btn-close-prize" aria-label="Закрыть">✕</button>
       </div>
-      <p class="modal-hint" data-i18n="goldenDesc">
-        Выполни 2 условия допуска, чтобы выходить в «Ночную смену» и пробивать золотые бочки с реальными промокодами в кино на 17 декабря.
+      <p class="modal-hint" data-i18n="premiereRaceDesc">
+        Пробивай бочки в цеху и набери 100 баллов до приглашения на закрытую Премьеру!
       </p>
+
+      <div class="premiere-card-meter">
+        <div class="premiere-strip-head">
+          <span class="premiere-strip-title" data-i18n="premiereBarLabel">ДОПУСК НА ПРЕМЬЕРУ</span>
+          <div class="premiere-strip-stats">
+            <span class="premiere-score-pill"><strong id="modal-premiere-score">0.0</strong> / 100</span>
+            <span class="premiere-lives-pill">❤️ <strong id="modal-premiere-lives">3</strong></span>
+          </div>
+        </div>
+        <div class="premiere-progress-track premiere-track-lg">
+          <div class="premiere-progress-fill" id="modal-premiere-fill"></div>
+        </div>
+      </div>
+
       <div class="prize-summary-big">
         <strong id="modal-caps-count">0</strong>
         <span>КРЫШЕК ЦЕХА НА СЧЕТУ</span>
       </div>
       <div class="modal-cta-row">
-        <button type="button" class="btn-primary" id="btn-prize-golden" data-i18n="goldenTitle">ЗОЛОТАЯ БОЧКА (ДОПУСК)</button>
+        <button type="button" class="btn-primary" id="btn-prize-golden" data-i18n="btnStartPremiereRace">🏆 ГОНКА ЗА ПРЕМЬЕРОЙ</button>
         <button type="button" class="btn-secondary" id="btn-prize-pack" data-i18n="btnPackFriendMain">УПАКОВАТЬ ДРУГА В БОЧКУ</button>
       </div>
     </div>

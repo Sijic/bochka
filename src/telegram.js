@@ -12,10 +12,13 @@ export function isTelegramMiniApp() {
 export function initTelegram() {
   const tg = getWebApp();
   if (!tg) {
+    const rawStart = extractUrlBarrelParam();
+    const passParam = extractUrlPassParam();
     return {
       inTelegram: false,
       user: null,
-      startParam: extractUrlBarrelParam(),
+      startParam: rawStart.startsWith('pass_') ? '' : rawStart,
+      passParam: passParam || (rawStart.startsWith('pass_') ? rawStart.slice(5) : ''),
     };
   }
 
@@ -31,7 +34,9 @@ export function initTelegram() {
   }
 
   const u = tg.initDataUnsafe?.user || null;
-  const startParam = tg.initDataUnsafe?.start_param || extractUrlBarrelParam();
+  const rawStart = tg.initDataUnsafe?.start_param || extractUrlBarrelParam();
+  const urlPass = extractUrlPassParam();
+  const isPassStart = rawStart.startsWith('pass_');
 
   return {
     inTelegram: Boolean(tg.initData && tg.initData.length > 0),
@@ -44,8 +49,20 @@ export function initTelegram() {
           lang: u.language_code || '',
         }
       : null,
-    startParam,
+    startParam: isPassStart ? '' : rawStart,
+    passParam: urlPass || (isPassStart ? rawStart.slice(5) : ''),
   };
+}
+
+export function extractUrlPassParam() {
+  try {
+    const sp = new URLSearchParams(window.location.search);
+    const p = sp.get('pass') || '';
+    if (p) return p.trim();
+  } catch {
+    /* ignore */
+  }
+  return '';
 }
 
 export function extractUrlBarrelParam() {

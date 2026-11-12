@@ -9,8 +9,9 @@ const SFX_PATHS = {
   drop2: './assets/sfx/water_drop_2.mp3',
   chain1: './assets/sfx/chain_clink_1.mp3',
   chain2: './assets/sfx/chain_clink_2.mp3',
-  bark: './assets/sfx/dog_bark_1.mp3',
-  scream: './assets/sfx/scream_1.mp3',
+  scream1: './assets/sfx/scream_1.mp3',
+  scream2: './assets/sfx/scream_2.mp3',
+  priestHit: './assets/sfx/voices/priest_hit_1.mp3',
   whisper: './assets/sfx/voices/screamer_0.mp3',
   hum: './assets/sfx/factory_hum.mp3',
 };
@@ -99,6 +100,7 @@ class WorkshopAudio {
     if (!this.enabled) {
       this.stopListening();
       this.stopMuffledVoiceLoop();
+      this.stopOceanEasterEggAudio();
     }
     return this.enabled;
   }
@@ -716,35 +718,279 @@ class WorkshopAudio {
     this.playChainRattle(0.95);
   }
 
+  /**
+   * 4 фирменных 0.4-секундных скримера из фильма (без собак!):
+   * 0 — рука с постера (скрежет ногтей по стали + удар)
+   * 1 — пастор Тиль Швайгер (тяжёлый выдох + колокольный удар золотого креста)
+   * 2 — отец с фонарём (щелчок прожектора + глухой шёпот "No, no!")
+   * 3 — пацан-блогер (стробоскоп затвора + цифровой визг битого видео)
+   */
   playMiniScreamer(variant = 0) {
     Haptics.error();
     if (!this.ctx || !this.enabled) return;
     const now = this.ctx.currentTime;
+    const v = ((variant % 4) + 4) % 4;
 
-    const keys = ['bark', 'whisper', 'scream'];
-    const buf = this.buffers.get(keys[variant % keys.length]) || this.buffers.get('bark');
-    if (buf) {
-      const src = this.ctx.createBufferSource();
-      src.buffer = buf;
-      const g = this.ctx.createGain();
-      g.gain.setValueAtTime(0.92, now);
-      g.gain.setValueAtTime(0.88, now + 0.32);
-      g.gain.exponentialRampToValueAtTime(0.001, now + 0.44);
-      src.connect(g).connect(this.master);
-      src.start(now);
-      src.stop(now + 0.46);
+    // Общий резкий суб-удар в грудь (0.4 сек)
+    const sub = this.ctx.createOscillator();
+    const subG = this.ctx.createGain();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(118, now);
+    sub.frequency.exponentialRampToValueAtTime(34, now + 0.36);
+    subG.gain.setValueAtTime(0.88, now);
+    subG.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+    sub.connect(subG).connect(this.master);
+    sub.start(now);
+    sub.stop(now + 0.41);
+
+    if (v === 0) {
+      // Вариант 0: Бледная грязная рука скребёт ногтями по стали из горловины
+      const buf = this.buffers.get('scream1');
+      if (buf) {
+        const src = this.ctx.createBufferSource();
+        src.buffer = buf;
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.88, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
+        src.connect(g).connect(this.master);
+        src.start(now);
+        src.stop(now + 0.43);
+      }
+      if (this.noiseBuffer) {
+        const nSrc = this.ctx.createBufferSource();
+        nSrc.buffer = this.noiseBuffer;
+        const bp = this.ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.setValueAtTime(2850, now);
+        bp.frequency.exponentialRampToValueAtTime(920, now + 0.38);
+        bp.Q.value = 8.5;
+        const ng = this.ctx.createGain();
+        ng.gain.setValueAtTime(0.55, now);
+        ng.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+        nSrc.connect(bp).connect(ng).connect(this.master);
+        nSrc.start(now);
+        nSrc.stop(now + 0.41);
+      }
+      return;
     }
 
-    const osc = this.ctx.createOscillator();
-    const g = this.ctx.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(880, now);
-    osc.frequency.exponentialRampToValueAtTime(190, now + 0.38);
-    g.gain.setValueAtTime(0.26, now);
-    g.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
-    osc.connect(g).connect(this.master);
-    osc.start(now);
-    osc.stop(now + 0.41);
+    if (v === 1) {
+      // Вариант 1: Священник Швайгера бьёт светящимся крестом под тяжёлый выдох
+      const pBuf = this.buffers.get('priestHit') || this.buffers.get('scream1');
+      if (pBuf) {
+        const src = this.ctx.createBufferSource();
+        src.buffer = pBuf;
+        src.playbackRate.value = 0.92;
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.95, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.44);
+        src.connect(g).connect(this.master);
+        src.start(now);
+        src.stop(now + 0.45);
+      }
+      // Медный диссонанс креста
+      [370, 554.37, 740].forEach((freq) => {
+        const osc = this.ctx.createOscillator();
+        const og = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(freq, now);
+        osc.frequency.exponentialRampToValueAtTime(freq * 0.94, now + 0.39);
+        og.gain.setValueAtTime(0.14, now);
+        og.gain.exponentialRampToValueAtTime(0.001, now + 0.41);
+        osc.connect(og).connect(this.master);
+        osc.start(now);
+        osc.stop(now + 0.42);
+      });
+      return;
+    }
+
+    if (v === 2) {
+      // Вариант 2: Отец в куртке слепит лучом фонаря в упор под глухое "No, no!"
+      const wBuf = this.buffers.get('whisper');
+      if (wBuf) {
+        const src = this.ctx.createBufferSource();
+        src.buffer = wBuf;
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.96, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.44);
+        src.connect(g).connect(this.master);
+        src.start(now);
+        src.stop(now + 0.45);
+      }
+      // Щелчок мощного фонаря + высоковольтный гул вспышки
+      const click = this.ctx.createOscillator();
+      const cg = this.ctx.createGain();
+      click.type = 'square';
+      click.frequency.setValueAtTime(1950, now);
+      click.frequency.exponentialRampToValueAtTime(240, now + 0.06);
+      cg.gain.setValueAtTime(0.38, now);
+      cg.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+      click.connect(cg).connect(this.master);
+      click.start(now);
+      click.stop(now + 0.09);
+      return;
+    }
+
+    // Вариант 3: Пацан-блогер врубает стробоскоп вспышки смартфона с цифровым визгом битого видео
+    const sBuf = this.buffers.get('scream2') || this.buffers.get('scream1');
+    if (sBuf) {
+      const src = this.ctx.createBufferSource();
+      src.buffer = sBuf;
+      src.playbackRate.value = 1.18;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.75, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.41);
+      src.connect(g).connect(this.master);
+      src.start(now);
+      src.stop(now + 0.42);
+    }
+    const glitch = this.ctx.createOscillator();
+    const gg = this.ctx.createGain();
+    glitch.type = 'square';
+    glitch.frequency.setValueAtTime(2200, now);
+    glitch.frequency.setValueAtTime(640, now + 0.08);
+    glitch.frequency.setValueAtTime(3100, now + 0.16);
+    glitch.frequency.setValueAtTime(420, now + 0.24);
+    glitch.frequency.setValueAtTime(1750, now + 0.32);
+    gg.gain.setValueAtTime(0.24, now);
+    gg.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+    glitch.connect(gg).connect(this.master);
+    glitch.start(now);
+    glitch.stop(now + 0.41);
+  }
+
+  /**
+   * Атмосфера секретного уровня «Достучаться до небес» (прибой, чайки и минорный перебор акустической гитары)
+   */
+  startOceanEasterEggAudio() {
+    this.stopOceanEasterEggAudio();
+    if (!this.ctx || !this.enabled) return;
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
+    }
+
+    const now = this.ctx.currentTime;
+    this._oceanActive = true;
+    this._oceanNodes = [];
+    this._oceanTimers = [];
+
+    // 1. Шум морского прибоя (розовый шум через медленный LFO волн)
+    if (this.noiseBuffer) {
+      const surfSrc = this.ctx.createBufferSource();
+      surfSrc.buffer = this.noiseBuffer;
+      surfSrc.loop = true;
+
+      const lp = this.ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(380, now);
+
+      const lfo = this.ctx.createOscillator();
+      const lfoGain = this.ctx.createGain();
+      lfo.type = 'sine';
+      lfo.frequency.value = 0.16; // цикл волны ~6.2 сек
+      lfoGain.gain.value = 260;
+      lfo.connect(lfoGain).connect(lp.frequency);
+
+      const surfGain = this.ctx.createGain();
+      surfGain.gain.setValueAtTime(0.001, now);
+      surfGain.gain.linearRampToValueAtTime(0.28, now + 1.4);
+
+      surfSrc.connect(lp).connect(surfGain).connect(this.master);
+      surfSrc.start(now);
+      lfo.start(now);
+      this._oceanNodes.push(surfSrc, lfo, surfGain);
+    }
+
+    // 2. Далёкие крики чаек
+    const playGull = () => {
+      if (!this._oceanActive || !this.ctx || !this.enabled) return;
+      const t = this.ctx.currentTime;
+      [0, 0.34].forEach((offset, idx) => {
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'sine';
+        const peak = idx === 0 ? 2150 : 1880;
+        osc.frequency.setValueAtTime(peak * 0.78, t + offset);
+        osc.frequency.linearRampToValueAtTime(peak, t + offset + 0.08);
+        osc.frequency.exponentialRampToValueAtTime(peak * 0.62, t + offset + 0.28);
+        g.gain.setValueAtTime(0.001, t + offset);
+        g.gain.linearRampToValueAtTime(0.055, t + offset + 0.06);
+        g.gain.exponentialRampToValueAtTime(0.001, t + offset + 0.3);
+        osc.connect(g).connect(this.master);
+        osc.start(t + offset);
+        osc.stop(t + offset + 0.32);
+      });
+      this._oceanTimers.push(window.setTimeout(playGull, 4600 + Math.random() * 2800));
+    };
+    this._oceanTimers.push(window.setTimeout(playGull, 1100));
+
+    // 3. Минорный перебор акустической гитары (Am -> Fmaj7 -> Dm7 -> E7)
+    const chords = [
+      [110.0, 164.81, 220.0, 261.63, 329.63, 261.63, 220.0, 164.81], // Am
+      [87.31, 130.81, 174.61, 220.0, 329.63, 220.0, 174.61, 130.81], // Fmaj7
+      [146.83, 220.0, 261.63, 349.23, 261.63, 220.0, 174.61, 220.0], // Dm7
+      [82.41, 123.47, 164.81, 207.65, 293.66, 207.65, 164.81, 123.47], // E7
+    ];
+    let step = 0;
+
+    const pluckNote = (freq) => {
+      if (!this._oceanActive || !this.ctx || !this.enabled) return;
+      const t = this.ctx.currentTime;
+      const osc1 = this.ctx.createOscillator();
+      const osc2 = this.ctx.createOscillator();
+      const lp = this.ctx.createBiquadFilter();
+      const g = this.ctx.createGain();
+
+      osc1.type = 'triangle';
+      osc2.type = 'sawtooth';
+      osc1.frequency.setValueAtTime(freq, t);
+      osc2.frequency.setValueAtTime(freq * 2.0, t);
+
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(freq * 5.2, t);
+      lp.frequency.exponentialRampToValueAtTime(freq * 1.4, t + 1.35);
+
+      g.gain.setValueAtTime(0.001, t);
+      g.gain.linearRampToValueAtTime(0.16, t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 1.65);
+
+      const mix2 = this.ctx.createGain();
+      mix2.gain.value = 0.22;
+
+      osc1.connect(lp);
+      osc2.connect(mix2).connect(lp);
+      lp.connect(g).connect(this.master);
+
+      osc1.start(t);
+      osc2.start(t);
+      osc1.stop(t + 1.7);
+      osc2.stop(t + 1.7);
+    };
+
+    const tickArpeggio = () => {
+      if (!this._oceanActive) return;
+      const chordIdx = Math.floor(step / 8) % chords.length;
+      const noteIdx = step % 8;
+      pluckNote(chords[chordIdx][noteIdx]);
+      step += 1;
+      this._oceanTimers.push(window.setTimeout(tickArpeggio, 340));
+    };
+    this._oceanTimers.push(window.setTimeout(tickArpeggio, 550));
+  }
+
+  stopOceanEasterEggAudio() {
+    this._oceanActive = false;
+    if (Array.isArray(this._oceanTimers)) {
+      this._oceanTimers.forEach((id) => clearTimeout(id));
+      this._oceanTimers = [];
+    }
+    if (Array.isArray(this._oceanNodes)) {
+      this._oceanNodes.forEach((n) => {
+        try { if (typeof n.stop === 'function') n.stop(); } catch { /* ignore */ }
+        try { n.disconnect(); } catch { /* ignore */ }
+      });
+      this._oceanNodes = [];
+    }
   }
 
   playLidBlowOff(survived = true) {

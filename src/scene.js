@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 
+export const BARREL_BATCH_CODES = ['01', '12', '17', '19', '26', '97'];
+
 export class WorkshopScene {
   constructor(canvas, callbacks = {}) {
     this.canvas = canvas;
@@ -212,6 +214,14 @@ export class WorkshopScene {
     const rimWorld = b.group.position.clone().add(new THREE.Vector3(0, 1.36, 0));
     this._spawnRustDust(rimWorld, 16);
     this._impulseChains(1.25);
+  }
+
+  /**
+   * Резкий удар тряски камеры при срабатывании 0.4-секундного фирменного скримера
+   */
+  triggerScreamerShake(intensity = 0.36) {
+    this.shakeIntensity = Math.max(this.shakeIntensity || 0, intensity);
+    this._impulseChains(1.4);
   }
 
   /**
@@ -633,7 +643,8 @@ export class WorkshopScene {
 
     for (let i = 0; i < 6; i++) {
       const group = new THREE.Group();
-      const maps = this._createBarrelPBRTextures(i + 1);
+      const batchCode = BARREL_BATCH_CODES[i] || `0${i + 1}`;
+      const maps = this._createBarrelPBRTextures(batchCode, i + 1);
 
       const dentUniforms = {
         uDentPos: { value: new THREE.Vector3(0, 0.8, 0.42) },
@@ -1370,7 +1381,7 @@ export class WorkshopScene {
     return new THREE.CanvasTexture(c);
   }
 
-  _createBarrelPBRTextures(num) {
+  _createBarrelPBRTextures(batchCode, num = 1) {
     const W = 512;
     const H = 512;
     const cCol = document.createElement('canvas');
@@ -1404,6 +1415,7 @@ export class WorkshopScene {
       ctx.fill();
 
       rctx.fillStyle = 'rgba(235, 235, 235, 0.45)';
+      ctx.beginPath();
       rctx.beginPath();
       rctx.ellipse(rx, ry, rw, rh, 0.2, 0, Math.PI * 2);
       rctx.fill();
@@ -1422,14 +1434,26 @@ export class WorkshopScene {
     ctx.fillRect(0, H * 0.32, W, 6);
     ctx.fillRect(0, H * 0.66, W, 6);
 
+    // Потёртый заводской трафарет номера партии (01, 12, 17, 19, 26, 97)
     ctx.save();
-    ctx.fillStyle = 'rgba(234, 179, 8, 0.72)';
-    ctx.font = '900 58px Impact, monospace';
+    ctx.fillStyle = 'rgba(15, 18, 22, 0.42)';
+    ctx.fillRect(W * 0.34, H * 0.37, W * 0.32, H * 0.21);
+    ctx.strokeStyle = 'rgba(234, 179, 8, 0.34)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(W * 0.34, H * 0.37, W * 0.32, H * 0.21);
+
+    ctx.fillStyle = 'rgba(234, 179, 8, 0.86)';
+    ctx.font = '900 72px Impact, "Arial Black", monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(`0${num}`, W * 0.5, H * 0.49);
-    ctx.font = '700 16px monospace';
-    ctx.fillStyle = 'rgba(214, 185, 130, 0.52)';
-    ctx.fillText('200L // B-04', W * 0.5, H * 0.55);
+    ctx.fillText(String(batchCode), W * 0.5, H * 0.505);
+
+    // Горизонтальная перемычка настоящего металлического трафарета + потёртости
+    ctx.fillStyle = '#262b31';
+    ctx.fillRect(W * 0.36, H * 0.448, W * 0.28, 3.5);
+
+    ctx.font = '700 15px monospace';
+    ctx.fillStyle = 'rgba(214, 185, 130, 0.56)';
+    ctx.fillText(`ПАРТИЯ // ${batchCode}`, W * 0.5, H * 0.556);
     ctx.restore();
 
     const color = new THREE.CanvasTexture(cCol);

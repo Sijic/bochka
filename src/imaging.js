@@ -532,6 +532,153 @@ export async function generateStoriesPosterPNG({
   return canvasToBlob(canvas, 'image/png', 0.95);
 }
 
+/**
+ * Сжимает реальное фото друга для Именного пропуска в кинотеатр (512x512 WebP <= 60 КБ)
+ * БЕЗ тёмного фильтра бочки, чтобы контролёр на кассе чётко сверил лицо!
+ */
+export async function processClearPassPhotoToWebP(source) {
+  if (!source) return null;
+  let drawable = null;
+  let sw = 512;
+  let sh = 512;
+
+  if (source instanceof Blob || source instanceof File) {
+    const objUrl = URL.createObjectURL(source);
+    try {
+      const img = await loadImageElement(objUrl);
+      drawable = img;
+      sw = img.naturalWidth || img.width;
+      sh = img.naturalHeight || img.height;
+    } finally {
+      URL.revokeObjectURL(objUrl);
+    }
+  } else if (typeof source === 'string') {
+    const img = await loadImageElement(source);
+    drawable = img;
+    sw = img.naturalWidth || img.width;
+    sh = img.naturalHeight || img.height;
+  } else if (source instanceof HTMLImageElement || source instanceof HTMLCanvasElement) {
+    drawable = source;
+    sw = source.naturalWidth || source.width;
+    sh = source.naturalHeight || source.height;
+  }
+
+  if (!drawable || sw < 64 || sh < 64) return null;
+
+  const SIZE = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = SIZE;
+  canvas.height = SIZE;
+  const ctx = canvas.getContext('2d');
+
+  const side = Math.min(sw, sh);
+  const sx = Math.max(0, (sw - side) * 0.5);
+  const sy = Math.max(0, (sh - side) * 0.38);
+  ctx.drawImage(drawable, sx, sy, side, side, 0, 0, SIZE, SIZE);
+
+  let quality = 0.80;
+  let blob = await canvasToBlob(canvas, 'image/webp', quality);
+  while (blob && blob.size > 58 * 1024 && quality > 0.34) {
+    quality -= 0.08;
+    blob = await canvasToBlob(canvas, 'image/webp', quality);
+  }
+  if (!blob || blob.size > 60 * 1024) {
+    blob = await canvasToBlob(canvas, 'image/jpeg', 0.62);
+  }
+
+  const dataUrl = await blobToDataUrl(blob);
+  return {
+    blob,
+    dataUrl,
+    sizeKb: Math.max(1, Math.round(blob.size / 1024)),
+  };
+}
+
+/**
+ * Генерирует эксклюзивную вертикальную открытку 1080x1920 для Сторис с пасхалкой у моря
+ * БЕЗ раскрытия секретной комбинации 19-97!
+ */
+export async function generateOceanEasterEggStoriesPNG() {
+  const W = 1080;
+  const H = 1920;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  // Холодное серое предрассветное небо над морем
+  const sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#1f2933');
+  sky.addColorStop(0.38, '#394854');
+  sky.addColorStop(0.72, '#1d262e');
+  sky.addColorStop(1, '#0d1014');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, H);
+
+  try {
+    const seaImg = await loadImageElement('./assets/keyed/ocean_panorama.webp');
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(seaImg, 0, 560, W, 820);
+  } catch { /* fallback gradient */ }
+
+  // Мягкий морской туман сверху и снизу панорамы
+  const topMist = ctx.createLinearGradient(0, 520, 0, 720);
+  topMist.addColorStop(0, '#364551');
+  topMist.addColorStop(1, 'rgba(54, 69, 81, 0)');
+  ctx.fillStyle = topMist;
+  ctx.fillRect(0, 520, W, 200);
+
+  const botMist = ctx.createLinearGradient(0, 1220, 0, 1420);
+  botMist.addColorStop(0, 'rgba(13, 16, 20, 0)');
+  botMist.addColorStop(1, '#0d1014');
+  ctx.fillStyle = botMist;
+  ctx.fillRect(0, 1220, W, 210);
+
+  try {
+    const tillImg = await loadImageElement('./assets/keyed/ocean_till_barrel.webp');
+    ctx.imageSmoothingEnabled = false;
+    const sw = 440;
+    const sh = 605;
+    ctx.drawImage(tillImg, (W - sw) * 0.5, 790, sw, sh);
+  } catch { /* ignore */ }
+
+  // Пена прибоя вокруг ржавой бочки
+  ctx.fillStyle = 'rgba(226, 236, 242, 0.28)';
+  ctx.beginPath();
+  ctx.ellipse(W * 0.5, 1368, 250, 22, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(234, 179, 8, 0.35)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(48, 56, W - 96, H - 112);
+
+  ctx.fillStyle = 'rgba(226, 234, 240, 0.72)';
+  ctx.font = '600 24px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('СЕКРЕТНЫЙ УРОВЕНЬ НАЙДЕН // БЕЗ ПОДСКАЗОК', W * 0.5, 132);
+
+  // Печатная машинка на небе
+  ctx.fillStyle = '#f8fafc';
+  ctx.font = '700 46px "Courier New", monospace';
+  wrapCenteredText(ctx, '«На небе только и разговоров, что о... БОЧКЕ.»', W * 0.5, 290, 880, 66);
+
+  ctx.fillStyle = '#eab308';
+  ctx.font = '900 132px Impact, "Arial Black", sans-serif';
+  ctx.fillText('БОЧКА', W * 0.5, 1555);
+
+  ctx.fillStyle = '#eab308';
+  ctx.fillRect(190, 1615, W - 380, 82);
+  ctx.fillStyle = '#0d0d0d';
+  ctx.font = '900 40px Impact, "Arial Black", sans-serif';
+  ctx.fillText('В КИНО С 17 ДЕКАБРЯ', W * 0.5, 1670);
+
+  ctx.fillStyle = 'rgba(226, 232, 240, 0.85)';
+  ctx.font = '700 30px monospace';
+  ctx.fillText('НАЙДИ ВЫХОД К МОРЮ НА BOCHKA.QUEST', W * 0.5, 1785);
+
+  return canvasToBlob(canvas, 'image/png', 0.95);
+}
+
 function wrapCenteredText(ctx, text, x, y, maxWidth, lineHeight) {
   const words = text.split(' ');
   let line = '';

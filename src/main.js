@@ -10,25 +10,33 @@ import {
 } from './telegram.js';
 import { audio } from './audio.js';
 import { BarrelVoiceRecorder } from './voice.js';
-import { WorkshopScene } from './scene.js';
+import { WorkshopScene, BARREL_BATCH_CODES } from './scene.js';
 import {
   DEMO_PORTRAITS,
   processPortraitToWebP,
+  processClearPassPhotoToWebP,
   verifyKinopoiskScreenshot,
   generateStoriesPosterPNG,
+  generateOceanEasterEggStoriesPNG,
 } from './imaging.js';
 import {
+  getViewerUid,
   createBarrelPack,
   loadBarrelPack,
   recordBarrelResult,
   sendCinemaInviteReply,
-  tryWinCinemaTicket,
+  isPremiereRaceUnlocked,
+  fetchPlayerProfile,
+  playPremiereStrike,
+  claimShareBonusLife,
+  burnRegularTicketForX2Lives,
+  createGiftTicketPass,
+  loadGiftTicketPass,
+  acceptGiftTicketPass,
+  claimEasterEgg1997Bonus,
   markTrailerCompleted,
   markKinopoiskVisited,
   markKpScreenshotVerified,
-  isGoldenHuntUnlocked,
-  getNightShiftAvailability,
-  consumeNightShiftEntry,
   syncFriendsOpenedTokens,
   getQuestState,
 } from './backend.js';
@@ -37,14 +45,34 @@ const AIR_DURATION_SEC = 30.0;
 const KP_MIN_AWAY_SEC = 15.0;
 const TRAILER_UNLOCK_SEC = 40.0;
 
+const SCREAMER_META = [
+  { key: 'hand', img: './assets/keyed/screamer_hand.webp', i18n: 'screamerHand' },
+  { key: 'pastor', img: './assets/keyed/screamer_pastor.webp', i18n: 'screamerPastor' },
+  { key: 'father', img: './assets/keyed/screamer_father.webp', i18n: 'screamerFather' },
+  { key: 'blogger', img: './assets/keyed/screamer_blogger.webp', i18n: 'screamerBlogger' },
+];
+
 const state = {
   tg: null,
   entered: false,
   activeScreen: 'gate',
   incomingParam: '',
   incomingPack: null,
+  incomingPassId: '',
+  activePassData: null,
 
-  // Состояние текущего раунда в цеху ('demo' | 'viral' | 'nightShift')
+  // Профиль главной Суперигры «Гонка за Премьерой (0..100)»
+  profile: {
+    premiereScore: 0,
+    lives: 3,
+    rawSharesToday: 0,
+    easterEggClaimed: false,
+    premiereWon: false,
+    premiereCode: '',
+    hasPendingTicket: false,
+  },
+
+  // Состояние текущего раунда в цеху ('demo' | 'viral' | 'premiere')
   round: {
     modeType: 'demo',
     isDemo: true,
@@ -54,6 +82,8 @@ const state = {
     rescueStage: 0, // 0: базовые 3 удара, 1: ждём Кинопоиск, 2: 4-й удар, 3: ждём Трейлер, 4: 5-й победный удар
     airLeft: AIR_DURATION_SEC,
     running: false,
+    pausedForModal: false,
+    pausedForOcean: false,
     strikeBusy: false,
     survived: false,
     portraitDataUrl: '',
@@ -62,6 +92,15 @@ const state = {
     senderLabel: '',
     lastUrgentSec: 9,
   },
+
+  // Детектор секретной комбинации «Достучаться до небес»: 19 (idx 3) -> 97 (idx 5) -> 3 быстрых удара по центру
+  easterCombo: {
+    stage: 0,
+    lastAt: 0,
+    knocks: 0,
+  },
+
+  screamerCursor: 0,
 
   // Сверка отметки «Буду смотреть» по отсутствию на вкладке >= 15 сек
   kpSync: {
@@ -87,16 +126,25 @@ const state = {
     frameStyle: 'flashlight',
     rawSource: null,
     processed: null,
-    voice: null, // { blob, mimeType, ext, durationSec, sizeKb, objectUrl }
+    voice: null,
     lastShareUrl: '',
     lastWebUrl: '',
+    shareLifeClaimedForUrl: '',
     customEdited: false,
+  },
+
+  // Состояние оформления подарочного билета с фейс-контролем (Путь Б)
+  giftPass: {
+    processedPhoto: null,
+    lastPassUrl: '',
+    recipientName: '',
   },
 
   cameraStream: null,
   ytPlayer: null,
   airInterval: null,
-  cooldownTimer: null,
+  passClockTimer: null,
+  oceanTypeTimer: null,
 };
 
 let scene = null;
@@ -105,6 +153,7 @@ let voiceRecorder = null;
 async function bootstrap() {
   state.tg = initTelegram();
   state.incomingParam = state.tg.startParam || '';
+  state.incomingPassId = state.tg.passParam || '';
 
   await initI18n(state.tg.user?.lang || '');
   applyDomTranslations();
@@ -158,15 +207,25 @@ async function bootstrap() {
   initVisibilityAndAntiSeekGuards();
   bindUIEvents();
   await initPackConstructorDefaults();
+
+  state.profile = await fetchPlayerProfile(state.tg?.user);
+  updatePremiereBarsUI();
   await refreshQuestUI();
+
+  // Если открыта ссылка защищённого Именного пропуска (?pass=ID) — сразу показываем экран кассового контроля!
+  if (state.incomingPassId) {
+    await openIncomingPassScreen(state.incomingPassId);
+  }
 }
 
 function updateControlHintText() {
-  const isTouch = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+  const isTouch = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart in window';
+  const coarse = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+  void isTouch;
   const el = document.getElementById('hud-hint-text');
   if (el) {
-    el.setAttribute('data-i18n', isTouch ? 'hudHintMobile' : 'hudHintDesktop');
-    el.textContent = t(isTouch ? 'hudHintMobile' : 'hudHintDesktop');
+    el.setAttribute('data-i18n', coarse ? 'hudHintMobile' : 'hudHintDesktop');
+    el.textContent = t(coarse ? 'hudHintMobile' : 'hudHintDesktop');
   }
 }
 
@@ -178,6 +237,8 @@ function showScreen(name) {
     workshop: 'screen-workshop',
     pack: 'screen-pack',
     finale: 'screen-finale',
+    pass: 'screen-pass',
+    ocean: 'screen-ocean',
   };
 
   for (const [key, domId] of Object.entries(ids)) {
@@ -189,6 +250,27 @@ function showScreen(name) {
     } else {
       el.setAttribute('hidden', '');
       el.classList.remove('is-visible');
+    }
+  }
+
+  if (name === 'modeA') {
+    const shortcut = document.getElementById('btn-mode-a-premiere');
+    if (shortcut) {
+      if (isPremiereRaceUnlocked()) shortcut.removeAttribute('hidden');
+      else shortcut.setAttribute('hidden', '');
+    }
+  }
+
+  if (name !== 'pass' && state.passClockTimer) {
+    clearInterval(state.passClockTimer);
+    state.passClockTimer = null;
+  }
+
+  if (name !== 'ocean') {
+    audio.stopOceanEasterEggAudio();
+    if (state.oceanTypeTimer) {
+      clearInterval(state.oceanTypeTimer);
+      state.oceanTypeTimer = null;
     }
   }
 
@@ -208,6 +290,11 @@ async function enterWorkshopGate(withSound) {
   await audio.unlock(withSound);
   refreshSoundButtonLabel();
 
+  if (state.incomingPassId) {
+    await openIncomingPassScreen(state.incomingPassId);
+    return;
+  }
+
   if (state.incomingParam) {
     if (!state.incomingPack) {
       state.incomingPack = await loadBarrelPack(state.incomingParam);
@@ -226,7 +313,9 @@ async function startDemoRound() {
     : { name: 'УЗНИК ЦЕХА', quote: 'Смотри «Бочку» в кино с 17 декабря.' };
 
   const graded = await processPortraitToWebP(DEMO_PORTRAITS[pickIdx], 'flashlight');
-  const targetIndex = Math.floor(Math.random() * 6);
+  // В демо избегаем бочки '19' (idx 3) как цели, чтобы ввод пасхалки 19 -> 97 не завершал раунд досрочно
+  const pool = [0, 1, 2, 4];
+  const targetIndex = pool[Math.floor(Math.random() * pool.length)];
 
   await audio.setSenderVoiceUrl('');
 
@@ -239,6 +328,8 @@ async function startDemoRound() {
     rescueStage: 0,
     airLeft: AIR_DURATION_SEC,
     running: true,
+    pausedForModal: false,
+    pausedForOcean: false,
     strikeBusy: false,
     survived: false,
     portraitDataUrl: graded.dataUrl,
@@ -251,6 +342,8 @@ async function startDemoRound() {
   document.getElementById('hud-mode-tag').textContent = t('modeATag');
   document.getElementById('hud-urgent-title').textContent = t('modeATitle');
   document.getElementById('btn-hud-pack')?.removeAttribute('hidden');
+  document.getElementById('hud-premiere-strip')?.setAttribute('hidden', '');
+  configureBottomAttemptsMode('squares');
 
   launchWorkshopGameplay(false);
 }
@@ -279,6 +372,8 @@ async function startViralFriendRound(pack) {
     rescueStage: 0,
     airLeft: AIR_DURATION_SEC,
     running: true,
+    pausedForModal: false,
+    pausedForOcean: false,
     strikeBusy: false,
     survived: false,
     portraitDataUrl,
@@ -291,6 +386,8 @@ async function startViralFriendRound(pack) {
   document.getElementById('hud-mode-tag').textContent = t('modeBTag');
   document.getElementById('hud-urgent-title').textContent = t('modeBTitle');
   document.getElementById('btn-hud-pack')?.setAttribute('hidden', '');
+  document.getElementById('hud-premiere-strip')?.setAttribute('hidden', '');
+  configureBottomAttemptsMode('squares');
 
   launchWorkshopGameplay(false);
   if (voiceUrl) {
@@ -298,46 +395,133 @@ async function startViralFriendRound(pack) {
   }
 }
 
-async function startNightShiftRound() {
-  const avail = getNightShiftAvailability();
-  if (!avail.unlocked || !avail.canPlayNow) {
-    refreshQuestUI();
+/* ============================================================================
+   ГЛАВНАЯ СУПЕРИГРА v3.0: «ГОНКА ЗА ПРЕМЬЕРОЙ (0..100)» + ЗОЛОТЫЕ БОЧКИ
+   ============================================================================ */
+async function startPremiereRaceRound() {
+  if (!isPremiereRaceUnlocked()) {
+    showToast(t('premiereLockedHint'));
+    showScreen('pack');
     return;
   }
 
-  consumeNightShiftEntry();
-  await audio.setSenderVoiceUrl('');
+  state.profile = await fetchPlayerProfile(state.tg?.user);
+  updatePremiereBarsUI();
 
-  const goldenEmblem = createGoldenTicketPortraitDataUrl('');
-  const targetIndex = Math.floor(Math.random() * 6);
+  if (state.profile.hasPendingTicket) {
+    openGoldenTicketForkModal();
+    return;
+  }
+
+  if (state.profile.lives <= 0) {
+    if (state.profile.premiereScore >= 90) {
+      openNearMissModal(state.profile.premiereScore);
+    } else {
+      showToast(t('nightShiftCooldown'));
+      showScreen('pack');
+    }
+    return;
+  }
+
+  await audio.setSenderVoiceUrl('');
+  const goldenEmblem = createGoldenTicketPortraitDataUrl('ДОПУСК НА ПРЕМЬЕРУ');
 
   state.round = {
-    modeType: 'nightShift',
+    modeType: 'premiere',
     isDemo: false,
-    targetIndex,
-    attemptsLeft: 3,
+    targetIndex: Math.floor(Math.random() * 6),
+    attemptsLeft: state.profile.lives,
     attemptsUsed: 0,
     rescueStage: 0,
     airLeft: AIR_DURATION_SEC,
     running: true,
+    pausedForModal: false,
+    pausedForOcean: false,
     strikeBusy: false,
     survived: false,
     portraitDataUrl: goldenEmblem,
     voiceUrl: '',
     message: t('nightShiftEmptyMsg'),
-    senderLabel: t('nightShiftTag'),
+    senderLabel: t('premiereRaceTag'),
     lastUrgentSec: 9,
   };
 
-  document.getElementById('hud-mode-tag').textContent = t('nightShiftTag');
-  document.getElementById('hud-urgent-title').textContent = t('nightShiftTitle');
-  document.getElementById('btn-hud-pack')?.setAttribute('hidden', '');
+  document.getElementById('hud-mode-tag').textContent = t('premiereRaceTag');
+  document.getElementById('hud-urgent-title').textContent = t('premiereHudTitle');
+  document.getElementById('btn-hud-pack')?.removeAttribute('hidden');
+  document.getElementById('hud-premiere-strip')?.removeAttribute('hidden');
+  configureBottomAttemptsMode('lives');
+  updatePremiereBarsUI();
 
   launchWorkshopGameplay(true);
 }
 
+function configureBottomAttemptsMode(mode) {
+  const sqWrap = document.getElementById('attempts-squares');
+  const livesWrap = document.getElementById('hud-premiere-lives-big');
+  const lbl = document.getElementById('hud-attempts-label');
+  if (mode === 'lives') {
+    sqWrap?.setAttribute('hidden', '');
+    livesWrap?.removeAttribute('hidden');
+    if (lbl) lbl.textContent = t('premiereLivesLabel');
+  } else {
+    sqWrap?.removeAttribute('hidden');
+    livesWrap?.setAttribute('hidden', '');
+    if (lbl) lbl.textContent = t('hudAttempts');
+  }
+}
+
+function updatePremiereBarsUI() {
+  const scoreStr = Number(state.profile.premiereScore || 0).toFixed(1);
+  const pct = Math.max(0, Math.min(100, Number(state.profile.premiereScore || 0)));
+  const lives = Math.max(0, Number(state.profile.lives ?? 0));
+
+  for (const id of ['hud-premiere-score', 'finale-premiere-score', 'modal-premiere-score']) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = scoreStr;
+  }
+  for (const id of ['hud-premiere-fill', 'finale-premiere-fill', 'modal-premiere-fill']) {
+    const el = document.getElementById(id);
+    if (el) el.style.width = `${pct}%`;
+  }
+  for (const id of ['hud-premiere-lives', 'finale-premiere-lives', 'modal-premiere-lives', 'hud-lives-big-num']) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = String(lives);
+  }
+
+  const pendingBanner = document.getElementById('btn-reopen-golden-fork');
+  if (pendingBanner) {
+    if (state.profile.hasPendingTicket) pendingBanner.removeAttribute('hidden');
+    else pendingBanner.setAttribute('hidden', '');
+  }
+}
+
+function spawnFloatingScorePopup(delta, barrelIndex = -1) {
+  const layer = document.getElementById('floating-score-layer');
+  if (!layer) return;
+
+  let x = window.innerWidth * 0.5;
+  let y = window.innerHeight * 0.44;
+  if (barrelIndex >= 0 && scene?.barrels?.[barrelIndex]) {
+    const wp = scene.barrels[barrelIndex].group.position.clone();
+    wp.y += 1.25;
+    wp.project(scene.camera);
+    x = (wp.x * 0.5 + 0.5) * window.innerWidth;
+    y = (-wp.y * 0.5 + 0.5) * window.innerHeight;
+  }
+
+  const pop = document.createElement('div');
+  pop.className = 'floating-score-pop';
+  pop.style.left = `${x}px`;
+  pop.style.top = `${y}px`;
+  pop.textContent = `+${Number(delta).toFixed(delta < 1 ? 1 : delta % 1 === 0 ? 0 : 1)}`;
+  layer.appendChild(pop);
+  window.setTimeout(() => pop.remove(), 980);
+}
+
 function launchWorkshopGameplay(golden = false) {
   stopAirTimer();
+  state.easterCombo = { stage: 0, lastAt: 0, knocks: 0 };
   document.getElementById('modal-rescue')?.setAttribute('hidden', '');
   renderAttemptSquares(state.round.attemptsLeft);
   updateAirHUD(state.round.airLeft);
@@ -354,11 +538,28 @@ function launchWorkshopGameplay(golden = false) {
   startAirCountdownLoop();
 }
 
+function reloadPremiereBarrelsWave() {
+  if (!state.round.running || state.round.modeType !== 'premiere') return;
+  state.round.airLeft = AIR_DURATION_SEC;
+  state.round.lastUrgentSec = 9;
+  state.round.targetIndex = Math.floor(Math.random() * 6);
+  scene.resetRound({
+    targetIndex: state.round.targetIndex,
+    portraitUrl: state.round.portraitDataUrl,
+    golden: true,
+  });
+  audio.playChainRattle(0.7);
+  updateAirHUD(state.round.airLeft);
+}
+
 function startAirCountdownLoop() {
   stopAirTimer();
   let lastTs = performance.now();
   state.airInterval = window.setInterval(() => {
-    if (!state.round.running) return;
+    if (!state.round.running || state.round.pausedForModal) {
+      lastTs = performance.now();
+      return;
+    }
     const now = performance.now();
     const dt = (now - lastTs) / 1000;
     lastTs = now;
@@ -383,7 +584,6 @@ function handleAirDepleted() {
   const r = state.round;
   if (!r.running) return;
 
-  // В вирусной 5-ходовой воронке сгорание кислорода включает Спасение №1 / №2, чтобы игрок прошёл весь путь!
   if (r.modeType === 'viral') {
     if (r.rescueStage === 0) {
       popRemainingEmptyBarrelsDownTo(3);
@@ -396,7 +596,6 @@ function handleAirDepleted() {
       return;
     }
     if (r.rescueStage === 4) {
-      // Если на 5-м ударе вышел воздух — автоматически вскрываем одну из 2 оставшихся бочек
       const closed = getUnstruckBarrelIndices();
       const winIdx = closed[0] ?? r.targetIndex;
       r.targetIndex = winIdx;
@@ -406,8 +605,8 @@ function handleAirDepleted() {
     }
   }
 
-  if (r.modeType === 'nightShift') {
-    finishNightShiftRound(false, null);
+  if (r.modeType === 'premiere') {
+    finishPremiereRound(false, null);
     return;
   }
 
@@ -459,13 +658,161 @@ function renderAttemptSquares(attemptsLeft) {
 }
 
 /* ============================================================================
-   ПРОСЛУШКА МЕТАЛЛА И ДРАМАТУРГИЯ 5 УДАРОВ / НОЧНОЙ СМЕНЫ
+   СЕКРЕТНАЯ ПАСХАЛКА «ДОСТУЧАТЬСЯ ДО НЕБЕС»: 19 (idx 3) -> 97 (idx 5) -> 3 УДАРА
+   ============================================================================ */
+function checkSecret1997Combo(index, worldPoint, alreadyStruck) {
+  const now = performance.now();
+  const c = state.easterCombo;
+
+  // Фаза 2: после 19 -> 97 ждём 3 быстрых удара по любой центральной бочке (12, 17, 19, 26)
+  if (c.stage === 2 && now - c.lastAt <= 3200) {
+    if (index === 1 || index === 2 || index === 3 || index === 4) {
+      c.knocks += 1;
+      c.lastAt = now;
+      scene.triggerStrikeFX(index, worldPoint);
+      audio.playStrike(index);
+      Haptics.light();
+
+      if (c.knocks >= 3) {
+        state.easterCombo = { stage: 0, lastAt: 0, knocks: 0 };
+        triggerOceanEasterEggScene();
+      }
+      return true;
+    }
+    state.easterCombo = { stage: 0, lastAt: 0, knocks: 0 };
+  }
+
+  // Фаза 1 -> 2: удар по бочке №97 (index 5) сразу после бочки №19 (index 3)
+  if (c.stage === 1 && now - c.lastAt <= 5500 && index === 5) {
+    state.easterCombo = { stage: 2, lastAt: now, knocks: 0 };
+    scene.triggerStrikeFX(index, worldPoint);
+    audio.playStrike(index);
+    Haptics.medium();
+    return true;
+  }
+
+  // Старт комбинации: клик по бочке №19 (index 3)
+  if (index === 3) {
+    state.easterCombo = { stage: 1, lastAt: now, knocks: 0 };
+    const lowLives =
+      state.round.modeType === 'premiere'
+        ? state.profile.lives <= 1
+        : state.round.attemptsLeft <= 1;
+
+    if (alreadyStruck || lowLives) {
+      scene.triggerStrikeFX(index, worldPoint);
+      audio.playStrike(index);
+      return true;
+    }
+    return false;
+  }
+
+  state.easterCombo = { stage: 0, lastAt: 0, knocks: 0 };
+  return false;
+}
+
+async function triggerOceanEasterEggScene() {
+  stopAirTimer();
+  state.round.pausedForOcean = state.round.running;
+  state.round.running = false;
+  audio.stopListening();
+  audio.stopMuffledVoiceLoop();
+  scene.setInteractive(false);
+  Haptics.success();
+
+  const mist = document.getElementById('mist-dissolve-overlay');
+  if (mist) {
+    mist.removeAttribute('hidden');
+    void mist.offsetWidth;
+    mist.classList.add('is-active');
+  }
+
+  const bonus = await claimEasterEgg1997Bonus(state.tg?.user);
+  state.profile.easterEggClaimed = true;
+  if (typeof bonus.lives === 'number') {
+    state.profile.lives = bonus.lives;
+  }
+  updatePremiereBarsUI();
+
+  const pill = document.getElementById('ocean-bonus-pill');
+  if (pill) {
+    pill.textContent = bonus.alreadyClaimed ? t('oceanBonusAlready') : t('oceanBonusBadge');
+  }
+
+  window.setTimeout(() => {
+    showScreen('ocean');
+    audio.startOceanEasterEggAudio();
+    startOceanTypewriter(t('oceanQuote'));
+
+    if (mist) {
+      mist.classList.remove('is-active');
+      window.setTimeout(() => mist.setAttribute('hidden', ''), 950);
+    }
+  }, 860);
+}
+
+function startOceanTypewriter(fullText) {
+  const out = document.getElementById('ocean-typewriter');
+  if (!out) return;
+  if (state.oceanTypeTimer) {
+    clearInterval(state.oceanTypeTimer);
+    state.oceanTypeTimer = null;
+  }
+  out.textContent = '';
+  let idx = 0;
+  state.oceanTypeTimer = window.setInterval(() => {
+    idx += 1;
+    out.textContent = fullText.slice(0, idx);
+    if (idx >= fullText.length) {
+      clearInterval(state.oceanTypeTimer);
+      state.oceanTypeTimer = null;
+    }
+  }, 58);
+}
+
+function handleReturnFromOcean() {
+  audio.stopOceanEasterEggAudio();
+  if (state.round.modeType === 'premiere') {
+    startPremiereRaceRound();
+    return;
+  }
+  if (state.round.pausedForOcean) {
+    state.round.pausedForOcean = false;
+    state.round.running = true;
+    state.round.airLeft = Math.max(15.0, state.round.airLeft);
+    state.round.attemptsLeft = Math.max(2, state.round.attemptsLeft);
+    renderAttemptSquares(state.round.attemptsLeft);
+    updateAirHUD(state.round.airLeft);
+    showScreen('workshop');
+    scene.setInteractive(true);
+    if (state.round.voiceUrl) audio.startMuffledVoiceLoop();
+    startAirCountdownLoop();
+    return;
+  }
+  showScreen('modeA');
+}
+
+async function handleDownloadOceanPostcard() {
+  const btn = document.getElementById('btn-ocean-story');
+  if (btn) btn.disabled = true;
+  Haptics.medium();
+  try {
+    const blob = await generateOceanEasterEggStoriesPNG();
+    if (!blob) return;
+    await shareOrDownloadPngBlob(blob, `bochka-sea-secret-${Date.now()}.png`);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+/* ============================================================================
+   ПРОСЛУШКА МЕТАЛЛА И ДРАМАТУРГИЯ УДАРОВ / 4 ФИЛЬМОВЫХ СКРИМЕРА
    ============================================================================ */
 function handleBarrelHover(index, sx, sy, alreadyStruck) {
   const reticle = document.getElementById('barrel-reticle');
   const retId = document.getElementById('reticle-id');
 
-  if (!state.round.running || index < 0) {
+  if (!state.round.running || state.round.pausedForModal || index < 0) {
     reticle?.setAttribute('hidden', '');
     audio.stopListening();
     return;
@@ -473,13 +820,17 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
 
   if (reticle && retId) {
     reticle.removeAttribute('hidden');
-    reticle.style.left = `${Math.max(70, Math.min(window.innerWidth - 70, sx))}px`;
-    reticle.style.top = `${Math.max(92, Math.min(window.innerHeight - 90, sy))}px`;
-    const labelBase = `${t('reticleBarrel')}${index + 1}`;
-    retId.textContent = alreadyStruck ? `${labelBase} // ${t('reticleEmpty')}` : `${labelBase} // ${t('reticleListening')}`;
+    reticle.style.left = `${Math.max(78, Math.min(window.innerWidth - 78, sx))}px`;
+    reticle.style.top = `${Math.max(96, Math.min(window.innerHeight - 90, sy))}px`;
+    const batchNum = BARREL_BATCH_CODES[index] || `0${index + 1}`;
+    const labelBase = `${t('reticleBatch')}${batchNum}`;
+    retId.textContent = alreadyStruck
+      ? `${labelBase} // ${t('reticleEmpty')}`
+      : `${labelBase} // ${t('reticleListening')}`;
+
     const showPulse =
       !alreadyStruck &&
-      state.round.modeType !== 'nightShift' &&
+      state.round.modeType !== 'premiere' &&
       index === state.round.targetIndex;
     reticle.classList.toggle('is-knocking', showPulse);
   }
@@ -493,42 +844,92 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
 
 async function handleBarrelStrike(index, worldPoint) {
   const r = state.round;
-  if (!r.running || r.strikeBusy) return;
+  if (!r.running || r.pausedForModal || r.strikeBusy) return;
   const barrelObj = scene.barrels[index];
-  if (!barrelObj || barrelObj.struck) return;
+  if (!barrelObj) return;
 
   audio.stopListening();
   document.getElementById('barrel-reticle')?.setAttribute('hidden', '');
 
+  // Проверяем секретный код «19 -> 97 -> 3 быстрых удара по центральной бочке»
+  if (checkSecret1997Combo(index, worldPoint, barrelObj.struck)) {
+    return;
+  }
+
+  if (barrelObj.struck) return;
+
   // -------------------------------------------------------------------------
-  // РЕЖИМ 1: ЗАКРЫТАЯ «НОЧНАЯ СМЕНА» (АТОМАРНАЯ СЕРВЕРНАЯ ПРОВЕРКА try_win_ticket)
+  // РЕЖИМ 1: ГЛАВНАЯ СУПЕРИГРА «ГОНКА ЗА ПРЕМЬЕРОЙ (0..100)» (Supabase RPC)
   // -------------------------------------------------------------------------
-  if (r.modeType === 'nightShift') {
+  if (r.modeType === 'premiere') {
     r.strikeBusy = true;
     scene.triggerStrikeFX(index, worldPoint);
     audio.playStrike(index);
     r.attemptsUsed += 1;
 
-    const winRes = await tryWinCinemaTicket(state.tg?.user);
+    const res = await playPremiereStrike(state.tg?.user);
     r.strikeBusy = false;
     if (!r.running) return;
 
-    if (winRes.won) {
-      r.targetIndex = index;
-      r.portraitDataUrl = createGoldenTicketPortraitDataUrl(winRes.ticketCode);
-      scene.setTargetPortrait(index, r.portraitDataUrl);
-      finishNightShiftRound(true, winRes);
+    if (!res.ok) {
+      if (state.profile.premiereScore >= 90) openNearMissModal(state.profile.premiereScore);
+      else finishPremiereRound(false, res);
       return;
     }
 
-    scene.triggerEmptyBarrelOpen(index);
-    r.attemptsLeft = Math.max(0, r.attemptsLeft - 1);
-    renderAttemptSquares(r.attemptsLeft);
+    state.profile.premiereScore = res.premiereScore;
+    state.profile.lives = res.lives;
+    state.profile.hasPendingTicket = Boolean(res.hasPendingTicket);
+    updatePremiereBarsUI();
 
-    if (r.attemptsLeft > 0) {
-      triggerMiniScreamer(r.attemptsUsed);
+    // Исход А: Достигнуты заветные 100.0 баллов и взят Пригласительный на Премьеру!
+    if (res.outcome === 'premiere_win') {
+      state.profile.premiereWon = true;
+      state.profile.premiereCode = res.premiereCode || '';
+      if (res.delta > 0) spawnFloatingScorePopup(res.delta, index);
+      r.targetIndex = index;
+      r.portraitDataUrl = createGoldenTicketPortraitDataUrl(res.premiereCode || 'ПРЕМЬЕРА 17.12');
+      scene.setTargetPortrait(index, r.portraitDataUrl);
+      finishPremiereRound(true, res);
+      return;
+    }
+
+    // Исход Б: Выпала «Золотая бочка с чужим билетом» -> жёсткая вилка (Топка ×2 или Подарок с фейс-контролем)!
+    if (res.outcome === 'golden_ticket') {
+      scene.triggerEmptyBarrelOpen(index);
+      audio.playLidBlowOff(true);
+      r.pausedForModal = true;
+      window.setTimeout(() => {
+        openGoldenTicketForkModal();
+      }, 420);
+      return;
+    }
+
+    // Исход В: Удачная бочка -> быстрый дофаминовый прыжок (или медленные десятые доли у финиша)
+    if (res.outcome === 'score_hit') {
+      scene.triggerEmptyBarrelOpen(index);
+      spawnFloatingScorePopup(res.delta, index);
+      Haptics.success();
     } else {
-      finishNightShiftRound(false, winRes);
+      // Исход Г: Пустая бочка -> 0.4 сек фильмовый скример (Рука / Пастор / Отец / Блогер)
+      scene.triggerEmptyBarrelOpen(index);
+      triggerMiniScreamer();
+    }
+
+    if (res.lives <= 0) {
+      r.pausedForModal = true;
+      window.setTimeout(() => {
+        if (res.nearMiss || res.premiereScore >= 90) {
+          openNearMissModal(res.premiereScore);
+        } else {
+          finishPremiereRound(false, res);
+        }
+      }, 480);
+      return;
+    }
+
+    if (getUnstruckBarrelIndices().length === 0) {
+      window.setTimeout(() => reloadPremiereBarrelsWave(), 520);
     }
     return;
   }
@@ -539,7 +940,6 @@ async function handleBarrelStrike(index, worldPoint) {
   if (r.modeType === 'viral') {
     r.attemptsUsed += 1;
 
-    // 5-й удар (после Кинопоиска и Трейлера) — 100% ГАРАНТИРОВАННОЕ ПОПАДАНИЕ в любую из 2 оставшихся бочек!
     if (r.rescueStage >= 4 || r.attemptsUsed >= 5) {
       r.targetIndex = index;
       scene.assignTargetBarrelNow(index);
@@ -549,7 +949,6 @@ async function handleBarrelStrike(index, worldPoint) {
       return;
     }
 
-    // Удары 1, 2, 3 и 4 — ВСЕГДА ПРОМАХ (срываем крышку пустой бочки с облаком ржавой пыли и лязгом цепей)
     const otherClosed = getUnstruckBarrelIndices().filter((i) => i !== index);
     if (otherClosed.length > 0 && index === r.targetIndex) {
       const nextTarget = otherClosed[Math.floor(Math.random() * otherClosed.length)];
@@ -566,18 +965,16 @@ async function handleBarrelStrike(index, worldPoint) {
 
     if (r.rescueStage === 0) {
       if (r.attemptsLeft > 0) {
-        triggerMiniScreamer(r.attemptsUsed);
+        triggerMiniScreamer(r.attemptsUsed - 1);
       } else {
-        // 3-й промах: остаётся ровно 3 закрытые бочки -> открываем Спасение №1 (Кинопоиск >= 15 сек)
-        triggerMiniScreamer(3);
+        triggerMiniScreamer(2);
         window.setTimeout(() => openRescueStep1(), 430);
       }
       return;
     }
 
     if (r.rescueStage === 2) {
-      // 4-й промах: остаётся ровно 2 закрытые бочки -> открываем Спасение №2 (Собственный MP4 Трейлер 40 сек)
-      triggerMiniScreamer(4);
+      triggerMiniScreamer(3);
       window.setTimeout(() => openRescueStep2(), 430);
       return;
     }
@@ -600,23 +997,292 @@ async function handleBarrelStrike(index, worldPoint) {
   renderAttemptSquares(r.attemptsLeft);
 
   if (r.attemptsLeft > 0) {
-    triggerMiniScreamer(r.attemptsUsed);
+    triggerMiniScreamer();
   } else {
     finishRound(false);
   }
 }
 
-function triggerMiniScreamer(variant = 1) {
-  audio.playMiniScreamer(variant);
+function triggerMiniScreamer(explicitVariant = null) {
+  const v =
+    typeof explicitVariant === 'number'
+      ? Math.abs(explicitVariant) % 4
+      : (state.screamerCursor++) % 4;
+
+  const meta = SCREAMER_META[v] || SCREAMER_META[0];
+  audio.playMiniScreamer(v);
+  scene?.triggerScreamerShake(0.38);
+
   const el = document.getElementById('screamer-overlay');
+  const img = document.getElementById('screamer-img');
+  const cap = document.getElementById('screamer-caption');
   if (!el) return;
+
+  el.setAttribute('data-variant', meta.key);
+  if (img) img.src = meta.img;
+  if (cap) cap.textContent = t(meta.i18n);
+
   el.removeAttribute('hidden');
   el.style.animation = 'none';
   void el.offsetWidth;
   el.style.animation = '';
   window.setTimeout(() => {
     el.setAttribute('hidden', '');
-  }, 410);
+  }, 420);
+}
+
+/* ============================================================================
+   ВИЛКА «ЗОЛОТАЯ БОЧКА: ЧУЖОЙ БИЛЕТ» & NEAR-MISS & ИМЕННОЙ ПРОПУСК (?pass=ID)
+   ============================================================================ */
+function openGoldenTicketForkModal() {
+  state.round.pausedForModal = true;
+  state.giftPass.processedPhoto = null;
+  state.giftPass.lastPassUrl = '';
+
+  document.getElementById('fork-choices-stack')?.removeAttribute('hidden');
+  document.getElementById('gift-pass-form')?.setAttribute('hidden', '');
+  document.getElementById('gift-pass-share-box')?.setAttribute('hidden', '');
+  document.getElementById('gift-form-error')?.setAttribute('hidden', '');
+
+  const prev = document.getElementById('gift-friend-photo-preview');
+  const ph = document.getElementById('gift-photo-placeholder');
+  if (prev) {
+    prev.removeAttribute('src');
+    prev.setAttribute('hidden', '');
+  }
+  ph?.removeAttribute('hidden');
+
+  const nameIn = document.getElementById('input-gift-friend-name');
+  if (nameIn) nameIn.value = '';
+
+  document.getElementById('modal-golden-fork')?.removeAttribute('hidden');
+  Haptics.heavy();
+}
+
+function closeGoldenTicketForkModal() {
+  document.getElementById('modal-golden-fork')?.setAttribute('hidden', '');
+  if (state.activeScreen === 'workshop' && state.round.modeType === 'premiere') {
+    if (state.profile.lives > 0) {
+      state.round.pausedForModal = false;
+      if (getUnstruckBarrelIndices().length === 0) reloadPremiereBarrelsWave();
+    } else {
+      finishPremiereRound(false, null);
+    }
+  }
+}
+
+async function handleBurnTicketChoice() {
+  const btn = document.getElementById('btn-burn-ticket-x2');
+  if (btn) btn.disabled = true;
+  audio.playWeldSeal();
+
+  try {
+    const res = await burnRegularTicketForX2Lives(state.tg?.user);
+    if (res.ok) {
+      state.profile.hasPendingTicket = false;
+      state.profile.lives = res.lives;
+      updatePremiereBarsUI();
+      showToast(t('burnSuccessToast'));
+      Haptics.success();
+      document.getElementById('modal-golden-fork')?.setAttribute('hidden', '');
+
+      if (state.activeScreen === 'workshop' && state.round.modeType === 'premiere') {
+        state.round.pausedForModal = false;
+        if (getUnstruckBarrelIndices().length === 0) reloadPremiereBarrelsWave();
+      } else {
+        startPremiereRaceRound();
+      }
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function handleGiftFriendPhotoChange(file) {
+  if (!file) return;
+  const processed = await processClearPassPhotoToWebP(file);
+  if (!processed) {
+    document.getElementById('gift-form-error')?.removeAttribute('hidden');
+    return;
+  }
+  state.giftPass.processedPhoto = processed;
+  document.getElementById('gift-form-error')?.setAttribute('hidden', '');
+
+  const prev = document.getElementById('gift-friend-photo-preview');
+  const ph = document.getElementById('gift-photo-placeholder');
+  if (prev) {
+    prev.src = processed.dataUrl;
+    prev.removeAttribute('hidden');
+  }
+  ph?.setAttribute('hidden', '');
+  Haptics.light();
+}
+
+async function handleIssueGiftPassClick() {
+  const recipientName = (document.getElementById('input-gift-friend-name')?.value || '').trim();
+  const errEl = document.getElementById('gift-form-error');
+  if (recipientName.length < 2 || !state.giftPass.processedPhoto?.blob) {
+    errEl?.removeAttribute('hidden');
+    Haptics.error();
+    return;
+  }
+
+  errEl?.setAttribute('hidden', '');
+  const issueBtn = document.getElementById('btn-issue-gift-pass');
+  if (issueBtn) issueBtn.disabled = true;
+
+  try {
+    const created = await createGiftTicketPass({
+      tgUser: state.tg?.user,
+      senderName: document.getElementById('input-sender-name')?.value || state.tg?.user?.name || '',
+      recipientName,
+      processedPassPhoto: state.giftPass.processedPhoto,
+    });
+
+    if (!created.ok) {
+      errEl?.removeAttribute('hidden');
+      return;
+    }
+
+    state.profile.hasPendingTicket = false;
+    state.giftPass.lastPassUrl = created.shareUrl;
+    state.giftPass.recipientName = recipientName;
+    updatePremiereBarsUI();
+
+    const out = document.getElementById('output-gift-pass-url');
+    if (out) out.value = created.shareUrl;
+
+    document.getElementById('fork-choices-stack')?.setAttribute('hidden', '');
+    document.getElementById('gift-pass-form')?.setAttribute('hidden', '');
+    document.getElementById('gift-pass-share-box')?.removeAttribute('hidden');
+    Haptics.success();
+  } finally {
+    if (issueBtn) issueBtn.disabled = false;
+  }
+}
+
+function openNearMissModal(score) {
+  state.round.pausedForModal = true;
+  stopAirTimer();
+  const formatted = Number(score || 0).toFixed(1);
+  const numEl = document.getElementById('near-miss-score-num');
+  const fillEl = document.getElementById('near-miss-score-fill');
+  const descEl = document.getElementById('near-miss-desc');
+  if (numEl) numEl.textContent = formatted;
+  if (fillEl) fillEl.style.width = `${Math.min(100, Number(score || 0))}%`;
+  if (descEl) descEl.textContent = t('nearMissDesc', { score: formatted });
+
+  document.getElementById('modal-near-miss')?.removeAttribute('hidden');
+  Haptics.error();
+}
+
+async function openIncomingPassScreen(passId) {
+  state.entered = true;
+  const passData = await loadGiftTicketPass(passId);
+  if (!passData) {
+    showScreen('modeA');
+    return;
+  }
+  state.activePassData = passData;
+
+  const photoEl = document.getElementById('pass-holder-photo');
+  const nameEl = document.getElementById('pass-holder-name');
+  const senderEl = document.getElementById('pass-sender-line');
+  const selfWarn = document.getElementById('pass-self-warning');
+  const acceptBtn = document.getElementById('btn-accept-gift-pass');
+  const codeBox = document.getElementById('pass-ticket-code-box');
+
+  if (photoEl) photoEl.src = passData.recipientPhotoUrl || DEMO_PORTRAITS[0];
+  if (nameEl) nameEl.textContent = passData.recipientName || 'ГОСТЬ ПРЕМЬЕРЫ';
+  if (senderEl) {
+    senderEl.textContent = passData.senderName
+      ? `Отправил(а): ${passData.senderName} · Триллер «Бочка» (17 декабря)`
+      : 'Именной подарочный билет · Триллер «Бочка» (17 декабря)';
+  }
+
+  const viewerUid = getViewerUid(state.tg?.user);
+  const isOwnPass = Boolean(passData.senderUid && passData.senderUid === viewerUid);
+
+  if (isOwnPass) {
+    selfWarn?.removeAttribute('hidden');
+    acceptBtn?.setAttribute('hidden', '');
+    codeBox?.setAttribute('hidden', '');
+  } else if (passData.accepted) {
+    selfWarn?.setAttribute('hidden', '');
+    acceptBtn?.setAttribute('hidden', '');
+    renderRevealedPassTicket(passData.ticketCode, passData.contact, passData.id);
+  } else {
+    selfWarn?.setAttribute('hidden', '');
+    codeBox?.setAttribute('hidden', '');
+    acceptBtn?.removeAttribute('hidden');
+  }
+
+  startLivePassClock(passData.serverOffsetMs || 0);
+  showScreen('pass');
+}
+
+function renderRevealedPassTicket(ticketCode, contactText, passId) {
+  const codeBox = document.getElementById('pass-ticket-code-box');
+  const codeIn = document.getElementById('pass-ticket-code');
+  const contactEl = document.getElementById('pass-ticket-contact');
+  const botBtn = document.getElementById('btn-pass-verify-bot');
+
+  codeBox?.removeAttribute('hidden');
+  if (codeIn) codeIn.value = ticketCode || 'PASS-VERIFIED';
+  if (contactEl) {
+    contactEl.textContent =
+      contactText || 'Покажи этот живой экран с идущими часами и своим лицом контролёру кинотеатра.';
+  }
+  if (botBtn) {
+    if (ENV.tgBotUsername) {
+      botBtn.removeAttribute('hidden');
+      botBtn.onclick = () => {
+        openExternalLink(`https://t.me/${ENV.tgBotUsername}?start=verify_${encodeURIComponent(passId)}`);
+      };
+    } else {
+      botBtn.setAttribute('hidden', '');
+    }
+  }
+}
+
+function startLivePassClock(serverOffsetMs = 0) {
+  if (state.passClockTimer) clearInterval(state.passClockTimer);
+  const clockEl = document.getElementById('pass-live-clock');
+  const tick = () => {
+    if (!clockEl) return;
+    const d = new Date(Date.now() + serverOffsetMs);
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    const ss = String(d.getSeconds()).padStart(2, '0');
+    const tenths = Math.floor(d.getMilliseconds() / 100);
+    clockEl.textContent = `${hh}:${mm}:${ss}.${tenths}`;
+  };
+  tick();
+  state.passClockTimer = window.setInterval(tick, 100);
+}
+
+async function handleAcceptIncomingPass() {
+  if (!state.activePassData?.id) return;
+  const btn = document.getElementById('btn-accept-gift-pass');
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await acceptGiftTicketPass(state.activePassData.id, state.tg?.user);
+    if (!res.ok) {
+      if (res.error === 'cannot_claim_own_ticket') {
+        document.getElementById('pass-self-warning')?.removeAttribute('hidden');
+        btn?.setAttribute('hidden', '');
+      }
+      Haptics.error();
+      return;
+    }
+
+    btn?.setAttribute('hidden', '');
+    renderRevealedPassTicket(res.ticketCode, res.contact, state.activePassData.id);
+    Haptics.success();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 /* ============================================================================
@@ -749,7 +1415,6 @@ async function finishRound(survived) {
   audio.playLidBlowOff(survived);
   scene.triggerRevealDive(state.round.targetIndex);
 
-  // Как только крышка сорвана — включаем ЧИСТЫЙ голос друга без фильтра стальной бочки!
   if (state.round.voiceUrl) {
     window.setTimeout(() => {
       audio.playCleanSenderVoice(state.round.voiceUrl);
@@ -766,13 +1431,14 @@ async function finishRound(survived) {
   }
 
   window.setTimeout(async () => {
-    await populateFinaleScreen({ nightShiftResult: null });
+    await populateFinaleScreen({ premiereResult: null });
     showScreen('finale');
   }, 1250);
 }
 
-async function finishNightShiftRound(won, winRes) {
+async function finishPremiereRound(won, winRes) {
   state.round.running = false;
+  state.round.pausedForModal = false;
   state.round.survived = Boolean(won);
   stopAirTimer();
   audio.stopListening();
@@ -786,9 +1452,9 @@ async function finishNightShiftRound(won, winRes) {
 
   window.setTimeout(async () => {
     scene.setGoldenMode(false);
-    await populateFinaleScreen({ nightShiftResult: { won, ...(winRes || {}) } });
+    await populateFinaleScreen({ premiereResult: { won, ...(winRes || {}) } });
     showScreen('finale');
-  }, won ? 1200 : 450);
+  }, won ? 1200 : 420);
 }
 
 /* ============================================================================
@@ -922,6 +1588,7 @@ async function handleSealBarrelClick() {
 
     state.pack.lastShareUrl = created.shareUrl;
     state.pack.lastWebUrl = created.webUrl;
+    state.pack.shareLifeClaimedForUrl = '';
 
     const outInput = document.getElementById('output-share-url');
     if (outInput) outInput.value = created.shareUrl;
@@ -932,6 +1599,23 @@ async function handleSealBarrelClick() {
   } finally {
     sealBtn.disabled = false;
     sealTxt.textContent = t('btnSealBarrel');
+  }
+}
+
+async function grantShareLifeOnceForCurrentBarrel() {
+  if (!state.pack.lastShareUrl) return;
+  if (state.pack.shareLifeClaimedForUrl === state.pack.lastShareUrl) return;
+  state.pack.shareLifeClaimedForUrl = state.pack.lastShareUrl;
+
+  const bonus = await claimShareBonusLife(state.tg?.user);
+  state.profile.lives = bonus.lives;
+  state.profile.rawSharesToday = bonus.rawSharesToday;
+  updatePremiereBarsUI();
+
+  if (bonus.granted > 0) {
+    showToast(t('shareLifeGrantedToast'));
+  } else if (bonus.capped) {
+    showToast(t('shareLifeCappedToast'));
   }
 }
 
@@ -1000,9 +1684,9 @@ async function captureSelfieFrame() {
 }
 
 /* ============================================================================
-   ЭКРАН 5: ФИНАЛ РАУНДА, ЗОЛОТАЯ БОЧКА (СКРИНШОТ КП + RPC) И СТОРИС 9:16
+   ЭКРАН 5: ФИНАЛ РАУНДА, ГОНКА ЗА ПРЕМЬЕРОЙ (0..100) И СТОРИС 9:16
    ============================================================================ */
-async function populateFinaleScreen({ nightShiftResult = null } = {}) {
+async function populateFinaleScreen({ premiereResult = null } = {}) {
   const r = state.round;
   const subtag = document.getElementById('finale-subtag');
   const portraitImg = document.getElementById('finale-portrait-img');
@@ -1011,30 +1695,32 @@ async function populateFinaleScreen({ nightShiftResult = null } = {}) {
   const voiceRow = document.getElementById('finale-voice-row');
   const notifyEl = document.getElementById('finale-notify-line');
 
-  if (nightShiftResult) {
-    if (subtag) subtag.textContent = t('nightShiftTag');
-    if (portraitImg) portraitImg.src = r.portraitDataUrl;
+  if (premiereResult) {
+    if (subtag) subtag.textContent = t('premiereRaceTag');
+    if (portraitImg) portraitImg.src = r.portraitDataUrl || createGoldenTicketPortraitDataUrl('');
     if (stampEl) {
-      stampEl.classList.toggle('is-failed', !nightShiftResult.won);
-      stampEl.textContent = nightShiftResult.won ? t('nightShiftWonTitle') : t('nightShiftEmptyTitle');
+      stampEl.classList.toggle('is-failed', !premiereResult.won);
+      stampEl.textContent = premiereResult.won
+        ? t('nightShiftWonTitle')
+        : `${t('premiereBarLabel')}: ${Number(state.profile.premiereScore || 0).toFixed(1)} / 100`;
     }
     if (msgEl) {
-      msgEl.textContent = nightShiftResult.won
-        ? `ПРОМОКОД ВЫДАН СЕРВЕРОМ: ${nightShiftResult.ticketCode}`
+      msgEl.textContent = premiereResult.won
+        ? `ПРОМОКОД ЗАКРЫТОЙ ПРЕМЬЕРЫ: ${premiereResult.premiereCode}`
         : t('nightShiftEmptyMsg');
     }
     voiceRow?.setAttribute('hidden', '');
     if (notifyEl) notifyEl.style.display = 'none';
   } else {
     if (subtag) subtag.textContent = r.isDemo ? t('revealDemoFrom') : r.senderLabel || t('revealFromFriend');
-    if (portraitImg) portraitImg.src = r.portraitDataUrl;
+    if (portraitImg) portraitImg.src = r.portraitDataUrl || DEMO_PORTRAITS[0];
     if (stampEl) {
       stampEl.classList.toggle('is-failed', !r.survived);
       stampEl.textContent = r.survived
-        ? t('finaleSurvivedTitle', { n: Math.max(1, r.attemptsUsed) })
+        ? t('finaleSurvivedTitle', { n: Math.max(1, r.attemptsUsed || 1) })
         : t('finaleFailedTitle');
     }
-    if (msgEl) msgEl.textContent = `«${r.message}»`;
+    if (msgEl) msgEl.textContent = `«${r.message || t('presetsSelf')[0]}»`;
     if (voiceRow) {
       if (r.voiceUrl) voiceRow.removeAttribute('hidden');
       else voiceRow.setAttribute('hidden', '');
@@ -1049,9 +1735,14 @@ async function populateFinaleScreen({ nightShiftResult = null } = {}) {
 }
 
 async function refreshQuestUI() {
-  const synced = await syncFriendsOpenedTokens(state.tg?.user);
-  const total = synced.totalTokens;
+  const [synced, freshProfile] = await Promise.all([
+    syncFriendsOpenedTokens(state.tg?.user),
+    fetchPlayerProfile(state.tg?.user),
+  ]);
+  state.profile = freshProfile;
+  updatePremiereBarsUI();
 
+  const total = synced.totalTokens;
   const topBadge = document.getElementById('top-caps-count');
   const finBadge = document.getElementById('finale-caps-total');
   const modBadge = document.getElementById('modal-caps-count');
@@ -1074,17 +1765,15 @@ async function refreshQuestUI() {
     kpBtn.textContent = synced.kinopoiskDone ? `✓ ${t('questDone')}` : t('questOpen');
   }
 
-  // Статус выигранного билета (если выбит на сервере)
   const winnerBox = document.getElementById('golden-winner-box');
   const codeOut = document.getElementById('output-ticket-code');
   const contactOut = document.getElementById('golden-winner-contact');
-  if (synced.wonTicketCode && winnerBox) {
+  if (state.profile.premiereWon && state.profile.premiereCode && winnerBox) {
     winnerBox.removeAttribute('hidden');
-    if (codeOut) codeOut.value = synced.wonTicketCode;
-    if (contactOut) contactOut.textContent = synced.wonTicketContact || '';
+    if (codeOut) codeOut.value = state.profile.premiereCode;
+    if (contactOut) contactOut.textContent = 'Пригласительный на закрытую Премьеру со съёмочной группой закреплён за твоим аккаунтом.';
   }
 
-  // Чек-лист допуска к Золотой бочке («Ночная смена»)
   const packDone = (synced.packedCount || 0) >= 1;
   const kpScreenDone = Boolean(synced.kpScreenshotVerified);
 
@@ -1103,48 +1792,24 @@ async function refreshQuestUI() {
     uploadTxt.textContent = kpScreenDone ? `✓ ${t('questDone')}` : t('btnUploadKpScreen');
   }
 
-  updateNightShiftButtonState();
-}
-
-function updateNightShiftButtonState() {
   const enterBtn = document.getElementById('btn-enter-night-shift');
   const cdText = document.getElementById('night-shift-cooldown-text');
-  if (!enterBtn) return;
-
-  const avail = getNightShiftAvailability();
-  if (!avail.unlocked) {
-    enterBtn.disabled = true;
-    cdText?.setAttribute('hidden', '');
-    return;
-  }
-
-  if (avail.canPlayNow) {
-    enterBtn.disabled = false;
-    cdText?.setAttribute('hidden', '');
-    if (state.cooldownTimer) {
-      clearInterval(state.cooldownTimer);
-      state.cooldownTimer = null;
-    }
-    return;
-  }
-
-  enterBtn.disabled = true;
-  if (cdText) {
-    cdText.removeAttribute('hidden');
-    const mm = String(Math.floor(avail.waitSec / 60)).padStart(2, '0');
-    const ss = String(avail.waitSec % 60).padStart(2, '0');
-    cdText.textContent = t('nightShiftCooldown', { min: mm, sec: ss });
-  }
-
-  if (!state.cooldownTimer) {
-    state.cooldownTimer = window.setInterval(() => {
-      const next = getNightShiftAvailability();
-      if (next.canPlayNow) {
-        clearInterval(state.cooldownTimer);
-        state.cooldownTimer = null;
+  if (enterBtn) {
+    const unlocked = isPremiereRaceUnlocked(synced);
+    enterBtn.disabled = !unlocked;
+    if (!unlocked) {
+      if (cdText) {
+        cdText.removeAttribute('hidden');
+        cdText.textContent = t('premiereLockedHint');
       }
-      updateNightShiftButtonState();
-    }, 1000);
+    } else if (state.profile.lives <= 0) {
+      if (cdText) {
+        cdText.removeAttribute('hidden');
+        cdText.textContent = t('nightShiftCooldown');
+      }
+    } else {
+      cdText?.setAttribute('hidden', '');
+    }
   }
 }
 
@@ -1192,9 +1857,31 @@ function createGoldenTicketPortraitDataUrl(ticketCode = '') {
 
   ctx.fillStyle = '#f5efe2';
   ctx.font = '700 22px monospace';
-  ctx.fillText(ticketCode || 'БИЛЕТ В КИНО · 17.12', 256, 294);
+  ctx.fillText(ticketCode || 'ПРЕМЬЕРА · 17.12', 256, 294);
 
   return c.toDataURL('image/webp', 0.85);
+}
+
+async function shareOrDownloadPngBlob(pngBlob, fileName) {
+  const file = new File([pngBlob], fileName, { type: 'image/png' });
+  if (navigator.canShare && navigator.canShare({ files: [file] }) && window.matchMedia('(pointer: coarse)').matches) {
+    try {
+      await navigator.share({
+        files: [file],
+        title: 'БОЧКА — В кино с 17 декабря',
+      });
+      return;
+    } catch { /* fallback */ }
+  }
+
+  const url = URL.createObjectURL(pngBlob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
 async function handleDownloadStories() {
@@ -1219,28 +1906,7 @@ async function handleDownloadStories() {
     });
 
     if (!pngBlob) return;
-
-    const fileName = `bochka-story-${Date.now()}.png`;
-    const file = new File([pngBlob], fileName, { type: 'image/png' });
-
-    if (navigator.canShare && navigator.canShare({ files: [file] }) && window.matchMedia('(pointer: coarse)').matches) {
-      try {
-        await navigator.share({
-          files: [file],
-          title: 'БОЧКА — В кино с 17 декабря',
-        });
-        return;
-      } catch { /* fallback */ }
-    }
-
-    const url = URL.createObjectURL(pngBlob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 5000);
+    await shareOrDownloadPngBlob(pngBlob, `bochka-story-${Date.now()}.png`);
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -1250,9 +1916,6 @@ async function handleDownloadStories() {
    КАСТОМНЫЙ SELF-HOSTED MP4 ПЛЕЕР ТРЕЙЛЕРА (БЕЗ ПЕРЕМОТКИ ВПЕРЁД + 40 СЕК UNLOCK)
    ============================================================================ */
 function initVisibilityAndAntiSeekGuards() {
-  // 1. Контроль ухода/возврата на вкладку для:
-  //    - сверки 15 секунд на Кинопоиске (Шаг А)
-  //    - авто-паузы собственного MP4 трейлера при сворачивании вкладки (Шаг Б)
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       if (state.kpSync.waiting) {
@@ -1282,7 +1945,6 @@ function initVisibilityAndAntiSeekGuards() {
     }
   });
 
-  // 2. Жёсткая блокировка перемотки вперёд и ускорения на <video id="trailer-video">
   const vid = document.getElementById('trailer-video');
   if (!vid) return;
 
@@ -1300,7 +1962,6 @@ function initVisibilityAndAntiSeekGuards() {
 
   vid.addEventListener('timeupdate', () => {
     if (!vid.seeking && vid.currentTime > state.trailer.maxTime) {
-      // Защита от скачка currentTime через консоль
       if (vid.currentTime - state.trailer.maxTime < 1.8) {
         state.trailer.maxTime = vid.currentTime;
       } else if (!state.trailer.unlocked40) {
@@ -1321,7 +1982,6 @@ function initVisibilityAndAntiSeekGuards() {
   vid.addEventListener('play', syncTrailerPlayButton);
   vid.addEventListener('pause', syncTrailerPlayButton);
 
-  // Резервный YouTube fallback ТОЛЬКО если MP4 вдруг не загрузился
   vid.addEventListener('error', () => {
     activateYouTubeFallback();
   });
@@ -1343,7 +2003,6 @@ function openTrailerModal({ forRescue = false } = {}) {
     state.trailer.maxTime = 0;
     state.trailer.unlocked40 = false;
     rescueBox?.removeAttribute('hidden');
-    // Во время спасения №2 крестик закрытия возвращает на карточку спасения, не давая обойти капкан
     if (closeBtn) closeBtn.style.visibility = 'visible';
     updateTrailerRescueBanner(0);
   } else {
@@ -1354,7 +2013,6 @@ function openTrailerModal({ forRescue = false } = {}) {
     if (forRescue) vid.currentTime = 0;
     vid.muted = false;
     vid.play().catch(() => {
-      // Если мобильный браузер потребовал автостарт без звука — запускаем и даём кнопку ЗВУК
       vid.muted = true;
       vid.play().catch(() => {});
     });
@@ -1375,7 +2033,6 @@ function closeTrailerModal() {
     state.trailer.ytTimer = null;
   }
 
-  // Если игрок закрыл модалку трейлера во время Шага Б, не досмотрев 40 сек — возвращаем окно Спасения №2
   if (state.trailer.forRescue && state.round.rescueStage === 3 && !state.trailer.unlocked40) {
     document.getElementById('modal-rescue')?.removeAttribute('hidden');
   }
@@ -1565,9 +2222,15 @@ function bindUIEvents() {
   document.getElementById('btn-prize-golden')?.addEventListener('click', async () => {
     document.getElementById('modal-prize')?.setAttribute('hidden', '');
     state.entered = true;
-    await populateFinaleScreen();
-    showScreen('finale');
-    document.getElementById('golden-hunt-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    await audio.unlock(true);
+    refreshSoundButtonLabel();
+    if (isPremiereRaceUnlocked()) {
+      startPremiereRaceRound();
+    } else {
+      await populateFinaleScreen();
+      showScreen('finale');
+      document.getElementById('golden-hunt-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   });
 
   // Экран 1: Входной шлюз
@@ -1577,6 +2240,7 @@ function bindUIEvents() {
   // Экран 2 (Режим А)
   document.getElementById('btn-start-demo')?.addEventListener('click', () => startDemoRound());
   document.getElementById('btn-go-pack')?.addEventListener('click', () => showScreen('pack'));
+  document.getElementById('btn-mode-a-premiere')?.addEventListener('click', () => startPremiereRaceRound());
 
   // Экран 3 (HUD Цеха)
   document.getElementById('btn-hud-sound')?.addEventListener('click', async () => {
@@ -1591,6 +2255,72 @@ function bindUIEvents() {
     stopAirTimer();
     state.round.running = false;
     showScreen('pack');
+  });
+
+  // Секретная пасхалка «Достучаться до небес» (Экран моря)
+  document.getElementById('btn-ocean-story')?.addEventListener('click', () => handleDownloadOceanPostcard());
+  document.getElementById('btn-ocean-back')?.addEventListener('click', () => handleReturnFromOcean());
+
+  // Вилка «Золотая бочка: Чужой билет с фейс-контролем»
+  document.getElementById('btn-close-golden-fork')?.addEventListener('click', () => closeGoldenTicketForkModal());
+  document.getElementById('btn-reopen-golden-fork')?.addEventListener('click', () => openGoldenTicketForkModal());
+  document.getElementById('btn-burn-ticket-x2')?.addEventListener('click', () => handleBurnTicketChoice());
+  document.getElementById('btn-gift-ticket-toggle')?.addEventListener('click', () => {
+    document.getElementById('gift-pass-form')?.removeAttribute('hidden');
+    Haptics.light();
+  });
+  document.getElementById('input-gift-friend-photo')?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (file) await handleGiftFriendPhotoChange(file);
+  });
+  document.getElementById('btn-issue-gift-pass')?.addEventListener('click', () => handleIssueGiftPassClick());
+  document.getElementById('btn-copy-gift-pass')?.addEventListener('click', async () => {
+    if (!state.giftPass.lastPassUrl) return;
+    await copyToClipboard(state.giftPass.lastPassUrl);
+    showToast(t('copiedToast'));
+  });
+  document.getElementById('btn-share-gift-native')?.addEventListener('click', async () => {
+    if (!state.giftPass.lastPassUrl) return;
+    const res = await shareNativeOrFallback({
+      title: 'Именной билет в кино — БОЧКА (17 декабря)',
+      text: `🎟 Дарю тебе именной пропуск в кино на триллер «Бочка»! На кассе сверят по фото (${state.giftPass.recipientName}):`,
+      url: state.giftPass.lastPassUrl,
+    });
+    if (res === 'copied') showToast(t('copiedToast'));
+  });
+  document.getElementById('btn-share-gift-tg')?.addEventListener('click', () => {
+    if (!state.giftPass.lastPassUrl) return;
+    openTelegramShare(
+      state.giftPass.lastPassUrl,
+      `🎟 Выбил в цеху «БОЧКИ» настоящий билет в кино и оформил пропуск на твоё имя (${state.giftPass.recipientName})! Активируй по ссылке:`
+    );
+  });
+  document.getElementById('btn-done-gift-pass')?.addEventListener('click', () => closeGoldenTicketForkModal());
+
+  // Near-Miss модалка («До Премьеры остался один рывок!»)
+  document.getElementById('btn-close-near-miss')?.addEventListener('click', async () => {
+    document.getElementById('modal-near-miss')?.setAttribute('hidden', '');
+    await finishPremiereRound(false, null);
+  });
+  document.getElementById('btn-near-miss-pack')?.addEventListener('click', () => {
+    document.getElementById('modal-near-miss')?.setAttribute('hidden', '');
+    stopAirTimer();
+    state.round.running = false;
+    showScreen('pack');
+  });
+
+  // Защищённый экран Именного пропуска кинотеатра (?pass=ID)
+  document.getElementById('btn-accept-gift-pass')?.addEventListener('click', () => handleAcceptIncomingPass());
+  document.getElementById('btn-copy-pass-code')?.addEventListener('click', async () => {
+    const code = document.getElementById('pass-ticket-code')?.value || '';
+    if (!code) return;
+    await copyToClipboard(code);
+    showToast(t('copiedToast'));
+  });
+  document.getElementById('btn-pass-go-workshop')?.addEventListener('click', async () => {
+    await audio.unlock(true);
+    refreshSoundButtonLabel();
+    showScreen('modeA');
   });
 
   // 5-ходовая модалка Спасения
@@ -1630,7 +2360,6 @@ function bindUIEvents() {
     else showScreen('modeA');
   });
 
-  // Запись голоса (поддерживает и удержание кнопки, и клик старт/стоп)
   let recPressAt = 0;
   const recBtn = document.getElementById('btn-record-voice');
   recBtn?.addEventListener('pointerdown', async (e) => {
@@ -1654,7 +2383,6 @@ function bindUIEvents() {
     if (!voiceRecorder?.isRecording || !recPressAt) return;
     const heldMs = performance.now() - recPressAt;
     recPressAt = 0;
-    // Если пользователь именно зажимал кнопку дольше 420 мс — завершаем запись при отпускании пальца
     if (heldMs >= 420) {
       voiceRecorder.stop();
     }
@@ -1741,6 +2469,7 @@ function bindUIEvents() {
     if (!state.pack.lastShareUrl) return;
     await copyToClipboard(state.pack.lastShareUrl);
     showToast(t('copiedToast'));
+    await grantShareLifeOnceForCurrentBarrel();
     Haptics.light();
   });
 
@@ -1752,16 +2481,26 @@ function bindUIEvents() {
       text: `🛢 Тебя заварили в цеху (воздуха на 30 сек): «${msg}»`,
       url: state.pack.lastShareUrl,
     });
+    if (res !== 'aborted') {
+      await grantShareLifeOnceForCurrentBarrel();
+    }
     if (res === 'copied') showToast(t('copiedToast'));
   });
 
-  document.getElementById('btn-share-tg')?.addEventListener('click', () => {
+  document.getElementById('btn-share-tg')?.addEventListener('click', async () => {
     if (!state.pack.lastShareUrl) return;
     const msg = document.getElementById('input-custom-phrase')?.value || '';
     openTelegramShare(
       state.pack.lastShareUrl,
       `🛢 Кто-то заварил тебя в цеху «БОЧКИ»! Надень наушники — 3 попытки и 30 сек воздуха: «${msg}»`
     );
+    await grantShareLifeOnceForCurrentBarrel();
+  });
+
+  document.getElementById('btn-pack-go-premiere')?.addEventListener('click', async () => {
+    await audio.unlock(true);
+    refreshSoundButtonLabel();
+    startPremiereRaceRound();
   });
 
   // Секретный видеокружок со съёмок
@@ -1778,7 +2517,7 @@ function bindUIEvents() {
     document.getElementById('modal-circle')?.setAttribute('hidden', '');
   });
 
-  // Экран 5: Финал раунда и Золотая бочка
+  // Экран 5: Финал раунда и Суперигра «Гонка за Премьерой»
   document.getElementById('btn-finale-replay-voice')?.addEventListener('click', () => {
     if (state.round.voiceUrl) {
       audio.playCleanSenderVoice(state.round.voiceUrl);
@@ -1806,9 +2545,7 @@ function bindUIEvents() {
   });
 
   document.getElementById('btn-enter-night-shift')?.addEventListener('click', () => {
-    if (isGoldenHuntUnlocked()) {
-      startNightShiftRound();
-    }
+    startPremiereRaceRound();
   });
 
   document.getElementById('btn-cinema-reply')?.addEventListener('click', async () => {

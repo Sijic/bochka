@@ -3,9 +3,10 @@ import { ENV } from './env.js';
 import { saveLocalPackMedia, loadLocalPackMedia } from './voice.js';
 
 const PACKS_STORAGE_KEY = 'bochka_v2_packs';
+const PASSES_STORAGE_KEY = 'bochka_v3_passes';
 const QUEST_STORAGE_KEY = 'bochka_v2_quest';
+const PROFILE_STORAGE_KEY = 'bochka_v3_profile';
 const UID_STORAGE_KEY = 'bochka_v2_uid';
-const NIGHT_SHIFT_COOLDOWN_MS = 10 * 60 * 1000; // 10 минут между бесплатными сменами (либо мгновенно за друга)
 
 export const supabase =
   ENV.supabaseUrl && ENV.supabaseAnonKey
@@ -55,12 +56,24 @@ function decodeLegacyBase64Url(b64) {
   }
 }
 
+function resolveShareBaseUrl() {
+  if (typeof window !== 'undefined') {
+    const loc = window.location;
+    if (loc.hostname === 'localhost' || loc.hostname === '127.0.0.1') {
+      return `${loc.origin}${loc.pathname}`;
+    }
+    if (loc.protocol.startsWith('http') && loc.hostname) {
+      return `${loc.origin}${loc.pathname}`;
+    }
+  }
+  return `${ENV.publicUrl.replace(/\/+$/, '')}/`;
+}
+
 /**
  * Создаёт упакованную бочку:
  * - грузит портрет 512x512 WebP (<= 60 КБ) и голосовое Opus/WebM (<= 40 КБ) в Supabase Storage,
  * - сохраняет запись в public.barrels с коротким 7-буквенным ID,
- * - дублирует медиа в IndexedDB для мгновенного локального теста,
- * - ВСЕГДА возвращает чистую короткую ссылку вида https://bochka.quest/?b=jakaqgx (без base64-хвостов!).
+ * - ВСЕГДА возвращает чистую короткую ссылку вида https://bochka.quest/?b=jakaqgx (без base64!).
  */
 export async function createBarrelPack({
   mode = 'friend',
@@ -138,13 +151,11 @@ export async function createBarrelPack({
     }
   }
 
-  // Бинарные блобы фото и голоса кладём в IndexedDB (для локальной проверки без раздутия localStorage)
   await saveLocalPackMedia(id, {
     photoBlob: processedImage?.blob || null,
     voiceBlob: recordedVoice?.blob || null,
   });
 
-  // Компактные метаданные в localStorage
   const localPacks = readLocalPacks();
   localPacks[id] = {
     id,
@@ -171,14 +182,11 @@ export async function createBarrelPack({
   }
   safeWriteJson(PACKS_STORAGE_KEY, localPacks);
 
-  // Фиксируем упаковку друга (шаг 1 для разблокировки Золотой бочки + видеокружка со съёмок + доп. смена)
   const q = getQuestState();
   q.packedCount = (q.packedCount || 0) + 1;
-  q.bonusShifts = (q.bonusShifts || 0) + 1;
   q.myBarrelIds = Array.from(new Set([...(q.myBarrelIds || []), id])).slice(-25);
   saveQuestState(q);
 
-  // СТРОГО чистая короткая ссылка вида https://bochka.quest/?b=jakaqgx (никакого base64 в URL!)
   const baseOrigin = resolveShareBaseUrl();
   const sep = baseOrigin.includes('?') ? '&' : '?';
   const webUrl = `${baseOrigin}${sep}b=${encodeURIComponent(id)}`;
@@ -197,23 +205,6 @@ export async function createBarrelPack({
   };
 }
 
-function resolveShareBaseUrl() {
-  if (typeof window !== 'undefined') {
-    const loc = window.location;
-    if (loc.hostname === 'localhost' || loc.hostname === '127.0.0.1') {
-      return `${loc.origin}${loc.pathname}`;
-    }
-    if (loc.protocol.startsWith('http') && loc.hostname) {
-      return `${loc.origin}${loc.pathname}`;
-    }
-  }
-  return `${ENV.publicUrl.replace(/\/+$/, '')}/`;
-}
-
-/**
- * Загружает данные загаданной бочки по параметру ?b=jakaqgx или startapp=jakaqgx
- * (поддерживает и старые ссылки с точкой для обратной совместимости)
- */
 export async function loadBarrelPack(rawParam) {
   if (!rawParam) return null;
   let decodedParam = rawParam;
@@ -225,7 +216,6 @@ export async function loadBarrelPack(rawParam) {
   const id = (dotIdx > 0 ? decodedParam.slice(0, dotIdx) : decodedParam).trim();
   const legacyToken = dotIdx > 0 ? decodedParam.slice(dotIdx + 1) : '';
 
-  // 1. Запрос в Supabase `public.barrels` по short_id
   if (supabase && id) {
     try {
       const { data, error } = await supabase
@@ -259,7 +249,6 @@ export async function loadBarrelPack(rawParam) {
     } catch { /* fallback below */ }
   }
 
-  // 2. Локальное хранилище + IndexedDB (полноразмерный 512x512 WebP + записанный голос при локальном тесте)
   const localPacks = readLocalPacks();
   if (localPacks[id]) {
     const entry = { ...localPacks[id] };
@@ -269,7 +258,6 @@ export async function loadBarrelPack(rawParam) {
     return entry;
   }
 
-  // 3. Обратная совместимость со старыми длинными ссылками v2.0 (.eyJ...)
   if (legacyToken) {
     const payload = decodeLegacyBase64Url(legacyToken);
     if (payload) {
@@ -289,7 +277,6 @@ export async function loadBarrelPack(rawParam) {
     }
   }
 
-  // 4. Гостевая демо-капсула по произвольному короткому коду (?b=jakaqgx без записи в БД)
   const fallbackTarget = Math.abs(hashCode(id)) % 6;
   return {
     id,
@@ -307,7 +294,8 @@ export async function loadBarrelPack(rawParam) {
 }
 
 /**
- * Фиксирует финал раунда получателя в Supabase + шлёт уведомление отправителю через Telegram Bot API
+ * Фиксирует финал раунда получателя, начисляет +2 жизни отправителю на сервере
+ * и шлёт живой пуш в Telegram-бот.
  */
 export async function recordBarrelResult(pack, { survived, attemptsUsed, timeLeft, viewerTgUser = null }) {
   if (!pack || !pack.id) return { notified: false };
@@ -320,6 +308,7 @@ export async function recordBarrelResult(pack, { survived, attemptsUsed, timeLef
   safeWrite(openedGuardKey, '1');
 
   const nextOpenedCount = !alreadyOpenedByMe && !isSelfOpen ? (pack.openedCount || 0) + 1 : (pack.openedCount || 0);
+  let senderBonusCredited = 0;
 
   if (supabase) {
     try {
@@ -333,6 +322,14 @@ export async function recordBarrelResult(pack, { survived, attemptsUsed, timeLef
           last_opened_at: new Date().toISOString(),
         })
         .eq('id', pack.id);
+
+      if (!alreadyOpenedByMe && !isSelfOpen) {
+        const { data: cred } = await supabase.rpc('credit_friend_opened_lives', {
+          p_barrel_id: pack.id,
+          p_viewer_uid: viewerUid,
+        });
+        senderBonusCredited = cred?.credited || 0;
+      }
     } catch { /* ignore */ }
   }
 
@@ -346,9 +343,10 @@ export async function recordBarrelResult(pack, { survived, attemptsUsed, timeLef
   }
 
   const readerName = viewerTgUser?.name || 'Твой друг';
+  const bonusTail = !isSelfOpen ? ' Тебе начислено +2 жизни в Гонке за Премьерой!' : '';
   const notifyText = survived
-    ? `🛢 БОЧКА: ${readerName} пробил все преграды и вскрыл твою бочку с ${attemptsUsed}-й попытки!`
-    : `💀 БОЧКА: ${readerName} остался в тёмном цеху Корпуса Б!`;
+    ? `🛢 БОЧКА: ${readerName} пробил цех и вскрыл твою бочку с ${attemptsUsed}-й попытки!${bonusTail}`
+    : `💀 БОЧКА: ${readerName} остался в тёмном цеху Корпуса Б!${bonusTail}`;
 
   const notified = await sendTelegramPing({
     chatId: pack.senderTgId,
@@ -358,14 +356,12 @@ export async function recordBarrelResult(pack, { survived, attemptsUsed, timeLef
     survived,
     attemptsUsed,
     timeLeft,
+    senderBonusCredited,
   });
 
-  return { notified };
+  return { notified, senderBonusCredited };
 }
 
-/**
- * Отправляет ответ в 1 клик «ИДЁМ В КИНО 17 ДЕКАБРЯ!» первому игроку
- */
 export async function sendCinemaInviteReply(pack, viewerTgUser = null) {
   if (pack?.id && supabase) {
     try {
@@ -416,52 +412,468 @@ async function sendTelegramPing(payload) {
 }
 
 /* ============================================================================
-   ЗАКРЫТАЯ ОХОТА ЗА НАСТОЯЩИМ БИЛЕТОМ В КИНО («НОЧНАЯ СМЕНА»)
-   Вся проверка выигрыша выполняется ИСКЛЮЧИТЕЛЬНО на сервере через RPC `try_win_ticket`.
-   В клиентском коде НЕТ ни формул выигрыша, ни промокодов!
+   ГЛАВНАЯ СУПЕРИГРА v3.0: ГОНКА ЗА ПРЕМЬЕРОЙ (0..100) + ПРАВИЛО «ЧУЖОГО БИЛЕТА»
+   На продакшене вся математика и лимиты считаются СТРОГО на сервере в Supabase RPC.
+   Если ключи Supabase ещё не подключены, работает безопасное превью с потолком 99.9
+   без выдачи реальных кодов кинотеатра.
    ============================================================================ */
-export async function tryWinCinemaTicket(tgUser = null) {
-  if (!supabase) {
-    return {
-      won: false,
-      status: 'backend_not_configured',
-    };
-  }
 
+function getLocalPreviewProfile() {
+  const today = new Date().toISOString().slice(0, 10);
+  const def = {
+    premiereScore: 0,
+    lives: 3,
+    rawSharesToday: 0,
+    rawSharesDay: today,
+    easterEggClaimed: false,
+    premiereWon: false,
+    premiereCode: '',
+    hasPendingTicket: false,
+    demoStrikes: 0,
+  };
+  const saved = safeReadJson(PROFILE_STORAGE_KEY, null);
+  const prof = saved ? { ...def, ...saved } : def;
+  if (prof.rawSharesDay !== today) {
+    prof.rawSharesToday = 0;
+    prof.rawSharesDay = today;
+    safeWriteJson(PROFILE_STORAGE_KEY, prof);
+  }
+  return prof;
+}
+
+function saveLocalPreviewProfile(prof) {
+  safeWriteJson(PROFILE_STORAGE_KEY, prof);
+}
+
+export function isPremiereRaceUnlocked(state = getQuestState()) {
+  return Boolean((state.packedCount || 0) >= 1);
+}
+
+export async function fetchPlayerProfile(tgUser = null) {
   const uid = getViewerUid(tgUser);
-  try {
-    const { data, error } = await supabase.rpc('try_win_ticket', {
-      user_id: uid,
-    });
-
-    if (error || !data) {
-      return { won: false, status: 'rpc_error' };
-    }
-
-    if (data.won === true && data.ticket_code) {
-      const q = getQuestState();
-      q.wonTicketCode = data.ticket_code;
-      q.wonTicketContact = data.contact || '';
-      saveQuestState(q);
-      return {
-        won: true,
-        ticketCode: data.ticket_code,
-        contact: data.contact || '',
-      };
-    }
-
-    return {
-      won: false,
-      status: data.status || 'empty',
-    };
-  } catch {
-    return { won: false, status: 'network_error' };
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.rpc('get_player_profile', {
+        p_user_id: uid,
+      });
+      if (!error && data?.ok) {
+        const mapped = {
+          premiereScore: Number(data.premiere_score || 0),
+          lives: Number(data.lives ?? 3),
+          rawSharesToday: Number(data.raw_shares_today || 0),
+          easterEggClaimed: Boolean(data.easter_egg_claimed),
+          premiereWon: Boolean(data.premiere_won),
+          premiereCode: data.premiere_code || '',
+          hasPendingTicket: Boolean(data.has_pending_ticket),
+        };
+        saveLocalPreviewProfile({ ...getLocalPreviewProfile(), ...mapped });
+        return mapped;
+      }
+    } catch { /* fallback below */ }
   }
+  return getLocalPreviewProfile();
+}
+
+export async function playPremiereStrike(tgUser = null) {
+  const uid = getViewerUid(tgUser);
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.rpc('play_premiere_strike', {
+        p_user_id: uid,
+      });
+      if (!error && data) {
+        return {
+          ok: Boolean(data.ok),
+          status: data.status || 'ok',
+          outcome: data.outcome || 'empty_screamer',
+          delta: Number(data.delta || 0),
+          premiereScore: Number(data.premiere_score || 0),
+          lives: Number(data.lives || 0),
+          nearMiss: Boolean(data.near_miss),
+          hasPendingTicket: Boolean(data.has_pending_ticket),
+          premiereCode: data.premiere_code || '',
+          contact: data.contact || '',
+        };
+      }
+      return { ok: false, status: 'rpc_error' };
+    } catch {
+      return { ok: false, status: 'network_error' };
+    }
+  }
+
+  // Безопасный оффлайн-превью режим (до подключения .env Supabase): потолок строго 99.9, реальных промокодов нет!
+  const prof = getLocalPreviewProfile();
+  if (prof.lives <= 0) {
+    return {
+      ok: false,
+      status: 'no_lives',
+      premiereScore: prof.premiereScore,
+      lives: 0,
+    };
+  }
+
+  prof.lives = Math.max(0, prof.lives - 1);
+  prof.demoStrikes = (prof.demoStrikes || 0) + 1;
+
+  // На 4-м ударе превью показываем механику «Золотой бочки с чужим билетом»
+  if (!prof.hasPendingTicket && prof.demoStrikes === 4) {
+    prof.hasPendingTicket = true;
+    saveLocalPreviewProfile(prof);
+    return {
+      ok: true,
+      outcome: 'golden_ticket',
+      delta: 0,
+      premiereScore: prof.premiereScore,
+      lives: prof.lives,
+      hasPendingTicket: true,
+    };
+  }
+
+  let emptyProb = 0.18;
+  let delta = 35.0;
+  const s = prof.premiereScore;
+  if (s < 35) { emptyProb = 0.14; delta = 45.0; }
+  else if (s < 70) { emptyProb = 0.20; delta = 30.0; }
+  else if (s < 90) { emptyProb = 0.26; delta = 16.0; }
+  else if (s < 95) { emptyProb = 0.66; delta = 3.0; }
+  else if (s < 98) { emptyProb = 0.70; delta = 1.5; }
+  else if (s < 98.8) { emptyProb = 0.74; delta = 0.4; }
+  else { emptyProb = 0.78; delta = 0.1; }
+
+  if (Math.random() < emptyProb) {
+    saveLocalPreviewProfile(prof);
+    return {
+      ok: true,
+      outcome: 'empty_screamer',
+      delta: 0,
+      premiereScore: prof.premiereScore,
+      lives: prof.lives,
+      nearMiss: prof.premiereScore >= 90 && prof.lives === 0,
+    };
+  }
+
+  const nextScore = Math.min(99.9, Number((prof.premiereScore + delta).toFixed(1)));
+  const realDelta = Number((nextScore - prof.premiereScore).toFixed(1));
+  prof.premiereScore = nextScore;
+  saveLocalPreviewProfile(prof);
+
+  return {
+    ok: true,
+    outcome: 'score_hit',
+    delta: realDelta,
+    premiereScore: prof.premiereScore,
+    lives: prof.lives,
+    nearMiss: prof.premiereScore >= 90 && prof.lives === 0,
+  };
 }
 
 /**
- * Управление прогрессом квеста, верификацией скриншота Кинопоиска и доступом к «Ночной смене»
+ * Начисляет +1 жизнь сразу за отправку ссылки с бочкой другу (максимум 3 раза в сутки)
  */
+export async function claimShareBonusLife(tgUser = null) {
+  const uid = getViewerUid(tgUser);
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.rpc('claim_share_life', {
+        p_user_id: uid,
+      });
+      if (!error && data?.ok) {
+        return {
+          granted: Number(data.granted || 0),
+          lives: Number(data.lives || 0),
+          rawSharesToday: Number(data.raw_shares_today || 0),
+          capped: data.reason === 'daily_share_cap',
+        };
+      }
+    } catch { /* fallback below */ }
+  }
+
+  const prof = getLocalPreviewProfile();
+  if (prof.rawSharesToday >= 3) {
+    return {
+      granted: 0,
+      lives: prof.lives,
+      rawSharesToday: prof.rawSharesToday,
+      capped: true,
+    };
+  }
+  prof.rawSharesToday += 1;
+  prof.lives += 1;
+  saveLocalPreviewProfile(prof);
+  return {
+    granted: 1,
+    lives: prof.lives,
+    rawSharesToday: prof.rawSharesToday,
+    capped: false,
+  };
+}
+
+/**
+ * ПУТЬ А (Азарт): Сжечь выпавший обычный билет в топке цеха в обмен на множитель ×2 жизней!
+ */
+export async function burnRegularTicketForX2Lives(tgUser = null) {
+  const uid = getViewerUid(tgUser);
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.rpc('burn_regular_ticket', {
+        p_user_id: uid,
+      });
+      if (!error && data?.ok) {
+        return { ok: true, lives: Number(data.lives || 4) };
+      }
+      return { ok: false };
+    } catch {
+      return { ok: false };
+    }
+  }
+
+  const prof = getLocalPreviewProfile();
+  if (!prof.hasPendingTicket) return { ok: false };
+  prof.hasPendingTicket = false;
+  prof.lives = Math.max(4, prof.lives * 2);
+  saveLocalPreviewProfile(prof);
+  return { ok: true, lives: prof.lives };
+}
+
+/**
+ * ПУТЬ Б (Подарок с фейс-контролем): Создать именной веб-пропуск для друга (?pass=ID).
+ * Самому игроку промокод НЕ показывается — только получателю при активации пропуска!
+ */
+export async function createGiftTicketPass({
+  tgUser = null,
+  senderName = '',
+  recipientName = '',
+  processedPassPhoto,
+}) {
+  const passId = randomShortId(8);
+  const uid = getViewerUid(tgUser);
+  const cleanRecipient = (recipientName || '').trim().slice(0, 40);
+  const cleanSender = (senderName || tgUser?.name || '').trim().slice(0, 32);
+
+  if (cleanRecipient.length < 2 || !processedPassPhoto?.blob) {
+    return { ok: false, error: 'missing_fields' };
+  }
+
+  let remotePhotoUrl = '';
+  let storedInCloud = false;
+
+  if (supabase) {
+    try {
+      const photoPath = `passes/${passId}.webp`;
+      const { error: upErr } = await supabase.storage
+        .from(ENV.supabaseBucket)
+        .upload(photoPath, processedPassPhoto.blob, {
+          contentType: processedPassPhoto.blob.type || 'image/webp',
+          cacheControl: '604800',
+          upsert: true,
+        });
+
+      if (!upErr) {
+        const { data: pubData } = supabase.storage.from(ENV.supabaseBucket).getPublicUrl(photoPath);
+        remotePhotoUrl = pubData?.publicUrl || '';
+      }
+
+      const { data, error } = await supabase.rpc('create_gift_ticket_pass', {
+        p_user_id: uid,
+        p_pass_id: passId,
+        p_recipient_name: cleanRecipient,
+        p_recipient_photo_url: remotePhotoUrl || 'local://pass',
+        p_sender_name: cleanSender,
+        p_sender_tg_id: tgUser?.id || null,
+      });
+
+      if (!error && data?.ok) {
+        storedInCloud = true;
+      } else {
+        return { ok: false, error: data?.error || 'rpc_error' };
+      }
+    } catch {
+      return { ok: false, error: 'network_error' };
+    }
+  } else {
+    const prof = getLocalPreviewProfile();
+    prof.hasPendingTicket = false;
+    saveLocalPreviewProfile(prof);
+  }
+
+  await saveLocalPackMedia(`pass_${passId}`, {
+    photoBlob: processedPassPhoto.blob,
+    voiceBlob: null,
+  });
+
+  const localPasses = safeReadJson(PASSES_STORAGE_KEY, {}) || {};
+  localPasses[passId] = {
+    id: passId,
+    recipientName: cleanRecipient,
+    recipientPhotoUrl: remotePhotoUrl || '',
+    senderName: cleanSender,
+    senderUid: uid,
+    senderTgId: tgUser?.id || '',
+    accepted: false,
+    createdAt: Date.now(),
+  };
+  safeWriteJson(PASSES_STORAGE_KEY, localPasses);
+
+  const baseOrigin = resolveShareBaseUrl();
+  const sep = baseOrigin.includes('?') ? '&' : '?';
+  const webUrl = `${baseOrigin}${sep}pass=${encodeURIComponent(passId)}`;
+  const tgUrl =
+    ENV.tgBotUsername && storedInCloud
+      ? `https://t.me/${ENV.tgBotUsername}/${ENV.tgAppName}?startapp=${encodeURIComponent('pass_' + passId)}`
+      : webUrl;
+
+  return {
+    ok: true,
+    passId,
+    shareUrl: tgUrl,
+    webUrl,
+  };
+}
+
+/**
+ * Загружает данные Именного пропуска кинотеатра по ?pass=ID + смещение живых серверных часов
+ */
+export async function loadGiftTicketPass(passId) {
+  if (!passId) return null;
+  const cleanId = passId.trim();
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.rpc('get_gift_ticket_pass', {
+        p_pass_id: cleanId,
+      });
+      if (!error && data?.ok) {
+        let photoUrl = data.recipient_photo_url || '';
+        if (!photoUrl || photoUrl.startsWith('local://')) {
+          const media = await loadLocalPackMedia(`pass_${cleanId}`);
+          if (media?.photoObjectUrl) photoUrl = media.photoObjectUrl;
+        }
+        const serverNowMs = Number(data.server_now_ms || Date.now());
+        return {
+          id: data.id,
+          recipientName: data.recipient_name,
+          recipientPhotoUrl: photoUrl,
+          senderName: data.sender_name || '',
+          senderUid: data.sender_uid || '',
+          senderTgId: data.sender_tg_id || '',
+          accepted: Boolean(data.accepted),
+          ticketCode: data.ticket_code || '',
+          contact: data.contact || '',
+          serverOffsetMs: serverNowMs - Date.now(),
+        };
+      }
+    } catch { /* fallback below */ }
+  }
+
+  const localPasses = safeReadJson(PASSES_STORAGE_KEY, {}) || {};
+  const entry = localPasses[cleanId];
+  if (!entry) return null;
+
+  let photoUrl = entry.recipientPhotoUrl || '';
+  if (!photoUrl) {
+    const media = await loadLocalPackMedia(`pass_${cleanId}`);
+    if (media?.photoObjectUrl) photoUrl = media.photoObjectUrl;
+  }
+
+  return {
+    ...entry,
+    recipientPhotoUrl: photoUrl,
+    ticketCode: entry.accepted ? 'DEMO-PASS-CONNECT-SUPABASE' : '',
+    contact: 'Предъяви этот живой именной пропуск с часами контролёру или в боте фильма.',
+    serverOffsetMs: 0,
+  };
+}
+
+/**
+ * Получатель активирует свой Именной билет -> отправителю начисляется множитель ×2 жизней!
+ */
+export async function acceptGiftTicketPass(passId, tgUser = null) {
+  const viewerUid = getViewerUid(tgUser);
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.rpc('accept_gift_ticket_pass', {
+        p_pass_id: passId,
+        p_recipient_uid: viewerUid,
+      });
+      if (!error && data?.ok) {
+        if (data.sender_tg_id) {
+          await sendTelegramPing({
+            chatId: data.sender_tg_id,
+            text: `🎟 БОЧКА: Друг активировал твой именной билет в кино! Твои жизни умножены ×2 (сейчас: ${data.sender_lives})!`,
+            event: 'gift_pass_accepted',
+            passId,
+          });
+        }
+        return {
+          ok: true,
+          ticketCode: data.ticket_code || '',
+          contact: data.contact || '',
+          serverOffsetMs: Number(data.server_now_ms || Date.now()) - Date.now(),
+        };
+      }
+      return { ok: false, error: data?.error || 'rpc_error' };
+    } catch {
+      return { ok: false, error: 'network_error' };
+    }
+  }
+
+  const localPasses = safeReadJson(PASSES_STORAGE_KEY, {}) || {};
+  const entry = localPasses[passId];
+  if (!entry) return { ok: false, error: 'not_found' };
+  if (entry.senderUid === viewerUid) {
+    return { ok: false, error: 'cannot_claim_own_ticket' };
+  }
+  entry.accepted = true;
+  safeWriteJson(PASSES_STORAGE_KEY, localPasses);
+
+  return {
+    ok: true,
+    ticketCode: 'DEMO-PASS-CONNECT-SUPABASE',
+    contact: 'Демо-пропуск активирован (подключите Supabase для выдачи реальных кодов киносети).',
+    serverOffsetMs: 0,
+  };
+}
+
+/**
+ * Секретная пасхалка «Достучаться до небес» (19 -> 97 -> 3 быстрых удара): разовый бонус +3 жизни!
+ */
+export async function claimEasterEgg1997Bonus(tgUser = null) {
+  const uid = getViewerUid(tgUser);
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.rpc('claim_easter_egg_1997', {
+        p_user_id: uid,
+      });
+      if (!error && data?.ok) {
+        const prof = getLocalPreviewProfile();
+        prof.easterEggClaimed = true;
+        prof.lives = Number(data.lives ?? prof.lives);
+        saveLocalPreviewProfile(prof);
+        return {
+          granted: Number(data.granted || 0),
+          alreadyClaimed: Boolean(data.already_claimed),
+          lives: Number(data.lives || 0),
+        };
+      }
+    } catch { /* fallback below */ }
+  }
+
+  const prof = getLocalPreviewProfile();
+  if (prof.easterEggClaimed) {
+    return { granted: 0, alreadyClaimed: true, lives: prof.lives };
+  }
+  prof.easterEggClaimed = true;
+  prof.lives += 3;
+  saveLocalPreviewProfile(prof);
+  return { granted: 3, alreadyClaimed: false, lives: prof.lives };
+}
+
+/* ============================================================================
+   УПРАВЛЕНИЕ КВЕСТ-СОСТОЯНИЕМ И ЖЕТОНАМИ «КРЫШКИ»
+   ============================================================================ */
 export function getQuestState() {
   const def = {
     trailerDone: false,
@@ -469,10 +881,6 @@ export function getQuestState() {
     kpScreenshotVerified: false,
     friendsOpened: 0,
     packedCount: 0,
-    bonusShifts: 0,
-    lastNightShiftAt: 0,
-    wonTicketCode: '',
-    wonTicketContact: '',
     myBarrelIds: [],
   };
   const saved = safeReadJson(QUEST_STORAGE_KEY, null);
@@ -483,45 +891,10 @@ function saveQuestState(state) {
   safeWriteJson(QUEST_STORAGE_KEY, state);
 }
 
-export function isGoldenHuntUnlocked(state = getQuestState()) {
-  return Boolean((state.packedCount || 0) >= 1 && state.kpScreenshotVerified);
-}
-
 export function markKpScreenshotVerified() {
   const s = getQuestState();
   s.kpScreenshotVerified = true;
   s.kinopoiskDone = true;
-  saveQuestState(s);
-  return s;
-}
-
-export function getNightShiftAvailability() {
-  const s = getQuestState();
-  if (!isGoldenHuntUnlocked(s)) {
-    return { unlocked: false, canPlayNow: false, waitSec: 0, bonusShifts: 0 };
-  }
-  if ((s.bonusShifts || 0) > 0) {
-    return { unlocked: true, canPlayNow: true, waitSec: 0, bonusShifts: s.bonusShifts };
-  }
-  const elapsed = Date.now() - (s.lastNightShiftAt || 0);
-  if (elapsed >= NIGHT_SHIFT_COOLDOWN_MS) {
-    return { unlocked: true, canPlayNow: true, waitSec: 0, bonusShifts: 0 };
-  }
-  return {
-    unlocked: true,
-    canPlayNow: false,
-    waitSec: Math.ceil((NIGHT_SHIFT_COOLDOWN_MS - elapsed) / 1000),
-    bonusShifts: 0,
-  };
-}
-
-export function consumeNightShiftEntry() {
-  const s = getQuestState();
-  if ((s.bonusShifts || 0) > 0) {
-    s.bonusShifts -= 1;
-  } else {
-    s.lastNightShiftAt = Date.now();
-  }
   saveQuestState(s);
   return s;
 }
@@ -558,9 +931,6 @@ export async function syncFriendsOpenedTokens(tgUser = null) {
 
       if (!error && Array.isArray(data)) {
         const openedBarrels = data.reduce((acc, row) => acc + Math.min(5, row.opened_count || 0), 0);
-        if (openedBarrels > prevFriends) {
-          s.bonusShifts = (s.bonusShifts || 0) + (openedBarrels - prevFriends);
-        }
         s.friendsOpened = Math.max(prevFriends, openedBarrels);
         saveQuestState(s);
       }
@@ -570,9 +940,6 @@ export async function syncFriendsOpenedTokens(tgUser = null) {
     let localOpened = 0;
     for (const id of s.myBarrelIds || []) {
       if (localPacks[id]?.openedCount > 0) localOpened += localPacks[id].openedCount;
-    }
-    if (localOpened > prevFriends) {
-      s.bonusShifts = (s.bonusShifts || 0) + (localOpened - prevFriends);
     }
     s.friendsOpened = Math.max(prevFriends, localOpened);
     saveQuestState(s);

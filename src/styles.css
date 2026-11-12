@@ -1822,3 +1822,774 @@ button:disabled {
     align-items: stretch;
   }
 }
+
+
+/* ==========================================================================
+   V3.0 MASTER UPGRADE:
+   - ШКАЛА ДОПУСКА НА ПРЕМЬЕРУ (0 / 100) + ВСПЛЫВАЮЩИЕ ОЧКИ
+   - 4 ФИЛЬМОВЫХ СКРИМЕРА (РУКА, ПАСТОР С КРЕСТОМ, ОТЕЦ С ФОНАРЁМ, БЛОГЕР)
+   - ВИЛКА «ЧУЖОГО БИЛЕТА» (ТОПКА ×2 ИЛИ ИМЕННОЙ ПРОПУСК ДРУГУ)
+   - ЗАЩИЩЁННЫЙ ВЕБ-ПРОПУСК С ЖИВЫМИ ЧАСАМИ ПРОТИВ СКРИНШОТОВ (?pass=ID)
+   - СЕКРЕТНЫЙ УРОВЕНЬ-ПАСХАЛКА «ДОСТУЧАТЬСЯ ДО НЕБЕС» (19 · 97)
+   ========================================================================== */
+
+.mode-premiere-shortcut {
+  margin-top: 10px;
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(234, 179, 8, 0.08);
+}
+
+.share-go-premiere-btn {
+  margin-top: 10px;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.hud-top-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.hud-premiere-strip,
+.premiere-card-meter {
+  background: rgba(13, 13, 14, 0.9);
+  border: 1px solid var(--accent);
+  padding: 9px 13px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.65);
+}
+
+.premiere-card-meter {
+  margin-bottom: 12px;
+  background: rgba(8, 8, 10, 0.78);
+}
+
+.premiere-strip-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.premiere-strip-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+
+.premiere-strip-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.premiere-score-pill {
+  padding: 2px 8px;
+  background: rgba(234, 179, 8, 0.14);
+  border: 1px solid var(--line);
+  color: #fef08a;
+}
+.premiere-score-pill strong {
+  font-size: 14px;
+  color: #fde047;
+}
+
+.premiere-lives-pill {
+  padding: 2px 8px;
+  background: rgba(239, 68, 68, 0.14);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  color: #fecaca;
+}
+
+.premiere-progress-track {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(234, 179, 8, 0.22);
+  overflow: hidden;
+  position: relative;
+}
+
+.premiere-track-lg {
+  height: 12px;
+}
+
+.premiere-progress-fill {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #ca8a04 0%, #eab308 55%, #fef08a 100%);
+  box-shadow: 0 0 16px rgba(234, 179, 8, 0.65);
+  transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.premiere-lives-big {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  color: #fde047;
+}
+
+.floating-score-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 22;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.floating-score-pop {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-display);
+  font-size: clamp(28px, 6vw, 44px);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #fde047;
+  text-shadow: 0 4px 18px rgba(0, 0, 0, 0.95), 0 0 22px rgba(234, 179, 8, 0.8);
+  animation: scoreFloatUp 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes scoreFloatUp {
+  0% { opacity: 0; transform: translate(-50%, -15%) scale(0.72); }
+  20% { opacity: 1; transform: translate(-50%, -55%) scale(1.12); }
+  100% { opacity: 0; transform: translate(-50%, -145%) scale(0.96); }
+}
+
+.life-economy-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 12px;
+  padding: 9px 11px;
+  background: rgba(234, 179, 8, 0.06);
+  border-left: 3px solid var(--accent);
+}
+
+.life-rule-item {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.38;
+  color: #e7e0d0;
+}
+
+.pending-ticket-banner {
+  margin-bottom: 12px;
+  border-color: #facc15;
+  background: rgba(234, 179, 8, 0.18);
+  color: #fef08a;
+  animation: dangerPulse 0.9s infinite alternate;
+}
+
+/* ==========================================================================
+   4 АУТЕНТИЧНЫХ СКРИМЕРА ФИЛЬМА (0.4 СЕК, БЕЗ СОБАК!)
+   ========================================================================== */
+.screamer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  animation: screamerBurst 0.42s cubic-bezier(0.12, 0.9, 0.25, 1) forwards;
+}
+
+.screamer-fx-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.screamer-img {
+  position: relative;
+  z-index: 2;
+  width: min(350px, 76vw);
+  max-height: 64vh;
+  object-fit: contain;
+}
+
+/* Вариант 0: Бледная грязная рука тянется из горловины бочки к лицу */
+.screamer-overlay[data-variant="hand"] {
+  background: radial-gradient(circle at 50% 48%, rgba(165, 28, 28, 0.42) 0%, rgba(7, 7, 8, 0.96) 76%);
+}
+.screamer-overlay[data-variant="hand"] .screamer-img {
+  width: min(410px, 84vw);
+  border-radius: 50%;
+  border: 4px solid rgba(180, 83, 9, 0.55);
+  box-shadow: 0 0 60px rgba(220, 38, 38, 0.65), inset 0 0 35px #000;
+  animation: handLunge 0.4s ease-out forwards;
+}
+.screamer-overlay[data-variant="hand"] .screamer-fx-layer {
+  background:
+    linear-gradient(118deg, transparent 43%, rgba(255, 240, 230, 0.55) 44%, transparent 45.2%),
+    linear-gradient(116deg, transparent 48%, rgba(239, 68, 68, 0.72) 49%, transparent 50.4%),
+    linear-gradient(120deg, transparent 53%, rgba(255, 240, 230, 0.48) 54%, transparent 55.1%);
+}
+
+@keyframes handLunge {
+  0% { transform: scale(0.76) translateY(34px); filter: contrast(1.4); }
+  55% { transform: scale(1.18) translateY(-6px); filter: contrast(1.65) brightness(1.12); }
+  100% { transform: scale(1.24) translateY(0); opacity: 0; }
+}
+
+/* Вариант 1: Пастор Тиля Швайгера в рясе бьёт светящимся крестом */
+.screamer-overlay[data-variant="pastor"] {
+  background: radial-gradient(circle at 50% 38%, rgba(250, 204, 21, 0.55) 0%, rgba(120, 53, 15, 0.52) 42%, rgba(8, 7, 6, 0.96) 82%);
+}
+.screamer-overlay[data-variant="pastor"] .screamer-img {
+  image-rendering: pixelated;
+  filter: contrast(1.28) drop-shadow(0 0 36px rgba(250, 204, 21, 0.92));
+  animation: pastorCrossThrust 0.4s steps(4) forwards;
+}
+.screamer-overlay[data-variant="pastor"] .screamer-fx-layer {
+  background:
+    linear-gradient(0deg, transparent 47%, rgba(254, 240, 138, 0.42) 50%, transparent 53%),
+    linear-gradient(90deg, transparent 48.5%, rgba(254, 240, 138, 0.45) 50%, transparent 51.5%);
+}
+
+@keyframes pastorCrossThrust {
+  0% { transform: scale(0.88) translateY(18px); }
+  50% { transform: scale(1.15) translateY(-4px); }
+  100% { transform: scale(1.2); opacity: 0; }
+}
+
+/* Вариант 2: Отец с ослепляющим лучом фонаря прямо в камеру ("No, no!") */
+.screamer-overlay[data-variant="father"] {
+  background: radial-gradient(circle at 52% 44%, rgba(255, 255, 255, 0.96) 0%, rgba(186, 230, 253, 0.68) 26%, rgba(12, 18, 26, 0.95) 78%);
+}
+.screamer-overlay[data-variant="father"] .screamer-img {
+  image-rendering: pixelated;
+  filter: contrast(1.35) brightness(1.15) drop-shadow(0 0 48px rgba(224, 242, 254, 0.98));
+}
+.screamer-overlay[data-variant="father"] .screamer-caption {
+  border-color: #bae6fd;
+  color: #e0f2fe;
+}
+
+/* Вариант 3: Пацан-блогер со стробоскопом вспышки смартфона и битым видео */
+.screamer-overlay[data-variant="blogger"] {
+  background: radial-gradient(circle at 48% 42%, rgba(248, 250, 252, 0.88) 0%, rgba(56, 189, 248, 0.35) 36%, rgba(9, 9, 14, 0.96) 80%);
+  animation: strobeGlitch 0.4s steps(2) forwards;
+}
+.screamer-overlay[data-variant="blogger"] .screamer-img {
+  image-rendering: pixelated;
+  filter: contrast(1.45) saturate(1.25) drop-shadow(-5px 0 0 rgba(239, 68, 68, 0.8)) drop-shadow(5px 0 0 rgba(56, 189, 248, 0.8));
+}
+.screamer-overlay[data-variant="blogger"] .screamer-fx-layer {
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.16) 0px,
+    rgba(255, 255, 255, 0.16) 2px,
+    transparent 2px,
+    transparent 7px
+  );
+}
+
+@keyframes screamerBurst {
+  0% { opacity: 1; transform: translate(-7px, 4px); }
+  45% { opacity: 0.98; transform: translate(7px, -5px); }
+  100% { opacity: 0; transform: translate(0, 0); }
+}
+
+@keyframes strobeGlitch {
+  0% { opacity: 1; filter: invert(0); transform: translate(-9px, 0); }
+  35% { opacity: 0.92; filter: invert(0.85); transform: translate(9px, -3px); }
+  70% { opacity: 1; filter: invert(0); transform: translate(-4px, 4px); }
+  100% { opacity: 0; transform: translate(0, 0); }
+}
+
+/* ==========================================================================
+   ВИЛКА «ЗОЛОТАЯ БОЧКА: ЧУЖОЙ БИЛЕТ С ФЕЙС-КОНТРОЛЕМ» И NEAR-MISS
+   ========================================================================== */
+.golden-fork-card {
+  position: relative;
+  width: min(560px, 100%);
+  max-height: calc(100vh - 36px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(234, 179, 8, 0.45) transparent;
+  padding: 22px 20px;
+  border: 1.5px solid var(--accent);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.96);
+}
+
+.golden-fork-card > .tech-corner {
+  display: none;
+}
+
+.fork-choices-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.btn-burn-furnace {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 14px 18px;
+  border-radius: 2px;
+  cursor: pointer;
+  background: linear-gradient(90deg, #991b1b 0%, #dc2626 52%, #ea580c 100%);
+  color: #fff7ed;
+  border: 1px solid #fb923c;
+  box-shadow: 0 8px 26px rgba(220, 38, 38, 0.36);
+  transition: filter 0.15s, transform 0.1s;
+}
+.btn-burn-furnace:hover {
+  filter: brightness(1.1);
+}
+
+.gift-pass-form {
+  margin-top: 14px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--accent);
+}
+
+.gift-face-warn {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  background: rgba(234, 179, 8, 0.1);
+  border-left: 3px solid var(--accent);
+  font-size: 12px;
+  line-height: 1.42;
+  color: #fef08a;
+}
+
+.gift-photo-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.gift-photo-thumb-wrap {
+  width: 86px;
+  height: 86px;
+  border-radius: 6px;
+  border: 2px solid var(--accent);
+  background: #090a0c;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.gift-photo-thumb-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gift-photo-placeholder {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.gift-form-inputs {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gift-done-btn {
+  margin-top: 10px;
+}
+
+.near-miss-meter {
+  margin: 10px 0 14px;
+}
+
+/* ==========================================================================
+   ЗАЩИЩЁННЫЙ ИМЕННОЙ ВЕБ-ПРОПУСК В КИНОТЕАТР (?pass=ID)
+   ========================================================================== */
+.pass-sheet {
+  overflow: hidden;
+  border: 2px solid var(--accent);
+}
+
+.pass-holo-ribbon {
+  margin: -20px -20px 14px;
+  padding: 6px 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(234, 179, 8, 0.22),
+    rgba(234, 179, 8, 0.22) 14px,
+    rgba(13, 13, 14, 0.95) 14px,
+    rgba(13, 13, 14, 0.95) 28px
+  );
+  border-bottom: 1px solid var(--accent);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.pass-holo-ribbon span {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #fde047;
+  animation: holoTicker 9s linear infinite;
+}
+
+@keyframes holoTicker {
+  from { transform: translateX(0); }
+  to { transform: translateX(-35%); }
+}
+
+.pass-main-title {
+  margin-top: 2px;
+  margin-bottom: 12px;
+}
+
+.pass-live-clock-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  background: rgba(22, 101, 52, 0.18);
+  border: 1px solid rgba(74, 222, 128, 0.55);
+}
+
+.live-clock-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.live-pulse-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 12px #4ade80;
+  animation: recBlink 0.55s infinite alternate;
+  flex-shrink: 0;
+}
+
+.live-clock-caption {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #86efac;
+}
+
+.live-clock-digits {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  color: #ffffff;
+}
+
+.pass-identity-card {
+  display: grid;
+  grid-template-columns: 152px 1fr;
+  gap: 16px;
+  align-items: center;
+  padding: 14px;
+  margin-bottom: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+}
+
+.pass-photo-frame {
+  position: relative;
+  width: 152px;
+  height: 152px;
+  border-radius: 6px;
+  border: 2px solid var(--accent);
+  overflow: hidden;
+  background: #0b0d10;
+}
+
+.pass-photo-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.pass-scan-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent 0%, #4ade80 50%, transparent 100%);
+  box-shadow: 0 0 12px #4ade80;
+  animation: passLaserScan 2.1s ease-in-out infinite alternate;
+}
+
+@keyframes passLaserScan {
+  from { top: 4%; }
+  to { top: 94%; }
+}
+
+.pass-holder-name {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 26px;
+  letter-spacing: 0.04em;
+  color: #ffffff;
+  margin-bottom: 6px;
+}
+
+.pass-sender-credit {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--rust);
+}
+
+.pass-code-box {
+  margin-top: 12px;
+}
+
+.pass-bot-btn {
+  margin-top: 10px;
+}
+
+.pass-enter-game-btn {
+  margin-top: 12px;
+}
+
+/* ==========================================================================
+   СЕКРЕТНАЯ ПАСХАЛКА «ДОСТУЧАТЬСЯ ДО НЕБЕС» (19 -> 97 -> 3 УДАРА)
+   ========================================================================== */
+.mist-dissolve-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 45%, #ffffff 0%, #e2e8f0 62%, #cbd5e1 100%);
+  opacity: 0;
+  transition: opacity 0.95s ease-in-out;
+}
+.mist-dissolve-overlay.is-active {
+  opacity: 1;
+}
+
+.screen-ocean {
+  inset: 0;
+  z-index: 42;
+  padding: 0;
+  overflow: hidden;
+  background: #1d2731;
+}
+
+.ocean-sky-bg {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, #24313d 0%, #465866 36%, #2b3945 58%, #10161c 100%);
+}
+
+.ocean-waves-wrap {
+  position: absolute;
+  left: -4%;
+  right: -4%;
+  top: 28%;
+  bottom: 0;
+  overflow: hidden;
+}
+
+.ocean-panorama-img {
+  width: 108%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+  opacity: 0.92;
+  animation: oceanWaveSway 7.5s ease-in-out infinite alternate;
+}
+
+.ocean-surf-shimmer {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, #40515e 0%, transparent 22%, transparent 76%, rgba(12, 16, 21, 0.92) 100%);
+}
+
+@keyframes oceanWaveSway {
+  from { transform: translateX(-1.5%) scale(1.03); }
+  to { transform: translateX(1.5%) scale(1.06); }
+}
+
+.ocean-hero-wrap {
+  position: absolute;
+  left: 50%;
+  bottom: 19%;
+  transform: translateX(-50%);
+  width: min(250px, 52vw);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  animation: barrelSeaBob 4.4s ease-in-out infinite;
+}
+
+.ocean-till-img {
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 18px 28px rgba(0, 0, 0, 0.78));
+  position: relative;
+  z-index: 2;
+}
+
+.ocean-foam-ring {
+  width: 116%;
+  height: 24px;
+  margin-top: -14px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(241, 245, 249, 0.55) 0%, rgba(203, 213, 225, 0.22) 55%, transparent 78%);
+  animation: foamPulse 3.2s ease-in-out infinite alternate;
+}
+
+@keyframes barrelSeaBob {
+  0%, 100% { transform: translate(-50%, 0px) rotate(-0.8deg); }
+  50% { transform: translate(-50%, 6px) rotate(0.9deg); }
+}
+
+@keyframes foamPulse {
+  from { transform: scaleX(0.92); opacity: 0.48; }
+  to { transform: scaleX(1.1); opacity: 0.86; }
+}
+
+.ocean-ui-layer {
+  position: relative;
+  z-index: 5;
+  width: 100%;
+  height: 100%;
+  padding: calc(58px + var(--safe-top)) 18px calc(20px + var(--safe-bottom));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ocean-top-box {
+  width: min(680px, 100%);
+  text-align: center;
+  padding: 14px 18px;
+  background: rgba(15, 23, 32, 0.52);
+  border: 1px solid rgba(226, 232, 240, 0.24);
+  backdrop-filter: blur(6px);
+}
+
+.ocean-tag {
+  color: #cbd5e1;
+}
+
+.ocean-quote-line {
+  margin: 10px 0 2px;
+  min-height: 2.5em;
+  font-family: var(--font-mono);
+  font-size: clamp(16px, 4.2vw, 24px);
+  font-weight: 700;
+  line-height: 1.38;
+  color: #f8fafc;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.85);
+}
+
+.typewriter-caret {
+  display: inline-block;
+  margin-left: 2px;
+  color: var(--accent);
+  animation: recBlink 0.5s infinite alternate;
+}
+
+.ocean-bottom-card {
+  width: min(500px, 100%);
+  padding: 14px 16px;
+  background: rgba(11, 15, 20, 0.86);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(10px);
+  text-align: center;
+}
+
+.ocean-bonus-pill {
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 5px 12px;
+  background: rgba(234, 179, 8, 0.16);
+  border: 1px solid var(--accent);
+  color: #fde047;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.ocean-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .brand-word {
+    font-size: 15px;
+    letter-spacing: 0.06em;
+  }
+  .topbar-nav {
+    gap: 2px;
+  }
+  .nav-link {
+    font-size: 9.5px;
+    letter-spacing: 0.02em;
+    padding: 4px 5px;
+    gap: 3px;
+  }
+  .cap-badge {
+    min-width: 14px;
+    height: 14px;
+    padding: 0 3px;
+    font-size: 9px;
+  }
+  .lang-btn {
+    padding: 4px 5px;
+    font-size: 9.5px;
+  }
+  .pass-identity-card {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+  .gift-photo-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .gift-photo-thumb-wrap {
+    margin: 0 auto;
+  }
+  .ocean-hero-wrap {
+    bottom: 24%;
+    width: min(210px, 56vw);
+  }
+}
