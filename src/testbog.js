@@ -172,7 +172,12 @@ export function mountTestBogHUD(hooks) {
       <span class="tbog-sec-lbl">1. МГНОВЕННЫЙ ПЕРЕХОД ПО ЭКРАНАМ И ПАСХАЛКАМ</span>
       <div class="tbog-grid">
         <button type="button" class="tbog-btn" data-tbog-jump="gate">🚪 1. Входной шлюз</button>
-        <button type="button" class="tbog-btn" data-tbog-jump="demo">🛢 2. Демо-цех</button>
+        <button type="button" class="tbog-btn" data-tbog-jump="demo">🛢 Ур. 1 (3 бочки)</button>
+        <button type="button" class="tbog-btn" data-tbog-jump="level8">🛢 Ур. 8 (10 бочек)</button>
+        <button type="button" class="tbog-btn tbog-btn-gold" data-tbog-jump="blitz">⚡ Блиц 10Б (Ур.9+)</button>
+        <button type="button" class="tbog-btn tbog-btn-gold" data-tbog-jump="duel">⚔️ Стол «На счёт три!»</button>
+        <button type="button" class="tbog-btn tbog-btn-gold" data-tbog-jump="leaders">🏆 Рейтинг ТОП-10</button>
+        <button type="button" class="tbog-btn" data-tbog-jump="sharehub">📤 Шеринг + Трейлер</button>
         <button type="button" class="tbog-btn" data-tbog-jump="viral">🆘 3. Бочка друга (5 ходов)</button>
         <button type="button" class="tbog-btn" data-tbog-jump="pack">🎙 4. Упаковать (Фото+Голос)</button>
         <button type="button" class="tbog-btn tbog-btn-gold" data-tbog-jump="premiere">🏆 5. Гонка за Премьерой</button>
@@ -240,8 +245,16 @@ export function mountTestBogHUD(hooks) {
 
   document.getElementById('tbog-reset-btn')?.addEventListener('click', () => {
     resetTestBogSandbox();
-    hooks.syncProfile?.({ premiereScore: 0, lives: 5, hasPendingTicket: false, premiereWon: false, premiereCode: '' });
-    hooks.toast?.('🔄 Песочница очищена (5 ❤️, 0.0 / 100)');
+    hooks.syncProfile?.({
+      premiereScore: 0,
+      premierePoints: 0,
+      currentLevel: 1,
+      lives: 5,
+      hasPendingTicket: false,
+      premiereWon: false,
+      premiereCode: '',
+    });
+    hooks.toast?.('🔄 Песочница очищена (Ур.1, ⭐ 0, 5 ❤️, 0.0 / 100)');
   });
 
   root.querySelectorAll('[data-tbog-jump]').forEach((btn) => {

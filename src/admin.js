@@ -444,6 +444,9 @@ function renderLeadersPane() {
   tbody.innerHTML = admState.leaders
     .map((u, idx) => {
       const score = Number(u.premiere_score || 0).toFixed(1);
+      const pts = Number(u.premiere_points || 0);
+      const lvl = Number(u.current_level || 1);
+      const duelsWon = Number(u.duels_won || 0);
       const tgLabel = u.tg_username ? `@${u.tg_username}` : u.tg_user_id ? `tg:${u.tg_user_id}` : u.uid;
       const kpHtml = u.kp_screenshot_url
         ? `<a href="${escapeAttr(u.kp_screenshot_url)}" target="_blank" rel="noopener noreferrer" style="color:#fde047">✓ Скриншот ↗</a>`
@@ -455,7 +458,9 @@ function renderLeadersPane() {
         ? `<span class="status-badge status-sent">ПОДТВЕРЖДЁН · ${escapeHtml(u.premiere_code || '')}</span>`
         : u.premiere_won
           ? `<span class="status-badge status-pending">100/100 · ${escapeHtml(u.premiere_code || '')}</span>`
-          : `<span class="mono-muted">В гонке (❤️ ${u.lives ?? 0})</span>`;
+          : idx < 10
+            ? `<span class="status-badge status-pending">🏆 ТОП-10 · УР.${lvl}</span>`
+            : `<span class="mono-muted">В гонке (❤️ ${u.lives ?? 0} · Ур.${lvl})</span>`;
 
       const actionHtml = u.premiere_confirmed
         ? '<span class="mono-muted">Приглашён</span>'
@@ -465,8 +470,8 @@ function renderLeadersPane() {
         <tr>
           <td>${idx + 1}</td>
           <td><strong>${escapeHtml(u.display_name || 'Узник цеха')}</strong><br/><span class="mono-muted">${escapeHtml(tgLabel)}</span></td>
-          <td><strong>${score}</strong> / 100</td>
-          <td>${u.friends_brought || 0}</td>
+          <td><strong style="color:#fde047">⭐ ${pts}</strong><br/><span class="mono-muted">${score} / 100</span></td>
+          <td>👥 ${u.friends_brought || 0} · ⚔️ ${duelsWon}</td>
           <td>${u.packed_count || 0}</td>
           <td>${kpHtml}</td>
           <td>${statusHtml}</td>

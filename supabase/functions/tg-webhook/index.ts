@@ -180,31 +180,123 @@ Deno.serve(async (req: Request) => {
   if (body.clientAction || body.event) {
     const action = body.clientAction || body.event;
 
-    if ((action === "barrel_opened" || action === "opened") && body.senderTgId) {
-      const opener = body.openerName ? ` (${escapeHtml(body.openerName)})` : "";
+    // ТРИГГЕР А: Друг открыл ссылку и нажал старт поиска -> пуш отправителю + кнопка подглядывать!
+    if (action === "barrel_search_started" && body.senderTgId) {
+      const opener = escapeHtml(body.openerName || "Твой друг");
+      const credited = Number(body.creditedLives || 0);
+      const barrelId = String(body.barrelId || "");
+      const watchUrl = barrelId
+        ? `${MINI_APP_LINK}?startapp=watch_${encodeURIComponent(barrelId)}`
+        : MINI_APP_LINK;
+      const duelUrl = barrelId
+        ? `${MINI_APP_LINK}?startapp=duel_${encodeURIComponent(String(body.roomId || barrelId))}`
+        : MINI_APP_LINK;
+
+      const bonusLine = credited > 0
+        ? `Лови <b>+${credited} ❤️ жизни</b> и <b>+400 ⭐ очков</b> в рейтинг ТОП-10 Премьеры! Заходи подглядывать в реальном времени, по каким бочкам он лупит:`
+        : `Заходи подглядывать в реальном времени за его ударами или перехвати его на стол дуэли:`;
+
       await tgApi("sendMessage", {
         chat_id: body.senderTgId,
         parse_mode: "HTML",
-        text:
-          `💥 <b>Твой кент${opener} вскрыл заваренную бочку!</b>\n` +
-          `Голосовое послание доставлено — тебе начислено <b>+2 ❤️ жизни</b> для штурма Закрытой Премьеры!`,
+        text: `🔦 <b>${opener} вошёл в цех и ищет твою бочку по звуку!</b>\n${bonusLine}`,
         reply_markup: {
-          inline_keyboard: [[{ text: "🏆 В ЦЕХ: ГОНКА ЗА ПРЕМЬЕРОЙ", url: MINI_APP_LINK }]],
+          inline_keyboard: [
+            [{ text: "👀 Подглядывать за игрой", url: watchUrl }],
+            [{ text: "⚔️ Вызвать «На счёт три!»", url: duelUrl }],
+          ],
         },
       });
       return jsonResp({ ok: true });
     }
 
-    if ((action === "cinema_accept" || action === "accepted_cinema") && body.senderTgId) {
+    if ((action === "barrel_opened" || action === "opened") && body.senderTgId) {
       const opener = body.openerName ? ` (${escapeHtml(body.openerName)})` : "";
+      const survived = body.survived !== false;
+      await tgApi("sendMessage", {
+        chat_id: body.senderTgId,
+        parse_mode: "HTML",
+        text: survived
+          ? `💥 <b>Твой кент${opener} сорвал крышку с твоей бочки!</b>\nГолосовое послание прозвучало — сейчас прилетит его ответ из цеха!`
+          : `💀 <b>Твой кент${opener} задохнулся в цеху и не нашёл твою бочку!</b>\nЗови его на реванш «На счёт три!»!`,
+        reply_markup: {
+          inline_keyboard: [[{ text: "🏆 В ЦЕХ: РЕЙТИНГ И ПРЕМЬЕРА", url: MINI_APP_LINK }]],
+        },
+      });
+      return jsonResp({ ok: true });
+    }
+
+    // ТРИГГЕР Б (Кнопка 1): «Идём в кино 17 декабря!»
+    if ((action === "reaction_cinema" || action === "cinema_accept" || action === "accepted_cinema") && body.senderTgId) {
+      const opener = escapeHtml(body.openerName || "Твой друг");
       await tgApi("sendMessage", {
         chat_id: body.senderTgId,
         parse_mode: "HTML",
         text:
           `🍿 <b>ИДЁМ В КИНО 17 ДЕКАБРЯ!</b>\n` +
-          `Твой друг${opener} принял вызов из бочки и нажал «Идём на „Бочку“ 17 декабря»!`,
+          `<b>${opener}</b> нашёл тебя в бочке и зовёт в кино на «БОЧКУ» 17 декабря! Берёте билеты?`,
         reply_markup: {
-          inline_keyboard: [[{ text: "🎬 КАРТОЧКА НА КИНОПОИСКЕ", url: "https://www.kinopoisk.ru/film/11226275/" }]],
+          inline_keyboard: [
+            [{ text: "🎬 «Буду смотреть» на Кинопоиске", url: "https://www.kinopoisk.ru/film/11226275/" }],
+            [{ text: "🏆 Ответить в цеху", url: MINI_APP_LINK }],
+          ],
+        },
+      });
+      return jsonResp({ ok: true });
+    }
+
+    // ТРИГГЕР Б (Кнопка 2): «Подари мне билет!»
+    if (action === "reaction_ask_ticket" && body.senderTgId) {
+      const opener = escapeHtml(body.openerName || "Твой друг");
+      await tgApi("sendMessage", {
+        chat_id: body.senderTgId,
+        parse_mode: "HTML",
+        text:
+          `🎟 <b>ДРУГ ПРОСИТ ЛИШНИЙ БИЛЕТ!</b>\n` +
+          `<b>${opener}</b> вытащил тебя из бочки и просит подогнать ему выигранный билет в кино!\n` +
+          `<i>За передачу билета другу ты получаешь ×2 ❤️ жизней и +1000 ⭐ очков в ТОП-10 Премьеры!</i>`,
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🎁 Подарить / Выбить билет другу", url: `${MINI_APP_LINK}?startapp=giftfork` }],
+          ],
+        },
+      });
+      return jsonResp({ ok: true });
+    }
+
+    // ТРИГГЕР Б (Кнопка 3): «Разыграем третьего втроём!»
+    if (action === "reaction_duel_3p" && body.senderTgId) {
+      const opener = escapeHtml(body.openerName || "Твой друг");
+      const roomId = String(body.roomId || "room3");
+      await tgApi("sendMessage", {
+        chat_id: body.senderTgId,
+        parse_mode: "HTML",
+        text:
+          `🔥 <b>СТОЛ НА ТРОИХ ОТКРЫТ!</b>\n` +
+          `<b>${opener}</b> открыл синхронную комнату «НА СЧЁТ ТРИ!» — заходи разыграть ещё одного кента за банк из 3 ❤️ жизней и бонус Цеха к Премьере!`,
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "⚔️ ЗАХОДИ В КОМНАТУ НА ТРОИХ!", url: `${MINI_APP_LINK}?startapp=duel_${encodeURIComponent(roomId)}` }],
+          ],
+        },
+      });
+      return jsonResp({ ok: true });
+    }
+
+    // ВЫЗОВ НА СИНХРОННУЮ ДУЭЛЬ (при повторной ссылке или кнопке «Вызвать на дуэль» в списке друзей)
+    if (action === "duel_challenge" && body.targetTgId) {
+      const challenger = escapeHtml(body.challengerName || "Кент из Цеха");
+      const roomId = String(body.roomId || "duel");
+      await tgApi("sendMessage", {
+        chat_id: body.targetTgId,
+        parse_mode: "HTML",
+        text:
+          `⚡ <b>ОБА УЖЕ ТЁРТЫЕ В ЦЕХУ! ВЫЗОВ НА ВЫБЫВАНИЕ!</b>\n` +
+          `<b>${challenger}</b> ждёт тебя за столом «НА СЧЁТ ТРИ!» (2–3 игрока). Кто быстрее займёт безопасную бочку — забирает весь банк жизней и очки ТОП-10 Премьеры!`,
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "⚔️ ПРИНЯТЬ ВЫЗОВ «НА СЧЁТ ТРИ!»", url: `${MINI_APP_LINK}?startapp=duel_${encodeURIComponent(roomId)}` }],
+          ],
         },
       });
       return jsonResp({ ok: true });

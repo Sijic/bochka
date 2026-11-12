@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export const BARREL_BATCH_CODES = ['01', '12', '17', '19', '26', '97'];
+export const BARREL_BATCH_CODES = ['01', '19', '97', '12', '17', '26', '33', '48', '71', '99'];
 
 export class WorkshopScene {
   constructor(canvas, callbacks = {}) {
@@ -43,6 +43,7 @@ export class WorkshopScene {
     this.raycaster = new THREE.Raycaster();
     this.barrels = [];
     this.hitMeshes = [];
+    this.activeBarrelCount = 6;
     this.hoveredIndex = -1;
     this.interactive = false;
     this.goldenMode = false;
@@ -99,7 +100,19 @@ export class WorkshopScene {
     });
   }
 
-  resetRound({ targetIndex = 0, portraitUrl = '', golden = false } = {}) {
+  setActiveBarrelCount(count) {
+    const clean = Math.max(2, Math.min(this.barrels.length || 10, Math.round(Number(count) || 6)));
+    this.activeBarrelCount = clean;
+    this.barrels.forEach((b, idx) => {
+      b.group.visible = idx < clean;
+    });
+    this._applyResponsiveCameraAndLayout();
+  }
+
+  resetRound({ targetIndex = 0, portraitUrl = '', golden = false, barrelCount = null } = {}) {
+    if (typeof barrelCount === 'number' && !Number.isNaN(barrelCount)) {
+      this.activeBarrelCount = Math.max(2, Math.min(this.barrels.length || 10, Math.round(barrelCount)));
+    }
     this.diving = false;
     this.diveProgress = 0;
     this.diveTargetIndex = targetIndex;
@@ -108,6 +121,7 @@ export class WorkshopScene {
     this.setGoldenMode(golden);
 
     this.barrels.forEach((b, idx) => {
+      b.group.visible = idx < this.activeBarrelCount;
       b.struck = false;
       b.dentTarget = 0;
       b.dentUniforms.uDentDepth.value = 0;
@@ -118,7 +132,7 @@ export class WorkshopScene {
       b.lidSpin.set(0, 0, 0);
       b.lidFlying = false;
       b.ringMesh.material.opacity = 0;
-      b.portraitMesh.visible = idx === targetIndex;
+      b.portraitMesh.visible = idx === targetIndex && idx < this.activeBarrelCount;
     });
 
     if (portraitUrl) {
@@ -168,7 +182,7 @@ export class WorkshopScene {
   }
 
   getBarrelWorldPositions() {
-    return this.barrels.map((b) => b.group.position.clone());
+    return this.barrels.slice(0, this.activeBarrelCount).map((b) => b.group.position.clone());
   }
 
   /**
@@ -641,9 +655,9 @@ export class WorkshopScene {
     const defaultPortraitTex = this._createDefaultPortraitTexture();
     this.cachedPortraitTex = defaultPortraitTex;
 
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 10; i++) {
       const group = new THREE.Group();
-      const batchCode = BARREL_BATCH_CODES[i] || `0${i + 1}`;
+      const batchCode = BARREL_BATCH_CODES[i] || `${i + 1}`;
       const maps = this._createBarrelPBRTextures(batchCode, i + 1);
 
       const dentUniforms = {
@@ -899,50 +913,113 @@ export class WorkshopScene {
   _applyResponsiveCameraAndLayout() {
     const aspect = this.width / Math.max(1, this.height);
     this.isPortrait = aspect < 0.88;
+    const n = Math.max(2, Math.min(this.barrels.length || 10, this.activeBarrelCount || 6));
+
+    this.barrels.forEach((b, idx) => {
+      b.group.visible = idx < n;
+    });
 
     if (this.isPortrait) {
-      const mobileCoords = [
-        [-1.16, -1.35],
-        [0.0, -1.72],
-        [1.16, -1.35],
-        [-1.24, 0.02],
-        [0.0, 0.36],
-        [1.24, 0.02],
-      ];
-      this.barrels.forEach((b, idx) => {
-        const [x, z] = mobileCoords[idx];
-        b.group.position.set(x, 0, z);
-        b.bodyMesh.rotation.y = Math.PI - x * 0.22;
-      });
+      const coords = [];
+      let bScale = 1.0;
 
-      if (this.leftColumn) this.leftColumn.position.set(-2.12, 0, -2.25);
-      if (this.rightColumn) this.rightColumn.position.set(2.12, 0, -2.25);
+      if (n <= 3) {
+        bScale = 1.04;
+        if (n === 2) {
+          coords.push([-0.82, -0.45], [0.82, -0.45]);
+        } else {
+          coords.push([-1.14, -0.58], [0.0, -1.04], [1.14, -0.58]);
+        }
+      } else {
+        const backCount = Math.ceil(n / 2);
+        const frontCount = n - backCount;
+        bScale = n >= 9 ? 0.76 : n >= 7 ? 0.84 : 0.96;
+        const maxHalfBack = n >= 9 ? 1.56 : n >= 7 ? 1.42 : 1.18;
+        const maxHalfFront = n >= 9 ? 1.58 : n >= 7 ? 1.38 : 1.24;
+
+        for (let i = 0; i < backCount; i++) {
+          const t = backCount === 1 ? 0 : (i / (backCount - 1)) * 2 - 1;
+          const x = t * maxHalfBack;
+          const z = -1.42 - (1 - Math.abs(t)) * 0.34;
+          coords.push([x, z]);
+        }
+        for (let j = 0; j < frontCount; j++) {
+          const t = frontCount === 1 ? 0 : (j / (frontCount - 1)) * 2 - 1;
+          const x = t * maxHalfFront;
+          const z = 0.08 + (1 - Math.abs(t)) * 0.28;
+          coords.push([x, z]);
+        }
+      }
+
+      for (let idx = 0; idx < n; idx++) {
+        const b = this.barrels[idx];
+        const [x, z] = coords[idx] || [0, 0];
+        b.group.position.set(x, 0, z);
+        b.group.scale.setScalar(bScale);
+        b.bodyMesh.rotation.y = Math.PI - x * 0.22;
+      }
+
+      if (this.leftColumn) this.leftColumn.position.set(-2.22, 0, -2.35);
+      if (this.rightColumn) this.rightColumn.position.set(2.22, 0, -2.35);
       if (this.flywheelGroup) this.flywheelGroup.scale.setScalar(0.82);
 
       this.camera.fov = 50;
-      const distScale = Math.max(1, 0.52 / Math.max(0.36, aspect));
+      const crowdPull = n >= 9 ? 1.13 : n >= 7 ? 1.07 : 1.0;
+      const distScale = Math.max(1, 0.52 / Math.max(0.36, aspect)) * crowdPull;
       this.baseCamPos.set(0, 3.25 * distScale, 5.75 * distScale);
       this.baseLookAt.set(0, 0.68, -0.62);
     } else {
-      const angles = [-1.16, -0.70, -0.23, 0.23, 0.70, 1.16];
-      const radius = 3.08;
-      const centerZ = 1.38;
-      this.barrels.forEach((b, idx) => {
-        const a = angles[idx];
-        const x = Math.sin(a) * radius;
-        const z = centerZ - Math.cos(a) * radius;
-        b.group.position.set(x, 0, z);
-        b.bodyMesh.rotation.y = Math.PI - a * 0.65;
-      });
+      if (n <= 6) {
+        const maxAng = n === 2 ? 0.32 : n === 3 ? 0.62 : n === 4 ? 0.84 : n === 5 ? 1.02 : 1.16;
+        const radius = n <= 3 ? 2.65 : 3.08;
+        const centerZ = 1.38;
+        const bScale = n <= 3 ? 1.04 : 1.0;
+        for (let idx = 0; idx < n; idx++) {
+          const t = n === 1 ? 0 : (idx / (n - 1)) * 2 - 1;
+          const a = t * maxAng;
+          const x = Math.sin(a) * radius;
+          const z = centerZ - Math.cos(a) * radius;
+          const b = this.barrels[idx];
+          b.group.position.set(x, 0, z);
+          b.group.scale.setScalar(bScale);
+          b.bodyMesh.rotation.y = Math.PI - a * 0.65;
+        }
+      } else {
+        const backCount = Math.ceil(n / 2);
+        const frontCount = n - backCount;
+        const bScale = n >= 9 ? 0.88 : 0.92;
+        let ptr = 0;
+        for (let i = 0; i < backCount; i++) {
+          const t = backCount === 1 ? 0 : (i / (backCount - 1)) * 2 - 1;
+          const a = t * 1.12;
+          const x = Math.sin(a) * 3.45;
+          const z = 1.35 - Math.cos(a) * 3.45;
+          const b = this.barrels[ptr++];
+          b.group.position.set(x, 0, z);
+          b.group.scale.setScalar(bScale);
+          b.bodyMesh.rotation.y = Math.PI - a * 0.6;
+        }
+        for (let j = 0; j < frontCount; j++) {
+          const t = frontCount === 1 ? 0 : (j / (frontCount - 1)) * 2 - 1;
+          const a = t * 0.96;
+          const x = Math.sin(a) * 2.25;
+          const z = 1.68 - Math.cos(a) * 2.25;
+          const b = this.barrels[ptr++];
+          b.group.position.set(x, 0, z);
+          b.group.scale.setScalar(bScale);
+          b.bodyMesh.rotation.y = Math.PI - a * 0.55;
+        }
+      }
 
-      if (this.leftColumn) this.leftColumn.position.set(-3.95, 0, -1.72);
-      if (this.rightColumn) this.rightColumn.position.set(3.95, 0, -1.72);
+      if (this.leftColumn) this.leftColumn.position.set(-4.05, 0, -1.78);
+      if (this.rightColumn) this.rightColumn.position.set(4.05, 0, -1.78);
       if (this.flywheelGroup) this.flywheelGroup.scale.setScalar(1.0);
 
       this.camera.fov = 42;
-      const wideAdjust = aspect < 1.35 ? 1.14 : 1.0;
-      this.baseCamPos.set(0, 2.15 * wideAdjust, 5.85 * wideAdjust);
-      this.baseLookAt.set(0, 0.76, -0.58);
+      const crowdAdjust = n >= 7 ? 1.09 : 1.0;
+      const wideAdjust = (aspect < 1.35 ? 1.14 : 1.0) * crowdAdjust;
+      this.baseCamPos.set(0, 2.18 * wideAdjust, 5.88 * wideAdjust);
+      this.baseLookAt.set(0, 0.74, -0.62);
     }
 
     this.camera.aspect = aspect;
@@ -1033,10 +1110,26 @@ export class WorkshopScene {
   _pickBarrel() {
     this.raycaster.setFromCamera(this.pointerNDC, this.camera);
     const hits = this.raycaster.intersectObjects(this.hitMeshes, false);
-    if (!hits.length) return null;
-    const idx = hits[0].object.userData.barrelIndex;
-    if (typeof idx !== 'number') return null;
-    return { index: idx, point: hits[0].point };
+    for (const h of hits) {
+      const idx = h.object.userData.barrelIndex;
+      if (typeof idx === 'number' && idx >= 0 && idx < this.activeBarrelCount && this.barrels[idx]?.group.visible) {
+        return { index: idx, point: h.point };
+      }
+    }
+    return null;
+  }
+
+  projectBarrelScreenPos(index, yOffset = 1.5) {
+    const b = this.barrels[index];
+    if (!b || !b.group.visible) return { x: -999, y: -999, visible: false };
+    const s = b.group.scale.y || 1;
+    const v = b.group.position.clone().add(new THREE.Vector3(0, yOffset * s, 0));
+    v.project(this.camera);
+    return {
+      x: (v.x * 0.5 + 0.5) * this.width,
+      y: (-v.y * 0.5 + 0.5) * this.height,
+      visible: v.z < 1,
+    };
   }
 
   _raycastHover() {

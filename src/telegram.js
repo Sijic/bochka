@@ -51,12 +51,34 @@ export function initTelegram() {
   const tg = getWebApp();
   const rawUrlStart = extractUrlBarrelParam();
   const urlGift = extractUrlPassParam();
+  const urlExtras = extractUrlExtraParams();
 
   const parseStartTokens = (raw) => {
-    if (!raw) return { barrelParam: '', passParam: '' };
-    if (raw.startsWith('gift_')) return { barrelParam: '', passParam: raw.slice(5) };
-    if (raw.startsWith('pass_')) return { barrelParam: '', passParam: raw.slice(5) };
-    return { barrelParam: raw, passParam: '' };
+    const res = {
+      barrelParam: '',
+      passParam: '',
+      duelRoomParam: '',
+      watchBarrelParam: '',
+      trailerAutoOpen: false,
+      trailerRefUid: '',
+      openGiftFork: false,
+    };
+    if (!raw) return res;
+    if (raw === 'giftfork') {
+      res.openGiftFork = true;
+    } else if (raw.startsWith('gift_') || raw.startsWith('pass_')) {
+      res.passParam = raw.slice(5);
+    } else if (raw.startsWith('duel_')) {
+      res.duelRoomParam = raw.slice(5);
+    } else if (raw.startsWith('watch_')) {
+      res.watchBarrelParam = raw.slice(6);
+    } else if (raw.startsWith('trailer_')) {
+      res.trailerAutoOpen = true;
+      res.trailerRefUid = raw.slice(8);
+    } else {
+      res.barrelParam = raw;
+    }
+    return res;
   };
 
   if (!tg) {
@@ -66,6 +88,11 @@ export function initTelegram() {
       user: null,
       startParam: parsed.barrelParam,
       passParam: urlGift || parsed.passParam,
+      duelRoomParam: urlExtras.duel || parsed.duelRoomParam,
+      watchBarrelParam: urlExtras.watch || parsed.watchBarrelParam,
+      trailerAutoOpen: urlExtras.trailer || parsed.trailerAutoOpen,
+      trailerRefUid: urlExtras.ref || parsed.trailerRefUid,
+      openGiftFork: urlExtras.giftfork || parsed.openGiftFork,
     };
   }
 
@@ -97,7 +124,27 @@ export function initTelegram() {
       : null,
     startParam: parsed.barrelParam,
     passParam: urlGift || parsed.passParam,
+    duelRoomParam: urlExtras.duel || parsed.duelRoomParam,
+    watchBarrelParam: urlExtras.watch || parsed.watchBarrelParam,
+    trailerAutoOpen: urlExtras.trailer || parsed.trailerAutoOpen,
+    trailerRefUid: urlExtras.ref || parsed.trailerRefUid,
+    openGiftFork: urlExtras.giftfork || parsed.openGiftFork,
   };
+}
+
+function extractUrlExtraParams() {
+  try {
+    const sp = new URLSearchParams(window.location.search);
+    return {
+      duel: (sp.get('duel') || '').trim(),
+      watch: (sp.get('watch') || '').trim(),
+      trailer: sp.get('trailer') === '1',
+      ref: (sp.get('ref') || '').trim(),
+      giftfork: sp.get('giftfork') === '1',
+    };
+  } catch {
+    return { duel: '', watch: '', trailer: false, ref: '', giftfork: false };
+  }
 }
 
 export function extractUrlPassParam() {
@@ -244,6 +291,46 @@ export function openTelegramShare(shareUrl, shareText) {
     return;
   }
   window.open(tgShare, '_blank', 'noopener,noreferrer');
+}
+
+export function openWhatsAppShare(shareUrl, shareText) {
+  const full = `${shareText}\n${shareUrl}`;
+  openExternalLink(`https://api.whatsapp.com/send?text=${encodeURIComponent(full)}`);
+}
+
+export function openVkShare(shareUrl, shareText) {
+  openExternalLink(
+    `https://vk.com/share.php?url=${encodeURIComponent(shareUrl)}&title=${encodeURIComponent(shareText)}`
+  );
+}
+
+export async function openInstagramShareFlow({ url, text, posterBlob = null }) {
+  await copyToClipboard(`${text} ${url}`);
+  if (posterBlob && navigator.canShare) {
+    try {
+      const file = new File([posterBlob], 'bochka-story-9x16.png', { type: 'image/png' });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'БОЧКА — В кино с 17 декабря',
+          text: `${text} ${url}`,
+        });
+        return 'shared_story';
+      }
+    } catch { /* fallback below */ }
+  }
+  if (posterBlob) {
+    const objUrl = URL.createObjectURL(posterBlob);
+    const a = document.createElement('a');
+    a.href = objUrl;
+    a.download = 'bochka-instagram-story-9x16.png';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objUrl), 5000);
+  }
+  openExternalLink('https://www.instagram.com/');
+  return 'copied_and_opened';
 }
 
 export async function shareNativeOrFallback({ title, text, url }) {

@@ -58,6 +58,10 @@
       <button type="button" class="nav-link is-active" id="nav-workshop" data-i18n="navWorkshop">ЦЕХ</button>
       <button type="button" class="nav-link" id="nav-trailer" data-i18n="navTrailer">ТРЕЙЛЕР</button>
       <a class="nav-link" id="nav-kinopoisk" href="https://www.kinopoisk.ru/film/11226275/" target="_blank" rel="noopener noreferrer" data-i18n="navKinopoisk">КИНОПОИСК</a>
+      <button type="button" class="nav-link nav-leaders" id="nav-leaderboard" title="Рейтинг ТОП-10 на закрытую Премьеру">
+        <span>🏆 ТОП-10</span>
+        <span class="cap-badge points-badge" id="top-points-count">0</span>
+      </button>
       <button type="button" class="nav-link nav-prize" id="nav-prize">
         <span data-i18n="navPrize">ПРЕМЬЕРА</span>
         <span class="cap-badge" id="top-caps-count">0</span>
@@ -131,8 +135,17 @@
           <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="6" ry="2"/><path d="M6 5v14c0 1.1 2.7 2 6 2s6-.9 6-2V5M6 10c0 1.1 2.7 2 6 2s6-.9 6-2M6 15c0 1.1 2.7 2 6 2s6-.9 6-2"/></svg>
           <span data-i18n="btnPackFriendMain">УПАКОВАТЬ ДРУГА В БОЧКУ</span>
         </button>
-        <button type="button" class="btn-secondary" id="btn-start-demo" data-i18n="btnPlayDemo">
-          ПРОСТУЧАТЬ ЦЕХ (ДЕМО)
+        <button type="button" class="btn-secondary" id="btn-start-demo">
+          <span id="btn-start-level-label">▶ УРОВЕНЬ 1 · 3 БОЧКИ (+⭐)</span>
+        </button>
+      </div>
+
+      <div class="mode-extra-grid">
+        <button type="button" class="btn-secondary btn-full mode-duel-btn" id="btn-mode-a-duel">
+          ⚔️ СТОЛ ДРУЗЕЙ «НА СЧЁТ ТРИ!» (2–3 ИГРОКА)
+        </button>
+        <button type="button" class="btn-ghost btn-full" id="btn-mode-a-share-hub">
+          📤 РАЗОСЛАТЬ ТРЕЙЛЕР / БОЧКУ В СОЦСЕТИ (+❤️ И ⭐)
         </button>
       </div>
 
@@ -143,16 +156,30 @@
   </section>
 
   <!-- ====================================================================
-       ЭКРАН 3: ГЕЙМПЛЕЙ ЦЕХА (6 БОЧЕК 01·12·17·19·26·97, ВОЗДУХ, ШКАЛА 0/100)
+       ЭКРАН 3: ГЕЙМПЛЕЙ ЦЕХА (УРОВНИ 3..10 БОЧЕК + БЛИЦ, ВОЗДУХ, ШКАЛА 0/100)
        ==================================================================== -->
   <section class="screen screen-hud" id="screen-workshop" hidden>
     <div class="hud-top-stack">
+      <!-- Баннер живого наблюдения (?startapp=watch_<barrelId>) -->
+      <div class="hud-watch-banner" id="hud-watch-banner" hidden>
+        <div class="hud-watch-meta">
+          <span class="live-pulse-dot"></span>
+          <strong id="hud-watch-status">👀 ПОДГЛЯДЫВАЕШЬ ЗА ДРУГОМ В ЦЕХУ...</strong>
+        </div>
+        <div class="hud-watch-actions">
+          <button type="button" class="hud-mini-btn hud-mini-accent" id="btn-watch-rattle">⛓ ЦЕПИ</button>
+          <button type="button" class="hud-mini-btn" id="btn-watch-challenge">⚔️ В ДУЭЛЬ</button>
+          <button type="button" class="hud-mini-btn" id="btn-watch-exit">✕</button>
+        </div>
+      </div>
+
       <!-- Главная шкала Суперигры «Допуск на закрытую Премьеру: 0 / 100» -->
       <div class="hud-premiere-strip" id="hud-premiere-strip" hidden>
         <div class="premiere-strip-head">
           <span class="premiere-strip-title" data-i18n="premiereBarLabel">ДОПУСК НА ПРЕМЬЕРУ</span>
           <div class="premiere-strip-stats">
             <span class="premiere-score-pill"><strong id="hud-premiere-score">0.0</strong> / 100</span>
+            <span class="premiere-score-pill">⭐ <strong id="hud-premiere-points">0</strong></span>
             <span class="premiere-lives-pill">❤️ <span data-i18n="premiereLivesLabel">ЖИЗНИ</span>: <strong id="hud-premiere-lives">3</strong></span>
           </div>
         </div>
@@ -163,7 +190,12 @@
 
       <div class="hud-top">
         <div class="hud-alert-box">
-          <span class="mono-tag" id="hud-mode-tag">ЦЕХ, КОРПУС Б // СЕКТОР 04</span>
+          <div class="hud-tag-row">
+            <span class="mono-tag" id="hud-mode-tag">ЦЕХ, КОРПУС Б // СЕКТОР 04</span>
+            <button type="button" class="hud-points-chip" id="btn-hud-leaderboard">
+              🏆 <span id="hud-level-points-text">УР. 1 · ⭐ 0</span>
+            </button>
+          </div>
           <h2 class="hud-urgent-title" id="hud-urgent-title">
             КТО-ТО ЗАВАРИЛ ТЕБЯ В ЦЕХУ. НАЙДИ СВОЮ БОЧКУ ЗА 3 ПОПЫТКИ
           </h2>
@@ -422,6 +454,14 @@
         Скрипт сожмёт портрет в холодный тон фонаря (512×512 WebP ≤ 60 КБ), запишет голос (≤ 40 КБ) и создаст короткую ссылку bochka.quest/?b=...
       </p>
 
+      <!-- ШАГ 8.1: Соцграф «ТВОИ ЛЮДИ В ЦЕХУ» (анти-дублирование открыток -> прямой вызов на дуэль!) -->
+      <div class="pack-friends-box" id="pack-friends-box" hidden>
+        <div class="pack-friends-head">
+          <span class="mono-label">👥 ТВОИ ЛЮДИ УЖЕ В ЦЕХУ (НЕ ДУБЛИРУЙ БОЧКУ — ЗОВИ НА СЧЁТ ТРИ!)</span>
+        </div>
+        <div class="pack-friends-strip" id="pack-friends-strip"></div>
+      </div>
+
       <!-- 1. Переключатель смысла -->
       <div class="mode-toggle" role="tablist">
         <button type="button" class="toggle-tab is-active" id="tab-mode-friend" data-i18n="modeFriend">
@@ -558,6 +598,13 @@
           </button>
         </div>
 
+        <div class="multi-social-row">
+          <button type="button" class="social-pill-btn social-wa" id="btn-pack-share-wa">WhatsApp (+⭐)</button>
+          <button type="button" class="social-pill-btn social-vk" id="btn-pack-share-vk">VK (+⭐)</button>
+          <button type="button" class="social-pill-btn social-ig" id="btn-pack-share-ig">Instagram 9:16 (+⭐)</button>
+          <button type="button" class="social-pill-btn" id="btn-pack-open-share-hub">🎬 Трейлер в соцсети</button>
+        </div>
+
         <button type="button" class="btn-secondary btn-full share-go-premiere-btn" id="btn-pack-go-premiere">
           <span data-i18n="btnStartPremiereRace">🏆 ВОЙТИ В ЦЕХ: ГОНКА ЗА ПРЕМЬЕРОЙ</span>
         </button>
@@ -618,6 +665,23 @@
         Отправителю ушёл сигнал о твоём результате (+2 жизни на его счёт!).
       </p>
 
+      <!-- ШАГ 8.2 (ТРИГГЕР Б): 3 Реактивные кнопки ответа отправителю в 1 клик (блокируются после выбора от спама) -->
+      <div class="finale-reactions-box" id="finale-friend-reactions" hidden>
+        <span class="mono-label">⚡ ОТПРАВИТЬ ЖИВОЙ ПУШ АВТОРУ БОЧКИ В TELEGRAM (1 КЛИК):</span>
+        <div class="finale-reactions-grid">
+          <button type="button" class="btn-primary btn-full js-finale-reaction" data-reaction="cinema">
+            🍿 Идём в кино 17 декабря!
+          </button>
+          <button type="button" class="btn-secondary btn-full js-finale-reaction" data-reaction="ask_ticket">
+            🎟 Подари мне билет в кино!
+          </button>
+          <button type="button" class="btn-secondary btn-full reaction-duel-btn js-finale-reaction" data-reaction="duel_3p">
+            ⚔️ Разыграем третьего втроём! («На счёт три!»)
+          </button>
+        </div>
+        <p class="reaction-sent-note" id="finale-reaction-status" hidden></p>
+      </div>
+
       <!-- Главные кнопки конверсии и вирального цикла -->
       <div class="finale-cta-stack">
         <button type="button" class="btn-primary btn-full" id="btn-cinema-reply">
@@ -634,34 +698,44 @@
         </button>
 
         <div class="finale-dual-row">
+          <button type="button" class="btn-secondary" id="btn-finale-open-duel">
+            ⚔️ СТОЛ «НА СЧЁТ ТРИ!»
+          </button>
+          <button type="button" class="btn-secondary" id="btn-finale-share-hub">
+            📤 СОЦСЕТИ + ТРЕЙЛЕР (+⭐)
+          </button>
+        </div>
+
+        <div class="finale-dual-row">
           <button type="button" class="btn-ghost" id="btn-download-stories">
             <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="1.5"/><path d="M12 8v6m0 0-2.5-2.5M12 14l2.5-2.5"/></svg>
             <span data-i18n="btnDownloadStories">СКАЧАТЬ СТОРИС 9:16</span>
           </button>
           <button type="button" class="btn-ghost" id="btn-replay-round" data-i18n="btnPlayAgain">
-            ЕЩЁ РАУНД В ЦЕХУ
+            СЛЕД. УРОВЕНЬ В ЦЕХУ
           </button>
         </div>
       </div>
 
       <!-- ==================================================================
-           ГЛАВНАЯ СУПЕРИГРА: ГОНКА ЗА ЗАКРЫТОЙ ПРЕМЬЕРОЙ (0 / 100) + ЗОЛОТЫЕ БОЧКИ
+           ГЛАВНАЯ СУПЕРИГРА: ГОНКА ЗА ЗАКРЫТОЙ ПРЕМЬЕРОЙ (0 / 100) + ТОП-10
            ================================================================== -->
       <div class="golden-hunt-card" id="golden-hunt-card">
         <div class="golden-hunt-head">
           <span class="mono-tag accent-tag" data-i18n="premiereRaceTag">ГЛАВНАЯ СУПЕРИГРА // КРАСНАЯ ДОРОЖКА 17 ДЕКАБРЯ</span>
           <h3 class="golden-hunt-title" data-i18n="premiereRaceTitle">ГОНКА ЗА ЗАКРЫТОЙ ПРЕМЬЕРОЙ СО СЪЁМОЧНОЙ ГРУППОЙ</h3>
           <p class="golden-hunt-desc" data-i18n="premiereRaceDesc">
-            Пробивай бочки в цеху и набери 100 баллов до приглашения на закрытую Премьеру! По пути выпадают «Золотые бочки» с билетами в кино (забрать себе нельзя — сожги ради ×2 жизней или подари другу с фейс-контролем!).
+            Набирай шкалу Премьеры и Рейтинговые очки (⭐): ТОП-10 лидеров рейтинга гарантированно идут на закрытый показ со съёмочной группой 17 декабря! По пути выпадают «Золотые бочки» с билетами для друзей.
           </p>
         </div>
 
-        <!-- Крупная шкала 0..100 прямо на карточке Суперигры -->
+        <!-- Крупная шкала 0..100 + Очки ТОП-10 прямо на карточке Суперигры -->
         <div class="premiere-card-meter">
           <div class="premiere-strip-head">
             <span class="premiere-strip-title" data-i18n="premiereBarLabel">ДОПУСК НА ПРЕМЬЕРУ</span>
             <div class="premiere-strip-stats">
               <span class="premiere-score-pill"><strong id="finale-premiere-score">0.0</strong> / 100</span>
+              <span class="premiere-score-pill">⭐ <strong id="finale-premiere-points">0</strong></span>
               <span class="premiere-lives-pill">❤️ <span data-i18n="premiereLivesLabel">ЖИЗНИ</span>: <strong id="finale-premiere-lives">3</strong></span>
             </div>
           </div>
@@ -669,6 +743,10 @@
             <div class="premiere-progress-fill" id="finale-premiere-fill"></div>
           </div>
         </div>
+
+        <button type="button" class="btn-secondary btn-full leaderboard-open-banner" id="btn-finale-leaderboard">
+          🏆 ОТКРЫТЬ РЕЙТИНГ ТОП-10 НА ПРЕМЬЕРУ (ПРОВЕРИТЬ СВОЁ МЕСТО) →
+        </button>
 
         <!-- Неразыгранный «Чужой билет», если игрок закрыл окно вилки -->
         <button type="button" class="btn-secondary btn-full pending-ticket-banner" id="btn-reopen-golden-fork" hidden>
@@ -877,6 +955,15 @@
       <button type="button" class="btn-primary btn-full" id="btn-near-miss-pack">
         <span data-i18n="btnNearMissPack">⚡ УПАКОВАТЬ ДРУГА (+1 ЖИЗНЬ СРАЗУ И +2 ЗА ОТКРЫТИЕ)</span>
       </button>
+
+      <div class="finale-dual-row near-miss-extra-row">
+        <button type="button" class="btn-secondary" id="btn-near-miss-leaderboard">
+          🏆 РЕЙТИНГ ТОП-10 НА ПРЕМЬЕРУ
+        </button>
+        <button type="button" class="btn-secondary" id="btn-near-miss-share-hub">
+          📤 ТРЕЙЛЕР В СОЦСЕТИ (+❤️ +⭐)
+        </button>
+      </div>
     </div>
   </div>
 
@@ -980,11 +1067,14 @@
       </p>
 
       <div class="modal-cta-row">
-        <button type="button" class="btn-secondary" id="btn-open-kp-trailer" data-i18n="btnOpenKpTrailer">
-          ОТКРЫТЬ ТРЕЙЛЕР НА КИНОПОИСКЕ ↗
+        <button type="button" class="btn-primary" id="btn-trailer-share-hub">
+          📤 РАЗОСЛАТЬ ТРЕЙЛЕР (+150 ⭐ +1 ❤️)
         </button>
         <button type="button" class="btn-kp-orange" id="btn-modal-kinopoisk" data-i18n="btnKinopoiskGo">
           БУДУ СМОТРЕТЬ НА КИНОПОИСКЕ ↗
+        </button>
+        <button type="button" class="btn-secondary" id="btn-open-kp-trailer" data-i18n="btnOpenKpTrailer">
+          ТРЕЙЛЕР НА КП ↗
         </button>
         <button type="button" class="btn-ghost" id="btn-modal-calendar" data-i18n="btnCalendarAdd">
           НАПОМНИТЬ 17 ДЕКАБРЯ (.ICS)
@@ -1047,6 +1137,7 @@
           <span class="premiere-strip-title" data-i18n="premiereBarLabel">ДОПУСК НА ПРЕМЬЕРУ</span>
           <div class="premiere-strip-stats">
             <span class="premiere-score-pill"><strong id="modal-premiere-score">0.0</strong> / 100</span>
+            <span class="premiere-score-pill">⭐ <strong id="modal-premiere-points">0</strong></span>
             <span class="premiere-lives-pill">❤️ <strong id="modal-premiere-lives">3</strong></span>
           </div>
         </div>
@@ -1062,6 +1153,193 @@
       <div class="modal-cta-row">
         <button type="button" class="btn-primary" id="btn-prize-golden" data-i18n="btnStartPremiereRace">🏆 ГОНКА ЗА ПРЕМЬЕРОЙ</button>
         <button type="button" class="btn-secondary" id="btn-prize-pack" data-i18n="btnPackFriendMain">УПАКОВАТЬ ДРУГА В БОЧКУ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       ШАГ 8.3: СИНХРОННЫЙ СТОЛ НА 2–3 ИГРОКОВ «НА СЧЁТ ТРИ!» (REALTIME RAM)
+       ==================================================================== -->
+  <div class="duel-overlay" id="duel-overlay" hidden>
+    <!-- Круглые аватарки захвата над 3D-бочками (проекция координат Three.js) -->
+    <div class="duel-barrel-badges" id="duel-barrel-badges" aria-hidden="true"></div>
+
+    <div class="duel-top-panel">
+      <div class="duel-top-head">
+        <div>
+          <span class="mono-tag accent-tag" id="duel-room-code">СТОЛ #ROOM</span>
+          <strong class="duel-main-heading">⚔️ НА СЧЁТ ТРИ! · СИНХРОННЫЙ БОЙ В ЦЕХУ</strong>
+        </div>
+        <div class="duel-top-btns">
+          <button type="button" class="hud-mini-btn" id="btn-duel-add-bot" hidden>+ БОТ 🤖</button>
+          <button type="button" class="icon-close" id="btn-duel-close" aria-label="Выйти из стола">✕</button>
+        </div>
+      </div>
+
+      <div class="duel-pot-banner" id="duel-pot-banner">
+        ⚔️ БАНК ДУЭЛИ: 2 ❤️ (ставки по 1 ❤️ · Победитель забирает всё + 200 ⭐ в ТОП-10)
+      </div>
+
+      <div class="duel-slots-row" id="duel-slots-row"></div>
+
+      <div class="duel-lobby-actions">
+        <button type="button" class="btn-secondary btn-full" id="btn-duel-invite-third">
+          ➕ ПОЗВАТЬ 3-ГО КЕНТА (ЦЕХ ДОБАВИТ +450 ⭐ И ЗОЛОТУЮ БОЧКУ!)
+        </button>
+        <button type="button" class="btn-primary btn-full" id="btn-duel-start-go">
+          🔥 НА СЧЁТ ТРИ! СТАРТ (СТАВКА 1 ❤️)
+        </button>
+      </div>
+    </div>
+
+    <!-- Гигантский отсчёт по центру экрана: РАЗ... ДВА... ТРИ — БЕЙ! -->
+    <div class="duel-countdown-banner" id="duel-countdown-banner" hidden>
+      <strong id="duel-countdown-text">РАЗ...</strong>
+      <span id="duel-countdown-sub">ПРИГОТОВЬСЯ ХВАТАТЬ СВОЮ БОЧКУ!</span>
+    </div>
+
+    <!-- Плашка вылетевшего 3-го игрока в режиме зрителя Суперфинала 1 на 1 -->
+    <div class="duel-spectator-bar" id="duel-spectator-bar" hidden>
+      <span>☠️ ТЫ В НОКАУТЕ — СМОТРИ СУПЕРФИНАЛ 1 НА 1!</span>
+      <button type="button" class="btn-primary btn-compact" id="btn-duel-rattle-chains">
+        ⛓ ПОГРЕМЕТЬ ЦЕПЯМИ (3с)
+      </button>
+    </div>
+
+    <!-- Итоговая карточка раунда: Победитель + Реванш + Добор жизней -->
+    <div class="duel-result-box" id="duel-result-box" hidden>
+      <h3 id="duel-result-title">🏆 ТЫ ЗАБРАЛ ВЕСЬ БАНК!</h3>
+      <p id="duel-result-sub"></p>
+      <div class="duel-result-actions">
+        <button type="button" class="btn-primary btn-full" id="btn-duel-rematch">
+          🔄 РЕВАНШ НА СЧЁТ ТРИ! (СТАВКА 1 ❤️)
+        </button>
+        <button type="button" class="btn-secondary btn-full" id="btn-duel-invite-lives">
+          📲 ПОЗВАТЬ НОВОГО ДРУГА (+2 ❤️ ЗА ВХОД + 400 ⭐)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       ШАГ 8.1: АВТО-ПЕРЕХВАТ ПОВТОРНОЙ ССЫЛКИ МЕЖДУ ДРУЗЬЯМИ -> В ДУЭЛЬ!
+       ==================================================================== -->
+  <div class="modal-backdrop" id="modal-repeat-duel" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <span class="mono-tag accent-tag">БАЗА ЦЕХА // ПОВТОРНАЯ СВЯЗКА ОБНАРУЖЕНА</span>
+        <button type="button" class="icon-close" id="btn-close-repeat-duel" aria-label="Закрыть">✕</button>
+      </div>
+      <h3 class="section-title rescue-title">⚡ ОБА УЖЕ ТЁРТЫЕ В ЦЕХУ! ЗАПУСКАЕМ ИГРУ НА ВЫБЫВАНИЕ</h3>
+      <p class="modal-hint" id="repeat-duel-desc">
+        Ты и автор этой ссылки уже проходили одиночный цех (повторные реферальные жизни за старых друзей не начисляются). Залетайте за синхронный стол «На счёт три!» на живой кон — и зовите 3-го кента ради бонуса цеха!
+      </p>
+      <div class="fork-choices-stack">
+        <button type="button" class="btn-primary btn-full" id="btn-repeat-accept-duel">
+          ⚔️ ОТКРЫТЬ СТОЛ «НА СЧЁТ ТРИ!» И ВЫЗВАТЬ ДРУГА В БОЙ
+        </button>
+        <button type="button" class="btn-ghost btn-full" id="btn-repeat-open-solo">
+          👁 Всё равно посмотреть послание внутри бочки
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       POPUP: «🏆 ЛИГА ПРЕМЬЕРЫ: ТОП-10 ИДУТ НА ПОКАЗ СО СЪЁМОЧНОЙ ГРУППОЙ»
+       ==================================================================== -->
+  <div class="modal-backdrop" id="modal-leaderboard" hidden>
+    <div class="modal-card leaderboard-modal-card">
+      <div class="modal-head">
+        <span class="mono-tag accent-tag">КРАСНАЯ ДОРОЖКА 17 ДЕКАБРЯ // ОФИЦИАЛЬНЫЙ РЕЙТИНГ</span>
+        <button type="button" class="icon-close" id="btn-close-leaderboard" aria-label="Закрыть">✕</button>
+      </div>
+      <h3 class="section-title rescue-title">🏆 ТОП-10 ЛИДЕРОВ ИДУТ НА ЗАКРЫТУЮ ПРЕМЬЕРУ!</h3>
+      <p class="modal-hint">
+        Даже если шкала замерла в миллиметре от 100%, <strong>первые 10 игроков по очкам активности (⭐)</strong> получают именные пригласительные на закрытый показ триллера «БОЧКА» со съёмочной группой!
+      </p>
+
+      <!-- Личная карточка игрока в рейтинге -->
+      <div class="leader-me-banner" id="leader-me-banner">
+        <div>
+          <span class="mono-label">ТВОЯ ПОЗИЦИЯ В ГОНКЕ:</span>
+          <strong id="leader-me-rank">#—</strong>
+        </div>
+        <div class="leader-me-right">
+          <strong id="leader-me-points">⭐ 0</strong>
+          <small id="leader-me-gap">До ТОП-10: расчёт...</small>
+        </div>
+      </div>
+
+      <!-- Список ТОП-10 -->
+      <div class="leaderboard-list" id="leaderboard-list">
+        <div class="mono-tag">Загрузка рейтинга из Supabase...</div>
+      </div>
+
+      <!-- Справочник начисления очков -->
+      <div class="points-guide-box">
+        <span class="mono-label">КАК БЫСТРО ВЫРВАТЬСЯ В ТОП-10:</span>
+        <div class="points-guide-grid">
+          <span>🎟 Подарить билет другу: <strong>+1000 ⭐</strong></span>
+          <span>📸 Скриншот «Буду смотреть» КП: <strong>+500 ⭐</strong></span>
+          <span>⚔️ Победа втроём «На счёт три!»: <strong>+450 ⭐</strong></span>
+          <span>🆕 Привести нового друга в цех: <strong>+400 ⭐</strong></span>
+          <span>🎬 Трейлер + рассылка по соцсетям: <strong>+250 / +150 ⭐</strong></span>
+          <span>🛢 Уровни 3..10 бочек и Блиц: <strong>до +750 ⭐</strong></span>
+        </div>
+      </div>
+
+      <div class="finale-dual-row">
+        <button type="button" class="btn-primary" id="btn-leader-go-share">📤 СОБРАТЬ ОЧКИ В СОЦСЕТЯХ</button>
+        <button type="button" class="btn-secondary" id="btn-leader-go-duel">⚔️ В БОЙ «НА СЧЁТ ТРИ!»</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       POPUP: УНИВЕРСАЛЬНЫЙ МУЛЬТИ-ШЕРИНГ БОЧКИ И ТРЕЙЛЕРА ВО ВСЕ СОЦСЕТИ
+       ==================================================================== -->
+  <div class="modal-backdrop" id="modal-share-hub" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <span class="mono-tag accent-tag">ВИРУСНЫЙ УЗЕЛ // ВСЕ СОЦСЕТИ (+❤️ И +⭐ В ТОП-10)</span>
+        <button type="button" class="icon-close" id="btn-close-share-hub" aria-label="Закрыть">✕</button>
+      </div>
+      <h3 class="section-title rescue-title">📤 РАЗОСЛАТЬ БОЧКУ ИЛИ ПРЯМОЙ ТРЕЙЛЕР</h3>
+      <p class="modal-hint">
+        Выбери, что отправить друзьям или в сторис: за каждую соцсеть раз в сутки начисляются <strong>Рейтинговые очки ТОП-10 (⭐)</strong> и <strong>дополнительные жизни (❤️)</strong>!
+      </p>
+
+      <div class="mode-toggle" role="tablist">
+        <button type="button" class="toggle-tab is-active" id="tab-share-kind-trailer">
+          🎬 Ссылка на Трейлер (+150 ⭐)
+        </button>
+        <button type="button" class="toggle-tab" id="tab-share-kind-barrel">
+          🛢 Моя Бочка-пранк (+120 ⭐)
+        </button>
+      </div>
+
+      <div class="share-url-row" style="margin-top: 10px">
+        <input type="text" id="share-hub-url-output" class="industrial-input" readonly />
+        <button type="button" class="btn-ghost" id="btn-share-hub-copy">КОПИРОВАТЬ</button>
+      </div>
+
+      <div class="share-hub-platforms">
+        <button type="button" class="btn-primary btn-full" data-social-platform="tg">
+          ✈️ Отправить в Telegram (+⭐ +❤️)
+        </button>
+        <button type="button" class="btn-secondary btn-full social-wa-full" data-social-platform="wa">
+          💬 Отправить в WhatsApp (+⭐ +❤️)
+        </button>
+        <button type="button" class="btn-secondary btn-full social-vk-full" data-social-platform="vk">
+          🌐 Опубликовать ВКонтакте / Чаты (+⭐ +❤️)
+        </button>
+        <button type="button" class="btn-secondary btn-full social-ig-full" data-social-platform="ig">
+          📸 Instagram Stories 9:16 + Direct (+⭐ +❤️)
+        </button>
+        <button type="button" class="btn-ghost btn-full" data-social-platform="native">
+          📲 Системное меню «Поделиться» (TikTok / SMS / Другое)
+        </button>
       </div>
     </div>
   </div>

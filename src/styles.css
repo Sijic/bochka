@@ -2700,3 +2700,636 @@ button:disabled {
     width: min(210px, 56vw);
   }
 }
+
+/* ==========================================================================
+   ШАГ 8 (v5.0): СОЦГРАФ ДРУЗЕЙ, РЕАКЦИИ 1-КЛИК, СТОЛ «НА СЧЁТ ТРИ!»,
+   РЕЙТИНГ ТОП-10 НА ПРЕМЬЕРУ И МУЛЬТИ-ШЕРИНГ ТРЕЙЛЕРА / БОЧКИ
+   ========================================================================== */
+
+.nav-leaders .points-badge {
+  background: rgba(234, 179, 8, 0.22);
+  color: #fde047;
+  border: 1px solid rgba(234, 179, 8, 0.55);
+}
+
+.mode-extra-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.mode-duel-btn {
+  border-color: rgba(234, 179, 8, 0.55);
+  color: #fde047;
+}
+
+.hud-tag-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hud-points-chip {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(234, 179, 8, 0.6);
+  background: rgba(15, 16, 20, 0.88);
+  color: #fde047;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.hud-watch-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background: rgba(22, 101, 52, 0.28);
+  border: 1px solid rgba(74, 222, 128, 0.65);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.hud-watch-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: #dcfce7;
+}
+
+.hud-watch-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+/* Горизонтальная лента «Твои люди уже в цеху» на экране упаковки */
+.pack-friends-box {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  background: rgba(234, 179, 8, 0.06);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+}
+
+.pack-friends-head {
+  margin-bottom: 8px;
+}
+
+.pack-friends-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+
+.pack-friend-chip {
+  flex: 0 0 auto;
+  min-width: 178px;
+  padding: 8px 10px;
+  background: rgba(12, 13, 16, 0.92);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.pack-friend-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.pack-friend-top strong {
+  font-size: 12.5px;
+  color: #fff;
+  max-width: 108px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pack-friend-stamp {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  padding: 1px 5px;
+  background: rgba(34, 197, 94, 0.16);
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  color: #86efac;
+}
+
+.pack-friend-duel-btn {
+  padding: 5px 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  border: 1px solid rgba(234, 179, 8, 0.6);
+  background: rgba(234, 179, 8, 0.16);
+  color: #fde047;
+  cursor: pointer;
+}
+
+.pack-friend-duel-btn:hover {
+  background: rgba(234, 179, 8, 0.3);
+}
+
+/* Мульти-соцсети */
+.multi-social-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.social-pill-btn {
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f3f0e6;
+  cursor: pointer;
+}
+
+.social-pill-btn:hover {
+  border-color: var(--accent);
+  color: #fde047;
+}
+
+.social-wa, .social-wa-full {
+  border-color: rgba(34, 197, 94, 0.45);
+}
+.social-vk, .social-vk-full {
+  border-color: rgba(56, 189, 248, 0.45);
+}
+.social-ig, .social-ig-full {
+  border-color: rgba(244, 114, 182, 0.45);
+}
+
+.share-hub-platforms {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* 3 Реактивные кнопки ответа другу на финальном экране (Триггер Б) */
+.finale-reactions-box {
+  margin: 10px 0 14px;
+  padding: 12px;
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.48);
+}
+
+.finale-reactions-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.reaction-duel-btn {
+  border-color: #facc15;
+  color: #fef08a;
+}
+
+.reaction-sent-note {
+  margin: 8px 0 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: #86efac;
+  text-align: center;
+}
+
+.leaderboard-open-banner {
+  margin-bottom: 12px;
+  border-color: rgba(234, 179, 8, 0.65);
+  color: #fde047;
+}
+
+.near-miss-extra-row {
+  margin-top: 8px;
+}
+
+/* Модалка Рейтинга ТОП-10 на закрытую Премьеру */
+.leaderboard-modal-card {
+  width: min(580px, 100%);
+  max-height: calc(100vh - 28px);
+  overflow-y: auto;
+}
+
+.leader-me-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  margin: 10px 0 12px;
+  background: rgba(234, 179, 8, 0.14);
+  border: 1px solid var(--accent);
+}
+
+.leader-me-banner strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 24px;
+  color: #fde047;
+}
+
+.leader-me-right {
+  text-align: right;
+}
+
+.leader-me-right small {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: #e5e7eb;
+}
+
+.leaderboard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 265px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+  padding-right: 2px;
+}
+
+.leader-row {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  font-size: 12.5px;
+}
+
+.leader-row.is-top3 {
+  border-color: rgba(234, 179, 8, 0.55);
+  background: rgba(234, 179, 8, 0.08);
+}
+
+.leader-row.is-me {
+  border-color: #4ade80;
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.leader-rank {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: #fde047;
+}
+
+.leader-name-col strong {
+  display: block;
+  color: #fff;
+}
+
+.leader-name-col small {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.leader-pts {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: #fde047;
+}
+
+.points-guide-box {
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--line);
+}
+
+.points-guide-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px 10px;
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: #d6d3cd;
+}
+
+.points-guide-grid strong {
+  color: #fde047;
+}
+
+/* ==========================================================================
+   СТОЛ «⚔️ НА СЧЁТ ТРИ!» (2–3 ИГРОКА · SYNCHRONOUS REALTIME OVERLAY)
+   ========================================================================== */
+.duel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 54;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: calc(52px + var(--safe-top)) 12px calc(14px + var(--safe-bottom));
+}
+
+.duel-overlay[hidden] {
+  display: none !important;
+}
+
+.duel-top-panel,
+.duel-spectator-bar,
+.duel-result-box {
+  pointer-events: auto;
+}
+
+.duel-top-panel {
+  width: min(680px, 100%);
+  margin: 0 auto;
+  padding: 12px 14px;
+  background: rgba(10, 11, 14, 0.9);
+  border: 1px solid rgba(234, 179, 8, 0.55);
+  backdrop-filter: blur(10px);
+}
+
+.duel-top-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.duel-main-heading {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 18px;
+  letter-spacing: 0.04em;
+  color: #fff;
+}
+
+.duel-top-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.duel-pot-banner {
+  padding: 7px 10px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 3px solid var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #fef08a;
+}
+
+.duel-pot-banner.is-triple-bonus {
+  background: rgba(234, 179, 8, 0.16);
+  border-left-color: #4ade80;
+  color: #fff;
+}
+
+.duel-slots-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+  margin-bottom: 8px;
+}
+
+.duel-slot-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  min-width: 0;
+}
+
+.duel-slot-card.is-filled {
+  border-style: solid;
+  border-color: rgba(234, 179, 8, 0.55);
+  background: rgba(234, 179, 8, 0.08);
+}
+
+.duel-slot-card.is-knockout {
+  opacity: 0.6;
+  border-color: rgba(239, 68, 68, 0.55);
+}
+
+.duel-slot-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  background: #171920;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.duel-slot-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.duel-slot-initials {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: #fde047;
+}
+
+.duel-slot-meta {
+  min-width: 0;
+}
+
+.duel-slot-meta strong {
+  display: block;
+  font-size: 11.5px;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.duel-slot-meta span {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-muted);
+}
+
+.duel-lobby-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.duel-countdown-banner {
+  align-self: center;
+  text-align: center;
+  padding: 12px 24px;
+  background: rgba(8, 9, 12, 0.84);
+  border: 2px solid var(--accent);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85);
+}
+
+.duel-countdown-banner strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: clamp(32px, 8vw, 56px);
+  letter-spacing: 0.06em;
+  color: #fde047;
+}
+
+.duel-countdown-banner.is-go {
+  border-color: #4ade80;
+}
+
+.duel-countdown-banner.is-go strong {
+  color: #4ade80;
+}
+
+.duel-countdown-banner span {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: #e5e7eb;
+  margin-top: 3px;
+}
+
+.duel-barrel-badges {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 55;
+}
+
+.duel-barrel-badge {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transition: transform 0.12s ease-out;
+}
+
+.duel-badge-ava {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 2.5px solid #fde047;
+  background: #111318;
+  box-shadow: 0 0 16px rgba(234, 179, 8, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: #fde047;
+}
+
+.duel-badge-ava img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.duel-barrel-badge.is-safe .duel-badge-ava {
+  border-color: #4ade80;
+  box-shadow: 0 0 20px rgba(74, 222, 128, 0.95);
+}
+
+.duel-barrel-badge.is-dead .duel-badge-ava {
+  border-color: #ef4444;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.95);
+}
+
+.duel-barrel-badge small {
+  padding: 1px 6px;
+  background: rgba(8, 9, 12, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.duel-spectator-bar {
+  width: min(560px, 100%);
+  margin: 0 auto;
+  padding: 10px 14px;
+  background: rgba(127, 29, 29, 0.88);
+  border: 1px solid #f87171;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: #fee2e2;
+}
+
+.duel-result-box {
+  width: min(560px, 100%);
+  margin: 0 auto;
+  padding: 14px 16px;
+  background: rgba(11, 13, 17, 0.95);
+  border: 1.5px solid var(--accent);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9);
+  text-align: center;
+}
+
+.duel-result-box h3 {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: #fde047;
+}
+
+.duel-result-box p {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #e5e7eb;
+}
+
+.duel-result-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+@media (max-width: 640px) {
+  .mode-extra-grid,
+  .points-guide-grid {
+    grid-template-columns: 1fr;
+  }
+  .duel-slots-row {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+}

@@ -1120,6 +1120,52 @@ class WorkshopAudio {
     }
     return buf;
   }
+
+  playChainRattle() {
+    Haptics.medium();
+    if (!this.enabled || !this.ctx) return;
+    const key = Math.random() < 0.5 ? 'chain1' : 'chain2';
+    const buf = this.buffers.get(key);
+    if (buf) {
+      const src = this.ctx.createBufferSource();
+      src.buffer = buf;
+      src.playbackRate.value = 0.92 + Math.random() * 0.18;
+      const g = this.ctx.createGain();
+      g.gain.value = 0.78;
+      src.connect(g).connect(this.master);
+      try { src.start(0); } catch { /* ignore */ }
+    }
+  }
+
+  playCountdownBeat(isFinalGo = false) {
+    if (isFinalGo) Haptics.heavy();
+    else Haptics.light();
+    if (!this.enabled || !this.ctx) return;
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = isFinalGo ? 'sawtooth' : 'sine';
+    osc.frequency.setValueAtTime(isFinalGo ? 185 : 88, now);
+    osc.frequency.exponentialRampToValueAtTime(isFinalGo ? 58 : 42, now + (isFinalGo ? 0.28 : 0.16));
+    g.gain.setValueAtTime(isFinalGo ? 0.52 : 0.36, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + (isFinalGo ? 0.32 : 0.18));
+    osc.connect(g).connect(this.master);
+    osc.start(now);
+    osc.stop(now + (isFinalGo ? 0.34 : 0.2));
+
+    if (isFinalGo) {
+      const hit = this.buffers.get('hitHigh');
+      if (hit) {
+        const s = this.ctx.createBufferSource();
+        s.buffer = hit;
+        const hg = this.ctx.createGain();
+        hg.gain.value = 0.65;
+        s.connect(hg).connect(this.master);
+        try { s.start(now); } catch { /* ignore */ }
+      }
+    }
+  }
 }
 
 export const audio = new WorkshopAudio();

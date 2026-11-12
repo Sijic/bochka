@@ -29,6 +29,10 @@ function getCloudDb() {
   return supabase;
 }
 
+export function getActiveRealtimeClient() {
+  return getCloudDb();
+}
+
 export function isSupabaseActive() {
   return Boolean(getCloudDb());
 }
@@ -427,6 +431,15 @@ function getLocalPreviewProfile() {
   const today = new Date().toISOString().slice(0, 10);
   const def = {
     premiereScore: 0,
+    premierePoints: 0,
+    currentLevel: 1,
+    hasPlayedSolo: false,
+    ticketsGifted: 0,
+    duelsWon: 0,
+    duelsPlayed: 0,
+    trailerRewarded: false,
+    kpClickRewarded: false,
+    dailySocialMask: '',
     lives: 3,
     rawSharesToday: 0,
     rawSharesDay: today,
@@ -445,6 +458,7 @@ function getLocalPreviewProfile() {
   const prof = saved ? { ...def, ...saved } : def;
   if (prof.rawSharesDay !== today) {
     prof.rawSharesToday = 0;
+    prof.dailySocialMask = '';
     prof.rawSharesDay = today;
     safeWriteJson(PROFILE_STORAGE_KEY, prof);
   }
@@ -480,6 +494,15 @@ export async function fetchPlayerProfile(tgUser = null) {
       if (!error && data?.ok) {
         const mapped = {
           premiereScore: Number(data.premiere_score || 0),
+          premierePoints: Number(data.premiere_points || 0),
+          currentLevel: Math.max(1, Number(data.current_level || 1)),
+          hasPlayedSolo: Boolean(data.has_played_solo),
+          ticketsGifted: Number(data.tickets_gifted || 0),
+          duelsWon: Number(data.duels_won || 0),
+          duelsPlayed: Number(data.duels_played || 0),
+          trailerRewarded: Boolean(data.trailer_rewarded),
+          kpClickRewarded: Boolean(data.kp_click_rewarded),
+          dailySocialMask: String(data.daily_social_mask || ''),
           lives: Number(data.lives ?? 3),
           rawSharesToday: Number(data.daily_shares_count || 0),
           easterEggClaimed: Boolean(data.easter_egg_claimed),
@@ -523,7 +546,9 @@ export async function playPremiereStrike(tgUser = null) {
           status: data.reason || 'ok',
           outcome: data.outcome || 'empty_screamer',
           delta: Number(data.delta || 0),
+          pointsGain: Number(data.points_gain || 0),
           premiereScore: Number(data.premiere_score || 0),
+          premierePoints: Number(data.premiere_points || 0),
           lives: Number(data.lives || 0),
           nearMiss: Boolean(data.near_miss),
           hasPendingTicket: Boolean(data.has_pending_ticket),
@@ -560,6 +585,7 @@ export async function playPremiereStrike(tgUser = null) {
     if (forced === 'premiere_win') {
       const delta = Math.max(0.1, Number((100 - prof.premiereScore).toFixed(1)));
       prof.premiereScore = 100;
+      prof.premierePoints = (prof.premierePoints || 0) + 500;
       prof.premiereWon = true;
       prof.premiereCode = 'TESTBOG-VIP-17DEC';
       saveLocalPreviewProfile(prof);
@@ -568,7 +594,9 @@ export async function playPremiereStrike(tgUser = null) {
         status: 'ok',
         outcome: 'premiere_win',
         delta,
+        pointsGain: 500,
         premiereScore: 100,
+        premierePoints: prof.premierePoints,
         lives: prof.lives,
         nearMiss: false,
         hasPendingTicket: prof.hasPendingTicket,
@@ -578,13 +606,16 @@ export async function playPremiereStrike(tgUser = null) {
 
     if (forced === 'golden_ticket' || (!forced && !prof.hasPendingTicket && Math.random() < 0.18)) {
       prof.hasPendingTicket = true;
+      prof.premierePoints = (prof.premierePoints || 0) + 180;
       saveLocalPreviewProfile(prof);
       return {
         ok: true,
         status: 'ok',
         outcome: 'golden_ticket',
         delta: 0,
+        pointsGain: 180,
         premiereScore: prof.premiereScore,
+        premierePoints: prof.premierePoints,
         lives: prof.lives,
         nearMiss: false,
         hasPendingTicket: true,
@@ -593,13 +624,16 @@ export async function playPremiereStrike(tgUser = null) {
     }
 
     if (forced === 'empty_screamer' || (!forced && Math.random() < 0.34)) {
+      prof.premierePoints = (prof.premierePoints || 0) + 20;
       saveLocalPreviewProfile(prof);
       return {
         ok: true,
         status: 'ok',
         outcome: 'empty_screamer',
         delta: 0,
+        pointsGain: 20,
         premiereScore: prof.premiereScore,
+        premierePoints: prof.premierePoints,
         lives: prof.lives,
         nearMiss: prof.lives <= 0 && prof.premiereScore >= 90,
         hasPendingTicket: prof.hasPendingTicket,
@@ -607,30 +641,17 @@ export async function playPremiereStrike(tgUser = null) {
       };
     }
 
-    let delta = 0.4;
+    let delta = 0.2;
     if (prof.premiereScore < 60) delta = 18 + Math.round(Math.random() * 8);
     else if (prof.premiereScore < 85) delta = 7 + Math.round(Math.random() * 5);
-    else if (prof.premiereScore < 95) delta = Number((2.2 + Math.random() * 2.2).toFixed(1));
-    else delta = Number((0.2 + Math.random() * 0.5).toFixed(1));
+    else if (prof.premiereScore < 95) delta = Number((2.2 + Math.random() * 2.0).toFixed(1));
+    else if (prof.premiereScore < 98.8) delta = Number((0.2 + Math.random() * 0.4).toFixed(1));
+    else delta = Number((0.05 + Math.random() * 0.08).toFixed(2));
 
-    prof.premiereScore = Number(Math.min(100, prof.premiereScore + delta).toFixed(1));
-    if (prof.premiereScore >= 100) {
-      prof.premiereScore = 100;
-      prof.premiereWon = true;
-      prof.premiereCode = 'TESTBOG-VIP-17DEC';
-      saveLocalPreviewProfile(prof);
-      return {
-        ok: true,
-        status: 'ok',
-        outcome: 'premiere_win',
-        delta,
-        premiereScore: 100,
-        lives: prof.lives,
-        nearMiss: false,
-        hasPendingTicket: prof.hasPendingTicket,
-        premiereCode: prof.premiereCode,
-      };
-    }
+    // Асимптота Near-Miss: удерживаем шкалу на 98.5..99.5, пока игрок набирает Рейтинговые Очки ТОП-10!
+    prof.premiereScore = Number(Math.min(99.5, prof.premiereScore + delta).toFixed(1));
+    const ptsGain = 55 + Math.round(delta * 3);
+    prof.premierePoints = (prof.premierePoints || 0) + ptsGain;
 
     saveLocalPreviewProfile(prof);
     return {
@@ -638,7 +659,9 @@ export async function playPremiereStrike(tgUser = null) {
       status: 'ok',
       outcome: 'score_hit',
       delta,
+      pointsGain: ptsGain,
       premiereScore: prof.premiereScore,
+      premierePoints: prof.premierePoints,
       lives: prof.lives,
       nearMiss: prof.lives <= 0 && prof.premiereScore >= 90,
       hasPendingTicket: prof.hasPendingTicket,
@@ -1071,6 +1094,441 @@ function hashCode(str) {
     h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
   }
   return h;
+}
+
+/* ============================================================================
+   ШАГ 8: СОЦГРАФ («ТВОИ ЛЮДИ В ЦЕХУ»), ЖИВЫЕ ПУШИ, ДУЭЛИ «НА СЧЁТ ТРИ!»,
+   УРОВНИ 1..8 (3..10 БОЧЕК + БЛИЦ), МУЛЬТИ-ШЕРИНГ И РЕЙТИНГ ТОП-10 НА ПРЕМЬЕРУ
+   ============================================================================ */
+
+export function buildDuelShareLinks(roomId) {
+  const clean = encodeURIComponent(String(roomId || 'room'));
+  const base = resolveShareBaseUrl();
+  const bot = ENV.tgBotUsername || 'bochka_film_bot';
+  const app = ENV.tgAppName || 'play';
+  return {
+    webUrl: `${base}/?duel=${clean}`,
+    tgMiniAppUrl: `https://t.me/${bot}/${app}?startapp=duel_${clean}`,
+  };
+}
+
+export function buildTrailerReferralLinks(tgUser = null) {
+  const uid = encodeURIComponent(getViewerUid(tgUser));
+  const base = resolveShareBaseUrl();
+  const bot = ENV.tgBotUsername || 'bochka_film_bot';
+  const app = ENV.tgAppName || 'play';
+  return {
+    webUrl: `${base}/?trailer=1&ref=${uid}`,
+    tgMiniAppUrl: `https://t.me/${bot}/${app}?startapp=trailer_${uid}`,
+  };
+}
+
+export async function checkBarrelEntryRouting(barrelId, viewerTgUser = null) {
+  if (!barrelId) return { ok: false, shouldRouteToDuel: false };
+  const viewerUid = getViewerUid(viewerTgUser);
+  const db = getCloudDb();
+
+  if (db) {
+    try {
+      const { data, error } = await db.rpc('check_barrel_entry_routing', {
+        p_barrel_id: barrelId,
+        p_viewer_uid: viewerUid,
+        p_viewer_tg_id: viewerTgUser?.id || null,
+      });
+      if (!error && data?.ok) {
+        return {
+          ok: true,
+          isSelf: Boolean(data.is_self),
+          alreadyConnected: Boolean(data.already_connected),
+          viewerHasPlayedSolo: Boolean(data.viewer_has_played_solo),
+          shouldRouteToDuel: Boolean(data.should_route_to_duel),
+          senderUid: data.sender_uid || '',
+          senderTgId: data.sender_tg_id || '',
+          senderName: data.sender_name || '',
+          suggestedRoomId: data.suggested_room_id || barrelId,
+        };
+      }
+    } catch { /* ignore */ }
+  }
+
+  return { ok: true, shouldRouteToDuel: false, suggestedRoomId: barrelId };
+}
+
+export async function notifyBarrelSearchStarted(pack, viewerTgUser = null) {
+  if (!pack?.id) return { creditedLives: 0 };
+  const openerUid = getViewerUid(viewerTgUser);
+  const db = getCloudDb();
+  let creditedLives = 0;
+  let senderTgId = pack.senderTgId || '';
+  const roomId = `r_${pack.id}`;
+
+  if (db) {
+    try {
+      const { data } = await db.rpc('mark_barrel_search_started', {
+        p_barrel_id: pack.id,
+        p_opener_uid: openerUid,
+        p_opener_tg_id: viewerTgUser?.id || null,
+        p_opener_username: viewerTgUser?.username || null,
+        p_opener_name: viewerTgUser?.name || '',
+      });
+      if (data?.ok) {
+        creditedLives = Number(data.credited_lives || 0);
+        if (data.sender_tg_id) senderTgId = data.sender_tg_id;
+      }
+    } catch { /* ignore */ }
+  }
+
+  if (senderTgId) {
+    await sendTelegramPing({
+      clientAction: 'barrel_search_started',
+      senderTgId,
+      openerName: viewerTgUser?.name || 'Кент из чата',
+      barrelId: pack.id,
+      roomId,
+      creditedLives,
+    });
+  }
+
+  return { creditedLives, roomId };
+}
+
+export async function sendPostRescueReaction(pack, reactionType, viewerTgUser = null, extra = {}) {
+  const mapAction = {
+    cinema: 'reaction_cinema',
+    ask_ticket: 'reaction_ask_ticket',
+    duel_3p: 'reaction_duel_3p',
+  };
+  const clientAction = mapAction[reactionType] || 'reaction_cinema';
+
+  if (reactionType === 'cinema') {
+    await recordFunnelEvent('cinema_clicks', viewerTgUser);
+  }
+
+  const notified = await sendTelegramPing({
+    clientAction,
+    senderTgId: pack?.senderTgId || '',
+    openerName: viewerTgUser?.name || 'Твой друг',
+    barrelId: pack?.id || '',
+    roomId: extra.roomId || `d_${randomShortId(6)}`,
+  });
+
+  return { ok: true, notified };
+}
+
+export async function sendDuelChallengePush({ targetTgId, challengerName = '', roomId }) {
+  if (!targetTgId) return false;
+  return sendTelegramPing({
+    clientAction: 'duel_challenge',
+    targetTgId,
+    challengerName: challengerName || 'Друг из Цеха',
+    roomId,
+  });
+}
+
+export async function fetchMyWorkshopFriends(tgUser = null) {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  if (db) {
+    try {
+      const { data, error } = await db.rpc('get_my_workshop_friends', { p_uid: uid });
+      if (!error && data?.ok && Array.isArray(data.friends)) {
+        return data.friends;
+      }
+    } catch { /* ignore */ }
+  }
+
+  if (isTestBogActive()) {
+    return [
+      {
+        friend_uid: 'tbog_f1',
+        friend_tg_id: '10001',
+        friend_name: 'Макс (Уже в цеху)',
+        friend_username: 'max_bochka',
+        opened_barrel: true,
+        duels_together: 2,
+      },
+      {
+        friend_uid: 'tbog_f2',
+        friend_tg_id: '10002',
+        friend_name: 'Алина (Кент)',
+        friend_username: 'alina_cinema',
+        opened_barrel: false,
+        duels_together: 0,
+      },
+    ];
+  }
+  return [];
+}
+
+export async function startDuelAnte(tgUser = null, roomId = '', roundKey = '') {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  if (db) {
+    try {
+      const { data, error } = await db.rpc('start_duel_ante_rpc', {
+        p_uid: uid,
+        p_room_id: roomId,
+        p_round_key: roundKey,
+      });
+      if (!error && data) {
+        const prof = getLocalPreviewProfile();
+        if (typeof data.lives === 'number') prof.lives = data.lives;
+        if (typeof data.premiere_points === 'number') prof.premierePoints = data.premiere_points;
+        saveLocalPreviewProfile(prof);
+        return {
+          ok: Boolean(data.ok),
+          reason: data.reason || 'ok',
+          lives: Number(data.lives ?? prof.lives),
+          premierePoints: Number(data.premiere_points ?? prof.premierePoints),
+        };
+      }
+    } catch { /* fallback below */ }
+  }
+
+  const prof = getLocalPreviewProfile();
+  if (prof.lives <= 0) {
+    return { ok: false, reason: 'no_lives', lives: 0, premierePoints: prof.premierePoints || 0 };
+  }
+  prof.lives = Math.max(0, prof.lives - 1);
+  prof.duelsPlayed = (prof.duelsPlayed || 0) + 1;
+  prof.premierePoints = (prof.premierePoints || 0) + 80;
+  saveLocalPreviewProfile(prof);
+  return { ok: true, lives: prof.lives, premierePoints: prof.premierePoints };
+}
+
+export async function settleDuelRound({ roomId, roundKey, winnerUid, playerUids = [], tgUser = null }) {
+  const myUid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  if (db) {
+    try {
+      const { data, error } = await db.rpc('settle_duel_round', {
+        p_room_id: roomId,
+        p_round_key: roundKey,
+        p_winner_uid: winnerUid,
+        p_player_uids: playerUids,
+      });
+      if (!error && data?.ok) {
+        if (winnerUid === myUid) {
+          const prof = getLocalPreviewProfile();
+          prof.lives = Number(data.winner_lives ?? prof.lives);
+          prof.premiereScore = Number(data.winner_score ?? prof.premiereScore);
+          prof.premierePoints = Number(data.winner_points ?? prof.premierePoints);
+          prof.hasPendingTicket = Boolean(data.has_pending_ticket);
+          saveLocalPreviewProfile(prof);
+        }
+        return {
+          ok: true,
+          potLives: Number(data.pot_lives || playerUids.length || 2),
+          scoreBonus: Number(data.score_bonus || 0),
+          pointsBonus: Number(data.points_bonus || 200),
+          goldenTicketDropped: Boolean(data.golden_ticket_dropped),
+          winnerLives: Number(data.winner_lives || 0),
+          winnerScore: Number(data.winner_score || 0),
+          winnerPoints: Number(data.winner_points || 0),
+          hasPendingTicket: Boolean(data.has_pending_ticket),
+        };
+      }
+    } catch { /* fallback below */ }
+  }
+
+  const n = Math.max(2, Math.min(3, playerUids.length || 2));
+  const scoreBonus = n >= 3 ? 0.25 : 0;
+  const pointsBonus = n >= 3 ? 450 : 200;
+  const prof = getLocalPreviewProfile();
+
+  if (winnerUid === myUid) {
+    prof.lives = (prof.lives || 0) + n;
+    prof.duelsWon = (prof.duelsWon || 0) + 1;
+    prof.premierePoints = (prof.premierePoints || 0) + pointsBonus;
+    prof.premiereScore = Number(Math.min(99.5, (prof.premiereScore || 0) + scoreBonus).toFixed(2));
+    saveLocalPreviewProfile(prof);
+  }
+
+  return {
+    ok: true,
+    potLives: n,
+    scoreBonus,
+    pointsBonus,
+    goldenTicketDropped: false,
+    winnerLives: prof.lives,
+    winnerScore: prof.premiereScore,
+    winnerPoints: prof.premierePoints,
+    hasPendingTicket: prof.hasPendingTicket,
+  };
+}
+
+export async function completeWorkshopLevel(tgUser = null, level = 1, timeLeftSec = 0, bonusPoints = 0) {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  if (db) {
+    try {
+      const { data, error } = await db.rpc('complete_workshop_level_rpc', {
+        p_uid: uid,
+        p_level: Math.max(1, Math.round(level)),
+        p_time_left_sec: Math.max(0, Number(timeLeftSec || 0)),
+        p_bonus_points: Math.max(0, Math.round(bonusPoints || 0)),
+      });
+      if (!error && data?.ok) {
+        const prof = getLocalPreviewProfile();
+        prof.currentLevel = Number(data.current_level || level + 1);
+        prof.premierePoints = Number(data.premiere_points || prof.premierePoints);
+        prof.hasPlayedSolo = true;
+        saveLocalPreviewProfile(prof);
+        return {
+          ok: true,
+          earnedPoints: Number(data.earned_points || 120),
+          currentLevel: prof.currentLevel,
+          premierePoints: prof.premierePoints,
+        };
+      }
+    } catch { /* fallback below */ }
+  }
+
+  const prof = getLocalPreviewProfile();
+  const earned = Math.min(750, 80 + Math.min(10, level) * 25 + Math.round(Math.max(0, timeLeftSec) * 6) + Math.max(0, bonusPoints));
+  prof.currentLevel = Math.max(prof.currentLevel || 1, level + 1);
+  prof.premierePoints = (prof.premierePoints || 0) + earned;
+  prof.hasPlayedSolo = true;
+  saveLocalPreviewProfile(prof);
+  return {
+    ok: true,
+    earnedPoints: earned,
+    currentLevel: prof.currentLevel,
+    premierePoints: prof.premierePoints,
+  };
+}
+
+export async function claimSocialOrPromoBonus(tgUser = null, action = 'share_barrel', platform = 'tg', refUid = '') {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  if (db) {
+    try {
+      const { data, error } = await db.rpc('claim_social_or_promo_bonus_rpc', {
+        p_uid: uid,
+        p_action: action,
+        p_platform: platform,
+        p_ref_uid: refUid || null,
+      });
+      if (!error && data?.ok) {
+        const prof = getLocalPreviewProfile();
+        prof.lives = Number(data.lives ?? prof.lives);
+        prof.premierePoints = Number(data.premiere_points ?? prof.premierePoints);
+        if (action === 'trailer_watched') prof.trailerRewarded = true;
+        if (action === 'kp_clicked') prof.kpClickRewarded = true;
+        saveLocalPreviewProfile(prof);
+        return {
+          ok: true,
+          pointsAdded: Number(data.points_added || 0),
+          livesAdded: Number(data.lives_added || 0),
+          premierePoints: prof.premierePoints,
+          lives: prof.lives,
+          alreadyClaimed: Boolean(data.already_claimed),
+        };
+      }
+    } catch { /* fallback below */ }
+  }
+
+  const prof = getLocalPreviewProfile();
+  const token = `[${action}:${platform}]`;
+  let ptsAdded = 0;
+  let livesAdded = 0;
+
+  if (action === 'trailer_watched' && !prof.trailerRewarded) {
+    prof.trailerRewarded = true;
+    ptsAdded = 250;
+    livesAdded = 1;
+  } else if (action === 'kp_clicked' && !prof.kpClickRewarded) {
+    prof.kpClickRewarded = true;
+    ptsAdded = 300;
+  } else if ((action === 'share_barrel' || action === 'share_trailer') && !(prof.dailySocialMask || '').includes(token)) {
+    prof.dailySocialMask = (prof.dailySocialMask || '') + token;
+    ptsAdded = action === 'share_trailer' ? 150 : 120;
+    if ((prof.rawSharesToday || 0) < 5) {
+      livesAdded = 1;
+      prof.rawSharesToday = (prof.rawSharesToday || 0) + 1;
+    }
+  }
+
+  prof.lives = (prof.lives || 0) + livesAdded;
+  prof.premierePoints = (prof.premierePoints || 0) + ptsAdded;
+  saveLocalPreviewProfile(prof);
+
+  return {
+    ok: true,
+    pointsAdded: ptsAdded,
+    livesAdded,
+    premierePoints: prof.premierePoints,
+    lives: prof.lives,
+    alreadyClaimed: ptsAdded === 0 && livesAdded === 0,
+  };
+}
+
+export async function fetchPremiereLeaderboard(tgUser = null) {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  if (db) {
+    try {
+      const { data, error } = await db.rpc('get_premiere_leaderboard_rpc', {
+        p_uid: uid,
+      });
+      if (!error && data?.ok) {
+        return {
+          ok: true,
+          leaders: Array.isArray(data.leaders) ? data.leaders : [],
+          tenthPoints: Number(data.tenth_points || 0),
+          me: data.me || null,
+        };
+      }
+    } catch { /* fallback below */ }
+  }
+
+  const prof = getLocalPreviewProfile();
+  const mockLeaders = [
+    { rank: 1, uid: 'm1', name: 'Артём К.', premiere_points: 6850, premiere_score: 99.4, current_level: 11, friends_brought: 7, tickets_gifted: 2, duels_won: 5 },
+    { rank: 2, uid: 'm2', name: 'Данияр М.', premiere_points: 5420, premiere_score: 99.2, current_level: 10, friends_brought: 5, tickets_gifted: 2, duels_won: 4 },
+    { rank: 3, uid: 'm3', name: 'Ника С.', premiere_points: 4790, premiere_score: 98.9, current_level: 9, friends_brought: 6, tickets_gifted: 1, duels_won: 3 },
+    { rank: 4, uid: 'm4', name: 'Руслан Т.', premiere_points: 3910, premiere_score: 98.5, current_level: 9, friends_brought: 4, tickets_gifted: 1, duels_won: 3 },
+    { rank: 5, uid: 'm5', name: 'Кирилл В.', premiere_points: 3400, premiere_score: 97.8, current_level: 8, friends_brought: 4, tickets_gifted: 1, duels_won: 2 },
+    { rank: 6, uid: 'm6', name: 'Алия Н.', premiere_points: 2950, premiere_score: 96.4, current_level: 7, friends_brought: 3, tickets_gifted: 1, duels_won: 1 },
+    { rank: 7, uid: 'm7', name: 'Егор П.', premiere_points: 2480, premiere_score: 95.1, current_level: 6, friends_brought: 3, tickets_gifted: 0, duels_won: 2 },
+    { rank: 8, uid: 'm8', name: 'Тимур Б.', premiere_points: 2120, premiere_score: 93.5, current_level: 6, friends_brought: 2, tickets_gifted: 0, duels_won: 2 },
+    { rank: 9, uid: 'm9', name: 'София Л.', premiere_points: 1840, premiere_score: 91.0, current_level: 5, friends_brought: 2, tickets_gifted: 0, duels_won: 1 },
+    { rank: 10, uid: 'm10', name: 'Илья З.', premiere_points: 1550, premiere_score: 88.5, current_level: 4, friends_brought: 1, tickets_gifted: 0, duels_won: 1 },
+  ];
+  const myPts = prof.premierePoints || 0;
+  mockLeaders.push({
+    rank: 11,
+    uid,
+    name: tgUser?.name || 'Ты (Sandbox)',
+    premiere_points: myPts,
+    premiere_score: prof.premiereScore || 0,
+    current_level: prof.currentLevel || 1,
+    friends_brought: prof.friendsBrought || 0,
+    tickets_gifted: prof.ticketsGifted || 0,
+    duels_won: prof.duelsWon || 0,
+  });
+  mockLeaders.sort((a, b) => b.premiere_points - a.premiere_points);
+  mockLeaders.forEach((r, idx) => { r.rank = idx + 1; });
+  const meEntry = mockLeaders.find((r) => r.uid === uid);
+  const tenth = mockLeaders[9]?.premiere_points || 0;
+
+  return {
+    ok: true,
+    leaders: mockLeaders,
+    tenthPoints: tenth,
+    me: {
+      uid,
+      rank: meEntry?.rank || 11,
+      in_top10: (meEntry?.rank || 11) <= 10,
+      premiere_points: myPts,
+      premiere_score: prof.premiereScore || 0,
+      current_level: prof.currentLevel || 1,
+      friends_brought: prof.friendsBrought || 0,
+      tickets_gifted: prof.ticketsGifted || 0,
+      duels_won: prof.duelsWon || 0,
+      points_to_top10: Math.max(0, tenth - myPts + ((meEntry?.rank || 11) > 10 ? 10 : 0)),
+    },
+  };
 }
 
 export function patchTestBogProfile(patch = {}) {
