@@ -28,8 +28,8 @@ export class WorkshopScene {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x090b0d);
-    this.scene.fog = new THREE.FogExp2(0x090b0d, 0.082);
+    this.scene.background = new THREE.Color(0x0b0907);
+    this.scene.fog = new THREE.FogExp2(0x0d0a08, 0.072);
 
     this.camera = new THREE.PerspectiveCamera(45, this.width / Math.max(1, this.height), 0.1, 38);
     this.baseCamPos = new THREE.Vector3(0, 2.25, 6.1);
@@ -67,6 +67,31 @@ export class WorkshopScene {
     this.rightColumn = null;
     this.flywheelGroup = null;
     this.chains = [];
+
+    // Кино-реквизит и 2.5D персонажи (v6.1)
+    this.wallClockGroup = null;
+    this.clockHourPivot = null;
+    this.clockMinPivot = null;
+    this.clockSecPivot = null;
+    this.clockRimMat = null;
+    this.clockAirActive = false;
+    this.clockAirLeft = 30;
+    this.clockBlitz = false;
+    this.clockSimSeconds = 8 * 3600 + 15 * 60;
+    this.fatherPillarGroup = null;
+    this.fatherSpriteMat = null;
+    this.fatherMesh = null;
+    this.fatherLight = null;
+    this.fatherMissJolt = 0;
+    this.pastorWalkerGroup = null;
+    this.pastorSprite = null;
+    this.pastorWalkTex1 = null;
+    this.pastorWalkTex2 = null;
+    this.pastorWalkDir = 1;
+    this.pastorWalkPhase = 0;
+    this.activeLevel = 1;
+    this._isPortraitLayout = false;
+    this._projVec = new THREE.Vector3();
 
     this.clock = new THREE.Clock();
     this.rafId = 0;
@@ -311,11 +336,11 @@ export class WorkshopScene {
     this.scene.environment = pmrem.fromScene(envScene, 0.04).texture;
     pmrem.dispose();
 
-    const hemi = new THREE.HemisphereLight(0x9fb8d4, 0x1e1610, 0.65);
+    const hemi = new THREE.HemisphereLight(0xa3b3c2, 0x1e1610, 0.72);
     this.scene.add(hemi);
 
     // Главный верхний цеховой прожектор
-    this.mainSpot = new THREE.SpotLight(0xffe0a3, 72, 22, Math.PI * 0.39, 0.58, 1.2);
+    this.mainSpot = new THREE.SpotLight(0xffcf86, 78, 24, Math.PI * 0.40, 0.56, 1.18);
     this.mainSpot.position.set(0, 6.6, 1.35);
     this.mainSpot.target.position.set(0, 0.1, -0.55);
     this.mainSpot.castShadow = true;
@@ -323,16 +348,16 @@ export class WorkshopScene {
     this.mainSpot.shadow.bias = -0.0005;
     this.scene.add(this.mainSpot, this.mainSpot.target);
 
-    const frontKey = new THREE.DirectionalLight(0xdbe6f2, 1.0);
+    const frontKey = new THREE.DirectionalLight(0xeadbc8, 1.05);
     frontKey.position.set(0.4, 2.6, 5.4);
     this.scene.add(frontKey);
 
     // Холодный контровой свет из двухъярусных решётчатых окон позади маховика
-    const windowBacklight = new THREE.DirectionalLight(0x7dd3fc, 1.85);
+    const windowBacklight = new THREE.DirectionalLight(0x6ca0bc, 1.65);
     windowBacklight.position.set(-1.5, 5.2, -5.5);
     this.scene.add(windowBacklight);
 
-    const warmFill = new THREE.PointLight(0xea580c, 3.2, 10);
+    const warmFill = new THREE.PointLight(0xd95b12, 3.5, 11);
     warmFill.position.set(3.4, 1.6, 1.8);
     this.scene.add(warmFill);
 
@@ -380,6 +405,8 @@ export class WorkshopScene {
 
     // 5. КВАДРАТНЫЕ КОЛОННЫ С ОБЛУПИВШЕЙСЯ СЕРО-ЗЕЛЁНОЙ КАФЕЛЬНОЙ ПЛИТКОЙ + РЖАВЫЕ ЦЕПИ
     this._buildTiledColumnsAndChains();
+    this._buildFilmWallClock();
+    this._buildFilmCharacters();
 
     // 6. Объёмный конус верхнего прожектора в сыром тумане
     const coneGeo = new THREE.ConeGeometry(4.2, 6.6, 32, 1, true);
@@ -962,6 +989,15 @@ export class WorkshopScene {
       if (this.leftColumn) this.leftColumn.position.set(-2.22, 0, -2.35);
       if (this.rightColumn) this.rightColumn.position.set(2.22, 0, -2.35);
       if (this.flywheelGroup) this.flywheelGroup.scale.setScalar(0.82);
+      this._isPortraitLayout = true;
+      if (this.wallClockGroup) {
+        this.wallClockGroup.position.set(0.94, 2.04, -2.72);
+        this.wallClockGroup.scale.setScalar(0.95);
+      }
+      if (this.fatherPillarGroup) {
+        this.fatherPillarGroup.position.set(-0.72, 0, -2.42);
+        this.fatherPillarGroup.scale.setScalar(0.95);
+      }
 
       this.camera.fov = 50;
       const crowdPull = n >= 9 ? 1.13 : n >= 7 ? 1.07 : 1.0;
@@ -1014,6 +1050,15 @@ export class WorkshopScene {
       if (this.leftColumn) this.leftColumn.position.set(-4.05, 0, -1.78);
       if (this.rightColumn) this.rightColumn.position.set(4.05, 0, -1.78);
       if (this.flywheelGroup) this.flywheelGroup.scale.setScalar(1.0);
+      this._isPortraitLayout = false;
+      if (this.wallClockGroup) {
+        this.wallClockGroup.position.set(2.10, 2.18, -2.72);
+        this.wallClockGroup.scale.setScalar(1.12);
+      }
+      if (this.fatherPillarGroup) {
+        this.fatherPillarGroup.position.set(-1.42, 0, -2.48);
+        this.fatherPillarGroup.scale.setScalar(1.0);
+      }
 
       this.camera.fov = 42;
       const crowdAdjust = n >= 7 ? 1.09 : 1.0;
@@ -1207,6 +1252,78 @@ export class WorkshopScene {
     // 2. Медленное тяжёлое вращение гигантского чугунного колеса-маховика
     if (this.flywheelGroup) {
       this.flywheelGroup.rotation.z -= dt * 0.16;
+    }
+
+    // 2б. Кино-часы на задней стене цеха (тикание / ускорение на таймере / Блиц)
+    if (this.wallClockGroup) {
+      let speed = 1.0;
+      if (this.clockBlitz) {
+        speed = 22.0;
+      } else if (this.clockAirActive) {
+        speed = this.clockAirLeft <= 12 ? 5.0 + (12.0 - this.clockAirLeft) * 0.75 : 5.0;
+      }
+      this.clockSimSeconds += dt * speed;
+      const wholeSec = Math.floor(this.clockSimSeconds);
+      const frac = this.clockSimSeconds - wholeSec;
+      const secAnglePos = speed <= 1.5 ? wholeSec + Math.pow(frac, 6) : this.clockSimSeconds;
+
+      if (this.clockSecPivot) {
+        this.clockSecPivot.rotation.z = -(secAnglePos / 60) * Math.PI * 2;
+      }
+      if (this.clockMinPivot) {
+        this.clockMinPivot.rotation.z = -(this.clockSimSeconds / 3600) * Math.PI * 2;
+      }
+      if (this.clockHourPivot) {
+        this.clockHourPivot.rotation.z = -((this.clockSimSeconds % 43200) / 43200) * Math.PI * 2;
+      }
+      if (this.clockRimMat) {
+        const urgent = this.clockBlitz || (this.clockAirActive && this.clockAirLeft <= 10);
+        if (urgent) {
+          const pulse = 0.55 + Math.abs(Math.sin(elapsed * 8.0)) * 0.85;
+          this.clockRimMat.emissive.setHex(0xb91c1c);
+          this.clockRimMat.emissiveIntensity = pulse;
+        } else {
+          this.clockRimMat.emissive.setHex(0x3a2a14);
+          this.clockRimMat.emissiveIntensity = 0.35;
+        }
+      }
+    }
+
+    // 2в. Отец, привязанный к столбу (дыхание, периодическое и ударное дёрганье цепей)
+    if (this.fatherPillarGroup?.visible && this.fatherMesh) {
+      this.fatherMissJolt = Math.max(0, this.fatherMissJolt - dt * 2.6);
+      const breath = 1.0 + Math.sin(elapsed * 2.15) * 0.015;
+      this.fatherMesh.scale.y = breath;
+      const periodicTug = Math.max(0, Math.sin(elapsed * 1.45) - 0.82) * 0.08;
+      const joltAmp = periodicTug + this.fatherMissJolt * 0.055;
+      this.fatherMesh.position.x = Math.sin(elapsed * 28.0) * joltAmp;
+      this.fatherMesh.rotation.z = Math.sin(elapsed * 19.0) * joltAmp * 0.7;
+      if (this.fatherLight) {
+        this.fatherLight.intensity = 2.0 + Math.sin(elapsed * 3.1) * 0.25 + this.fatherMissJolt * 1.4;
+      }
+    }
+
+    // 2г. Идущий Пастор на патруле позади бочек (пошаговая смена поз)
+    if (this.pastorWalkerGroup?.visible && this.pastorSprite) {
+      const limit = this._isPortraitLayout ? 1.58 : 2.95;
+      const walkSpeed = 0.78;
+      this.pastorWalkerGroup.position.x += this.pastorWalkDir * walkSpeed * dt;
+      if (this.pastorWalkerGroup.position.x > limit) {
+        this.pastorWalkerGroup.position.x = limit;
+        this.pastorWalkDir = -1;
+      } else if (this.pastorWalkerGroup.position.x < -limit) {
+        this.pastorWalkerGroup.position.x = -limit;
+        this.pastorWalkDir = 1;
+      }
+      this.pastorWalkPhase += dt * 3.8;
+      const frameIdx = Math.floor(this.pastorWalkPhase) % 2;
+      const desiredTex = frameIdx === 0 ? this.pastorWalkTex1 : this.pastorWalkTex2;
+      if (desiredTex && this.pastorSprite.material.map !== desiredTex) {
+        this.pastorSprite.material.map = desiredTex;
+        this.pastorSprite.material.needsUpdate = true;
+      }
+      this.pastorSprite.scale.x = this.pastorWalkDir >= 0 ? 1 : -1;
+      this.pastorSprite.position.y = 0.96 + Math.abs(Math.sin(this.pastorWalkPhase * Math.PI)) * 0.032;
     }
 
     // 3. Физика маятника для висящих ржавых цепей на колоннах
@@ -1616,6 +1733,237 @@ export class WorkshopScene {
     return { color, roughness };
   }
 
+  _buildFilmWallClock() {
+    const loader = new THREE.TextureLoader();
+    const spriteBase = (typeof window !== 'undefined' && window.location.pathname.includes('/testbog'))
+      ? '../public/sprites/'
+      : './public/sprites/';
+    const dialTex = loader.load(`${spriteBase}film_clock.webp`);
+    dialTex.colorSpace = THREE.SRGBColorSpace;
+    dialTex.anisotropy = 4;
+
+    const grp = new THREE.Group();
+    grp.name = 'filmWallClock';
+
+    // Металлическая рама-кожух и консоль крепления к бетонной стене
+    const bracketMat = new THREE.MeshStandardMaterial({
+      color: 0x1c1e22,
+      roughness: 0.78,
+      metalness: 0.55,
+    });
+    const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.22, 0.28), bracketMat);
+    bracket.position.set(0, 0.02, -0.14);
+    grp.add(bracket);
+
+    const caseMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.43, 0.11, 32), bracketMat);
+    caseMesh.rotation.x = Math.PI * 0.5;
+    caseMesh.position.z = -0.02;
+    grp.add(caseMesh);
+
+    this.clockRimMat = new THREE.MeshStandardMaterial({
+      color: 0x524534,
+      roughness: 0.45,
+      metalness: 0.72,
+      emissive: new THREE.Color(0x3a2a14),
+      emissiveIntensity: 0.35,
+    });
+    const bezel = new THREE.Mesh(new THREE.TorusGeometry(0.41, 0.028, 12, 36), this.clockRimMat);
+    bezel.position.z = 0.038;
+    grp.add(bezel);
+
+    // Циферблат с ретроспективно выровненным спрайтом из кадра фильма
+    const dialMat = new THREE.MeshStandardMaterial({
+      map: dialTex,
+      transparent: true,
+      alphaTest: 0.1,
+      roughness: 0.65,
+      metalness: 0.08,
+      emissive: new THREE.Color(0xd8c8a8),
+      emissiveMap: dialTex,
+      emissiveIntensity: 0.28,
+    });
+    const dialMesh = new THREE.Mesh(new THREE.CircleGeometry(0.39, 32), dialMat);
+    dialMesh.position.z = 0.042;
+    grp.add(dialMesh);
+
+    // Стрелки: часовая, минутная, секундная (вращаются вокруг -Z в плоскости циферблата)
+    const darkHandMat = new THREE.MeshBasicMaterial({ color: 0x141210 });
+    const secHandMat = new THREE.MeshBasicMaterial({ color: 0xb91c1c });
+
+    this.clockHourPivot = new THREE.Group();
+    this.clockHourPivot.position.z = 0.048;
+    const hrMesh = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.19, 0.008), darkHandMat);
+    hrMesh.position.y = 0.085;
+    this.clockHourPivot.add(hrMesh);
+    grp.add(this.clockHourPivot);
+
+    this.clockMinPivot = new THREE.Group();
+    this.clockMinPivot.position.z = 0.053;
+    const minMesh = new THREE.Mesh(new THREE.BoxGeometry(0.017, 0.275, 0.008), darkHandMat);
+    minMesh.position.y = 0.128;
+    this.clockMinPivot.add(minMesh);
+    grp.add(this.clockMinPivot);
+
+    this.clockSecPivot = new THREE.Group();
+    this.clockSecPivot.position.z = 0.058;
+    const secMesh = new THREE.Mesh(new THREE.BoxGeometry(0.009, 0.305, 0.006), secHandMat);
+    secMesh.position.y = 0.115;
+    this.clockSecPivot.add(secMesh);
+    grp.add(this.clockSecPivot);
+
+    const centerPin = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.018, 16), darkHandMat);
+    centerPin.rotation.x = Math.PI * 0.5;
+    centerPin.position.z = 0.062;
+    grp.add(centerPin);
+
+    grp.position.set(2.10, 2.18, -2.72);
+    grp.scale.setScalar(1.12);
+    this.wallClockGroup = grp;
+    this.scene.add(grp);
+  }
+
+  _buildFilmCharacters() {
+    const loader = new THREE.TextureLoader();
+    const spriteBase = (typeof window !== 'undefined' && window.location.pathname.includes('/testbog'))
+      ? '../public/sprites/'
+      : './public/sprites/';
+
+    // 1. Отец (Филипп Рейнхардт), привязанный цепями к бетонной опоре (Ур. 2, 3, 6, 7, 10)
+    const fatherGroup = new THREE.Group();
+    fatherGroup.name = 'fatherPillar';
+
+    const pillarMat = new THREE.MeshStandardMaterial({
+      color: 0x3b3833,
+      roughness: 0.92,
+      metalness: 0.08,
+    });
+    const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.36, 3.8, 0.36), pillarMat);
+    pillar.position.set(0, 1.9, -0.16);
+    pillar.castShadow = true;
+    pillar.receiveShadow = true;
+    fatherGroup.add(pillar);
+
+    const ropeMat = new THREE.MeshStandardMaterial({ color: 0x2a241d, roughness: 0.85, metalness: 0.45 });
+    for (const yOff of [0.92, 1.24]) {
+      const collar = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.022, 8, 20), ropeMat);
+      collar.rotation.x = Math.PI * 0.46;
+      collar.position.set(0, yOff, -0.04);
+      fatherGroup.add(collar);
+    }
+
+    const fatherTex = loader.load(`${spriteBase}father_pillar.webp`);
+    fatherTex.colorSpace = THREE.SRGBColorSpace;
+    this.fatherSpriteMat = new THREE.MeshStandardMaterial({
+      map: fatherTex,
+      transparent: true,
+      alphaTest: 0.08,
+      roughness: 0.85,
+      metalness: 0.04,
+      emissive: new THREE.Color(0x241d15),
+      emissiveMap: fatherTex,
+      emissiveIntensity: 0.38,
+      side: THREE.DoubleSide,
+    });
+    const fatherPlane = new THREE.PlaneGeometry(1.38, 1.96);
+    this.fatherMesh = new THREE.Mesh(fatherPlane, this.fatherSpriteMat);
+    this.fatherMesh.position.set(0, 0.98, 0.08);
+    fatherGroup.add(this.fatherMesh);
+
+    this.fatherLight = new THREE.PointLight(0xfbbf24, 2.0, 4.4, 2);
+    this.fatherLight.position.set(0.18, 1.65, 0.55);
+    fatherGroup.add(this.fatherLight);
+
+    fatherGroup.position.set(-1.42, 0, -2.48);
+    fatherGroup.visible = false;
+    this.fatherPillarGroup = fatherGroup;
+    this.scene.add(fatherGroup);
+
+    // 2. Идущий Пастор (Тиль Швайгер) позади бочек (Ур. 4, 5, 6, 8, 9, 10)
+    const pastorGroup = new THREE.Group();
+    pastorGroup.name = 'pastorWalker';
+
+    this.pastorWalkTex1 = loader.load(`${spriteBase}pastor_walk_1.webp`);
+    this.pastorWalkTex1.colorSpace = THREE.SRGBColorSpace;
+    this.pastorWalkTex2 = loader.load(`${spriteBase}pastor_walk_2.webp`);
+    this.pastorWalkTex2.colorSpace = THREE.SRGBColorSpace;
+
+    const pastorMat = new THREE.MeshStandardMaterial({
+      map: this.pastorWalkTex1,
+      transparent: true,
+      alphaTest: 0.08,
+      roughness: 0.84,
+      metalness: 0.05,
+      emissive: new THREE.Color(0x282118),
+      emissiveMap: this.pastorWalkTex1,
+      emissiveIntensity: 0.42,
+      side: THREE.DoubleSide,
+    });
+    this.pastorSprite = new THREE.Mesh(new THREE.PlaneGeometry(1.42, 1.92), pastorMat);
+    this.pastorSprite.position.set(0, 0.96, 0);
+    pastorGroup.add(this.pastorSprite);
+
+    pastorGroup.position.set(-1.2, 0, -2.05);
+    pastorGroup.visible = false;
+    this.pastorWalkerGroup = pastorGroup;
+    this.scene.add(pastorGroup);
+  }
+
+  setClockUrgency({ airActive = false, airLeft = 30, isBlitz = false } = {}) {
+    this.clockAirActive = Boolean(airActive);
+    this.clockAirLeft = Number(airLeft) || 0;
+    this.clockBlitz = Boolean(isBlitz);
+  }
+
+  setWorkshopLevelDecor(level = 1, modeType = 'solo') {
+    this.activeLevel = Number(level) || 1;
+    const lv = this.activeLevel;
+    const isFatherLvl = modeType !== 'viral' && [2, 3, 6, 7, 10].includes(lv);
+    const isPastorLvl = modeType !== 'viral' && [4, 5, 6, 8, 9, 10].includes(lv);
+
+    if (this.wallClockGroup) this.wallClockGroup.visible = true;
+    if (this.fatherPillarGroup) this.fatherPillarGroup.visible = isFatherLvl;
+    if (this.pastorWalkerGroup) this.pastorWalkerGroup.visible = isPastorLvl;
+    this._applyResponsiveCameraAndLayout();
+  }
+
+  triggerCharacterMissReaction() {
+    if (this.fatherPillarGroup?.visible) {
+      this.fatherMissJolt = 1.0;
+    }
+  }
+
+  getMinBarrelTopY() {
+    if (!this.renderer?.domElement || !this.camera) return 260;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    let minTopY = rect.height * 0.72;
+    const positions = this.getBarrelWorldPositions();
+    for (const pos of positions) {
+      this._projVec.set(pos.x, pos.y + 1.08, pos.z);
+      this._projVec.project(this.camera);
+      const sy = ((1 - this._projVec.y) * 0.5) * rect.height;
+      if (Number.isFinite(sy)) {
+        minTopY = Math.min(minTopY, sy);
+      }
+    }
+    return minTopY;
+  }
+
+  projectFatherBubblePos() {
+    if (!this.fatherPillarGroup?.visible || !this.renderer?.domElement || !this.camera) {
+      return { visible: false, x: 0, y: 0 };
+    }
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const p = this.fatherPillarGroup.position;
+    const sc = this.fatherPillarGroup.scale.y || 1;
+    this._projVec.set(p.x, p.y + 2.08 * sc, p.z + 0.08);
+    this._projVec.project(this.camera);
+    return {
+      visible: this._projVec.z < 1,
+      x: ((this._projVec.x + 1) * 0.5) * rect.width,
+      y: ((1 - this._projVec.y) * 0.5) * rect.height,
+    };
+  }
+
   _createBackWallWindowShadowTexture() {
     const W = 1024;
     const H = 512;
@@ -1623,13 +1971,47 @@ export class WorkshopScene {
     c.width = W; c.height = H;
     const ctx = c.getContext('2d');
 
-    ctx.fillStyle = '#0a0c0e';
+    // Тёплый угольный бетон / кирпичная кладка цеха (тон кадров фильма)
+    const wallGrad = ctx.createLinearGradient(0, 0, 0, H);
+    wallGrad.addColorStop(0, '#181410');
+    wallGrad.addColorStop(0.55, '#12100d');
+    wallGrad.addColorStop(1, '#0b0907');
+    ctx.fillStyle = wallGrad;
     ctx.fillRect(0, 0, W, H);
 
-    ctx.fillStyle = 'rgba(234, 179, 8, 0.08)';
+    // Пятна сырости и подтёки ржавчины на стене
+    for (let i = 0; i < 42; i++) {
+      const rx = (i * 197) % W;
+      const ry = (i * 89) % (H * 0.65);
+      const rw = 24 + (i % 5) * 18;
+      const rh = 90 + (i % 7) * 32;
+      const drip = ctx.createLinearGradient(rx, ry, rx, ry + rh);
+      drip.addColorStop(0, 'rgba(68, 46, 26, 0.14)');
+      drip.addColorStop(1, 'rgba(12, 10, 8, 0)');
+      ctx.fillStyle = drip;
+      ctx.fillRect(rx, ry, rw, rh);
+    }
+
+    // Двухъярусные запылённые заводские окна с контрастным переплётом
+    for (const wx of [135, 370, 610, 845]) {
+      const wg = ctx.createLinearGradient(wx, 24, wx, 240);
+      wg.addColorStop(0, 'rgba(130, 168, 194, 0.17)');
+      wg.addColorStop(1, 'rgba(72, 92, 104, 0.05)');
+      ctx.fillStyle = wg;
+      ctx.fillRect(wx, 28, 118, 198);
+      ctx.strokeStyle = 'rgba(18, 16, 14, 0.88)';
+      ctx.lineWidth = 7;
+      ctx.strokeRect(wx, 28, 118, 198);
+      ctx.beginPath();
+      ctx.moveTo(wx + 59, 28); ctx.lineTo(wx + 59, 226);
+      ctx.moveTo(wx, 127); ctx.lineTo(wx + 118, 127);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = 'rgba(234, 179, 8, 0.11)';
     ctx.font = '900 44px Impact, monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('ЦЕХ · КОРПУС Б — СЕКТОР 04', W * 0.5, H * 0.72);
+    ctx.fillText('ЦЕХ · КОРПУС Б — СЕКТОР 04', W * 0.5, H * 0.74);
 
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;

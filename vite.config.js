@@ -40,6 +40,10 @@ const RUNTIME_ASSETS = [
   'assets/sfx/water_drop_2.mp3',
   'assets/sfx/voices/priest_hit_1.mp3',
   'assets/sfx/voices/screamer_0.mp3',
+  'public/sprites/film_clock.webp',
+  'public/sprites/father_pillar.webp',
+  'public/sprites/pastor_walk_1.webp',
+  'public/sprites/pastor_walk_2.webp',
 ];
 
 function stripStaticImportMapAndCopyAssets() {

@@ -47,6 +47,9 @@ import {
   markKpScreenshotVerified,
   syncFriendsOpenedTokens,
   getQuestState,
+  getStoredUiStage,
+  computeEffectiveUiStage,
+  syncUiStage,
   patchTestBogProfile,
   buildDuelShareLinks,
   buildTrailerReferralLinks,
@@ -77,6 +80,7 @@ const state = {
   tg: null,
   entered: false,
   activeScreen: 'gate',
+  uiStage: 1,
   incomingParam: '',
   incomingPack: null,
   incomingPassId: '',
@@ -94,6 +98,14 @@ const state = {
     premiereWon: false,
     premiereCode: '',
     hasPendingTicket: false,
+    packedCount: 0,
+    friendsBrought: 0,
+    duelsPlayed: 0,
+    duelsWon: 0,
+    uiStage: 1,
+    temuSurgeClaimed: false,
+    hasSocialConnection: false,
+    repeatLinkEntered: false,
   },
 
   // Состояние текущего раунда в цеху ('demo' | 'viral' | 'premiere')
@@ -135,6 +147,10 @@ const state = {
   },
 
   screamerCursor: 0,
+  fatherBubbleInterval: null,
+  fatherBubbleInitialTimer: null,
+  fatherBubbleHideTimer: null,
+  fatherBubbleCursor: 0,
 
   // Сверка отметки «Буду смотреть» по отсутствию на вкладке >= 15 сек
   kpSync: {
@@ -222,6 +238,112 @@ function formatBarrelWord(n) {
   return 'БОЧКА';
 }
 
+function applyProgressiveDisclosureUI({ forceStage = null, skipPromoteFromSocial = false } = {}) {
+  const temuModal = document.getElementById('modal-temu-unlock');
+  const temuOpen = Boolean(temuModal && !temuModal.hasAttribute('hidden'));
+
+  let nextStage =
+    forceStage != null
+      ? Number(forceStage)
+      : computeEffectiveUiStage(state.profile, getQuestState(), {
+          hasDuelParam: Boolean(state.tg?.duelRoomParam),
+          routing: state.repeatRoutePending?.routing,
+        });
+
+  if ((skipPromoteFromSocial || temuOpen) && (state.uiStage <= 3 || nextStage > 3)) {
+    if (nextStage > 3 && Number(state.profile?.duelsPlayed || 0) === 0 && !state.tg?.duelRoomParam) {
+      nextStage = Math.min(nextStage, 3);
+    }
+  }
+
+  nextStage = Math.min(4, Math.max(1, Math.round(nextStage || 1)));
+  state.uiStage = nextStage;
+  if (state.profile) {
+    state.profile.uiStage = nextStage;
+  }
+
+  document.body.setAttribute('data-ui-stage', String(nextStage));
+  const blitzUnlocked = Number(state.profile?.currentLevel || 1) >= 8;
+  document.body.setAttribute('data-blitz-unlocked', blitzUnlocked ? '1' : '0');
+
+  const topPctEl = document.getElementById('top-premiere-pct');
+  if (topPctEl) {
+    topPctEl.textContent = `${Number(state.profile?.premiereScore || 0).toFixed(1)}%`;
+  }
+  const topLivesEl = document.getElementById('top-lives-count');
+  if (topLivesEl) {
+    topLivesEl.textContent = String(Math.max(0, Number(state.profile?.lives ?? 0)));
+  }
+
+  if (nextStage <= 2 && state.activeScreen === 'workshop' && !state.watchingBarrelId) {
+    const titleEl = document.getElementById('hud-urgent-title');
+    if (titleEl) titleEl.textContent = t('stage1TaskLine');
+  }
+
+  const packRevengeBtn = document.getElementById('btn-pack-revenge');
+  const packRevengeText = document.getElementById('btn-pack-revenge-text');
+  if (packRevengeBtn) {
+    packRevengeBtn.classList.toggle('btn-temu-pulse', nextStage <= 2);
+  }
+  if (packRevengeText) {
+    packRevengeText.textContent = nextStage <= 2 ? t('stage2PackBonusBtn') : t('btnPackBack');
+  }
+}
+
+function openBurgerDrawer() {
+  document.getElementById('burger-backdrop')?.removeAttribute('hidden');
+  document.getElementById('burger-drawer')?.removeAttribute('hidden');
+  document.getElementById('btn-burger-menu')?.setAttribute('aria-expanded', 'true');
+}
+
+function closeBurgerDrawer() {
+  document.getElementById('burger-backdrop')?.setAttribute('hidden', '');
+  document.getElementById('burger-drawer')?.setAttribute('hidden', '');
+  document.getElementById('btn-burger-menu')?.setAttribute('aria-expanded', 'false');
+}
+
+function toggleBurgerDrawer() {
+  const drawer = document.getElementById('burger-drawer');
+  if (!drawer) return;
+  if (drawer.hasAttribute('hidden')) openBurgerDrawer();
+  else closeBurgerDrawer();
+}
+
+function openTemuUnlockModal(targetScore = 88.0) {
+  const modal = document.getElementById('modal-temu-unlock');
+  const numEl = document.getElementById('temu-unlock-score-num');
+  const fillEl = document.getElementById('temu-unlock-bar-fill');
+  if (!modal || !numEl || !fillEl) return;
+
+  const target = Math.max(88.0, Math.min(100, Number(targetScore || 88.0)));
+  numEl.textContent = '0.0';
+  fillEl.style.transition = 'none';
+  fillEl.style.width = '0%';
+  modal.removeAttribute('hidden');
+
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      fillEl.style.transition = 'width 1.15s cubic-bezier(0.22, 1, 0.36, 1)';
+      fillEl.style.width = `${target.toFixed(1)}%`;
+    });
+  });
+
+  const startedAt = performance.now();
+  const durationMs = 1100;
+  const tick = (now) => {
+    const p = Math.min(1, (now - startedAt) / durationMs);
+    const eased = 1 - Math.pow(1 - p, 3);
+    numEl.textContent = (target * eased).toFixed(1);
+    if (p < 1) {
+      window.requestAnimationFrame(tick);
+    } else {
+      numEl.textContent = target.toFixed(1);
+    }
+  };
+  window.requestAnimationFrame(tick);
+  Haptics.success();
+}
+
 async function bootstrap() {
   if (isAdminModeRequested()) {
     window.location.replace('./admin/');
@@ -239,6 +361,8 @@ async function bootstrap() {
 
   await initI18n(state.tg.user?.lang || '');
   applyDomTranslations();
+  state.uiStage = getStoredUiStage();
+  applyProgressiveDisclosureUI({ forceStage: state.uiStage });
 
   const canvas = document.getElementById('workshop-canvas');
   scene = new WorkshopScene(canvas, {
@@ -273,6 +397,7 @@ async function bootstrap() {
     renderPresetChips();
     refreshSoundButtonLabel();
     refreshQuestUI();
+    applyProgressiveDisclosureUI();
   });
 
   // Предзагрузка входящей вирусной бочки (?b=jakaqgx или startapp=jakaqgx)
@@ -305,6 +430,12 @@ async function bootstrap() {
   await initPackConstructorDefaults();
 
   state.profile = await fetchPlayerProfile(state.tg?.user);
+  if (state.tg?.duelRoomParam) {
+    await syncUiStage(state.tg?.user, 4);
+    applyProgressiveDisclosureUI({ forceStage: 4 });
+  } else {
+    applyProgressiveDisclosureUI();
+  }
   updatePremiereBarsUI();
   await refreshQuestUI();
 
@@ -331,7 +462,69 @@ async function bootstrap() {
         if (state.round.modeType === 'premiere') {
           state.round.attemptsLeft = state.profile.lives;
         }
+        applyProgressiveDisclosureUI();
         updatePremiereBarsUI();
+      },
+      setStage: async (stageNum) => {
+        const sNum = Math.min(4, Math.max(1, Math.round(Number(stageNum) || 1)));
+        document.querySelectorAll('.modal-backdrop').forEach((m) => m.setAttribute('hidden', ''));
+        closeBurgerDrawer();
+        if (sNum <= 2 && isTestBogSessionActive()) {
+          try {
+            const rawQ = sessionStorage.getItem('tbog_bochka_v2_quest');
+            if (rawQ) {
+              const parsedQ = JSON.parse(rawQ);
+              parsedQ.packedCount = 0;
+              parsedQ.friendsOpened = 0;
+              sessionStorage.setItem('tbog_bochka_v2_quest', JSON.stringify(parsedQ));
+            }
+          } catch { /* ignore */ }
+        }
+        const patch =
+          sNum === 1
+            ? {
+                uiStage: 1,
+                temuSurgeClaimed: false,
+                packedCount: 0,
+                premiereScore: 0,
+                hasSocialConnection: false,
+                duelsPlayed: 0,
+                friendsBrought: 0,
+              }
+            : sNum === 2
+              ? {
+                  uiStage: 2,
+                  temuSurgeClaimed: false,
+                  packedCount: 0,
+                  hasSocialConnection: false,
+                  duelsPlayed: 0,
+                  friendsBrought: 0,
+                }
+              : sNum === 3
+                ? {
+                    uiStage: 3,
+                    temuSurgeClaimed: true,
+                    packedCount: Math.max(1, Number(state.profile.packedCount || 0)),
+                    premiereScore: Math.max(88.0, Number(state.profile.premiereScore || 0)),
+                    hasSocialConnection: false,
+                    duelsPlayed: 0,
+                    friendsBrought: 0,
+                  }
+                : {
+                    uiStage: 4,
+                    temuSurgeClaimed: true,
+                    packedCount: Math.max(1, Number(state.profile.packedCount || 0)),
+                    premiereScore: Math.max(88.0, Number(state.profile.premiereScore || 0)),
+                    hasSocialConnection: true,
+                  };
+        await syncUiStage(null, sNum, { force: true });
+        state.profile = patchTestBogProfile(patch);
+        applyProgressiveDisclosureUI({ forceStage: sNum, skipPromoteFromSocial: sNum === 3 });
+        updatePremiereBarsUI();
+        if (sNum >= 4 && state.activeScreen === 'pack') {
+          refreshPackFriendsStrip();
+        }
+        showToast(`🎚 UI Стадия ${sNum} включена (Sandbox)`);
       },
       setAir: (sec) => {
         state.round.airLeft = sec;
@@ -375,8 +568,24 @@ async function bootstrap() {
           await startDemoRound();
         } else if (target === 'blitz') {
           state.profile = patchTestBogProfile({ currentLevel: 9 });
+          applyProgressiveDisclosureUI();
           updatePremiereBarsUI();
           await startDemoRound();
+        } else if (target === 'temu88') {
+          await syncUiStage(null, 3, { force: true });
+          state.profile = patchTestBogProfile({
+            uiStage: 3,
+            temuSurgeClaimed: true,
+            packedCount: Math.max(1, Number(state.profile.packedCount || 0)),
+            premiereScore: 88.0,
+            hasSocialConnection: false,
+            duelsPlayed: 0,
+            friendsBrought: 0,
+          });
+          applyProgressiveDisclosureUI({ forceStage: 3, skipPromoteFromSocial: true });
+          updatePremiereBarsUI();
+          if (state.activeScreen === 'gate') showScreen('pack');
+          openTemuUnlockModal(88.0);
         } else if (target === 'duel') {
           await openDuelTable(`tbog_${Date.now().toString(36).slice(-4)}`, { autoAddTestBots: true });
         } else if (target === 'leaders') {
@@ -452,6 +661,8 @@ function updateControlHintText() {
 
 function showScreen(name) {
   state.activeScreen = name;
+  closeBurgerDrawer();
+  document.getElementById('nav-workshop')?.classList.toggle('is-active', name === 'workshop' || name === 'modeA');
   const ids = {
     gate: 'screen-gate',
     modeA: 'screen-mode-a',
@@ -531,6 +742,8 @@ async function enterWorkshopGate(withSound) {
   }
 
   if (state.tg?.duelRoomParam) {
+    await syncUiStage(state.tg?.user, 4);
+    applyProgressiveDisclosureUI({ forceStage: 4 });
     await openDuelTable(state.tg.duelRoomParam);
     return;
   }
@@ -560,6 +773,9 @@ async function enterWorkshopGate(withSound) {
     const routing = await checkBarrelEntryRouting(state.incomingParam, state.tg?.user);
     if (routing.shouldRouteToDuel && !routing.isSelf) {
       state.repeatRoutePending = { pack: state.incomingPack, routing };
+      state.profile.repeatLinkEntered = true;
+      await syncUiStage(state.tg?.user, 4);
+      applyProgressiveDisclosureUI({ forceStage: 4 });
       showScreen('modeA');
       const descEl = document.getElementById('repeat-duel-desc');
       if (descEl && routing.senderName) {
@@ -570,8 +786,67 @@ async function enterWorkshopGate(withSound) {
     }
     await startViralFriendRound(state.incomingPack);
   } else {
-    showScreen('modeA');
+    const q = getQuestState();
+    const packedTotal = Math.max(Number(q.packedCount || 0), Number(state.profile?.packedCount || 0));
+    if (state.uiStage <= 2 && packedTotal < 1) {
+      await startNewbieOnboardingRound();
+    } else {
+      showScreen('modeA');
+    }
   }
+}
+
+async function startNewbieOnboardingRound() {
+  const demoChars = t('demoChars');
+  const pickIdx = Math.floor(Math.random() * DEMO_PORTRAITS.length);
+  const charMeta = Array.isArray(demoChars) && demoChars[pickIdx]
+    ? demoChars[pickIdx]
+    : { name: 'УЗНИК ЦЕХА', quote: 'Смотри «Бочку» в кино с 17 декабря.' };
+
+  const graded = await processPortraitToWebP(DEMO_PORTRAITS[pickIdx], 'flashlight');
+  const candidates = [];
+  for (let i = 0; i < 6; i++) {
+    if (BARREL_BATCH_CODES[i] !== '19') candidates.push(i);
+  }
+  const pool = candidates.length ? candidates : [0];
+  const targetIndex = pool[Math.floor(Math.random() * pool.length)];
+
+  await audio.setSenderVoiceUrl('');
+
+  state.round = {
+    modeType: 'viral',
+    isDemo: true,
+    barrelCount: 6,
+    workshopLevel: 1,
+    isBlitz: false,
+    blitzTargetsCleared: 0,
+    targetIndex,
+    attemptsLeft: 3,
+    attemptsUsed: 0,
+    rescueStage: 0,
+    airLeft: AIR_DURATION_SEC,
+    running: true,
+    pausedForModal: false,
+    pausedForOcean: false,
+    strikeBusy: false,
+    survived: false,
+    reactionLocked: false,
+    portraitDataUrl: graded.dataUrl,
+    voiceUrl: '',
+    message: charMeta.quote,
+    senderLabel: charMeta.name,
+    lastUrgentSec: 9,
+  };
+
+  const tagEl = document.getElementById('hud-mode-tag');
+  if (tagEl) tagEl.textContent = t('modeATag');
+  const titleEl = document.getElementById('hud-urgent-title');
+  if (titleEl) titleEl.textContent = t('stage1TaskLine');
+  document.getElementById('btn-hud-pack')?.setAttribute('hidden', '');
+  document.getElementById('hud-premiere-strip')?.setAttribute('hidden', '');
+  configureBottomAttemptsMode('squares');
+
+  launchWorkshopGameplay(false);
 }
 
 async function startDemoRound() {
@@ -673,7 +948,7 @@ async function startViralFriendRound(pack) {
   };
 
   document.getElementById('hud-mode-tag').textContent = t('modeBTag');
-  document.getElementById('hud-urgent-title').textContent = t('modeBTitle');
+  document.getElementById('hud-urgent-title').textContent = state.uiStage <= 2 ? t('stage1TaskLine') : t('modeBTitle');
   document.getElementById('btn-hud-pack')?.setAttribute('hidden', '');
   document.getElementById('hud-premiere-strip')?.setAttribute('hidden', '');
   configureBottomAttemptsMode('squares');
@@ -804,10 +1079,13 @@ function updatePremiereBarsUI() {
     const el = document.getElementById(id);
     if (el) el.style.width = `${pct}%`;
   }
-  for (const id of ['hud-premiere-lives', 'finale-premiere-lives', 'modal-premiere-lives', 'hud-lives-big-num']) {
+  for (const id of ['hud-premiere-lives', 'finale-premiere-lives', 'modal-premiere-lives', 'hud-lives-big-num', 'top-lives-count']) {
     const el = document.getElementById(id);
     if (el) el.textContent = String(lives);
   }
+  const topPctEl = document.getElementById('top-premiere-pct');
+  if (topPctEl) topPctEl.textContent = `${scoreStr}%`;
+  document.body.setAttribute('data-blitz-unlocked', Number(state.profile.currentLevel || 1) >= 8 ? '1' : '0');
   for (const id of ['top-points-count', 'hud-premiere-points', 'finale-premiere-points', 'modal-premiere-points']) {
     const el = document.getElementById(id);
     if (el) el.textContent = String(points);
@@ -877,9 +1155,16 @@ function launchWorkshopGameplay(golden = false) {
   });
   audio.setBarrelLayout(scene.getBarrelWorldPositions(), state.round.targetIndex);
   scene.setInteractive(true);
+  scene.setWorkshopLevelDecor?.(state.round.workshopLevel || 1, state.round.modeType);
+  scene.setClockUrgency?.({
+    airActive: state.uiStage > 2,
+    airLeft: state.round.airLeft,
+    isBlitz: Boolean(state.round.isBlitz),
+  });
 
   showScreen('workshop');
   startAirCountdownLoop();
+  startFatherBubbleLoop();
 }
 
 function reloadPremiereBarrelsWave() {
@@ -899,6 +1184,7 @@ function reloadPremiereBarrelsWave() {
 
 function startAirCountdownLoop() {
   stopAirTimer();
+  if (state.uiStage <= 2) return;
   let lastTs = performance.now();
   state.airInterval = window.setInterval(() => {
     if (!state.round.running || state.round.pausedForModal) {
@@ -911,6 +1197,11 @@ function startAirCountdownLoop() {
 
     state.round.airLeft = Math.max(0, state.round.airLeft - dt);
     updateAirHUD(state.round.airLeft);
+    scene.setClockUrgency?.({
+      airActive: true,
+      airLeft: state.round.airLeft,
+      isBlitz: Boolean(state.round.isBlitz),
+    });
 
     const wholeSec = Math.ceil(state.round.airLeft);
     if (wholeSec <= 8 && wholeSec > 0 && wholeSec < state.round.lastUrgentSec) {
@@ -937,7 +1228,8 @@ function handleAirDepleted() {
     }
     if (r.rescueStage === 2) {
       popRemainingEmptyBarrelsDownTo(2);
-      openRescueStep2();
+      if (state.uiStage <= 2) openRescueTrailerDirectly();
+      else openRescueStep2();
       return;
     }
     if (r.rescueStage === 4) {
@@ -987,6 +1279,77 @@ function stopAirTimer() {
     clearInterval(state.airInterval);
     state.airInterval = null;
   }
+  stopFatherBubbleLoop();
+  scene?.setClockUrgency?.({ airActive: false, airLeft: state.round.airLeft, isBlitz: false });
+}
+
+function stopFatherBubbleLoop() {
+  if (state.fatherBubbleInterval) {
+    clearInterval(state.fatherBubbleInterval);
+    state.fatherBubbleInterval = null;
+  }
+  if (state.fatherBubbleInitialTimer) {
+    clearTimeout(state.fatherBubbleInitialTimer);
+    state.fatherBubbleInitialTimer = null;
+  }
+  if (state.fatherBubbleHideTimer) {
+    clearTimeout(state.fatherBubbleHideTimer);
+    state.fatherBubbleHideTimer = null;
+  }
+  const el = document.getElementById('workshop-npc-bubble');
+  if (el) el.hidden = true;
+}
+
+function showFatherWorkshopBubble(urgentMiss = false) {
+  if (!state.round.running || state.round.pausedForModal) return;
+  const pos = scene?.projectFatherBubblePos?.();
+  if (!pos?.visible) return;
+  const el = document.getElementById('workshop-npc-bubble');
+  if (!el) return;
+
+  const lines = t('fatherWorkshopLines');
+  const pool = Array.isArray(lines) && lines.length ? lines : ['Тише... Слушай стук!'];
+  const idx = urgentMiss ? (2 + (state.fatherBubbleCursor % pool.length)) % pool.length : state.fatherBubbleCursor % pool.length;
+  state.fatherBubbleCursor = (state.fatherBubbleCursor + 1) % pool.length;
+
+  el.textContent = pool[idx];
+  el.style.opacity = '0';
+  el.hidden = false;
+
+  const rect = el.getBoundingClientRect();
+  const bw = rect.width || 168;
+  const bh = rect.height || 38;
+  const airEl = document.getElementById('hud-air-module');
+  const topEl = document.getElementById('hud-top-stack');
+  const airBottom = airEl && !airEl.hidden ? airEl.getBoundingClientRect().bottom : 0;
+  const topBottom = topEl && !topEl.hidden ? topEl.getBoundingClientRect().bottom : 0;
+  const hudBottom = Math.max(72, airBottom, topBottom);
+  const minBarrelTopY = scene?.getMinBarrelTopY?.() ?? 260;
+
+  const vw = window.innerWidth || 375;
+  const left = Math.max(8 + bw * 0.5, Math.min(vw - 8 - bw * 0.5, pos.x));
+  const minTop = hudBottom + 6;
+  const maxTop = Math.max(minTop, minBarrelTopY - bh - 10);
+  const top = Math.max(minTop, Math.min(maxTop, pos.y - bh - 6));
+
+  el.style.left = `${Math.round(left)}px`;
+  el.style.top = `${Math.round(top)}px`;
+  el.style.opacity = '1';
+
+  if (state.fatherBubbleHideTimer) clearTimeout(state.fatherBubbleHideTimer);
+  state.fatherBubbleHideTimer = window.setTimeout(() => {
+    el.style.opacity = '0';
+    state.fatherBubbleHideTimer = window.setTimeout(() => {
+      el.hidden = true;
+    }, 240);
+  }, 3800);
+}
+
+function startFatherBubbleLoop() {
+  stopFatherBubbleLoop();
+  if (!scene?.fatherPillarGroup?.visible) return;
+  state.fatherBubbleInitialTimer = window.setTimeout(() => showFatherWorkshopBubble(false), 1600);
+  state.fatherBubbleInterval = window.setInterval(() => showFatherWorkshopBubble(false), 10800);
 }
 
 function updateAirHUD(sec) {
@@ -1022,44 +1385,59 @@ function renderAttemptSquares(attemptsLeft, totalCount = null) {
    СЕКРЕТНАЯ ПАСХАЛКА «ДОСТУЧАТЬСЯ ДО НЕБЕС»: №19 -> №97 -> 3 УДАРА (НА 3..10 БОЧКАХ!)
    ============================================================================ */
 function checkSecret1997Combo(index, worldPoint, alreadyStruck) {
-  if (duelCtrl?.isActive || state.watchingBarrelId) return false;
+  if (duelCtrl?.isActive || state.watchingBarrelId || state.uiStage <= 2) return false;
+  if (
+    state.round.modeType === 'viral' &&
+    !alreadyStruck &&
+    (state.round.rescueStage >= 4 || state.round.attemptsUsed >= 4) &&
+    state.easterCombo.stage === 0
+  ) {
+    return false;
+  }
   const now = performance.now();
   const c = state.easterCombo;
   const batchCode = BARREL_BATCH_CODES[index] || '';
 
-  // Фаза 2: после 19 -> 97 ждём 3 быстрых удара по любой бочке
-  if (c.stage === 2 && now - c.lastAt <= 3200) {
-    c.knocks += 1;
-    c.lastAt = now;
-    scene.triggerStrikeFX(index, worldPoint);
-    audio.playStrike(index);
-    Haptics.light();
-
-    if (c.knocks >= 3) {
+  // Фаза 2: после 19 -> 97 ждём 3 быстрых повторных удара строго по УЖЕ ОТКРЫТОЙ бочке
+  if (c.stage === 2) {
+    if (!alreadyStruck) {
       state.easterCombo = { stage: 0, lastAt: 0, knocks: 0 };
-      triggerOceanEasterEggScene();
+      return false;
     }
-    return true;
+    const winMs = c.knocks === 0 ? 2200 : 1400;
+    if (now - c.lastAt <= winMs) {
+      c.knocks += 1;
+      c.lastAt = now;
+      scene.triggerStrikeFX(index, worldPoint);
+      audio.playStrike(index);
+      Haptics.light();
+
+      if (c.knocks >= 3) {
+        state.easterCombo = { stage: 0, lastAt: 0, knocks: 0 };
+        triggerOceanEasterEggScene();
+      }
+      return true;
+    }
+    state.easterCombo = { stage: 0, lastAt: 0, knocks: 0 };
+    return false;
   }
 
-  // Фаза 1 -> 2: удар по бочке №97 сразу после бочки №19
+  // Фаза 1 -> 2: удар по бочке №97 сразу после бочки №19 (закрытую бочку не перехватываем)
   if (c.stage === 1 && now - c.lastAt <= 5500 && batchCode === '97') {
     state.easterCombo = { stage: 2, lastAt: now, knocks: 0 };
-    scene.triggerStrikeFX(index, worldPoint);
-    audio.playStrike(index);
-    Haptics.medium();
-    return true;
+    if (alreadyStruck) {
+      scene.triggerStrikeFX(index, worldPoint);
+      audio.playStrike(index);
+      Haptics.medium();
+      return true;
+    }
+    return false;
   }
 
-  // Старт комбинации: клик по бочке №19
+  // Старт комбинации: клик по бочке №19 (закрытая бочка всегда открывается как обычный удар)
   if (batchCode === '19') {
     state.easterCombo = { stage: 1, lastAt: now, knocks: 0 };
-    const lowLives =
-      state.round.modeType === 'premiere'
-        ? state.profile.lives <= 1
-        : state.round.attemptsLeft <= 1;
-
-    if (alreadyStruck || lowLives) {
+    if (alreadyStruck) {
       scene.triggerStrikeFX(index, worldPoint);
       audio.playStrike(index);
       return true;
@@ -1471,6 +1849,8 @@ async function handleBarrelStrike(index, worldPoint) {
       // Исход Г: Пустая бочка -> 0.4 сек фильмовый скример (Рука / Пастор / Отец / Блогер)
       scene.triggerEmptyBarrelOpen(index);
       triggerMiniScreamer();
+      scene.triggerCharacterMissReaction?.();
+      showFatherWorkshopBubble(true);
     }
 
     if (res.lives <= 0) {
@@ -1499,6 +1879,8 @@ async function handleBarrelStrike(index, worldPoint) {
 
     if (r.rescueStage >= 4 || r.attemptsUsed >= 5) {
       r.targetIndex = index;
+      r.attemptsLeft = 0;
+      renderAttemptSquares(0, 3);
       scene.assignTargetBarrelNow(index);
       scene.triggerStrikeFX(index, worldPoint);
       audio.playStrike(index);
@@ -1526,6 +1908,8 @@ async function handleBarrelStrike(index, worldPoint) {
       if (r.attemptsLeft > 0) {
         triggerMiniScreamer(r.attemptsUsed - 1);
       } else {
+        r.running = false;
+        scene.setInteractive(false);
         triggerMiniScreamer(2);
         window.setTimeout(() => openRescueStep1(), 430);
       }
@@ -1533,8 +1917,13 @@ async function handleBarrelStrike(index, worldPoint) {
     }
 
     if (r.rescueStage === 2) {
+      r.running = false;
+      scene.setInteractive(false);
       triggerMiniScreamer(3);
-      window.setTimeout(() => openRescueStep2(), 430);
+      window.setTimeout(() => {
+        if (state.uiStage <= 2) openRescueTrailerDirectly();
+        else openRescueStep2();
+      }, 430);
       return;
     }
   }
@@ -1576,6 +1965,8 @@ async function handleBarrelStrike(index, worldPoint) {
   }
 
   scene.triggerEmptyBarrelOpen(index);
+  scene.triggerCharacterMissReaction?.();
+  showFatherWorkshopBubble(true);
   r.attemptsLeft = Math.max(0, r.attemptsLeft - 1);
   renderAttemptSquares(r.attemptsLeft, r.isBlitz ? 5 : 3);
 
@@ -2032,6 +2423,11 @@ function openRescueStep1() {
   updateAirHUD(0);
   renderAttemptSquares(0);
 
+  if (state.uiStage < 2) {
+    syncUiStage(state.tg?.user, 2).catch(() => {});
+    applyProgressiveDisclosureUI({ forceStage: 2 });
+  }
+
   state.kpSync = {
     waiting: false,
     leftTab: false,
@@ -2041,6 +2437,7 @@ function openRescueStep1() {
 
   document.getElementById('rescue-step-1')?.removeAttribute('hidden');
   document.getElementById('rescue-step-2')?.setAttribute('hidden', '');
+  document.getElementById('btn-rescue-kp-open')?.removeAttribute('hidden');
   document.getElementById('rescue-kp-sync')?.setAttribute('hidden', '');
   document.getElementById('rescue-kp-error')?.setAttribute('hidden', '');
   document.getElementById('btn-rescue-kp-claim')?.setAttribute('hidden', '');
@@ -2085,6 +2482,9 @@ function evaluateKinopoiskReturn() {
     .catch(() => {});
   refreshQuestUI();
   document.getElementById('rescue-kp-error')?.setAttribute('hidden', '');
+  if (state.uiStage <= 2) {
+    document.getElementById('btn-rescue-kp-open')?.setAttribute('hidden', '');
+  }
   document.getElementById('btn-rescue-kp-claim')?.removeAttribute('hidden');
   Haptics.success();
 }
@@ -2120,6 +2520,21 @@ function openRescueStep2() {
   document.getElementById('rescue-step-1')?.setAttribute('hidden', '');
   document.getElementById('rescue-step-2')?.removeAttribute('hidden');
   document.getElementById('modal-rescue')?.removeAttribute('hidden');
+}
+
+function openRescueTrailerDirectly() {
+  state.round.running = false;
+  state.round.rescueStage = 3;
+  state.round.airLeft = 0;
+  state.round.attemptsLeft = 0;
+  stopAirTimer();
+  audio.stopListening();
+  scene.setInteractive(false);
+  updateAirHUD(0);
+  renderAttemptSquares(0);
+
+  document.getElementById('modal-rescue')?.setAttribute('hidden', '');
+  openTrailerModal({ forRescue: true });
 }
 
 function claimTrailerFifthLife() {
@@ -2338,6 +2753,8 @@ async function handleSealBarrelClick() {
     const phrase = document.getElementById('input-custom-phrase')?.value || '';
     const senderName = document.getElementById('input-sender-name')?.value || '';
 
+    const wasPreStage3 = state.uiStage < 3 && !state.profile.temuSurgeClaimed;
+
     const created = await createBarrelPack({
       mode: state.pack.mode,
       message: phrase,
@@ -2352,10 +2769,26 @@ async function handleSealBarrelClick() {
     state.pack.lastWebUrl = created.webUrl;
     state.pack.shareLifeClaimedForUrl = '';
 
+    state.profile.premiereScore = Math.max(
+      Number(state.profile.premiereScore || 0),
+      Number(created.premiereScore || 88)
+    );
+    state.profile.temuSurgeClaimed = true;
+    state.profile.packedCount = Math.max(1, Number(state.profile.packedCount || 0) + 1);
+
     const outInput = document.getElementById('output-share-url');
     if (outInput) outInput.value = created.shareUrl;
 
     document.getElementById('share-result-box')?.removeAttribute('hidden');
+
+    if (created.surgeTriggered || wasPreStage3) {
+      await syncUiStage(state.tg?.user, 3);
+      openTemuUnlockModal(state.profile.premiereScore || 88.0);
+      applyProgressiveDisclosureUI({ forceStage: 3, skipPromoteFromSocial: true });
+    } else {
+      applyProgressiveDisclosureUI();
+    }
+
     await refreshQuestUI();
     Haptics.success();
   } finally {
@@ -2493,20 +2926,37 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
     }
   }
 
-  // ШАГ 8.2 (ТРИГГЕР Б): Если игрок вскрыл бочку друга — показываем 3 реактивные кнопки (1 клик без спама)
+  if (!premiereResult && state.uiStage < 2) {
+    syncUiStage(state.tg?.user, 2).catch(() => {});
+    applyProgressiveDisclosureUI({ forceStage: 2 });
+  }
+
+  // ШАГ 8.2 (ТРИГГЕР Б): Если игрок вскрыл бочку друга — показываем реактивные кнопки (1 клик без спама)
   const reactionsBox = document.getElementById('finale-friend-reactions');
+  const soloReactBox = document.getElementById('finale-solo-stage2-reaction');
+  const soloReactBtn = document.getElementById('btn-stage2-quick-react');
   const cinemaBtn = document.getElementById('btn-cinema-reply');
   const reactionStatus = document.getElementById('finale-reaction-status');
   if (!premiereResult && !r.isDemo && state.incomingPack) {
     reactionsBox?.removeAttribute('hidden');
+    soloReactBox?.setAttribute('hidden', '');
     cinemaBtn?.setAttribute('hidden', '');
     state.round.reactionLocked = false;
     document.querySelectorAll('.js-finale-reaction').forEach((btn) => {
       btn.disabled = false;
     });
     reactionStatus?.setAttribute('hidden', '');
+  } else if (state.uiStage <= 2 && !premiereResult) {
+    reactionsBox?.setAttribute('hidden', '');
+    soloReactBox?.removeAttribute('hidden');
+    if (soloReactBtn) {
+      soloReactBtn.disabled = false;
+      soloReactBtn.textContent = t('stage2QuickReactSolo');
+    }
+    cinemaBtn?.setAttribute('hidden', '');
   } else {
     reactionsBox?.setAttribute('hidden', '');
+    soloReactBox?.setAttribute('hidden', '');
     cinemaBtn?.removeAttribute('hidden');
   }
 
@@ -2523,6 +2973,7 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
   }
 
   await refreshQuestUI();
+  applyProgressiveDisclosureUI();
 }
 
 async function refreshQuestUI() {
@@ -2531,6 +2982,8 @@ async function refreshQuestUI() {
     fetchPlayerProfile(state.tg?.user),
   ]);
   state.profile = freshProfile;
+  const temuOpen = !document.getElementById('modal-temu-unlock')?.hasAttribute('hidden');
+  applyProgressiveDisclosureUI({ skipPromoteFromSocial: temuOpen });
   updatePremiereBarsUI();
 
   const total = synced.totalTokens;
@@ -2789,16 +3242,19 @@ function openTrailerModal({ forRescue = false } = {}) {
   const closeBtn = document.getElementById('btn-close-trailer');
   const vid = document.getElementById('trailer-video');
 
+  modal?.classList.toggle('is-rescue-only', Boolean(forRescue && state.uiStage <= 2));
   modal?.removeAttribute('hidden');
 
   if (forRescue) {
     state.trailer.maxTime = 0;
+    state.trailer.ytWatchedSec = 0;
     state.trailer.unlocked40 = false;
     rescueBox?.removeAttribute('hidden');
-    if (closeBtn) closeBtn.style.visibility = 'visible';
+    if (closeBtn) closeBtn.style.visibility = state.uiStage <= 2 ? 'hidden' : 'visible';
     updateTrailerRescueBanner(0);
   } else {
     rescueBox?.setAttribute('hidden', '');
+    if (closeBtn) closeBtn.style.visibility = 'visible';
   }
 
   if (vid && !state.trailer.usingYtFallback) {
@@ -2814,7 +3270,9 @@ function openTrailerModal({ forRescue = false } = {}) {
 }
 
 function closeTrailerModal() {
-  document.getElementById('modal-trailer')?.setAttribute('hidden', '');
+  const modal = document.getElementById('modal-trailer');
+  modal?.classList.remove('is-rescue-only');
+  modal?.setAttribute('hidden', '');
   const vid = document.getElementById('trailer-video');
   if (vid) vid.pause();
   if (state.ytPlayer && typeof state.ytPlayer.pauseVideo === 'function') {
@@ -2825,7 +3283,7 @@ function closeTrailerModal() {
     state.trailer.ytTimer = null;
   }
 
-  if (state.trailer.forRescue && state.round.rescueStage === 3 && !state.trailer.unlocked40) {
+  if (state.trailer.forRescue && state.round.rescueStage === 3 && !state.trailer.unlocked40 && state.uiStage > 2) {
     document.getElementById('modal-rescue')?.removeAttribute('hidden');
   }
 }
@@ -2845,6 +3303,11 @@ function updateTrailerProgressUI(cur, dur) {
 function updateTrailerRescueBanner(watchedSec) {
   const statusEl = document.getElementById('trailer-rescue-status');
   const claimBtn = document.getElementById('btn-claim-trailer-life');
+  if (state.trailer.unlocked40) {
+    if (statusEl) statusEl.textContent = t('trailerRescueUnlocked');
+    if (claimBtn) claimBtn.disabled = false;
+    return;
+  }
   const rem = Math.max(0, Math.ceil(TRAILER_UNLOCK_SEC - watchedSec));
   if (statusEl) {
     statusEl.textContent = rem > 0
@@ -2859,6 +3322,10 @@ function updateTrailerRescueBanner(watchedSec) {
 async function unlockTrailerReward() {
   if (state.trailer.unlocked40) return;
   state.trailer.unlocked40 = true;
+  if (state.trailer.ytTimer) {
+    clearInterval(state.trailer.ytTimer);
+    state.trailer.ytTimer = null;
+  }
 
   const statusEl = document.getElementById('trailer-rescue-status');
   const claimBtn = document.getElementById('btn-claim-trailer-life');
@@ -2996,6 +3463,9 @@ async function openDuelTable(roomId = '', { autoAddTestBots = false } = {}) {
   state.round.running = false;
   state.round.pausedForModal = false;
   document.querySelectorAll('.modal-backdrop').forEach((m) => m.setAttribute('hidden', ''));
+  closeBurgerDrawer();
+  await syncUiStage(state.tg?.user, 4);
+  applyProgressiveDisclosureUI({ forceStage: 4 });
 
   await audio.unlock(audio.enabled !== false);
   refreshSoundButtonLabel();
@@ -3101,11 +3571,22 @@ async function refreshPackFriendsStrip() {
   const strip = document.getElementById('pack-friends-strip');
   if (!box || !strip) return;
 
+  if (state.uiStage < 3) {
+    box.setAttribute('hidden', '');
+    strip.innerHTML = '';
+    return;
+  }
+
   const friends = await fetchMyWorkshopFriends(state.tg?.user);
   if (!friends.length) {
     box.setAttribute('hidden', '');
     strip.innerHTML = '';
     return;
+  }
+
+  if (state.uiStage < 4) {
+    await syncUiStage(state.tg?.user, 4);
+    applyProgressiveDisclosureUI({ forceStage: 4 });
   }
 
   box.removeAttribute('hidden');
@@ -3171,9 +3652,11 @@ async function handleFinaleFriendReaction(reactionType) {
   }
 
   if (reactionType === 'duel_3p') {
+    await syncUiStage(state.tg?.user, 4);
+    applyProgressiveDisclosureUI({ forceStage: 4 });
     await openDuelTable(roomId);
     await shareCurrentDuelRoom();
-  } else if (reactionType === 'cinema') {
+  } else if (reactionType === 'cinema' && state.uiStage >= 3) {
     openTrailerModal({ forRescue: false });
   }
 }
@@ -3349,24 +3832,86 @@ function bindUIEvents() {
     });
   });
 
+  document.getElementById('btn-burger-menu')?.addEventListener('click', () => toggleBurgerDrawer());
+  document.getElementById('burger-backdrop')?.addEventListener('click', () => closeBurgerDrawer());
+  document.getElementById('btn-close-burger')?.addEventListener('click', () => closeBurgerDrawer());
+
+  document.getElementById('btn-burger-rules')?.addEventListener('click', () => {
+    closeBurgerDrawer();
+    document.getElementById('modal-rules')?.removeAttribute('hidden');
+  });
+  document.getElementById('btn-close-rules')?.addEventListener('click', () => {
+    document.getElementById('modal-rules')?.setAttribute('hidden', '');
+  });
+  document.getElementById('btn-rules-ok')?.addEventListener('click', () => {
+    document.getElementById('modal-rules')?.setAttribute('hidden', '');
+  });
+  document.getElementById('btn-burger-share')?.addEventListener('click', () => {
+    closeBurgerDrawer();
+    openShareHubModal('trailer');
+  });
+  document.getElementById('btn-burger-duel')?.addEventListener('click', () => {
+    closeBurgerDrawer();
+    openDuelTable();
+  });
+  document.getElementById('btn-burger-sound')?.addEventListener('click', async () => {
+    await audio.toggleSound();
+    if (audio.enabled && state.round.running && state.round.voiceUrl) {
+      audio.startMuffledVoiceLoop();
+    }
+    refreshSoundButtonLabel();
+  });
+
+  document.getElementById('top-lives-pill')?.addEventListener('click', async () => {
+    await refreshQuestUI();
+    document.getElementById('modal-prize')?.removeAttribute('hidden');
+  });
+
+  document.getElementById('btn-stage2-quick-react')?.addEventListener('click', () => {
+    const btn = document.getElementById('btn-stage2-quick-react');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '✓ До встречи в кино 17 декабря!';
+    }
+    recordFunnelEvent('cinema_intent', state.tg?.user).catch(() => {});
+    Haptics.success();
+    document.getElementById('btn-pack-revenge')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+
+  document.getElementById('btn-temu-unlock-accept')?.addEventListener('click', () => {
+    document.getElementById('modal-temu-unlock')?.setAttribute('hidden', '');
+    applyProgressiveDisclosureUI({
+      forceStage: Math.max(3, state.uiStage),
+      skipPromoteFromSocial: true,
+    });
+    updatePremiereBarsUI();
+    document.getElementById('share-result-box')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+
   document.getElementById('nav-brand')?.addEventListener('click', () => {
     if (!state.entered) return;
+    closeBurgerDrawer();
     if (duelCtrl?.isActive) duelCtrl.leaveRoom(false);
     showScreen('modeA');
   });
 
   document.getElementById('nav-workshop')?.addEventListener('click', () => {
     if (!state.entered) return;
+    closeBurgerDrawer();
     if (duelCtrl?.isActive) duelCtrl.leaveRoom(false);
     if (state.round.running) showScreen('workshop');
     else showScreen('modeA');
   });
 
-  document.getElementById('nav-trailer')?.addEventListener('click', () => openTrailerModal({ forRescue: false }));
+  document.getElementById('nav-trailer')?.addEventListener('click', () => {
+    closeBurgerDrawer();
+    openTrailerModal({ forRescue: false });
+  });
 
   document.getElementById('nav-leaderboard')?.addEventListener('click', () => openLeaderboardModal());
 
   document.getElementById('nav-kinopoisk')?.addEventListener('click', async () => {
+    closeBurgerDrawer();
     markKinopoiskVisited();
     recordFunnelEvent('kp_clicks', state.tg?.user).catch(() => {});
     claimSocialOrPromoBonus(state.tg?.user, 'kp_clicked', 'kp').catch(() => {});
@@ -3539,8 +4084,14 @@ function bindUIEvents() {
   // Экран 4: Конструктор пранка (Фото + Голосовуха)
   document.getElementById('btn-close-pack')?.addEventListener('click', () => {
     if (voiceRecorder?.isRecording) voiceRecorder.stop();
-    if (state.incomingPack && !state.round.isDemo) showScreen('finale');
-    else showScreen('modeA');
+    if (state.uiStage <= 2) {
+      if (state.round.survived || (state.incomingPack && !state.round.isDemo)) showScreen('finale');
+      else startNewbieOnboardingRound();
+    } else if (state.incomingPack && !state.round.isDemo) {
+      showScreen('finale');
+    } else {
+      showScreen('modeA');
+    }
   });
 
   let recPressAt = 0;
@@ -3928,9 +4479,14 @@ function bindUIEvents() {
 }
 
 function refreshSoundButtonLabel() {
+  const txt = audio.enabled ? t('hudSoundOn') : t('hudSoundOff');
   const btn = document.getElementById('btn-hud-sound');
   if (btn) {
-    btn.textContent = audio.enabled ? t('hudSoundOn') : t('hudSoundOff');
+    btn.textContent = txt;
+  }
+  const burgerBtn = document.getElementById('btn-burger-sound');
+  if (burgerBtn) {
+    burgerBtn.textContent = audio.enabled ? `🔊 ${txt}` : `🔇 ${txt}`;
   }
 }
 

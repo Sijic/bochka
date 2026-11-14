@@ -169,8 +169,17 @@ export function mountTestBogHUD(hooks) {
         <button type="button" class="tbog-btn tbog-btn-gold tbog-btn-center" id="tbog-crack-target">Вскрыть 🎯</button>
       </div>
 
+      <span class="tbog-sec-lbl">0. СТАДИИ TEMU UI (PROGRESSIVE DISCLOSURE 1..4)</span>
+      <div class="tbog-grid-4" style="margin-bottom:6px">
+        <button type="button" class="tbog-btn tbog-btn-center" data-tbog-stage="1">Ст.1 Вход</button>
+        <button type="button" class="tbog-btn tbog-btn-center" data-tbog-stage="2">Ст.2 Спас.</button>
+        <button type="button" class="tbog-btn tbog-btn-center" data-tbog-stage="3">Ст.3 88%</button>
+        <button type="button" class="tbog-btn tbog-btn-center tbog-btn-gold" data-tbog-stage="4">Ст.4 Дуэль</button>
+      </div>
+
       <span class="tbog-sec-lbl">1. МГНОВЕННЫЙ ПЕРЕХОД ПО ЭКРАНАМ И ПАСХАЛКАМ</span>
       <div class="tbog-grid">
+        <button type="button" class="tbog-btn tbog-btn-gold" data-tbog-jump="temu88">🔥 Анимация 88.0% (Ст.3)</button>
         <button type="button" class="tbog-btn" data-tbog-jump="gate">🚪 1. Входной шлюз</button>
         <button type="button" class="tbog-btn" data-tbog-jump="demo">🛢 Ур. 1 (3 бочки)</button>
         <button type="button" class="tbog-btn" data-tbog-jump="level8">🛢 Ур. 8 (10 бочек)</button>
@@ -243,8 +252,9 @@ export function mountTestBogHUD(hooks) {
     hooks.crackTargetBarrel?.();
   });
 
-  document.getElementById('tbog-reset-btn')?.addEventListener('click', () => {
+  document.getElementById('tbog-reset-btn')?.addEventListener('click', async () => {
     resetTestBogSandbox();
+    await hooks.setStage?.(1);
     hooks.syncProfile?.({
       premiereScore: 0,
       premierePoints: 0,
@@ -253,8 +263,21 @@ export function mountTestBogHUD(hooks) {
       hasPendingTicket: false,
       premiereWon: false,
       premiereCode: '',
+      uiStage: 1,
+      temuSurgeClaimed: false,
+      packedCount: 0,
+      hasSocialConnection: false,
+      duelsPlayed: 0,
+      friendsBrought: 0,
     });
-    hooks.toast?.('🔄 Песочница очищена (Ур.1, ⭐ 0, 5 ❤️, 0.0 / 100)');
+    hooks.toast?.('🔄 Песочница очищена (Стадия 1, Ур.1, ⭐ 0, 5 ❤️, 0.0 / 100)');
+  });
+
+  root.querySelectorAll('[data-tbog-stage]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const stg = Number(btn.getAttribute('data-tbog-stage') || 1);
+      hooks.setStage?.(stg);
+    });
   });
 
   root.querySelectorAll('[data-tbog-jump]').forEach((btn) => {

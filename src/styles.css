@@ -3333,3 +3333,488 @@ button:disabled {
     gap: 5px;
   }
 }
+
+/* ============================================================================
+   БОЧКА v6.0 — TEMU-STYLE PROGRESSIVE DISCLOSURE (STAGES 1..4 + BURGER + TEMU MODAL)
+   ============================================================================ */
+
+/* Стадии 1 и 2: чистый 3D-цех без шапки, навиг. меню, ТОП-10 и шеринга */
+body[data-ui-stage="1"] #topbar,
+body[data-ui-stage="2"] #topbar,
+body[data-ui-stage="1"] #burger-drawer,
+body[data-ui-stage="2"] #burger-drawer,
+body[data-ui-stage="1"] #burger-backdrop,
+body[data-ui-stage="2"] #burger-backdrop {
+  display: none !important;
+}
+
+/* Стадия 1/2 Экран входа (#screen-gate): ТОЛЬКО лого БОЧКА, 18+ и вход со звуком */
+body[data-ui-stage="1"] #screen-gate .gate-top-meta .mono-tag,
+body[data-ui-stage="2"] #screen-gate .gate-top-meta .mono-tag,
+body[data-ui-stage="1"] #screen-gate .gate-subtitle,
+body[data-ui-stage="2"] #screen-gate .gate-subtitle,
+body[data-ui-stage="1"] #screen-gate .gate-teaser,
+body[data-ui-stage="2"] #screen-gate .gate-teaser,
+body[data-ui-stage="1"] #screen-gate #btn-enter-mute,
+body[data-ui-stage="2"] #screen-gate #btn-enter-mute,
+body[data-ui-stage="1"] #screen-gate .gate-footer,
+body[data-ui-stage="2"] #screen-gate .gate-footer {
+  display: none !important;
+}
+
+body[data-ui-stage="1"] #screen-gate .gate-frame,
+body[data-ui-stage="2"] #screen-gate .gate-frame {
+  padding-top: 26px;
+  padding-bottom: 26px;
+  text-align: center;
+}
+
+body[data-ui-stage="1"] #screen-gate .gate-top-meta,
+body[data-ui-stage="2"] #screen-gate .gate-top-meta {
+  justify-content: center;
+}
+
+body[data-ui-stage="1"] #screen-gate .gate-actions,
+body[data-ui-stage="2"] #screen-gate .gate-actions {
+  grid-template-columns: 1fr;
+  margin-top: 18px;
+}
+
+/* Стадия 1/2 Цех (#screen-workshop): >= 85% чистого 3D-пространства */
+body[data-ui-stage="1"] #screen-workshop,
+body[data-ui-stage="2"] #screen-workshop {
+  padding-top: 10px !important;
+}
+
+body[data-ui-stage="1"] #hud-premiere-strip,
+body[data-ui-stage="2"] #hud-premiere-strip,
+body[data-ui-stage="1"] #screen-workshop .hud-tag-row,
+body[data-ui-stage="2"] #screen-workshop .hud-tag-row,
+body[data-ui-stage="1"] #hud-air-module,
+body[data-ui-stage="2"] #hud-air-module,
+body[data-ui-stage="1"] #screen-workshop .hud-controls-panel,
+body[data-ui-stage="2"] #screen-workshop .hud-controls-panel,
+body[data-ui-stage="1"] #hud-watch-banner,
+body[data-ui-stage="2"] #hud-watch-banner {
+  display: none !important;
+}
+
+body[data-ui-stage="1"] #screen-workshop .hud-top,
+body[data-ui-stage="2"] #screen-workshop .hud-top {
+  justify-content: center;
+  padding: 0;
+}
+
+body[data-ui-stage="1"] #screen-workshop .hud-alert-box,
+body[data-ui-stage="2"] #screen-workshop .hud-alert-box {
+  flex: 0 1 auto;
+  max-width: min(350px, calc(100vw - 24px));
+  padding: 7px 14px;
+  background: rgba(11, 13, 17, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+}
+
+body[data-ui-stage="1"] #hud-urgent-title,
+body[data-ui-stage="2"] #hud-urgent-title {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+  text-align: center;
+  text-transform: none;
+}
+
+body[data-ui-stage="1"] #screen-workshop .hud-bottom,
+body[data-ui-stage="2"] #screen-workshop .hud-bottom {
+  justify-content: center;
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+}
+
+body[data-ui-stage="1"] #hud-attempts-panel,
+body[data-ui-stage="2"] #hud-attempts-panel {
+  border-radius: 999px;
+  padding: 7px 14px;
+  background: rgba(11, 13, 17, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+/* Стадия 2: Пошаговое спасение и чистый экран находки */
+body[data-ui-stage="1"] #btn-close-rescue,
+body[data-ui-stage="2"] #btn-close-rescue {
+  display: none !important;
+}
+
+#modal-trailer.is-rescue-only #btn-close-trailer,
+#modal-trailer.is-rescue-only #trailer-token-hint,
+#modal-trailer.is-rescue-only .modal-cta-row {
+  display: none !important;
+}
+
+#modal-trailer.is-rescue-only .trailer-rescue-box {
+  margin-top: 12px;
+}
+
+body[data-ui-stage="1"] #screen-finale #golden-winner-box,
+body[data-ui-stage="2"] #screen-finale #golden-winner-box,
+body[data-ui-stage="1"] #screen-finale #finale-notify-line,
+body[data-ui-stage="2"] #screen-finale #finale-notify-line,
+body[data-ui-stage="1"] #screen-finale #btn-cinema-reply,
+body[data-ui-stage="2"] #screen-finale #btn-cinema-reply,
+body[data-ui-stage="1"] #screen-finale .finale-dual-row,
+body[data-ui-stage="2"] #screen-finale .finale-dual-row,
+body[data-ui-stage="1"] #screen-finale #golden-hunt-card,
+body[data-ui-stage="2"] #screen-finale #golden-hunt-card,
+body[data-ui-stage="1"] #screen-finale #finale-quest-box,
+body[data-ui-stage="2"] #screen-finale #finale-quest-box,
+body[data-ui-stage="1"] #screen-finale [data-reaction="ask_ticket"],
+body[data-ui-stage="2"] #screen-finale [data-reaction="ask_ticket"],
+body[data-ui-stage="1"] #screen-finale [data-reaction="duel_3p"],
+body[data-ui-stage="2"] #screen-finale [data-reaction="duel_3p"],
+body[data-ui-stage="1"] #screen-finale #btn-pack-revenge .btn-sub-line,
+body[data-ui-stage="2"] #screen-finale #btn-pack-revenge .btn-sub-line {
+  display: none !important;
+}
+
+.finale-stage2-react-box {
+  margin: 12px 0 8px;
+}
+
+/* Главная мигающая CTA-кнопка «Закатать своего друга и забрать бонус» + кнопка Temu */
+@keyframes temuCtaPulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 94, 26, 0.72), 0 10px 28px rgba(255, 94, 26, 0.35);
+  }
+  50% {
+    transform: scale(1.022);
+    box-shadow: 0 0 0 9px rgba(255, 94, 26, 0), 0 14px 36px rgba(255, 94, 26, 0.58);
+  }
+}
+
+.btn-temu-pulse {
+  background: linear-gradient(135deg, #ff6b1a 0%, #ff3b1f 55%, #f59e0b 100%) !important;
+  border-color: #fde047 !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  animation: temuCtaPulse 1.35s ease-in-out infinite;
+}
+
+/* Компактная верхняя панель Стадии 3+ и угловой бургер */
+.topbar {
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.topbar-right .nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.top-lives-pill {
+  border-color: rgba(239, 68, 68, 0.45) !important;
+  background: rgba(127, 29, 29, 0.25) !important;
+  color: #fecaca !important;
+}
+
+.burger-btn {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  width: 34px;
+  height: 32px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 6px;
+  background: rgba(17, 21, 28, 0.9);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.burger-btn span {
+  display: block;
+  width: 16px;
+  height: 2px;
+  border-radius: 2px;
+  background: #f3f4f6;
+}
+
+.burger-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 68;
+  background: rgba(4, 6, 10, 0.7);
+  backdrop-filter: blur(4px);
+}
+
+.burger-drawer {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 69;
+  width: min(296px, calc(100vw - 20px));
+  max-height: calc(100dvh - 20px);
+  overflow-y: auto;
+  padding: 14px;
+  background: rgba(13, 16, 22, 0.98);
+  border: 1.5px solid rgba(255, 94, 26, 0.55);
+  border-radius: 10px;
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.92);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.burger-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.burger-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.burger-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #e5e7eb;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.burger-item.is-active,
+.burger-item:hover {
+  border-color: var(--accent);
+  background: rgba(255, 94, 26, 0.14);
+  color: #ffffff;
+}
+
+.burger-lang-row {
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Стадия 3 Temu Unlock Modal (#modal-temu-unlock) */
+.modal-temu-backdrop {
+  background: rgba(5, 7, 11, 0.88);
+  backdrop-filter: blur(8px);
+}
+
+.temu-unlock-card {
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+  border: 2px solid #f59e0b !important;
+  box-shadow: 0 0 60px rgba(255, 94, 26, 0.42), 0 24px 64px rgba(0, 0, 0, 0.95) !important;
+}
+
+@keyframes temuRaysSpin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+.temu-rays {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  width: 520px;
+  height: 520px;
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgba(245, 158, 11, 0.14) 0deg 12deg,
+    transparent 12deg 28deg
+  );
+  animation: temuRaysSpin 16s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.temu-unlock-card > *:not(.temu-rays):not(.tech-corner) {
+  position: relative;
+  z-index: 1;
+}
+
+.temu-pill-badge {
+  display: inline-block;
+  margin-bottom: 8px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ff5e1a, #f59e0b);
+  color: #0b0d11;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.temu-unlock-title {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 24px;
+  line-height: 1.1;
+  color: #ffffff;
+}
+
+.temu-unlock-sub {
+  margin: 0 0 14px;
+  font-size: 14px;
+  color: #fde68a;
+  font-weight: 600;
+}
+
+.temu-meter-stage {
+  margin: 12px 0 16px;
+  padding: 14px 12px;
+  border-radius: 10px;
+  background: rgba(10, 12, 17, 0.88);
+  border: 1px solid rgba(251, 191, 36, 0.42);
+}
+
+.temu-score-big {
+  margin-bottom: 8px;
+  font-family: var(--font-display);
+  font-size: 36px;
+  line-height: 1;
+  color: #fde047;
+}
+
+.temu-score-big span {
+  font-size: 18px;
+  color: #9ca3af;
+}
+
+.temu-bar-track {
+  position: relative;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.temu-bar-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ff5e1a 0%, #f59e0b 65%, #fde047 100%);
+  box-shadow: 0 0 18px rgba(250, 204, 21, 0.72);
+  transition: width 1.15s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.temu-bar-scale {
+  margin-top: 6px;
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: #9ca3af;
+}
+
+.temu-scale-hot {
+  color: #fb923c;
+  font-weight: 700;
+}
+
+.temu-scale-win {
+  color: #fde047;
+  font-weight: 700;
+}
+
+.rules-compact-list {
+  margin: 0 0 14px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #e5e7eb;
+}
+
+/* Стадия 4 Gate: скрываем «На счёт три!» и «Твои люди в цеху» до Стадии 4 */
+body:not([data-ui-stage="4"]) #pack-friends-box,
+body:not([data-ui-stage="4"]) .mode-duel-btn,
+body:not([data-ui-stage="4"]) #btn-finale-open-duel,
+body:not([data-ui-stage="4"]) #btn-leader-go-duel,
+body:not([data-ui-stage="4"]) #points-guide-duel-item,
+body:not([data-ui-stage="4"]) .stage4-only-item,
+body:not([data-ui-stage="4"]) #btn-watch-challenge,
+body:not([data-ui-stage="4"]) .reaction-duel-btn {
+  display: none !important;
+}
+
+/* Блиц-режим открыт только с Уровня 8+ */
+body[data-blitz-unlocked="0"] .blitz-rule-note {
+  display: none !important;
+}
+
+@media (max-width: 420px) {
+  .topbar {
+    padding: 6px 8px;
+    gap: 6px;
+  }
+  .topbar-brand .brand-word {
+    font-size: 15px;
+  }
+  .topbar-right {
+    gap: 4px;
+  }
+  .topbar-right .nav-link {
+    padding: 5px 6px;
+    font-size: 10.5px;
+  }
+}
+
+.workshop-npc-bubble {
+  position: fixed;
+  z-index: 21;
+  transform: translateX(-50%);
+  max-width: min(210px, 60vw);
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(18, 15, 12, 0.92);
+  border: 1px solid rgba(234, 179, 8, 0.48);
+  color: #f5ebd6;
+  font-size: 11.5px;
+  line-height: 1.3;
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.65);
+  transition: opacity 0.22s ease;
+}
+
+.workshop-npc-bubble[hidden] {
+  display: none !important;
+}

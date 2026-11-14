@@ -191,6 +191,20 @@
     "storiesFailed": "ОСТАЛСЯ В ЦЕХУ",
     "storiesSlogan": "СТУЧИТЕ — И ОТВОРЯТ ВАМ",
     "storiesPremiere": "В КИНО С 17 ДЕКАБРЯ",
+    "stage1TaskLine": "Стучи по бочкам — найди, кто внутри",
+    "stage2PackBonusBtn": "Закатать своего друга и забрать бонус",
+    "stage2QuickReactSolo": "🍿 Пойду в кино 17 декабря!",
+    "temuUnlockTag": "🔥 СТАРТОВЫЙ РЫВОК ОТКРЫТ!",
+    "temuUnlockTitle": "ДОПУСК НА ЗАКРЫТУЮ ПРЕМЬЕРУ",
+    "temuUnlockSub": "Тебе осталось совсем чуть-чуть до закрытой Премьеры!",
+    "temuUnlockBtn": "ЗАБРАТЬ +88.0% И ПОЕХАЛИ ДАЛЬШЕ!",
+    "burgerRules": "ПРАВИЛА",
+    "fatherWorkshopLines": [
+      "Тише... Пастор ходит рядом, слушай живой стук!",
+      "Не трать удары впустую — прислушайся к металлу.",
+      "Смотри на часы: воздух уходит быстрее с каждой ошибкой!",
+      "Нажимай осторожно, время против нас."
+    ],
     "demoChars": [
       { "name": "ПАСТОР (Тиль Швайгер)", "quote": "Не стучи снаружи, если боишься того, кто ответит изнутри. Встретимся в кино 17 декабря." },
       { "name": "ОТЕЦ (Филипп Рейнхардт)", "quote": "Тридцать секунд в темноте меняют человека навсегда. Смотри «Бочку» с 17 декабря." },
@@ -390,6 +404,20 @@
     "storiesFailed": "ЦЕХТА ҚАЛДЫ",
     "storiesSlogan": "ҚАҒЫҢДАР — СОНДА АШЫЛАДЫ",
     "storiesPremiere": "17 ЖЕЛТОҚСАННАН БАСТАП КИНОДА",
+    "stage1TaskLine": "Бөшкелерді қақ — ішінде кім барын тап",
+    "stage2PackBonusBtn": "Досыңды бөшкеге салып, бонус ал",
+    "stage2QuickReactSolo": "🍿 17 желтоқсанда киноға барамын!",
+    "temuUnlockTag": "🔥 БАСТАПҚЫ СЕРПІН АШЫЛДЫ!",
+    "temuUnlockTitle": "ЖАБЫҚ ПРЕМЬЕРАҒА РҰҚСАТ",
+    "temuUnlockSub": "Жабық Премьераға дейін өте аз қалды!",
+    "temuUnlockBtn": "+88.0% АЛЫП, АЛҒА!",
+    "burgerRules": "ЕРЕЖЕЛЕР",
+    "fatherWorkshopLines": [
+      "Тыныш... Пастор жақын жүр, тірі дыбысты тыңда!",
+      "Соққыны босқа жұмсама — темірдің үніне құлақ түр.",
+      "Сағатқа қара: әр қателік ауаны азайтады!",
+      "Абайлап бас, уақыт бізге қарсы."
+    ],
     "demoChars": [
       { "name": "ПАСТОР (Тиль Швайгер)", "quote": "Ішінен кім жауап беретінінен қорықсаң, сыртынан қақпа. 17 желтоқсанда кинода кездесеміз." },
       { "name": "ӘКЕ (Филипп Рейнхардт)", "quote": "Қараңғыдағы отыз секунд адамды мәңгі өзгертеді. 17 желтоқсаннан бастап." },
@@ -589,6 +617,20 @@
     "storiesFailed": "LEFT IN THE WORKSHOP",
     "storiesSlogan": "KNOCK — AND IT SHALL BE OPENED",
     "storiesPremiere": "IN CINEMAS DECEMBER 17",
+    "stage1TaskLine": "Knock on the barrels — find who is inside",
+    "stage2PackBonusBtn": "Seal a friend and claim your bonus",
+    "stage2QuickReactSolo": "🍿 I'm going to cinemas Dec 17!",
+    "temuUnlockTag": "🔥 LAUNCH SURGE UNLOCKED!",
+    "temuUnlockTitle": "CLOSED PREMIERE ACCESS",
+    "temuUnlockSub": "You are just inches away from the Closed Premiere!",
+    "temuUnlockBtn": "CLAIM 88.0% SURGE & CONTINUE",
+    "burgerRules": "RULES",
+    "fatherWorkshopLines": [
+      "Quiet... The Pastor is close, listen for the knock!",
+      "Don't waste strikes — trust the echo inside the steel.",
+      "Watch the wall clock: oxygen drops faster on every miss!",
+      "Pick carefully, time is running out."
+    ],
     "demoChars": [
       { "name": "THE PASTOR (Til Schweiger)", "quote": "Never knock from the outside if you fear what answers from within. December 17." },
       { "name": "THE FATHER (Philippe Reinhardt)", "quote": "Thirty seconds in total darkness changes a man forever. In cinemas December 17." },

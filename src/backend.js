@@ -8,6 +8,7 @@ const PASSES_STORAGE_KEY = 'bochka_v3_passes';
 const QUEST_STORAGE_KEY = 'bochka_v2_quest';
 const PROFILE_STORAGE_KEY = 'bochka_v3_profile';
 const UID_STORAGE_KEY = 'bochka_v2_uid';
+const UI_STAGE_STORAGE_KEY = 'bochka_v6_ui_stage';
 
 export const supabase =
   ENV.supabaseUrl && ENV.supabaseAnonKey
@@ -113,6 +114,7 @@ export async function createBarrelPack({
   let remotePhotoUrl = '';
   let remoteVoiceUrl = '';
   let storedInCloud = false;
+  let createPackRpcData = null;
   const db = getCloudDb();
 
   if (db) {
@@ -166,6 +168,7 @@ export async function createBarrelPack({
 
       if (!rpcErr && rpcRes?.ok) {
         storedInCloud = true;
+        createPackRpcData = rpcRes;
       }
     } catch {
       storedInCloud = false;
@@ -208,6 +211,33 @@ export async function createBarrelPack({
   q.myBarrelIds = Array.from(new Set([...(q.myBarrelIds || []), id])).slice(-25);
   saveQuestState(q);
 
+  const prevProf = getLocalPreviewProfile();
+  let surgeTriggered = !prevProf.temuSurgeClaimed && Number(prevProf.premiereScore || 0) < 88;
+  let nextScore = Math.max(Number(prevProf.premiereScore || 0), 88);
+  let nextUiStage = Math.max(
+    Number(prevProf.uiStage || 1),
+    getStoredUiStage(),
+    surgeTriggered
+      ? 3
+      : (prevProf.hasSocialConnection || Number(prevProf.duelsPlayed || 0) > 0 || Number(prevProf.friendsBrought || 0) > 0 ? 4 : 3)
+  );
+  if (typeof createPackRpcData === 'object' && createPackRpcData?.ok) {
+    surgeTriggered = Boolean(createPackRpcData.surge_triggered);
+    nextScore = Math.max(nextScore, Number(createPackRpcData.premiere_score || 0));
+    if (createPackRpcData.ui_stage) {
+      nextUiStage = Math.max(nextUiStage, Number(createPackRpcData.ui_stage));
+    }
+  }
+  const updatedProf = {
+    ...prevProf,
+    packedCount: Math.max(Number(prevProf.packedCount || 0) + 1, Number(q.packedCount || 1)),
+    premiereScore: nextScore,
+    temuSurgeClaimed: true,
+    uiStage: Math.min(4, Math.max(3, nextUiStage)),
+  };
+  saveLocalPreviewProfile(updatedProf);
+  safeWrite(UI_STAGE_STORAGE_KEY, String(updatedProf.uiStage));
+
   const baseOrigin = resolveShareBaseUrl();
   const sep = baseOrigin.includes('?') ? '&' : '?';
   const bogFlag = isTestBogActive() ? 'testbog=1&' : '';
@@ -221,6 +251,9 @@ export async function createBarrelPack({
     id,
     targetIndex,
     storedInCloud,
+    surgeTriggered,
+    premiereScore: updatedProf.premiereScore,
+    uiStage: updatedProf.uiStage,
     shareUrl: isTelegramMiniApp() ? tgMiniAppUrl : webUrl,
     tgUrl: tgMiniAppUrl,
     webUrl,
@@ -453,6 +486,10 @@ function getLocalPreviewProfile() {
     kpVerified: false,
     packedCount: 0,
     friendsBrought: 0,
+    uiStage: 1,
+    temuSurgeClaimed: false,
+    hasSocialConnection: false,
+    repeatLinkEntered: false,
   };
   const saved = safeReadJson(PROFILE_STORAGE_KEY, null);
   const prof = saved ? { ...def, ...saved } : def;
@@ -469,15 +506,70 @@ function saveLocalPreviewProfile(prof) {
   safeWriteJson(PROFILE_STORAGE_KEY, prof);
 }
 
+export function getStoredUiStage() {
+  const raw = Number.parseInt(safeRead(UI_STAGE_STORAGE_KEY, ''), 10);
+  if (Number.isFinite(raw) && raw >= 1 && raw <= 4) {
+    return raw;
+  }
+  const profStage = Number.parseInt(String(getLocalPreviewProfile()?.uiStage || 1), 10);
+  return Number.isFinite(profStage) ? Math.min(4, Math.max(1, profStage)) : 1;
+}
+
+export function computeEffectiveUiStage(profile = null, questState = getQuestState(), opts = {}) {
+  const prof = profile || getLocalPreviewProfile();
+  const stored = getStoredUiStage();
+  const profStage = Math.min(4, Math.max(1, Number(prof?.uiStage || 1)));
+  let stage = Math.max(stored, profStage);
+
+  const packedCount = Math.max(Number(questState?.packedCount || 0), Number(prof?.packedCount || 0));
+  const surged = Boolean(prof?.temuSurgeClaimed) || Number(prof?.premiereScore || 0) >= 88;
+  const duelsCount = Math.max(Number(prof?.duelsPlayed || 0), Number(prof?.duelsWon || 0));
+  const friendsBrought = Math.max(Number(prof?.friendsBrought || 0), Number(questState?.friendsOpened || 0));
+  const hasSocial = Boolean(prof?.hasSocialConnection);
+  const directDuel = Boolean(opts?.hasDuelParam || opts?.routing?.shouldRouteToDuel || prof?.repeatLinkEntered);
+
+  if (directDuel || duelsCount > 0 || friendsBrought > 0) {
+    stage = Math.max(stage, 4);
+  } else if ((packedCount >= 1 || surged) && hasSocial && stage >= 3) {
+    stage = Math.max(stage, 4);
+  } else if (packedCount >= 1 || surged) {
+    stage = Math.max(stage, 3);
+  }
+
+  return Math.min(4, Math.max(1, stage));
+}
+
+export async function syncUiStage(tgUser = null, targetStage = 1, { force = false } = {}) {
+  const clamped = Math.min(4, Math.max(1, Math.round(Number(targetStage) || 1)));
+  const current = getStoredUiStage();
+  const next = force ? clamped : Math.max(current, clamped);
+
+  safeWrite(UI_STAGE_STORAGE_KEY, String(next));
+  const prevProf = getLocalPreviewProfile();
+  if (force || next > Number(prevProf?.uiStage || 1)) {
+    saveLocalPreviewProfile({ ...prevProf, uiStage: next });
+  }
+
+  const db = getCloudDb();
+  if (db && !force && next > 1) {
+    try {
+      const uid = getViewerUid(tgUser);
+      await db.rpc('sync_user_ui_stage_rpc', { p_uid: uid, p_stage: next });
+    } catch { /* fallback stored locally */ }
+  }
+  return next;
+}
+
 /**
- * ШАГ 5: Суперигра «Гонка за Премьерой» открывается после того, как игрок
- * сам упаковал друга И подтвердил скриншот с оранжевой кнопкой «Буду смотреть» на Кинопоиске!
+ * ШАГ 5 & v6: Шкала «Допуск на Премьеру» открывается сразу после 1-й упакованной бочки (Стадия 3+)
  */
 export function isPremiereRaceUnlocked(questState = getQuestState(), profile = null) {
-  if (isTestBogActive()) return true;
+  if (isTestBogActive()) {
+    return getStoredUiStage() >= 3 || (profile?.packedCount || 0) >= 1 || Boolean(profile?.temuSurgeClaimed);
+  }
   const packedOk = (questState?.packedCount || 0) >= 1 || (profile?.packedCount || 0) >= 1;
-  const kpOk = Boolean(questState?.kpScreenshotVerified || profile?.kpVerified);
-  return Boolean(packedOk && kpOk);
+  const stageOk = getStoredUiStage() >= 3 || Number(profile?.uiStage || 1) >= 3 || Boolean(profile?.temuSurgeClaimed);
+  return Boolean(packedOk || stageOk);
 }
 
 export async function fetchPlayerProfile(tgUser = null) {
@@ -492,6 +584,7 @@ export async function fetchPlayerProfile(tgUser = null) {
         p_display_name: tgUser?.name || '',
       });
       if (!error && data?.ok) {
+        const localBefore = getLocalPreviewProfile();
         const mapped = {
           premiereScore: Number(data.premiere_score || 0),
           premierePoints: Number(data.premiere_points || 0),
@@ -515,7 +608,13 @@ export async function fetchPlayerProfile(tgUser = null) {
           kpVerified: Boolean(data.kp_verified),
           packedCount: Number(data.packed_count || 0),
           friendsBrought: Number(data.friends_brought || 0),
+          temuSurgeClaimed: Boolean(data.temu_surge_claimed),
+          hasSocialConnection: Boolean(data.has_social_connection),
+          repeatLinkEntered: Boolean(localBefore?.repeatLinkEntered),
+          uiStage: Math.max(getStoredUiStage(), Number(data.ui_stage || 1)),
         };
+        mapped.uiStage = computeEffectiveUiStage(mapped);
+        safeWrite(UI_STAGE_STORAGE_KEY, String(mapped.uiStage));
         if (mapped.kpVerified) markKpScreenshotVerified();
         if (mapped.packedCount > 0) {
           const q = getQuestState();
@@ -523,7 +622,7 @@ export async function fetchPlayerProfile(tgUser = null) {
           q.friendsOpened = Math.max(q.friendsOpened || 0, mapped.friendsBrought);
           saveQuestState(q);
         }
-        saveLocalPreviewProfile({ ...getLocalPreviewProfile(), ...mapped });
+        saveLocalPreviewProfile({ ...localBefore, ...mapped });
         return mapped;
       }
     } catch { /* fallback below */ }
@@ -1238,6 +1337,10 @@ export async function fetchMyWorkshopFriends(tgUser = null) {
   }
 
   if (isTestBogActive()) {
+    const prof = getLocalPreviewProfile();
+    if (getStoredUiStage() < 4 && !prof?.hasSocialConnection) {
+      return [];
+    }
     return [
       {
         friend_uid: 'tbog_f1',

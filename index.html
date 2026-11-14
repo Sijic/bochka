@@ -9,6 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0d0d'/%3E%3Crect x='8' y='4' width='16' height='24' rx='2' fill='none' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='11' x2='25' y2='11' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='21' x2='25' y2='21' stroke='%23eab308' stroke-width='2'/%3E%3C/svg%3E" />
   <title>БОЧКА — Упакуй друга | В кино с 17 декабря</title>
+  <meta name="bochka-build" content="v6.1-film-art" />
   <meta name="description" content="Шесть заваренных стальных бочек в тёмном цеху. Запиши фото и голос на дно бочки, проверь интуицию друга и выиграй допуск на закрытую Премьеру 17 декабря." />
 
   <!-- Open Graph / Telegram Link Preview -->
@@ -39,7 +40,7 @@
 
   <link rel="stylesheet" href="./src/styles.css" />
 </head>
-<body>
+<body data-ui-stage="1" data-blitz-unlocked="0">
   <!-- 3D Three.js Industrial Workshop Canvas -->
   <canvas id="workshop-canvas" aria-label="Цех Корпус Б"></canvas>
 
@@ -47,33 +48,69 @@
   <div class="grain-overlay" aria-hidden="true"></div>
   <div class="vignette-overlay" aria-hidden="true"></div>
 
-  <!-- Single-Row Top Navigation -->
+  <!-- Single-Row Top Navigation (Progressive Disclosure Stage 3+) -->
   <header class="topbar" id="topbar">
     <button type="button" class="topbar-brand" id="nav-brand" title="БОЧКА — 17 декабря">
       <span class="brand-dot"></span>
       <span class="brand-word">БОЧКА</span>
     </button>
 
-    <nav class="topbar-nav" aria-label="Навигация">
-      <button type="button" class="nav-link is-active" id="nav-workshop" data-i18n="navWorkshop">ЦЕХ</button>
-      <button type="button" class="nav-link" id="nav-trailer" data-i18n="navTrailer">ТРЕЙЛЕР</button>
-      <a class="nav-link" id="nav-kinopoisk" href="https://www.kinopoisk.ru/film/11226275/" target="_blank" rel="noopener noreferrer" data-i18n="navKinopoisk">КИНОПОИСК</a>
+    <div class="topbar-right">
+      <button type="button" class="nav-link nav-prize" id="nav-prize" title="Допуск на Премьеру">
+        <span class="topbar-meter-ico" aria-hidden="true">🔥</span>
+        <span class="topbar-meter-text" id="top-premiere-pct">88.0%</span>
+        <span class="cap-badge" id="top-caps-count" hidden>0</span>
+      </button>
+
+      <button type="button" class="nav-link top-lives-pill" id="top-lives-pill" title="Жизни в цеху">
+        <span aria-hidden="true">❤️</span>
+        <strong id="top-lives-count">3</strong>
+      </button>
+
       <button type="button" class="nav-link nav-leaders" id="nav-leaderboard" title="Рейтинг ТОП-10 на закрытую Премьеру">
         <span>🏆 ТОП-10</span>
         <span class="cap-badge points-badge" id="top-points-count">0</span>
       </button>
-      <button type="button" class="nav-link nav-prize" id="nav-prize">
-        <span data-i18n="navPrize">ПРЕМЬЕРА</span>
-        <span class="cap-badge" id="top-caps-count">0</span>
-      </button>
-    </nav>
 
-    <div class="lang-switch" role="group" aria-label="Язык">
-      <button type="button" class="lang-btn is-active" data-lang-btn="ru">RU</button>
-      <button type="button" class="lang-btn" data-lang-btn="kz">KZ</button>
-      <button type="button" class="lang-btn" data-lang-btn="en">EN</button>
+      <button
+        type="button"
+        class="burger-btn"
+        id="btn-burger-menu"
+        aria-label="Меню"
+        aria-controls="burger-drawer"
+        aria-expanded="false"
+      >
+        <span></span><span></span><span></span>
+      </button>
     </div>
   </header>
+
+  <!-- Выдвижное меню-бургер в углу (Стадия 3+) -->
+  <div class="burger-backdrop" id="burger-backdrop" hidden></div>
+  <aside class="burger-drawer" id="burger-drawer" aria-label="Меню цеха" hidden>
+    <div class="burger-head">
+      <span class="mono-tag accent-tag">ЦЕХ // МЕНЮ</span>
+      <button type="button" class="icon-close" id="btn-close-burger" aria-label="Закрыть меню">✕</button>
+    </div>
+
+    <div class="burger-list">
+      <button type="button" class="burger-item is-active" id="nav-workshop" data-i18n="navWorkshop">ЦЕХ</button>
+      <button type="button" class="burger-item" id="nav-trailer" data-i18n="navTrailer">ТРЕЙЛЕР</button>
+      <a class="burger-item" id="nav-kinopoisk" href="https://www.kinopoisk.ru/film/11226275/" target="_blank" rel="noopener noreferrer" data-i18n="navKinopoisk">КИНОПОИСК ↗</a>
+      <button type="button" class="burger-item" id="btn-burger-rules" data-i18n="burgerRules">ПРАВИЛА</button>
+      <button type="button" class="burger-item" id="btn-burger-share">📤 СОЦСЕТИ + ⭐</button>
+      <button type="button" class="burger-item stage4-only-item" id="btn-burger-duel">⚔️ НА СЧЁТ ТРИ!</button>
+      <button type="button" class="burger-item" id="btn-burger-sound">🔊 ЗВУК: ВКЛ</button>
+    </div>
+
+    <div class="burger-lang-row">
+      <div class="lang-switch" role="group" aria-label="Язык">
+        <button type="button" class="lang-btn is-active" data-lang-btn="ru">RU</button>
+        <button type="button" class="lang-btn" data-lang-btn="kz">KZ</button>
+        <button type="button" class="lang-btn" data-lang-btn="en">EN</button>
+      </div>
+    </div>
+  </aside>
 
   <!-- ====================================================================
        ЭКРАН 1: ВХОДНОЙ ШЛЮЗ (18+ / СО ЗВУКОМ / БЕЗ ЗВУКА)
@@ -215,6 +252,7 @@
 
     <!-- Всплывающие очки при попадании в Гонке за Премьерой (+45 / +0.4) -->
     <div class="floating-score-layer" id="floating-score-layer" aria-hidden="true"></div>
+    <div class="workshop-npc-bubble" id="workshop-npc-bubble" hidden aria-live="polite"></div>
 
     <div class="barrel-reticle" id="barrel-reticle" hidden>
       <span class="reticle-id" id="reticle-id">ПАРТИЯ №01</span>
@@ -665,7 +703,14 @@
         Отправителю ушёл сигнал о твоём результате (+2 жизни на его счёт!).
       </p>
 
-      <!-- ШАГ 8.2 (ТРИГГЕР Б): 3 Реактивные кнопки ответа отправителю в 1 клик (блокируются после выбора от спама) -->
+      <!-- Быстрая реакция в 1 клик (Стадия 2 для соло-прохождения без внешней открытки) -->
+      <div class="finale-stage2-react-box" id="finale-solo-stage2-reaction" hidden>
+        <button type="button" class="btn-secondary btn-full" id="btn-stage2-quick-react" data-i18n="stage2QuickReactSolo">
+          🍿 Пойду в кино 17 декабря!
+        </button>
+      </div>
+
+      <!-- ШАГ 8.2 (ТРИГГЕР Б): Реактивные кнопки ответа отправителю в 1 клик -->
       <div class="finale-reactions-box" id="finale-friend-reactions" hidden>
         <span class="mono-label">⚡ ОТПРАВИТЬ ЖИВОЙ ПУШ АВТОРУ БОЧКИ В TELEGRAM (1 КЛИК):</span>
         <div class="finale-reactions-grid">
@@ -692,7 +737,7 @@
         <button type="button" class="btn-secondary btn-full btn-with-sub" id="btn-pack-revenge">
           <span class="btn-main-line">
             <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="6" ry="2"/><path d="M6 5v14c0 1.1 2.7 2 6 2s6-.9 6-2V5M6 10c0 1.1 2.7 2 6 2s6-.9 6-2M6 15c0 1.1 2.7 2 6 2s6-.9 6-2"/></svg>
-            <span data-i18n="btnPackBack">ЗАКАТАТЬ СВОЕГО КЕНТА</span>
+            <span id="btn-pack-revenge-text" data-i18n="btnPackBack">ЗАКАТАТЬ СВОЕГО КЕНТА</span>
           </span>
           <small class="btn-sub-line" data-i18n="btnPackBackHint">Открывает «Гонку за Премьерой (0 / 100)» и даёт жизни для ударов</small>
         </button>
@@ -1282,17 +1327,78 @@
         <div class="points-guide-grid">
           <span>🎟 Подарить билет другу: <strong>+1000 ⭐</strong></span>
           <span>📸 Скриншот «Буду смотреть» КП: <strong>+500 ⭐</strong></span>
-          <span>⚔️ Победа втроём «На счёт три!»: <strong>+450 ⭐</strong></span>
+          <span id="points-guide-duel-item" class="stage4-only-item">⚔️ Победа втроём «На счёт три!»: <strong>+450 ⭐</strong></span>
           <span>🆕 Привести нового друга в цех: <strong>+400 ⭐</strong></span>
           <span>🎬 Трейлер + рассылка по соцсетям: <strong>+250 / +150 ⭐</strong></span>
-          <span>🛢 Уровни 3..10 бочек и Блиц: <strong>до +750 ⭐</strong></span>
+          <span id="points-guide-levels-item">🛢 Уровни 3..10 бочек: <strong>до +750 ⭐</strong> <em class="blitz-rule-note">(⚡ Блиц с Ур.8+)</em></span>
         </div>
       </div>
 
       <div class="finale-dual-row">
         <button type="button" class="btn-primary" id="btn-leader-go-share">📤 СОБРАТЬ ОЧКИ В СОЦСЕТЯХ</button>
-        <button type="button" class="btn-secondary" id="btn-leader-go-duel">⚔️ В БОЙ «НА СЧЁТ ТРИ!»</button>
+        <button type="button" class="btn-secondary stage4-only-item" id="btn-leader-go-duel">⚔️ В БОЙ «НА СЧЁТ ТРИ!»</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       POPUP (СТАДИЯ 3 TEMU): ЯРКАЯ РАЗБЛОКИРОВКА ШКАЛЫ «ДОПУСК НА ПРЕМЬЕРУ» 88.0%
+       ==================================================================== -->
+  <div class="modal-backdrop modal-temu-backdrop" id="modal-temu-unlock" hidden>
+    <div class="modal-card temu-unlock-card">
+      <div class="temu-rays" aria-hidden="true"></div>
+      <div class="tech-corner tl"></div>
+      <div class="tech-corner tr"></div>
+      <div class="tech-corner bl"></div>
+      <div class="tech-corner br"></div>
+
+      <span class="temu-pill-badge" data-i18n="temuUnlockTag">🔥 СТАРТОВЫЙ РЫВОК ОТКРЫТ!</span>
+      <h3 class="temu-unlock-title" data-i18n="temuUnlockTitle">ДОПУСК НА ЗАКРЫТУЮ ПРЕМЬЕРУ</h3>
+      <p class="temu-unlock-sub" data-i18n="temuUnlockSub">
+        Тебе осталось совсем чуть-чуть до закрытой Премьеры!
+      </p>
+
+      <div class="temu-meter-stage">
+        <div class="temu-score-big">
+          <strong id="temu-unlock-score-num">0.0</strong><span> / 100</span>
+        </div>
+        <div class="temu-bar-track">
+          <div class="temu-bar-fill" id="temu-unlock-bar-fill"></div>
+          <div class="temu-bar-spark" aria-hidden="true"></div>
+        </div>
+        <div class="temu-bar-scale">
+          <span>0</span>
+          <span>50</span>
+          <span class="temu-scale-hot">88.0 ⚡</span>
+          <span class="temu-scale-win">100 🏆</span>
+        </div>
+      </div>
+
+      <button type="button" class="btn-primary btn-full btn-temu-pulse" id="btn-temu-unlock-accept">
+        <span data-i18n="temuUnlockBtn">ЗАБРАТЬ +88.0% И ПОЕХАЛИ ДАЛЬШЕ!</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       POPUP: ПРАВИЛА ЦЕХА (ИЗ БУРГЕР-МЕНЮ СТАДИИ 3+)
+       ==================================================================== -->
+  <div class="modal-backdrop" id="modal-rules" hidden>
+    <div class="modal-card rules-modal-card">
+      <div class="modal-head">
+        <span class="mono-tag accent-tag">ПРАВИЛА ЦЕХА // КРАСНАЯ ДОРОЖКА 17 ДЕКАБРЯ</span>
+        <button type="button" class="icon-close" id="btn-close-rules" aria-label="Закрыть">✕</button>
+      </div>
+      <h3 class="section-title rescue-title">КАК ИДЁТ ГОНКА ЗА ПРЕМЬЕРОЙ</h3>
+      <ul class="rules-compact-list">
+        <li>🛢 <strong>Стучи по бочкам:</strong> прислушивайся к живому звуку сквозь сталь и открывай бочки.</li>
+        <li>🔥 <strong>Шкала Допуска 0..100:</strong> после 1-й упакованной бочки получаешь старт 88.0% — добери оставшиеся проценты!</li>
+        <li>🏆 <strong>Лига ТОП-10:</strong> 10 лидеров по рейтинговым очкам (⭐) гарантированно попадают на закрытую Премьеру со съёмочной группой.</li>
+        <li>🎟 <strong>Обычный билет:</strong> по закону цеха его нельзя забрать себе — сожги ради ×2 жизней или подари другу (+1000 ⭐ и ×2 жизней).</li>
+        <li class="stage4-only-item">⚔️ <strong>«На счёт три!»:</strong> вызов друзей по повторной ссылке — ставки жизнями и быстрый подъём в рейтинге.</li>
+        <li class="blitz-rule-note">⚡ <strong>Блиц-режим (Уровень 8+):</strong> бочки закрыты на скорость и приносят максимум ⭐ в ТОП-10.</li>
+      </ul>
+      <button type="button" class="btn-primary btn-full" id="btn-rules-ok">ПОНЯТНО, ВЕРНУТЬСЯ</button>
     </div>
   </div>
 

@@ -26,3 +26,16 @@ database.rules.json
 storage.rules
 supabase/.temp/
 ui_ux.md
+
+# Local QA artifacts, heavy raw refs & assistant config
+film_refs/
+qa_screenshots/
+*_СИНОПСИС_ПАПКИ.md
+GEMINI.md
+Code_Generated_Image.jpg
+photo_2026-11-14*.jpg
+video_2026-11-14*.mp4
+/*.webp
+watermarked_img_*.webp
+assets/keyed/Отец*.webp
+assets/keyed/Пастер*.webp
