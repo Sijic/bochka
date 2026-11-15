@@ -69,6 +69,11 @@ import { mountTestBogHUD } from './testbog.js';
 const AIR_DURATION_SEC = 30.0;
 const KP_MIN_AWAY_SEC = 3.5;
 const TRAILER_UNLOCK_SEC = 40.0;
+const STALE_YT_IDS = new Set(['EZFDcXeLTzQ', 'vAJpT_82uUo']);
+const OFFICIAL_YT_TRAILER_ID = (ENV.youtubeFallbackId && !STALE_YT_IDS.has(ENV.youtubeFallbackId))
+  ? ENV.youtubeFallbackId
+  : 'OmyqxUXmqNY';
+const OFFICIAL_YT_WATCH_URL = `https://www.youtube.com/watch?v=${OFFICIAL_YT_TRAILER_ID}`;
 
 const SCREAMER_META = [
   { key: 'hand', img: resolveSiteAsset('assets/keyed/screamer_hand.webp'), i18n: 'screamerHand' },
@@ -176,13 +181,15 @@ const state = {
     fallbackTimer: null,
   },
 
-  // Плеер трейлера: основной официальный YouTube (@kinoceh_bel) + авто-фоллбэк на локальный MP4 без водяного знака
+  // Плеер трейлера: напрямую официальный YouTube (@kinoceh_bel · OmyqxUXmqNY)
   trailer: {
+    modalOpen: false,
     forRescue: false,
     muted: false,
     maxTime: 0,
     unlocked40: false,
-    usingYtFallback: false,
+    usingYtFallback: true,
+    ytReady: false,
     ytTimer: null,
     ytWatchedSec: 0,
     ytBootWatchdog: null,
@@ -190,6 +197,7 @@ const state = {
     ytAutoplayRetry: null,
     ytStartedPlaying: false,
     ytBlockedInSession: false,
+    externalRescueDepartedAt: 0,
     rescueSafetyTimer: null,
   },
 
@@ -446,9 +454,6 @@ async function bootstrap() {
   const kpGoldLink = document.getElementById('link-golden-kp-card');
   if (kpGoldLink) kpGoldLink.href = ENV.kinopoiskUrl;
 
-  const trailerVideo = document.getElementById('trailer-video');
-  if (trailerVideo) trailerVideo.src = ENV.trailerMp4;
-
   if (state.tg.user?.photoUrl) {
     document.getElementById('btn-tg-avatar')?.removeAttribute('hidden');
   }
@@ -459,6 +464,7 @@ async function bootstrap() {
 
   initVoiceRecorderInstance();
   initVisibilityAndAntiSeekGuards();
+  prewarmYouTubeTrailerPlayer();
   bindUIEvents();
   document.getElementById('btn-enter-sound')?.removeAttribute('disabled');
   document.getElementById('btn-enter-mute')?.removeAttribute('disabled');
@@ -3408,6 +3414,16 @@ function clearTrailerTimers() {
 /* ============================================================================
    ПЛЕЕР ТРЕЙЛЕРА: ОФИЦИАЛЬНЫЙ YOUTUBE (@kinoceh_bel) + ЛОКАЛЬНЫЙ MP4 ФОЛЛБЭК
    ============================================================================ */
+function evaluateExternalYouTubeRescueReturn() {
+  const departed = Number(state.trailer.externalRescueDepartedAt || 0);
+  if (!departed) return;
+  state.trailer.externalRescueDepartedAt = 0;
+  if (!state.trailer.modalOpen || !state.trailer.forRescue || state.trailer.unlocked40) return;
+  if ((Date.now() - departed) / 1000 >= 12) {
+    unlockTrailerReward();
+  }
+}
+
 function initVisibilityAndAntiSeekGuards() {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
@@ -3424,7 +3440,7 @@ function initVisibilityAndAntiSeekGuards() {
         vid.pause();
         syncTrailerPlayButton();
       }
-      if (state.trailer.usingYtFallback && state.ytPlayer && typeof state.ytPlayer.pauseVideo === 'function') {
+      if (state.ytPlayer && typeof state.ytPlayer.pauseVideo === 'function') {
         try { state.ytPlayer.pauseVideo(); } catch { /* ignore */ }
       }
     } else {
@@ -3434,6 +3450,7 @@ function initVisibilityAndAntiSeekGuards() {
       if (state.externalLikeSync.active && state.externalLikeSync.leftTab) {
         evaluateExternalLikeReturn();
       }
+      evaluateExternalYouTubeRescueReturn();
     }
   });
 
@@ -3455,6 +3472,7 @@ function initVisibilityAndAntiSeekGuards() {
     if (state.externalLikeSync.active && state.externalLikeSync.leftTab) {
       evaluateExternalLikeReturn();
     }
+    evaluateExternalYouTubeRescueReturn();
   });
 
   const vid = document.getElementById('trailer-video');
@@ -3503,11 +3521,7 @@ function initVisibilityAndAntiSeekGuards() {
   vid.addEventListener('pause', syncTrailerPlayButton);
 
   vid.addEventListener('error', () => {
-    if (!state.trailer.ytBlockedInSession) {
-      activateYouTubePrimary({ forRescue: state.trailer.forRescue });
-    } else {
-      document.getElementById('btn-close-trailer')?.classList.remove('is-rescue-locked');
-    }
+    document.getElementById('btn-close-trailer')?.classList.remove('is-rescue-locked');
   });
 }
 
@@ -3729,7 +3743,10 @@ function setTrailerMuted(nextMuted = false) {
 }
 
 function openTrailerModal({ forRescue = false } = {}) {
+  state.trailer.modalOpen = true;
+  state.trailer.usingYtFallback = true;
   state.trailer.forRescue = Boolean(forRescue);
+  state.trailer.externalRescueDepartedAt = 0;
   audio.stopListening();
   audio.stopMuffledVoiceLoop();
   audio.setModalAudioDuck(true);
@@ -3767,16 +3784,14 @@ function openTrailerModal({ forRescue = false } = {}) {
     rescueBox?.setAttribute('hidden', '');
   }
 
-  if (!state.trailer.ytBlockedInSession) {
-    activateYouTubePrimary({ forRescue });
-  } else {
-    fallbackToLocalMp4({ resetPosition: forRescue });
-  }
+  activateYouTubePrimary({ forRescue });
 }
 
 function closeTrailerModal() {
+  state.trailer.modalOpen = false;
   state.trailer.usingYtFallback = false;
   state.trailer.ytStartedPlaying = false;
+  state.trailer.externalRescueDepartedAt = 0;
   clearTrailerTimers();
 
   const modal = document.getElementById('modal-trailer');
@@ -3788,11 +3803,11 @@ function closeTrailerModal() {
   if (vid) {
     try { vid.pause(); } catch { /* ignore */ }
     vid.muted = true;
+    vid.setAttribute('hidden', '');
   }
   if (state.ytPlayer) {
     try { state.ytPlayer.mute?.(); } catch { /* ignore */ }
     try { state.ytPlayer.pauseVideo?.(); } catch { /* ignore */ }
-    try { state.ytPlayer.stopVideo?.(); } catch { /* ignore */ }
   }
   audio.setModalAudioDuck(false);
   syncTrailerPlayButton();
@@ -3872,13 +3887,10 @@ function syncTrailerPlayButton() {
   const btn = document.getElementById('btn-trailer-play');
   if (!btn) return;
   let playing = false;
-  if (state.trailer.usingYtFallback && state.ytPlayer && typeof state.ytPlayer.getPlayerState === 'function') {
+  if (state.ytPlayer && typeof state.ytPlayer.getPlayerState === 'function') {
     try {
       playing = state.ytPlayer.getPlayerState() === 1;
     } catch { playing = false; }
-  } else {
-    const vid = document.getElementById('trailer-video');
-    playing = Boolean(vid && !vid.paused);
   }
   btn.textContent = playing ? '❚❚ ПАУЗА' : '▶ ПУСК';
 }
@@ -3891,61 +3903,9 @@ function syncTrailerMuteButton() {
   btn.setAttribute('aria-pressed', muted ? 'true' : 'false');
 }
 
-function fallbackToLocalMp4({ creditElapsedSec = 0, resetPosition = true } = {}) {
-  state.trailer.ytBlockedInSession = true;
-  state.trailer.usingYtFallback = false;
-  if (state.trailer.ytBootWatchdog) {
-    clearTimeout(state.trailer.ytBootWatchdog);
-    state.trailer.ytBootWatchdog = null;
-  }
-  if (state.trailer.ytStallWatchdog) {
-    clearTimeout(state.trailer.ytStallWatchdog);
-    state.trailer.ytStallWatchdog = null;
-  }
-  if (state.trailer.ytAutoplayRetry) {
-    clearTimeout(state.trailer.ytAutoplayRetry);
-    state.trailer.ytAutoplayRetry = null;
-  }
-  if (state.trailer.ytTimer) {
-    clearInterval(state.trailer.ytTimer);
-    state.trailer.ytTimer = null;
-  }
-
-  if (state.ytPlayer) {
-    try { state.ytPlayer.mute?.(); } catch { /* ignore */ }
-    try { state.ytPlayer.pauseVideo?.(); } catch { /* ignore */ }
-  }
-
-  document.getElementById('yt-fallback-slot')?.setAttribute('hidden', '');
-  const vid = document.getElementById('trailer-video');
-  vid?.removeAttribute('hidden');
-  document.getElementById('trailer-custom-bar')?.removeAttribute('hidden');
-  document.getElementById('btn-trailer-fast-mp4')?.setAttribute('hidden', '');
-
-  if (state.trailer.forRescue && creditElapsedSec > 0) {
-    state.trailer.maxTime = Math.max(state.trailer.maxTime, creditElapsedSec);
-  }
-
-  if (vid) {
-    if (vid.readyState > 0) {
-      if (resetPosition) {
-        try { vid.currentTime = 0; } catch { /* ignore */ }
-      } else if (state.trailer.ytWatchedSec > 0) {
-        const safeCap = Math.max(0, (Number.isFinite(vid.duration) ? vid.duration : 92) - 2);
-        try { vid.currentTime = Math.min(state.trailer.ytWatchedSec, safeCap); } catch { /* ignore */ }
-      }
-    }
-    vid.muted = Boolean(state.trailer.muted);
-    vid.play().catch(() => {
-      setTrailerMuted(true);
-      vid.play().catch(() => {});
-    });
-    syncTrailerPlayButton();
-    syncTrailerMuteButton();
-    if (state.trailer.forRescue) {
-      updateTrailerRescueBanner(state.trailer.maxTime, getEffectiveTrailerUnlockSec(vid));
-    }
-  }
+function showDirectYouTubeFallbackNotice() {
+  document.getElementById('btn-close-trailer')?.classList.remove('is-rescue-locked');
+  showToast('Нажми «▶ YOUTUBE ↗» — откроется этот же новый трейлер на YouTube');
 }
 
 function scheduleYtAutoplayRetry(player) {
@@ -3954,15 +3914,145 @@ function scheduleYtAutoplayRetry(player) {
   }
   state.trailer.ytAutoplayRetry = window.setTimeout(() => {
     state.trailer.ytAutoplayRetry = null;
-    if (!state.trailer.usingYtFallback) return;
+    if (!state.trailer.modalOpen) return;
     try {
       const pState = typeof player?.getPlayerState === 'function' ? player.getPlayerState() : -1;
-      if (pState === -1 || pState === 5) {
+      if (pState !== 1 && pState !== 3) {
         setTrailerMuted(true);
         player.playVideo?.();
       }
     } catch { /* ignore */ }
-  }, 1200);
+  }, 600);
+}
+
+function startYtPlaybackNow(player, { forRescue = false } = {}) {
+  if (!player || !state.trailer.modalOpen) return;
+  try {
+    const loadedId = player.getVideoData?.()?.video_id || '';
+    if (loadedId && loadedId !== OFFICIAL_YT_TRAILER_ID && typeof player.loadVideoById === 'function') {
+      player.loadVideoById(OFFICIAL_YT_TRAILER_ID, 0);
+    } else {
+      if (forRescue) player.seekTo?.(0, true);
+      player.playVideo?.();
+    }
+    if (state.trailer.muted) {
+      player.mute?.();
+    } else {
+      player.unMute?.();
+      player.setVolume?.(100);
+    }
+    scheduleYtAutoplayRetry(player);
+    syncTrailerPlayButton();
+    syncTrailerMuteButton();
+  } catch {
+    showDirectYouTubeFallbackNotice();
+  }
+}
+
+function ensureYouTubeScriptTag() {
+  if (window.YT?.Player) return;
+  if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
+    const tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    tag.async = true;
+    tag.onerror = () => {
+      if (state.trailer.modalOpen) showDirectYouTubeFallbackNotice();
+    };
+    document.head.appendChild(tag);
+  }
+}
+
+function ensureYtPlayerMounted() {
+  if (state.ytPlayer) return;
+  if (!window.YT?.Player) {
+    const prevReady = typeof window.onYouTubeIframeAPIReady === 'function'
+      ? window.onYouTubeIframeAPIReady
+      : null;
+    window.onYouTubeIframeAPIReady = () => {
+      try { prevReady?.(); } catch { /* ignore */ }
+      ensureYtPlayerMounted();
+    };
+    ensureYouTubeScriptTag();
+    return;
+  }
+
+  state.ytPlayer = new window.YT.Player('yt-fallback-slot', {
+    videoId: OFFICIAL_YT_TRAILER_ID,
+    playerVars: {
+      autoplay: 0,
+      controls: 1,
+      rel: 0,
+      modestbranding: 1,
+      playsinline: 1,
+      origin: window.location.origin,
+    },
+    events: {
+      onReady: (ev) => {
+        state.trailer.ytReady = true;
+        try {
+          const ifr = ev.target.getIframe?.();
+          if (ifr) {
+            ifr.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+            ifr.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen');
+          }
+        } catch { /* ignore */ }
+        if (!state.trailer.modalOpen) {
+          try { ev.target.mute?.(); ev.target.pauseVideo?.(); } catch { /* ignore */ }
+          return;
+        }
+        startYtPlaybackNow(ev.target, { forRescue: state.trailer.forRescue });
+      },
+      onError: () => {
+        if (state.trailer.modalOpen) {
+          showDirectYouTubeFallbackNotice();
+        }
+      },
+      onStateChange: (ev) => {
+        if (!state.trailer.modalOpen) {
+          try { ev.target?.mute?.(); ev.target?.pauseVideo?.(); } catch { /* ignore */ }
+          return;
+        }
+        syncTrailerPlayButton();
+        try {
+          const ytMuted = Boolean(ev.target?.isMuted?.());
+          if (ytMuted !== state.trailer.muted) {
+            state.trailer.muted = ytMuted;
+            syncTrailerMuteButton();
+          }
+        } catch { /* ignore */ }
+
+        if (ev.data === 1) {
+          state.trailer.ytStartedPlaying = true;
+          if (!state.trailer.ytTimer) {
+            state.trailer.ytTimer = window.setInterval(() => {
+              if (document.hidden || !state.trailer.modalOpen) return;
+              state.trailer.ytWatchedSec += 1;
+              const cur = Number(ev.target?.getCurrentTime?.() || state.trailer.ytWatchedSec);
+              const dur = Number(ev.target?.getDuration?.() || 92);
+              updateTrailerProgressUI(cur, dur > 0 ? dur : 92, TRAILER_UNLOCK_SEC);
+              updateTrailerRescueBanner(state.trailer.ytWatchedSec, TRAILER_UNLOCK_SEC);
+              if (state.trailer.ytWatchedSec >= TRAILER_UNLOCK_SEC) {
+                unlockTrailerReward();
+              }
+            }, 1000);
+          }
+        } else {
+          if (state.trailer.ytTimer) {
+            clearInterval(state.trailer.ytTimer);
+            state.trailer.ytTimer = null;
+          }
+          if (ev.data === 0 && state.trailer.ytWatchedSec >= 25) {
+            unlockTrailerReward();
+          }
+        }
+      },
+    },
+  });
+}
+
+function prewarmYouTubeTrailerPlayer() {
+  ensureYouTubeScriptTag();
+  ensureYtPlayerMounted();
 }
 
 function activateYouTubePrimary({ forRescue = false } = {}) {
@@ -3972,133 +4062,16 @@ function activateYouTubePrimary({ forRescue = false } = {}) {
   const vid = document.getElementById('trailer-video');
   if (vid && !vid.paused) vid.pause();
   vid?.setAttribute('hidden', '');
+  document.getElementById('yt-fallback-slot')?.removeAttribute('hidden');
   document.getElementById('trailer-custom-bar')?.removeAttribute('hidden');
-  document.getElementById('btn-trailer-fast-mp4')?.removeAttribute('hidden');
+  document.getElementById('btn-trailer-open-yt-app')?.removeAttribute('hidden');
   syncTrailerMuteButton();
   syncTrailerPlayButton();
 
-  const slot = document.getElementById('yt-fallback-slot');
-  slot?.removeAttribute('hidden');
-
-  if (state.trailer.ytBootWatchdog) {
-    clearTimeout(state.trailer.ytBootWatchdog);
+  ensureYtPlayerMounted();
+  if (state.ytPlayer && state.trailer.ytReady) {
+    startYtPlaybackNow(state.ytPlayer, { forRescue });
   }
-  state.trailer.ytBootWatchdog = window.setTimeout(() => {
-    state.trailer.ytBootWatchdog = null;
-    if (!state.trailer.ytStartedPlaying && state.trailer.usingYtFallback) {
-      fallbackToLocalMp4({ creditElapsedSec: 3, resetPosition: true });
-    }
-  }, 3000);
-
-  if (!window.YT) {
-    if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
-      const tag = document.createElement('script');
-      tag.src = 'https://www.youtube.com/iframe_api';
-      tag.onerror = () => fallbackToLocalMp4({ creditElapsedSec: 1, resetPosition: true });
-      document.head.appendChild(tag);
-    }
-  }
-
-  const mount = () => {
-    if (!state.trailer.usingYtFallback) return;
-    if (state.ytPlayer) {
-      if (typeof state.ytPlayer.playVideo === 'function') {
-        try {
-          const loadedId = state.ytPlayer.getVideoData?.()?.video_id || '';
-          if (loadedId && loadedId !== ENV.youtubeFallbackId && typeof state.ytPlayer.loadVideoById === 'function') {
-            state.ytPlayer.loadVideoById(ENV.youtubeFallbackId, 0);
-          } else {
-            if (forRescue) state.ytPlayer.seekTo?.(0, true);
-            state.ytPlayer.playVideo();
-          }
-          setTrailerMuted(state.trailer.muted);
-          scheduleYtAutoplayRetry(state.ytPlayer);
-        } catch {
-          fallbackToLocalMp4({ creditElapsedSec: 1, resetPosition: true });
-        }
-      }
-      return;
-    }
-    if (!window.YT?.Player) return;
-    state.ytPlayer = new window.YT.Player('yt-fallback-slot', {
-      videoId: ENV.youtubeFallbackId,
-      playerVars: { autoplay: 1, controls: 1, rel: 0, modestbranding: 1, playsinline: 1 },
-      events: {
-        onReady: (ev) => {
-          if (!state.trailer.usingYtFallback) {
-            try { ev.target.mute?.(); ev.target.pauseVideo?.(); } catch { /* ignore */ }
-            return;
-          }
-          try {
-            if (state.trailer.muted) ev.target.mute?.();
-            else {
-              ev.target.unMute?.();
-              ev.target.setVolume?.(100);
-            }
-            ev.target.playVideo();
-            scheduleYtAutoplayRetry(ev.target);
-          } catch { /* ignore */ }
-        },
-        onError: () => {
-          if (state.trailer.usingYtFallback) {
-            fallbackToLocalMp4({ creditElapsedSec: 1, resetPosition: true });
-          }
-        },
-        onStateChange: (ev) => {
-          if (!state.trailer.usingYtFallback) {
-            try { ev.target?.pauseVideo?.(); } catch { /* ignore */ }
-            return;
-          }
-          syncTrailerPlayButton();
-          if (ev.data === 1) {
-            state.trailer.ytStartedPlaying = true;
-            if (state.trailer.ytBootWatchdog) {
-              clearTimeout(state.trailer.ytBootWatchdog);
-              state.trailer.ytBootWatchdog = null;
-            }
-            if (state.trailer.ytStallWatchdog) {
-              clearTimeout(state.trailer.ytStallWatchdog);
-              state.trailer.ytStallWatchdog = null;
-            }
-            if (!state.trailer.ytTimer) {
-              state.trailer.ytTimer = window.setInterval(() => {
-                if (document.hidden || !state.trailer.usingYtFallback) return;
-                state.trailer.ytWatchedSec += 1;
-                const cur = Number(ev.target?.getCurrentTime?.() || state.trailer.ytWatchedSec);
-                const dur = Number(ev.target?.getDuration?.() || 92);
-                updateTrailerProgressUI(cur, dur > 0 ? dur : 92, TRAILER_UNLOCK_SEC);
-                updateTrailerRescueBanner(state.trailer.ytWatchedSec, TRAILER_UNLOCK_SEC);
-                if (state.trailer.ytWatchedSec >= TRAILER_UNLOCK_SEC) {
-                  unlockTrailerReward();
-                }
-              }, 1000);
-            }
-          } else {
-            if (state.trailer.ytTimer) {
-              clearInterval(state.trailer.ytTimer);
-              state.trailer.ytTimer = null;
-            }
-            if (ev.data === 3 && !state.trailer.ytStallWatchdog) {
-              state.trailer.ytStallWatchdog = window.setTimeout(() => {
-                state.trailer.ytStallWatchdog = null;
-                try {
-                  if (state.trailer.usingYtFallback && state.ytPlayer?.getPlayerState?.() === 3) {
-                    fallbackToLocalMp4({ creditElapsedSec: Math.max(2, state.trailer.ytWatchedSec), resetPosition: false });
-                  }
-                } catch { /* ignore */ }
-              }, 3200);
-            }
-            if (ev.data === 0 && state.trailer.ytWatchedSec >= 25) {
-              unlockTrailerReward();
-            }
-          }
-        },
-      },
-    });
-  };
-
-  if (window.YT?.Player) mount();
-  else window.onYouTubeIframeAPIReady = mount;
 }
 
 function formatTimeMMSS(sec) {
@@ -4888,31 +4861,26 @@ function bindUIEvents() {
     openTrailerModal({ forRescue: true });
   });
 
-  // Универсальный контроллер трейлера (YouTube + MP4)
+  // Универсальный контроллер трейлера (YouTube OmyqxUXmqNY)
   document.getElementById('btn-trailer-play')?.addEventListener('click', () => {
-    if (state.trailer.usingYtFallback && state.ytPlayer) {
+    if (state.ytPlayer) {
       try {
         const pState = state.ytPlayer.getPlayerState?.() ?? -1;
         if (pState === 1) state.ytPlayer.pauseVideo?.();
         else state.ytPlayer.playVideo?.();
       } catch { /* ignore */ }
       syncTrailerPlayButton();
-      return;
     }
-    const vid = document.getElementById('trailer-video');
-    if (!vid) return;
-    if (vid.paused) vid.play().catch(() => {});
-    else vid.pause();
-    syncTrailerPlayButton();
   });
 
   document.getElementById('btn-trailer-mute')?.addEventListener('click', () => {
     setTrailerMuted(!state.trailer.muted);
   });
 
-  document.getElementById('btn-trailer-fast-mp4')?.addEventListener('click', () => {
-    fallbackToLocalMp4({ creditElapsedSec: Math.max(1, state.trailer.ytWatchedSec), resetPosition: false });
-    showToast('⚡ Включён быстрый плеер без зависаний');
+  document.getElementById('btn-trailer-open-yt-app')?.addEventListener('click', () => {
+    pauseActiveTrailerPlayback();
+    state.trailer.externalRescueDepartedAt = Date.now();
+    openExternalLink(OFFICIAL_YT_WATCH_URL);
   });
 
   document.getElementById('btn-claim-trailer-life')?.addEventListener('click', () => claimTrailerFifthLife());
