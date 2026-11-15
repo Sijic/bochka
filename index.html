@@ -1030,13 +1030,15 @@
       <div class="tech-corner br"></div>
 
       <!-- ШАГ А: 4-я попытка за «Буду смотреть» на Кинопоиске (проверка >= 15 сек отсутствия) -->
-      <div id="rescue-step-1">
-        <span class="mono-tag danger-tag" data-i18n="rescueStep1Tag">КИСЛОРОД 0% // СПАСЕНИЕ №1</span>
+      <!-- ШАГ 2: 5-я победная попытка через Кинопоиск (или 1-клик без аккаунта) -->
+      <div id="rescue-step-1" hidden>
+        <div class="rescue-done-pill">✓ СПАСЕНИЕ №1: ТРЕЙЛЕР ПРОСМОТРЕН</div>
+        <span class="mono-tag danger-tag" data-i18n="rescueStep1Tag">ПОСЛЕДНИЙ ШАНС // СПАСЕНИЕ №2</span>
         <h3 class="section-title rescue-title" data-i18n="rescueStep1Title">
-          ВОЗДУХ НА НУЛЕ! СТУК ШЁЛ СОВСЕМ РЯДОМ — ОСТАЛОСЬ 3 БОЧКИ
+          ПОЧТИ! ОСТАЛОСЬ ВСЕГО 2 ЗАКРЫТЫЕ БОЧКИ!
         </h3>
         <p class="modal-hint" data-i18n="rescueStep1Desc">
-          Три крышки сорваны впустую, но внутри одной из 3 оставшихся бочек стучит твой друг. Нажми оранжевую кнопку «Буду смотреть» на Кинопоиске, чтобы получить +1 удар!
+          В одной из двух бочек заварен друг. Нажми «Буду смотреть» на Кинопоиске и вернись в игру, чтобы получить финальный победный удар!
         </p>
 
         <button type="button" class="btn-kp-orange btn-full" id="btn-rescue-kp-open">
@@ -1045,31 +1047,30 @@
 
         <div class="rescue-sync-box" id="rescue-kp-sync" hidden>
           <span class="sync-spinner" aria-hidden="true"></span>
-          <span data-i18n="rescueKpChecking">Сверка отметки «Буду смотреть» с базой...</span>
+          <span data-i18n="rescueKpChecking">Сверка перехода на Кинопоиск...</span>
         </div>
 
         <div class="rescue-error-box" id="rescue-kp-error" hidden data-i18n="rescueKpTooFast">
-          Слишком быстрый возврат! Открой страницу фильма на 4 сек или используй кнопку ниже без регистрации.
+          Слишком быстрый возврат! Подожди на странице фильма 4 сек или нажми кнопку ниже без аккаунта.
         </div>
 
         <button type="button" class="btn-primary btn-full rescue-claim-btn" id="btn-rescue-kp-claim" hidden>
-          <span data-i18n="btnRescueKpClaim">Я НАЖАЛ «БУДУ СМОТРЕТЬ» → ЗАБРАТЬ ЖИЗНЬ</span>
+          <span data-i18n="btnRescueKpClaim">✓ ПОСТАВИЛ «БУДУ СМОТРЕТЬ» → ЗАБРАТЬ +1 ПОПЫТКУ</span>
         </button>
 
-        <button type="button" class="btn-ghost btn-full" id="btn-rescue-kp-fallback-trailer" style="margin-top:8px;">
-          УЖЕ НАЖАТО / НЕТ АККАУНТА КИНОПОИСКА → СМОТРЕТЬ ТРЕЙЛЕР (+1)
+        <button type="button" class="btn-ghost btn-full" id="btn-rescue-kp-no-account" style="margin-top:8px;">
+          НЕТ АККАУНТА КИНОПОИСКА / УЖЕ НАЖАТО → ЗАБРАТЬ +1 ПОПЫТКУ
         </button>
       </div>
 
-      <!-- ШАГ Б: 5-я победная попытка за просмотр собственного MP4-трейлера (40 сек) -->
-      <div id="rescue-step-2" hidden>
-        <div class="rescue-done-pill" data-i18n="rescueKpDoneBadge">✓ ШАГ 1: ОТМЕТКА «БУДУ СМОТРЕТЬ» ЗАЧТЕНА</div>
-        <span class="mono-tag accent-tag" data-i18n="rescueStep2Tag">ПОСЛЕДНИЙ ШАНС // СПАСЕНИЕ №2</span>
+      <!-- ШАГ 1: 4-я попытка за просмотр собственного MP4-трейлера (без регистрации) -->
+      <div id="rescue-step-2">
+        <span class="mono-tag accent-tag" data-i18n="rescueStep2Tag">КИСЛОРОД 0% // СПАСЕНИЕ №1</span>
         <h3 class="section-title rescue-title" data-i18n="rescueStep2Title">
-          ПОЧТИ! ОСТАЛОСЬ ВСЕГО ДВЕ ЗАКРЫТЫЕ БОЧКИ!
+          ВОЗДУХ НА НУЛЕ! ОСТАЛОСЬ 3 ЗАКРЫТЫЕ БОЧКИ
         </h3>
         <p class="modal-hint" data-i18n="rescueStep2Desc">
-          В одной из двух бочек заварен друг. Посмотри эксклюзивный трейлер фильма «Бочка» (40 секунд без перемотки), чтобы забрать финальный победный удар!
+          Три крышки сорваны впустую, но внутри одной из 3 бочек стучит друг. Посмотри трейлер фильма «Бочка» (без регистрации!), чтобы забрать +1 удар!
         </p>
 
         <button type="button" class="btn-primary btn-full" id="btn-rescue-watch-trailer">
@@ -1113,6 +1114,11 @@
         <p class="trailer-rescue-status" id="trailer-rescue-status">
           До разблокировки +1 удара: 40 сек (перемотка вперёд отключена)
         </p>
+        <div id="trailer-reaction-box" style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 8px;">
+          <button type="button" class="hud-mini-btn trailer-react-btn" data-react="premiere">🔥 Жду премьеру (+25⭐)</button>
+          <button type="button" class="hud-mini-btn trailer-react-btn" data-react="intense">😱 Жёстко (+25⭐)</button>
+          <button type="button" class="hud-mini-btn trailer-react-btn" data-react="cinema">🎬 Пойду в кино (+25⭐)</button>
+        </div>
         <button type="button" class="btn-primary btn-full" id="btn-claim-trailer-life" disabled>
           <span data-i18n="btnClaimTrailerLife">⚡ ЗАБРАТЬ +1 УДАР И ВСКРЫТЬ БОЧКУ →</span>
         </button>

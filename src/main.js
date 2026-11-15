@@ -1238,8 +1238,7 @@ function handleAirDepleted() {
     }
     if (r.rescueStage === 2) {
       popRemainingEmptyBarrelsDownTo(2);
-      if (state.uiStage <= 2) openRescueTrailerDirectly();
-      else openRescueStep2();
+      openRescueStep2();
       return;
     }
     if (r.rescueStage === 4) {
@@ -1933,8 +1932,7 @@ async function handleBarrelStrike(index, worldPoint) {
       scene.setInteractive(false);
       triggerMiniScreamer(3);
       window.setTimeout(() => {
-        if (state.uiStage <= 2) openRescueTrailerDirectly();
-        else openRescueStep2();
+        openRescueStep2();
       }, 430);
       return;
     }
@@ -2463,19 +2461,8 @@ function openRescueStep1() {
     applyProgressiveDisclosureUI({ forceStage: 2 });
   }
 
-  state.kpSync = {
-    waiting: false,
-    leftTab: false,
-    departedAt: 0,
-    verified: false,
-  };
-
-  document.getElementById('rescue-step-1')?.removeAttribute('hidden');
-  document.getElementById('rescue-step-2')?.setAttribute('hidden', '');
-  document.getElementById('btn-rescue-kp-open')?.removeAttribute('hidden');
-  document.getElementById('rescue-kp-sync')?.setAttribute('hidden', '');
-  document.getElementById('rescue-kp-error')?.setAttribute('hidden', '');
-  document.getElementById('btn-rescue-kp-claim')?.setAttribute('hidden', '');
+  document.getElementById('rescue-step-1')?.setAttribute('hidden', '');
+  document.getElementById('rescue-step-2')?.removeAttribute('hidden');
   document.getElementById('modal-rescue')?.removeAttribute('hidden');
   Haptics.error();
 }
@@ -2524,21 +2511,24 @@ function evaluateKinopoiskReturn() {
   Haptics.success();
 }
 
-function claimKinopoiskFourthLife() {
-  if (!state.kpSync.verified) return;
+function claimKinopoiskFourthLife(bypassNoAccount = false) {
+  if (!bypassNoAccount && !state.kpSync.verified) return;
   document.getElementById('modal-rescue')?.setAttribute('hidden', '');
 
-  state.round.rescueStage = 2;
+  state.round.rescueStage = 4;
   state.round.attemptsLeft = 1;
-  state.round.airLeft = 18.0;
+  state.round.airLeft = 22.0;
   state.round.lastUrgentSec = 9;
   state.round.running = true;
 
   renderAttemptSquares(1);
   updateAirHUD(state.round.airLeft);
   scene.setInteractive(true);
+  if (state.round.voiceUrl) {
+    audio.startMuffledVoiceLoop();
+  }
   startAirCountdownLoop();
-  Haptics.medium();
+  Haptics.success();
 }
 
 function openRescueStep2() {
@@ -2552,9 +2542,21 @@ function openRescueStep2() {
   updateAirHUD(0);
   renderAttemptSquares(0);
 
-  document.getElementById('rescue-step-1')?.setAttribute('hidden', '');
-  document.getElementById('rescue-step-2')?.removeAttribute('hidden');
+  state.kpSync = {
+    waiting: false,
+    leftTab: false,
+    departedAt: 0,
+    verified: false,
+  };
+
+  document.getElementById('rescue-step-2')?.setAttribute('hidden', '');
+  document.getElementById('rescue-step-1')?.removeAttribute('hidden');
+  document.getElementById('btn-rescue-kp-open')?.removeAttribute('hidden');
+  document.getElementById('rescue-kp-sync')?.setAttribute('hidden', '');
+  document.getElementById('rescue-kp-error')?.setAttribute('hidden', '');
+  document.getElementById('btn-rescue-kp-claim')?.setAttribute('hidden', '');
   document.getElementById('modal-rescue')?.removeAttribute('hidden');
+  Haptics.error();
 }
 
 function openRescueTrailerDirectly() {
@@ -2577,9 +2579,10 @@ function claimTrailerFifthLife() {
   closeTrailerModal();
   document.getElementById('modal-rescue')?.setAttribute('hidden', '');
 
-  state.round.rescueStage = 4;
+  const isFirstRescue = state.round.rescueStage <= 1;
+  state.round.rescueStage = isFirstRescue ? 2 : 4;
   state.round.attemptsLeft = 1;
-  state.round.airLeft = 22.0;
+  state.round.airLeft = isFirstRescue ? 18.0 : 22.0;
   state.round.lastUrgentSec = 9;
   state.round.running = true;
 
@@ -3347,7 +3350,7 @@ function closeTrailerModal() {
     state.trailer.ytTimer = null;
   }
 
-  if (state.trailer.forRescue && state.round.rescueStage === 3 && !state.trailer.unlocked40 && state.uiStage > 2) {
+  if (state.trailer.forRescue && (state.round.rescueStage === 1 || state.round.rescueStage === 3) && !state.trailer.unlocked40 && state.uiStage > 2) {
     document.getElementById('modal-rescue')?.removeAttribute('hidden');
   }
 }
@@ -4228,8 +4231,25 @@ function bindUIEvents() {
 
   // 5-ходовая модалка Спасения
   document.getElementById('btn-rescue-kp-open')?.addEventListener('click', () => handleRescueKpOpenClick());
-  document.getElementById('btn-rescue-kp-claim')?.addEventListener('click', () => claimKinopoiskFourthLife());
-  document.getElementById('btn-rescue-kp-fallback-trailer')?.addEventListener('click', () => openRescueTrailerDirectly());
+  document.getElementById('btn-rescue-kp-claim')?.addEventListener('click', () => claimKinopoiskFourthLife(false));
+  document.getElementById('btn-rescue-kp-no-account')?.addEventListener('click', () => claimKinopoiskFourthLife(true));
+  document.querySelectorAll('.trailer-react-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      document.querySelectorAll('.trailer-react-btn').forEach((b) => b.classList.remove('is-on'));
+      btn.classList.add('is-on');
+      if (!localStorage.getItem('bochka_trailer_reacted')) {
+        localStorage.setItem('bochka_trailer_reacted', btn.dataset.react || '1');
+        const res = await claimSocialOrPromoBonus(state.tg?.user, 'trailer_reaction', 'trailer').catch(() => null);
+        if (res?.pointsAdded > 0) {
+          state.profile.premierePoints = res.premierePoints;
+          updatePremiereBarsUI();
+        }
+        showToast('🔥 Спасибо за оценку трейлера! +25 ⭐ в рейтинг');
+      } else {
+        showToast('Реакция обновлена!');
+      }
+    });
+  });
   document.getElementById('btn-rescue-watch-trailer')?.addEventListener('click', () => {
     document.getElementById('modal-rescue')?.setAttribute('hidden', '');
     openTrailerModal({ forRescue: true });
