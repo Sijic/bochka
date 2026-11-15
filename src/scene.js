@@ -253,9 +253,34 @@ export class WorkshopScene {
       b.lidSpin.set(-5.2, sideDir * 3.4, 2.6);
     }
 
-    const rimWorld = b.group.position.clone().add(new THREE.Vector3(0, 1.36, 0));
+    const s = b.group.scale.y || 1;
+    const rimWorld = b.group.position.clone().add(new THREE.Vector3(0, 1.36 * s, 0));
     this._spawnRustDust(rimWorld, 16);
     this._impulseChains(1.25);
+  }
+
+  /**
+   * Нырок камеры именно в ТУ пустую бочку, по крышке которой только что ударил игрок на последней попытке
+   */
+  triggerEmptyDive(index) {
+    const b = this.barrels[index];
+    if (!b) return;
+    this.interactive = false;
+    this._setHovered(-1);
+    b.portraitMesh.visible = false;
+
+    const s = b.group.scale.y || 1;
+    this.shakeIntensity = 0.30;
+    this.interiorSpot.position.set(b.group.position.x + 0.10 * s, 3.0 * s, b.group.position.z + 0.16 * s);
+    this.interiorSpot.target.position.set(b.group.position.x, 0.35 * s, b.group.position.z);
+    this.interiorSpot.target.updateMatrixWorld();
+    this.interiorSpot.intensity = 5.5;
+
+    this.diving = true;
+    this.diveProgress = 0;
+    this.diveTargetIndex = index;
+    this.diveStartPos.copy(this.camera.position);
+    this.diveStartLook.copy(this.currentLookAt);
   }
 
   /**
@@ -281,14 +306,15 @@ export class WorkshopScene {
     b.lidVel.set((Math.random() - 0.5) * 1.8, 4.8, -2.5);
     b.lidSpin.set(-6.8, (Math.random() - 0.5) * 4, 3.4);
 
+    const s = b.group.scale.y || 1;
     this.shakeIntensity = 0.28;
-    const rimWorld = b.group.position.clone().add(new THREE.Vector3(0, 1.38, 0));
+    const rimWorld = b.group.position.clone().add(new THREE.Vector3(0, 1.38 * s, 0));
     this._spawnSparks(rimWorld, 32);
     this._spawnRustDust(rimWorld, 12);
     this._impulseChains(1.6);
 
-    this.interiorSpot.position.set(b.group.position.x + 0.12, 3.2, b.group.position.z + 0.18);
-    this.interiorSpot.target.position.set(b.group.position.x, 0.35, b.group.position.z);
+    this.interiorSpot.position.set(b.group.position.x + 0.12 * s, 3.2 * s, b.group.position.z + 0.18 * s);
+    this.interiorSpot.target.position.set(b.group.position.x, 0.35 * s, b.group.position.z);
     this.interiorSpot.target.updateMatrixWorld();
     this.interiorSpot.intensity = 15;
 
@@ -682,8 +708,8 @@ export class WorkshopScene {
     const portraitGeo = new THREE.CircleGeometry(0.382, 44);
     portraitGeo.rotateX(-Math.PI * 0.5);
 
-    // Расширенный невидимый цилиндр-хитбокс (BUG-UX11: уверенный тап по мелким бочкам Блица на 375px и дальней бочке 97)
-    const proxyHitGeo = new THREE.CylinderGeometry(0.60, 0.60, 1.78, 12);
+    // Невидимый цилиндр-хитбокс без завышения над крышкой, чтобы передние бочки не перекрывали крышки заднего ряда
+    const proxyHitGeo = new THREE.CylinderGeometry(0.50, 0.50, 1.44, 12);
     const proxyHitMat = new THREE.MeshBasicMaterial({
       colorWrite: false,
       depthWrite: false,
@@ -760,10 +786,13 @@ export class WorkshopScene {
       lidPlate.userData.barrelIndex = i;
       const lidRim = new THREE.Mesh(lidRimGeo, lidMat);
       lidRim.position.y = 0.01;
+      lidRim.userData.barrelIndex = i;
       const bung1 = new THREE.Mesh(bungBigGeo, lidMat);
       bung1.position.set(0.21, 0.015, 0.05);
+      bung1.userData.barrelIndex = i;
       const bung2 = new THREE.Mesh(bungSmallGeo, lidMat);
       bung2.position.set(-0.2, 0.015, -0.06);
+      bung2.userData.barrelIndex = i;
 
       lidGroup.add(lidPlate, lidRim, bung1, bung2);
       group.add(lidGroup);
@@ -788,12 +817,12 @@ export class WorkshopScene {
       group.add(ringMesh);
 
       const proxyMesh = new THREE.Mesh(proxyHitGeo, proxyHitMat);
-      proxyMesh.position.y = 0.80;
+      proxyMesh.position.y = 0.72;
       proxyMesh.userData.barrelIndex = i;
       group.add(proxyMesh);
 
       this.scene.add(group);
-      this.hitMeshes.push(bodyMesh, lidPlate);
+      this.hitMeshes.push(bodyMesh, lidPlate, lidRim, bung1, bung2);
       this.proxyHitMeshes.push(proxyMesh);
 
       this.barrels.push({
@@ -1189,16 +1218,28 @@ export class WorkshopScene {
   _pickBarrel() {
     this.raycaster.setFromCamera(this.pointerNDC, this.camera);
     const hits = this.raycaster.intersectObjects(this.hitMeshes, false);
+    const isValidIdx = (idx) =>
+      typeof idx === 'number' && idx >= 0 && idx < this.activeBarrelCount && this.barrels[idx]?.group.visible;
+
+    // 1. Приоритет — закрытые (не пробитые) бочки по реальным мешам (корпус, крышка, обод, пробки)
     for (const h of hits) {
       const idx = h.object.userData.barrelIndex;
-      if (typeof idx === 'number' && idx >= 0 && idx < this.activeBarrelCount && this.barrels[idx]?.group.visible) {
+      if (isValidIdx(idx) && !this.barrels[idx].struck) {
         return { index: idx, point: h.point };
       }
     }
+    // 2. Затем закрытые бочки по мягкому тап-хитбоксу (для мелких мобильных рядов)
     const proxyHits = this.raycaster.intersectObjects(this.proxyHitMeshes, false);
     for (const h of proxyHits) {
       const idx = h.object.userData.barrelIndex;
-      if (typeof idx === 'number' && idx >= 0 && idx < this.activeBarrelCount && this.barrels[idx]?.group.visible) {
+      if (isValidIdx(idx) && !this.barrels[idx].struck) {
+        return { index: idx, point: h.point };
+      }
+    }
+    // 3. Уже пробитые бочки — только по реальным мешам (сохраняет пасхалку 19·97 без кражи тапа прокси-цилиндром)
+    for (const h of hits) {
+      const idx = h.object.userData.barrelIndex;
+      if (isValidIdx(idx)) {
         return { index: idx, point: h.point };
       }
     }
@@ -1259,10 +1300,12 @@ export class WorkshopScene {
     if (this.diving && this.diveTargetIndex >= 0) {
       this.diveProgress = Math.min(1, this.diveProgress + dt * 0.92);
       const ease = 1 - Math.pow(1 - this.diveProgress, 3);
-      const bPos = this.barrels[this.diveTargetIndex].group.position;
+      const diveBarrel = this.barrels[this.diveTargetIndex];
+      const bPos = diveBarrel.group.position;
+      const s = diveBarrel.group.scale.y || 1;
 
-      const endCam = new THREE.Vector3(bPos.x, 1.98, bPos.z + 0.24);
-      const endLook = new THREE.Vector3(bPos.x, 0.52, bPos.z);
+      const endCam = new THREE.Vector3(bPos.x, 1.92 * s, bPos.z + 0.18 * s);
+      const endLook = new THREE.Vector3(bPos.x, 0.52 * s, bPos.z);
 
       this.camera.position.lerpVectors(this.diveStartPos, endCam, ease);
       this.currentLookAt.lerpVectors(this.diveStartLook, endLook, ease);

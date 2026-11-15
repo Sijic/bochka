@@ -1278,7 +1278,7 @@ function handleAirDepleted() {
       const winIdx = closed[0] ?? r.targetIndex;
       r.targetIndex = winIdx;
       r.attemptsUsed = 5;
-      finishRound(true);
+      finishRound(true, { diveBarrelIndex: winIdx, hitTarget: true });
       return;
     }
   }
@@ -1290,11 +1290,11 @@ function handleAirDepleted() {
 
   // В режиме Блиц (Уровень 9+), если за время нашли хотя бы 1 живую бочку — уровень засчитывается как успешный с комбо-очками!
   if (r.isBlitz && r.blitzTargetsCleared > 0) {
-    finishRound(true);
+    finishRound(true, { diveBarrelIndex: -1, hitTarget: false });
     return;
   }
 
-  finishRound(false);
+  finishRound(false, { diveBarrelIndex: -1, hitTarget: false });
 }
 
 function popRemainingEmptyBarrelsDownTo(keepClosedCount) {
@@ -1928,7 +1928,7 @@ async function handleBarrelStrike(index, worldPoint) {
       scene.triggerStrikeFX(index, worldPoint);
       audio.playStrike(index);
       state.watchChannel?.send('strike', { barrelIndex: index, rescued: true, hitTarget: true });
-      finishRound(true);
+      finishRound(true, { diveBarrelIndex: index, hitTarget: true });
       return;
     }
 
@@ -2002,7 +2002,7 @@ async function handleBarrelStrike(index, worldPoint) {
       return;
     }
 
-    finishRound(true);
+    finishRound(true, { diveBarrelIndex: index, hitTarget: true });
     return;
   }
 
@@ -2015,7 +2015,11 @@ async function handleBarrelStrike(index, worldPoint) {
   if (r.attemptsLeft > 0) {
     triggerMiniScreamer();
   } else {
-    finishRound(r.isBlitz && r.blitzTargetsCleared > 0);
+    triggerMiniScreamer();
+    finishRound(r.isBlitz && r.blitzTargetsCleared > 0, {
+      diveBarrelIndex: index,
+      hitTarget: false,
+    });
   }
 }
 
@@ -2662,7 +2666,7 @@ function claimTrailerFifthLife() {
 /* ============================================================================
    ФИНАЛ РАУНДА: СРЫВ КРЫШКИ, ЧИСТЫЙ ГОЛОС ДРУГА И ПИНГ В TELEGRAM
    ============================================================================ */
-async function finishRound(survived) {
+async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null } = {}) {
   if (!state.round.running && state.round.rescueStage !== 4) return;
   state.round.running = false;
   state.round.survived = survived;
@@ -2670,15 +2674,28 @@ async function finishRound(survived) {
   audio.stopListening();
   audio.stopMuffledVoiceLoop();
 
-  audio.playLidBlowOff(survived);
-  scene.triggerRevealDive(state.round.targetIndex);
+  const didHitTarget = hitTarget !== null ? Boolean(hitTarget) : Boolean(survived);
+  audio.playLidBlowOff(didHitTarget);
+
+  if (didHitTarget) {
+    const revealIdx =
+      typeof diveBarrelIndex === 'number' && diveBarrelIndex >= 0
+        ? diveBarrelIndex
+        : state.round.targetIndex;
+    scene.triggerRevealDive(revealIdx);
+  } else if (typeof diveBarrelIndex === 'number' && diveBarrelIndex >= 0) {
+    scene.triggerEmptyDive(diveBarrelIndex);
+  } else {
+    scene.setInteractive(false);
+    scene.triggerScreamerShake(0.38);
+  }
 
   state.watchChannel?.send('rescued', {
     survived,
     attemptsUsed: state.round.attemptsUsed || 1,
   });
 
-  if (state.round.voiceUrl) {
+  if (didHitTarget && state.round.voiceUrl) {
     window.setTimeout(() => {
       audio.playCleanSenderVoice(state.round.voiceUrl);
     }, 360);
