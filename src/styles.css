@@ -574,6 +574,15 @@ body {
   background: var(--danger);
 }
 
+.air-sub-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  line-height: 1.2;
+  color: rgba(245, 235, 214, 0.78);
+  pointer-events: none;
+}
+
 /* Плавающий технический прицел прослушки */
 .barrel-reticle {
   position: fixed;
@@ -1873,9 +1882,13 @@ button:disabled {
     max-width: none;
     height: 4px;
   }
+  .air-sub-hint {
+    margin-top: 1px;
+    font-size: 9px;
+  }
   .share-hub-platforms {
-    gap: 6px;
-    margin-top: 8px;
+    gap: 10px;
+    margin-top: 10px;
   }
   .modal-card {
     padding: 12px;
@@ -2212,7 +2225,30 @@ button:disabled {
 .fork-choices-stack {
   display: flex;
   flex-direction: column;
+  gap: 12px;
+}
+
+.fork-choices-stack .btn-burn-furnace,
+#btn-gift-ticket-toggle {
+  min-height: 50px;
+}
+
+.fork-or-divider {
+  display: flex;
+  align-items: center;
   gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: rgba(253, 224, 71, 0.78);
+}
+
+.fork-or-divider::before,
+.fork-or-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(234, 179, 8, 0.35);
 }
 
 .btn-burn-furnace {
@@ -2954,11 +2990,28 @@ button:disabled {
   border-color: rgba(244, 114, 182, 0.45);
 }
 
+.share-hub-preview-pill {
+  margin-top: 10px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px dashed rgba(234, 179, 8, 0.42);
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: #fde68a;
+}
+
 .share-hub-platforms {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   margin-top: 12px;
+}
+
+.share-hub-platforms button {
+  min-height: 46px;
+  padding: 11px 14px;
+  font-size: 13.5px;
 }
 
 /* 3 Реактивные кнопки ответа другу на финальном экране (Триггер Б) */
@@ -3836,9 +3889,9 @@ body[data-ui-stage="2"] #screen-finale #btn-pack-revenge .btn-sub-line {
   border-left: 3px solid var(--accent);
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  font-size: 12.5px;
-  line-height: 1.38;
+  gap: 6px;
+  font-size: 13.5px;
+  line-height: 1.42;
   color: #f5ebd6;
 }
 
@@ -3848,16 +3901,16 @@ body[data-ui-stage="2"] #screen-finale #btn-pack-revenge .btn-sub-line {
 
 .gate-quick-rules {
   margin: 0 0 14px;
-  padding: 9px 11px;
+  padding: 10px 12px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--line-subtle);
   border-left: 2px solid var(--accent);
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 11.5px;
-  line-height: 1.35;
-  color: #d6d3cd;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.42;
+  color: #e5e0d5;
   text-align: left;
 }
 
@@ -4020,4 +4073,22 @@ body[data-blitz-unlocked="0"] .blitz-rule-note {
 .transparency-grid span {
   font-size: 11px;
   color: #e5e7eb;
+}
+
+.blitz-microgoal-card {
+  border-color: rgba(234, 179, 8, 0.45);
+  background: rgba(23, 20, 14, 0.92);
+}
+
+.blitz-microgoal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.blitz-microgoal-actions button {
+  flex: 1 1 140px;
+  min-height: 40px;
+  font-size: 12px;
 }

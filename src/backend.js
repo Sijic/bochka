@@ -477,6 +477,9 @@ function getLocalPreviewProfile() {
     lives: 3,
     rawSharesToday: 0,
     rawSharesDay: today,
+    dailyBlitzPoints: 0,
+    dailyBlitzDate: today,
+    lastBlitzAtMs: 0,
     easterEggClaimed: false,
     easterEggBestTaps: 0,
     easterEggGiftWon: false,
@@ -494,11 +497,17 @@ function getLocalPreviewProfile() {
   };
   const saved = safeReadJson(PROFILE_STORAGE_KEY, null);
   const prof = saved ? { ...def, ...saved } : def;
-  if (prof.rawSharesDay !== today) {
-    prof.rawSharesToday = 0;
-    prof.dailySocialMask = '';
-    prof.rawSharesDay = today;
-    safeWriteJson(PROFILE_STORAGE_KEY, prof);
+  if (prof.rawSharesDay !== today || prof.dailyBlitzDate !== today) {
+    if (prof.rawSharesDay !== today) {
+      prof.rawSharesToday = 0;
+      prof.dailySocialMask = '';
+      prof.rawSharesDay = today;
+    }
+    if (prof.dailyBlitzDate !== today) {
+      prof.dailyBlitzPoints = 0;
+      prof.dailyBlitzDate = today;
+    }
+    saveLocalPreviewProfile(prof);
   }
   return prof;
 }
@@ -1484,11 +1493,17 @@ export async function completeWorkshopLevel(tgUser = null, level = 1, timeLeftSe
         const prof = getLocalPreviewProfile();
         prof.currentLevel = Number(data.current_level || level + 1);
         prof.premierePoints = Number(data.premiere_points || prof.premierePoints);
+        prof.dailyBlitzPoints = Number(data.daily_blitz_points ?? prof.dailyBlitzPoints ?? 0);
         prof.hasPlayedSolo = true;
         saveLocalPreviewProfile(prof);
         return {
           ok: true,
-          earnedPoints: Number(data.earned_points || 120),
+          earnedPoints: Number(data.earned_points || 0),
+          cooldownBlocked: Boolean(data.cooldown_blocked),
+          cooldownRemainingSec: Number(data.cooldown_remaining_sec || 0),
+          dailyBlitzPoints: Number(data.daily_blitz_points || 0),
+          dailyBlitzCap: Number(data.daily_blitz_cap || 2000),
+          dailyEventCode: String(data.daily_event_code || ''),
           currentLevel: prof.currentLevel,
           premierePoints: prof.premierePoints,
         };
@@ -1497,7 +1512,29 @@ export async function completeWorkshopLevel(tgUser = null, level = 1, timeLeftSe
   }
 
   const prof = getLocalPreviewProfile();
-  const earned = Math.min(750, 80 + Math.min(10, level) * 25 + Math.round(Math.max(0, timeLeftSec) * 6) + Math.max(0, bonusPoints));
+  const isBlitz = level >= 8;
+  const nowMs = Date.now();
+  const elapsedSec = (nowMs - Number(prof.lastBlitzAtMs || 0)) / 1000;
+  let cooldownBlocked = false;
+  let cooldownRemainingSec = 0;
+  let earned = 0;
+
+  if (isBlitz && prof.lastBlitzAtMs && elapsedSec < 12) {
+    cooldownBlocked = true;
+    cooldownRemainingSec = Math.max(1, Math.min(12, Math.ceil(12 - elapsedSec)));
+  } else {
+    earned = Math.min(
+      280,
+      50 + Math.min(10, level) * 10 + Math.round(Math.max(0, Math.min(20, timeLeftSec)) * 2) + Math.max(0, Math.min(60, bonusPoints))
+    );
+    if (isBlitz) {
+      const blitzToday = Number(prof.dailyBlitzPoints || 0);
+      earned = Math.max(0, Math.min(earned, 2000 - blitzToday));
+      prof.dailyBlitzPoints = blitzToday + earned;
+      prof.lastBlitzAtMs = nowMs;
+    }
+  }
+
   prof.currentLevel = Math.max(prof.currentLevel || 1, level + 1);
   prof.premierePoints = (prof.premierePoints || 0) + earned;
   prof.hasPlayedSolo = true;
@@ -1505,6 +1542,11 @@ export async function completeWorkshopLevel(tgUser = null, level = 1, timeLeftSe
   return {
     ok: true,
     earnedPoints: earned,
+    cooldownBlocked,
+    cooldownRemainingSec,
+    dailyBlitzPoints: Number(prof.dailyBlitzPoints || 0),
+    dailyBlitzCap: 2000,
+    dailyEventCode: 'DOUBLE_BLITZ',
     currentLevel: prof.currentLevel,
     premierePoints: prof.premierePoints,
   };
@@ -1620,11 +1662,15 @@ export async function fetchPremiereLeaderboard(tgUser = null) {
     duels_won: prof.duelsWon || 0,
   });
   mockLeaders.forEach((r) => {
-    const bonusPct = Math.min(5, Number(r.friends_brought || 0)) * 10;
+    const friends = Number(r.friends_brought || 0);
+    const bonusPct = Math.min(5, friends) * 10;
+    const tier1Pts = friends >= 1 ? 150 : 0;
     r.friend_bonus_pct = bonusPct;
-    r.effective_points = Math.round(Number(r.premiere_points || 0) * (1 + bonusPct / 100));
+    r.referral_tier = friends >= 2 ? 2 : friends === 1 ? 1 : 0;
+    r.qualified_top10 = friends >= 2 && Number(r.premiere_points || 0) > 0;
+    r.effective_points = tier1Pts + Math.round(Number(r.premiere_points || 0) * (1 + bonusPct / 100));
   });
-  mockLeaders.sort((a, b) => b.effective_points - a.effective_points);
+  mockLeaders.sort((a, b) => (Number(b.qualified_top10) - Number(a.qualified_top10)) || (b.effective_points - a.effective_points));
   mockLeaders.forEach((r, idx) => { r.rank = idx + 1; });
   const meEntry = mockLeaders.find((r) => r.uid === uid);
   const tenth = mockLeaders[9]?.effective_points || 0;
@@ -1636,7 +1682,9 @@ export async function fetchPremiereLeaderboard(tgUser = null) {
     me: {
       uid,
       rank: meEntry?.rank || 11,
-      in_top10: (meEntry?.rank || 11) <= 10,
+      qualified_top10: Boolean(meEntry?.qualified_top10),
+      referral_tier: meEntry?.referral_tier || 0,
+      in_top10: (meEntry?.rank || 11) <= 10 && Boolean(meEntry?.qualified_top10),
       premiere_points: myPts,
       effective_points: meEntry?.effective_points || myPts,
       friend_bonus_pct: meEntry?.friend_bonus_pct || 0,

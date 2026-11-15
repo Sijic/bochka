@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { resolveSiteAsset } from './env.js';
 
 export const BARREL_BATCH_CODES = ['01', '19', '97', '12', '17', '26', '33', '48', '71', '99'];
 
@@ -1775,10 +1776,7 @@ export class WorkshopScene {
 
   _buildFilmWallClock() {
     const loader = new THREE.TextureLoader();
-    const spriteBase = (typeof window !== 'undefined' && window.location.pathname.includes('/testbog'))
-      ? '../public/sprites/'
-      : './public/sprites/';
-    const dialTex = loader.load(`${spriteBase}film_clock.webp`);
+    const dialTex = loader.load(resolveSiteAsset('public/sprites/film_clock.webp'));
     dialTex.colorSpace = THREE.SRGBColorSpace;
     dialTex.anisotropy = 4;
 
@@ -1864,9 +1862,6 @@ export class WorkshopScene {
 
   _buildFilmCharacters() {
     const loader = new THREE.TextureLoader();
-    const spriteBase = (typeof window !== 'undefined' && window.location.pathname.includes('/testbog'))
-      ? '../public/sprites/'
-      : './public/sprites/';
 
     // 1. Отец (Филипп Рейнхардт), привязанный цепями к бетонной опоре (Ур. 2, 3, 6, 7, 10)
     const fatherGroup = new THREE.Group();
@@ -1891,7 +1886,7 @@ export class WorkshopScene {
       fatherGroup.add(collar);
     }
 
-    const fatherTex = loader.load(`${spriteBase}father_pillar.webp`);
+    const fatherTex = loader.load(resolveSiteAsset('public/sprites/father_pillar.webp'));
     fatherTex.colorSpace = THREE.SRGBColorSpace;
     this.fatherSpriteMat = new THREE.MeshStandardMaterial({
       map: fatherTex,
@@ -1922,9 +1917,9 @@ export class WorkshopScene {
     const pastorGroup = new THREE.Group();
     pastorGroup.name = 'pastorWalker';
 
-    this.pastorWalkTex1 = loader.load(`${spriteBase}pastor_walk_1.webp`);
+    this.pastorWalkTex1 = loader.load(resolveSiteAsset('public/sprites/pastor_walk_1.webp'));
     this.pastorWalkTex1.colorSpace = THREE.SRGBColorSpace;
-    this.pastorWalkTex2 = loader.load(`${spriteBase}pastor_walk_2.webp`);
+    this.pastorWalkTex2 = loader.load(resolveSiteAsset('public/sprites/pastor_walk_2.webp'));
     this.pastorWalkTex2.colorSpace = THREE.SRGBColorSpace;
 
     const pastorMat = new THREE.MeshStandardMaterial({

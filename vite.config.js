@@ -64,6 +64,11 @@ function stripStaticImportMapAndCopyAssets() {
         const dst = path.join(root, outDir, rel);
         fs.mkdirSync(path.dirname(dst), { recursive: true });
         fs.copyFileSync(src, dst);
+        if (rel.startsWith('public/')) {
+          const aliasDst = path.join(root, outDir, rel.slice('public/'.length));
+          fs.mkdirSync(path.dirname(aliasDst), { recursive: true });
+          fs.copyFileSync(src, aliasDst);
+        }
       }
       const dictSrc = path.join(root, 'src', 'dict.json');
       if (fs.existsSync(dictSrc)) {

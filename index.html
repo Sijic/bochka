@@ -131,14 +131,14 @@
       <p class="gate-subtitle" data-i18n="gateSubtitle">ПСИХОЛОГИЧЕСКИЙ ТРИЛЛЕР · 200 ЛИТРОВ ТЕМНОТЫ</p>
 
       <p class="gate-teaser" data-i18n="gateTeaser">
-        Мокрый бетон, кафельные колонны с ржавыми цепями и шесть заваренных бочек под лучом прожектора. Надень наушники: внутри одной из них стучат ладонями и зовут сквозь сталь.
+        Шесть заваренных бочек под лучом прожектора. Надень наушники: внутри одной из них стучат сквозь сталь.
       </p>
 
       <div class="gate-quick-rules" aria-label="Правила игры">
-        <div>🛢 Друг заперт в одной из ржавых бочек — 30 сек воздуха и 3 удара ломом.</div>
-        <div>🎧 Слушай стук сквозь сталь и найди живую крышку (ищи секрет 19·97).</div>
-        <div>🎬 Закатай ответную бочку и зови друзей за стол «На счёт три!».</div>
-        <div>🎟 Добивай шкалу к Премьере или выигрывай билет в кино с 17 декабря!</div>
+        <div>🛢 30 сек кислорода O₂ и 3 удара ломом — найди живую бочку по звуку.</div>
+        <div>🎧 Води пальцем по стали, слушай стук и ищи код 19·97.</div>
+        <div>🎬 Закатай друга в ответ (+72% старта) и вызывай в «На счёт три!».</div>
+        <div>🎟 Добери 72% → 100% до закрытой Премьеры 17 декабря!</div>
       </div>
 
       <div class="gate-actions">
@@ -247,12 +247,13 @@
 
         <div class="hud-air-module" id="hud-air-module">
           <div class="air-row">
-            <span class="air-label" data-i18n="hudAir">ВОЗДУХ</span>
+            <span class="air-label" data-i18n="hudAir">КИСЛОРОД O₂</span>
             <span class="air-value"><strong id="air-seconds">30.0</strong> <small data-i18n="hudSec">СЕК</small></span>
           </div>
           <div class="air-bar-track">
             <div class="air-bar-fill" id="air-bar-fill"></div>
           </div>
+          <small class="air-sub-hint" id="air-sub-hint">запас дыхания · промах −сек</small>
         </div>
       </div>
     </div>
@@ -744,7 +745,7 @@
         <button type="button" class="btn-secondary btn-full btn-with-sub" id="btn-pack-revenge">
           <span class="btn-main-line">
             <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="6" ry="2"/><path d="M6 5v14c0 1.1 2.7 2 6 2s6-.9 6-2V5M6 10c0 1.1 2.7 2 6 2s6-.9 6-2M6 15c0 1.1 2.7 2 6 2s6-.9 6-2"/></svg>
-            <span id="btn-pack-revenge-text" data-i18n="btnPackBack">ЗАКАТАТЬ СВОЕГО КЕНТА</span>
+            <span id="btn-pack-revenge-text" data-i18n="btnPackBack">ЗАКАТАТЬ ДРУГА В ОТВЕТ</span>
           </span>
           <small class="btn-sub-line" data-i18n="btnPackBackHint">Открывает «Гонку за Премьерой (0 / 100)» и даёт жизни для ударов</small>
         </button>
@@ -767,6 +768,8 @@
             СЛЕД. УРОВЕНЬ В ЦЕХУ
           </button>
         </div>
+
+        <div class="retention-card blitz-microgoal-card" id="blitz-cooldown-microgoal" hidden></div>
       </div>
 
       <!-- ==================================================================
@@ -909,6 +912,8 @@
         <button type="button" class="btn-burn-furnace btn-full" id="btn-burn-ticket-x2">
           <span data-i18n="btnBurnTicketX2">🔥 ПУТЬ А: СЖЕЧЬ БИЛЕТ (×2 ДО 12 ❤️ + 150 ⭐)</span>
         </button>
+
+        <div class="fork-or-divider" aria-hidden="true"><span>ИЛИ ПОДАРИ БИЛЕТ ДРУГУ</span></div>
 
         <button type="button" class="btn-primary btn-full" id="btn-gift-ticket-toggle">
           <span data-i18n="btnGiftTicketToggle">🎟 ПУТЬ Б: ПОДАРИТЬ БИЛЕТ ДРУГУ (+4 ❤️ И +3500 ⭐)</span>
@@ -1387,7 +1392,7 @@
       <span class="temu-pill-badge" data-i18n="temuUnlockTag">🔥 СТАРТОВЫЙ РЫВОК ОТКРЫТ!</span>
       <h3 class="temu-unlock-title" data-i18n="temuUnlockTitle">ДОПУСК НА ЗАКРЫТУЮ ПРЕМЬЕРУ</h3>
       <p class="temu-unlock-sub" data-i18n="temuUnlockSub">
-        Тебе осталось совсем чуть-чуть до закрытой Премьеры!
+        Старт 72.0% уже твой! Формула 72% → 100%: вскрывай бочки (+%), зови друзей (+❤️) и забирай пропуск на закрытую Премьеру 17 декабря.
       </p>
 
       <div class="temu-meter-stage">
@@ -1431,10 +1436,10 @@
       <ul class="rules-compact-list">
         <li>🛢 <strong>Стучи по бочкам:</strong> прислушивайся к живому звуку сквозь сталь и открывай бочки.</li>
         <li>🔥 <strong>Шкала Допуска 0..100:</strong> после 1-й упакованной бочки получаешь старт 72.0% — добери оставшиеся проценты!</li>
-        <li>🏆 <strong>Лига ТОП-10:</strong> 10 лидеров с ≥2 приведёнными друзьями по рейтинговым очкам (⭐) гарантированно попадают на закрытую Премьеру.</li>
+        <li>🏆 <strong>Лига ТОП-10:</strong> 1-й друг сразу даёт +150 ⭐ и +10% к очкам; 2+ друзей открывают финал ТОП-10 на Премьеру.</li>
         <li>🎟 <strong>Обычный билет:</strong> по закону цеха его нельзя забрать себе — сожги (×2 до 12 ❤️ + 150 ⭐) или подари другу (+4 ❤️ и +3500 ⭐).</li>
         <li class="stage4-only-item">⚔️ <strong>«На счёт три!»:</strong> вызов друзей по повторной ссылке — ставки жизнями и быстрый подъём в рейтинге.</li>
-        <li class="blitz-rule-note">⚡ <strong>Блиц-режим (Уровень 8+):</strong> бочки закрыты на скорость и приносят до +220 ⭐ за раунд (макс 1500 ⭐/день).</li>
+        <li class="blitz-rule-note">⚡ <strong>Блиц-режим (Уровень 8+):</strong> бочки закрыты на скорость и приносят до +280 ⭐ за раунд (макс 2000 ⭐/день).</li>
       </ul>
       <button type="button" class="btn-primary btn-full" id="btn-rules-ok">ПОНЯТНО, ВЕРНУТЬСЯ</button>
     </div>
@@ -1467,6 +1472,8 @@
         <input type="text" id="share-hub-url-output" class="industrial-input" readonly />
         <button type="button" class="btn-ghost" id="btn-share-hub-copy">КОПИРОВАТЬ</button>
       </div>
+
+      <div class="share-hub-preview-pill" id="share-hub-preview-note">Превью: карточка трейлера 17 декабря + реферальная ссылка (+150 ⭐)</div>
 
       <div class="share-hub-platforms">
         <button type="button" class="btn-primary btn-full" data-social-platform="tg">

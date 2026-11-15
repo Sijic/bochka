@@ -78,12 +78,12 @@ async function handleLoginSubmit(e) {
     const allowed = await refreshDashboardData();
     if (!allowed) {
       await adminSupabase.auth.signOut();
-      showAuthGate('У этого аккаунта нет прав администратора в таблице public.admins.');
+      showAuthGate('Недостаточно прав доступа для входа в кабинет продюсера.');
       return;
     }
 
     showAdminDashboard();
-    showAdmToast('✓ Вход выполнен. Данные загружены из Supabase.');
+    showAdmToast('✓ Вход выполнен. Панель управления синхронизирована.');
   } finally {
     if (btn) {
       btn.disabled = false;

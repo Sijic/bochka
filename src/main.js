@@ -1,4 +1,4 @@
-import { ENV } from './env.js';
+import { ENV, resolveSiteAsset } from './env.js';
 import { initI18n, setLang, t, applyDomTranslations, onLangChange } from './i18n.js';
 import {
   initTelegram,
@@ -71,10 +71,10 @@ const KP_MIN_AWAY_SEC = 3.5;
 const TRAILER_UNLOCK_SEC = 40.0;
 
 const SCREAMER_META = [
-  { key: 'hand', img: './assets/keyed/screamer_hand.webp', i18n: 'screamerHand' },
-  { key: 'pastor', img: './assets/keyed/screamer_pastor.webp', i18n: 'screamerPastor' },
-  { key: 'father', img: './assets/keyed/screamer_father.webp', i18n: 'screamerFather' },
-  { key: 'blogger', img: './assets/keyed/screamer_blogger.webp', i18n: 'screamerBlogger' },
+  { key: 'hand', img: resolveSiteAsset('assets/keyed/screamer_hand.webp'), i18n: 'screamerHand' },
+  { key: 'pastor', img: resolveSiteAsset('assets/keyed/screamer_pastor.webp'), i18n: 'screamerPastor' },
+  { key: 'father', img: resolveSiteAsset('assets/keyed/screamer_father.webp'), i18n: 'screamerFather' },
+  { key: 'blogger', img: resolveSiteAsset('assets/keyed/screamer_blogger.webp'), i18n: 'screamerBlogger' },
 ];
 const SCREAMER_IMAGE_CACHE = new Map();
 if (typeof Image !== 'undefined') {
@@ -117,6 +117,11 @@ const state = {
     hasSocialConnection: false,
     repeatLinkEntered: false,
   },
+
+  blitzCooldownUntil: 0,
+  lastBlitzDailyPoints: 0,
+  lastBlitzDailyCap: 2000,
+  blitzTimerId: null,
 
   // Состояние текущего раунда в цеху ('demo' | 'viral' | 'premiere')
   round: {
@@ -1511,7 +1516,7 @@ function resetOceanTapperUI() {
   const giftBtn = document.getElementById('btn-ocean-claim-gift');
   const pill = document.getElementById('ocean-bonus-pill');
 
-  if (barrelImg) barrelImg.src = './assets/keyed/ocean_barrel_closed.webp';
+  if (barrelImg) barrelImg.src = resolveSiteAsset('assets/keyed/ocean_barrel_closed.webp');
   if (timerEl) timerEl.textContent = '10.0';
   if (countEl) countEl.textContent = '0';
   if (fillEl) fillEl.style.width = '0%';
@@ -1549,7 +1554,7 @@ function startOceanTapperCountdown() {
   const promptEl = document.getElementById('ocean-tap-prompt');
   const startBtn = document.getElementById('btn-ocean-start-tap');
 
-  if (barrelImg) barrelImg.src = './assets/keyed/ocean_barrel_closed.webp';
+  if (barrelImg) barrelImg.src = resolveSiteAsset('assets/keyed/ocean_barrel_closed.webp');
   if (timerEl) timerEl.textContent = '10.0';
   if (countEl) countEl.textContent = '0';
   if (fillEl) fillEl.style.width = '0%';
@@ -1603,7 +1608,7 @@ function handleOceanBarrelTap() {
   if (fillEl) fillEl.style.width = `${Math.min(100, (taps / 40) * 100)}%`;
 
   if (taps === 20 && barrelImg) {
-    barrelImg.src = './assets/keyed/ocean_barrel_arm.webp';
+    barrelImg.src = resolveSiteAsset('assets/keyed/ocean_barrel_arm.webp');
     audio.playLidBlowOff(true);
   }
   if (promptEl) {
@@ -2622,15 +2627,32 @@ async function finishRound(survived) {
   }
 
   if (state.round.isDemo && survived) {
-    const blitzBonus = state.round.isBlitz ? state.round.blitzTargetsCleared * 95 : 0;
-    completeWorkshopLevel(state.tg?.user, state.round.workshopLevel, state.round.airLeft, blitzBonus)
+    const wasBlitz = Boolean(state.round.isBlitz);
+    const completedLvl = state.round.workshopLevel;
+    const blitzBonus = wasBlitz ? state.round.blitzTargetsCleared * 95 : 0;
+    completeWorkshopLevel(state.tg?.user, completedLvl, state.round.airLeft, blitzBonus)
       .then((lvlRes) => {
         if (lvlRes?.ok) {
           state.profile.currentLevel = lvlRes.currentLevel;
           state.profile.premierePoints = lvlRes.premierePoints;
           state.profile.hasPlayedSolo = true;
+          state.lastBlitzDailyPoints = Number(lvlRes.dailyBlitzPoints ?? state.lastBlitzDailyPoints ?? 0);
+          state.lastBlitzDailyCap = Number(lvlRes.dailyBlitzCap || 2000);
+          if (lvlRes.cooldownBlocked) {
+            const rem = Math.max(1, Number(lvlRes.cooldownRemainingSec || 12));
+            state.blitzCooldownUntil = Date.now() + rem * 1000;
+            showToast(`⏳ Блиц остывает (${rem}с) — забери +150 ⭐ в ShareHub!`);
+          } else {
+            if (wasBlitz) state.blitzCooldownUntil = Date.now() + 12000;
+            const capped = wasBlitz && state.lastBlitzDailyPoints >= state.lastBlitzDailyCap && Number(lvlRes.earnedPoints || 0) === 0;
+            showToast(
+              capped
+                ? `🛑 Дневной лимит Блица ${state.lastBlitzDailyCap} ⭐ достигнут — забери очки в ShareHub!`
+                : `🏆 Уровень ${completedLvl} пройден! +${lvlRes.earnedPoints} ⭐ в ТОП-10`
+            );
+          }
           updatePremiereBarsUI();
-          showToast(`🏆 Уровень ${state.round.workshopLevel} пройден! +${lvlRes.earnedPoints} ⭐ в ТОП-10`);
+          renderBlitzCooldownMicroGoal();
         }
       })
       .catch(() => {});
@@ -3014,7 +3036,62 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
   }
 
   await refreshQuestUI();
+  renderBlitzCooldownMicroGoal();
   applyProgressiveDisclosureUI();
+}
+
+function renderBlitzCooldownMicroGoal() {
+  const box = document.getElementById('blitz-cooldown-microgoal');
+  if (!box) return;
+  if (state.blitzTimerId) {
+    clearInterval(state.blitzTimerId);
+    state.blitzTimerId = null;
+  }
+
+  const now = Date.now();
+  const remSec = Math.max(0, Math.ceil((Number(state.blitzCooldownUntil || 0) - now) / 1000));
+  const dailyPts = Number(state.lastBlitzDailyPoints || 0);
+  const dailyCap = Number(state.lastBlitzDailyCap || 2000);
+  const showBox = Boolean(state.round.isBlitz) || remSec > 0 || dailyPts >= dailyCap;
+
+  if (!showBox) {
+    box.setAttribute('hidden', '');
+    return;
+  }
+
+  const paint = () => {
+    const secLeft = Math.max(0, Math.ceil((Number(state.blitzCooldownUntil || 0) - Date.now()) / 1000));
+    const capHit = dailyPts >= dailyCap;
+    const headText = capHit
+      ? `🛑 ДНЕВНОЙ ЛИМИТ БЛИЦА (${dailyPts}/${dailyCap} ⭐)`
+      : secLeft > 0
+        ? `⚡ ОХЛАЖДЕНИЕ БЛИЦА: ${secLeft}с · ЗА ДЕНЬ ${dailyPts}/${dailyCap} ⭐`
+        : `⚡ БЛИЦ ГОТОВ К СТАРТУ · ЗА ДЕНЬ ${dailyPts}/${dailyCap} ⭐`;
+
+    box.innerHTML = `
+      <div class="retention-card-head">
+        <span class="mono-label">${escapeHtmlSafe(headText)}</span>
+      </div>
+      <small>Пока цех остывает или упёрся в дневной лимит, выполни быструю цель для роста в ТОП-10:</small>
+      <div class="blitz-microgoal-actions">
+        <button type="button" class="btn-secondary" id="btn-micro-share">📤 Забрать +150 ⭐ в ShareHub</button>
+        <button type="button" class="btn-ghost" id="btn-micro-leaders">🏆 Проверить ТОП-10 и квесты</button>
+      </div>
+    `;
+    box.removeAttribute('hidden');
+    document.getElementById('btn-micro-share')?.addEventListener('click', () => openShareHubModal('trailer'));
+    document.getElementById('btn-micro-leaders')?.addEventListener('click', () => openLeaderboardModal());
+
+    if (secLeft <= 0 && state.blitzTimerId) {
+      clearInterval(state.blitzTimerId);
+      state.blitzTimerId = null;
+    }
+  };
+
+  paint();
+  if (remSec > 0) {
+    state.blitzTimerId = window.setInterval(paint, 1000);
+  }
 }
 
 async function refreshQuestUI() {
@@ -3761,12 +3838,16 @@ async function openLeaderboardModal() {
   if (rankEl) rankEl.textContent = me.rank ? `#${me.rank}` : '#—';
   if (ptsEl) ptsEl.textContent = myBonusPct > 0 ? `⭐ ${myEffective} (+${myBonusPct}%)` : `⭐ ${myEffective}`;
   if (gapEl) {
-    const bonusHint = myBonusPct < 50
-      ? ` · 🤝 +10% за каждого друга (сейчас +${myBonusPct}%, макс +50%)`
-      : ' · 🤝 Макс. бонус за друзей +50%';
+    const tierHint = myFriends === 0
+      ? ' · 🤝 Приведи 1-го друга → сразу +150 ⭐ и +10% (2+ друзей → финал ТОП-10)'
+      : myFriends === 1
+        ? ' · ✓ Ступень 1 (+150 ⭐ и +10% активны) · Ещё 1 друг открывает финал ТОП-10!'
+        : myBonusPct < 50
+          ? ` · ✓ Допуск в финал ТОП-10 открыт (+${myBonusPct}%, макс +50%)`
+          : ' · ✓ Допуск в финал ТОП-10 открыт (макс. +50%)';
     gapEl.textContent = me.in_top10
-      ? `🔥 ТЫ В ЗОНЕ ПРИГЛАШЕНИЯ НА ЗАКРЫТУЮ ПРЕМЬЕРУ (ТОП-10)!${bonusHint}`
-      : `До входа в ТОП-10: +${Math.max(10, Number(me.points_to_top10 || 150))} ⭐${bonusHint}`;
+      ? `🔥 ТЫ В ЗОНЕ ПРИГЛАШЕНИЯ НА ЗАКРЫТУЮ ПРЕМЬЕРУ (ТОП-10)!${tierHint}`
+      : `До входа в ТОП-10: +${Math.max(10, Number(me.points_to_top10 || 150))} ⭐${tierHint}`;
   }
 
   if (!listEl) return;
@@ -3800,14 +3881,24 @@ async function openLeaderboardModal() {
 }
 
 function getDailyMiniEventSpec() {
-  const dow = new Date().getDay();
-  if (dow === 0 || dow === 3) {
-    return { code: 'DOUBLE_BLITZ', title: '⚡ МИНИ-ИВЕНТ ДНЯ: ДВОЙНОЙ БЛИЦ', desc: '+30% к очкам на уровнях 8+ (кулдаун снижен до 12с, лимит 2000 ⭐/день).' };
+  const epochDays = Math.floor(Date.now() / 86400000);
+  const rotIdx = Math.floor(epochDays / 3) % 5;
+  const daysLeft = 3 - (epochDays % 3);
+  const suffix = ` (смена модификатора: каждые 3 дня · осталось ${daysLeft} дн.)`;
+
+  if (rotIdx === 0) {
+    return { code: 'DOUBLE_BLITZ', title: '⚡ ИВЕНТ СМЕНЫ: ДВОЙНОЙ БЛИЦ', desc: `+30% к очкам на уровнях 8+ (кулдаун 12с, лимит 2000 ⭐/день).${suffix}` };
   }
-  if (dow === 1 || dow === 4) {
-    return { code: 'SPEED_SHIFT', title: '⏱ МИНИ-ИВЕНТ ДНЯ: СКОРОСТНАЯ СМЕНА', desc: '+25% к бонусу за оставшееся время (кулдаун Блица 12с).' };
+  if (rotIdx === 1) {
+    return { code: 'SPEED_SHIFT', title: '⏱ ИВЕНТ СМЕНЫ: СКОРОСТНАЯ СМЕНА', desc: `×2.5 бонус за сохранённый кислород O₂ и быстрый взлом.${suffix}` };
   }
-  return { code: 'IRON_STREAK', title: '🛡 МИНИ-ИВЕНТ ДНЯ: СТАЛЬНОЙ ХАРАКТЕР', desc: '+35 ⭐ гарантированно за каждый пройденный уровень (кулдаун Блица 12с).' };
+  if (rotIdx === 2) {
+    return { code: 'IRON_STREAK', title: '🛡 ИВЕНТ СМЕНЫ: СТАЛЬНОЙ ХАРАКТЕР', desc: `+35 ⭐ гарантированно к каждому пройденному уровню цеха.${suffix}` };
+  }
+  if (rotIdx === 3) {
+    return { code: 'SECRET_1997', title: '🌊 ИВЕНТ СМЕНЫ: КОД 19·97', desc: `+40 ⭐ бонуса лора на уровнях 5+ при чистом поиске по звуку.${suffix}` };
+  }
+  return { code: 'PREMIERE_SURGE', title: '🎬 ИВЕНТ СМЕНЫ: ПРЕМЬЕРНЫЙ ШТУРМ', desc: `+25% рейтинговых ⭐ на всех уровнях перед премьерой 17 декабря.${suffix}` };
 }
 
 async function renderRetentionAndTransparencyPanels() {
@@ -3837,7 +3928,7 @@ async function renderRetentionAndTransparencyPanels() {
         if (next && typeof Notification !== 'undefined' && Notification.permission === 'default') {
           try { await Notification.requestPermission(); } catch {}
         }
-        showToast(next ? 'Напоминания о мини-ивентах дня включены!' : 'Напоминания отключены.');
+        showToast(next ? '🔔 Тизеры смен цеха и секретов 19·97 включены (без спама)!' : 'Напоминания отключены.');
       });
     }
   }
@@ -3851,7 +3942,8 @@ async function renderRetentionAndTransparencyPanels() {
     const quests = [
       { label: 'Пройти уровень цеха (≥ Ур.3)', done: lvl >= 3, val: `${Math.min(lvl, 3)}/3` },
       { label: 'Упаковать бочку другу', done: packed >= 1, val: `${Math.min(packed, 1)}/1` },
-      { label: 'Привести 1-го друга (+10% к ТОП-10)', done: friends >= 1, val: `${Math.min(friends, 1)}/1` },
+      { label: 'Ступень 1 (1 друг): +150 ⭐ и +10% к очкам', done: friends >= 1, val: `${Math.min(friends, 1)}/1` },
+      { label: 'Ступень 2 (2 друга): Допуск в финал ТОП-10 Премьеры', done: friends >= 2, val: `${Math.min(friends, 2)}/2` },
     ];
     const badges = [
       { name: '🔥 Спринтер Ур.8', ok: lvl >= 8 },
@@ -3917,6 +4009,12 @@ function syncShareHubUrl() {
   const bundle = getActiveShareBundle(isBarrel ? 'barrel' : 'trailer');
   const out = document.getElementById('share-hub-url-output');
   if (out) out.value = bundle.url;
+  const preview = document.getElementById('share-hub-preview-note');
+  if (preview) {
+    preview.textContent = isBarrel
+      ? 'Превью: твоя именная бочка с фото и шифром «БОЧКА 17.12» (+1 ❤️ сразу, +2 ❤️ за открытие)'
+      : 'Превью: карточка трейлера 17 декабря + реферальная ссылка (+150 ⭐)';
+  }
 }
 
 function openShareHubModal(kind = 'trailer') {

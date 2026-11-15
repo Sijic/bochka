@@ -1,8 +1,10 @@
+import { resolveSiteAsset } from './env.js';
+
 export const DEMO_PORTRAITS = [
-  './assets/images.jpg',
-  './assets/images_6.jpg',
-  './assets/images_5.jpg',
-  './assets/images_2.jpg',
+  resolveSiteAsset('assets/images.jpg'),
+  resolveSiteAsset('assets/images_6.jpg'),
+  resolveSiteAsset('assets/images_5.jpg'),
+  resolveSiteAsset('assets/images_2.jpg'),
 ];
 
 export function loadImageElement(src) {
@@ -617,7 +619,7 @@ export async function generateOceanEasterEggStoriesPNG() {
   ctx.fillRect(0, 0, W, H);
 
   try {
-    const seaImg = await loadImageElement('./assets/keyed/ocean_beach_bg.webp');
+    const seaImg = await loadImageElement(resolveSiteAsset('assets/keyed/ocean_beach_bg.webp'));
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(seaImg, 0, 520, W, 940);
   } catch { /* fallback gradient */ }
@@ -636,13 +638,13 @@ export async function generateOceanEasterEggStoriesPNG() {
   ctx.fillRect(0, 1300, W, 180);
 
   try {
-    const tillSit = await loadImageElement('./assets/keyed/ocean_till_sitting.webp');
+    const tillSit = await loadImageElement(resolveSiteAsset('assets/keyed/ocean_till_sitting.webp'));
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(tillSit, 135, 965, 290, 376);
   } catch { /* ignore */ }
 
   try {
-    const barrelArm = await loadImageElement('./assets/keyed/ocean_barrel_arm.webp');
+    const barrelArm = await loadImageElement(resolveSiteAsset('assets/keyed/ocean_barrel_arm.webp'));
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(barrelArm, 455, 1085, 495, 255);
   } catch { /* ignore */ }
