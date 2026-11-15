@@ -19,8 +19,9 @@ export function resolveSiteAsset(relPath = '') {
   }
 }
 
-const rawYtId = pick('VITE_YOUTUBE_FALLBACK_ID', 'EZFDcXeLTzQ');
-const resolvedYtId = rawYtId === 'vAJpT_82uUo' ? 'EZFDcXeLTzQ' : rawYtId;
+const STALE_YT_IDS = new Set(['vAJpT_82uUo', 'EZFDcXeLTzQ']);
+const rawYtId = pick('VITE_YOUTUBE_FALLBACK_ID', 'OmyqxUXmqNY');
+const resolvedYtId = STALE_YT_IDS.has(rawYtId) ? 'OmyqxUXmqNY' : rawYtId;
 
 // ВНИМАНИЕ: Здесь находятся ТОЛЬКО публичные клиентские константы (URL и anon key, защищённые RLS + SECURITY DEFINER RPC).
 // Секретные ключи (TELEGRAM_BOT_TOKEN, SUPABASE_SERVICE_ROLE_KEY, пароли админки) НИКОГДА не попадают в клиентский JS!
@@ -44,6 +45,7 @@ export const ENV = {
   trailerMp4: pick('VITE_TRAILER_MP4', resolveSiteAsset('video/trailer.mp4')),
   youtubeFallbackId: resolvedYtId,
   youtubeWatchUrl: pick('VITE_YOUTUBE_WATCH_URL', `https://www.youtube.com/watch?v=${resolvedYtId}`),
+  youtubeSubscribeUrl: pick('VITE_YOUTUBE_SUBSCRIBE_URL', 'https://www.youtube.com/@kinoceh_bel?sub_confirmation=1'),
   instagramTrailerUrl: pick('VITE_INSTAGRAM_TRAILER_URL', 'https://www.instagram.com/kinoceh_bel/reels/'),
   directorVideo: resolveSiteAsset('hf_20261017_093522_42c309d3-daf2-486e-9539-a8dcb422167c.mp4'),
   posterVert: resolveSiteAsset('photo_2026-11-08_00-00-26.jpg'),

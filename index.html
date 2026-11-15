@@ -648,7 +648,20 @@
           <button type="button" class="social-pill-btn social-wa" id="btn-pack-share-wa">WhatsApp (+⭐)</button>
           <button type="button" class="social-pill-btn social-vk" id="btn-pack-share-vk">VK (+⭐)</button>
           <button type="button" class="social-pill-btn social-ig" id="btn-pack-share-ig">Instagram 9:16 (+⭐)</button>
-          <button type="button" class="social-pill-btn" id="btn-pack-open-share-hub">🎬 Трейлер в соцсети</button>
+        </div>
+
+        <div class="step4-trailer-card" id="pack-step4-trailer-box" hidden>
+          <span class="mono-tag accent-tag" data-i18n="step4TrailerTag">ШАГ 4 (ДОПОЛНИТЕЛЬНО) // ПОСЛЕ ФОТО-БОЧКИ</span>
+          <p class="share-hint" data-i18n="step4TrailerHint">
+            Фото-бочка улетела другу! Дополнительно отправь ему ссылку на новый трейлер «БОЧКИ» (+150 ⭐ и +1 ❤️ сразу, +250 ⭐ за досмотр).
+          </p>
+          <button type="button" class="btn-primary btn-full" id="btn-pack-step4-trailer">
+            <span data-i18n="btnStep4SendTrailer">🎬 ШАГ 4: ОТПРАВИТЬ ДРУГУ ТРЕЙЛЕР (+150 ⭐ +1 ❤️)</span>
+          </button>
+          <div class="step4-trailer-subrow">
+            <button type="button" class="social-pill-btn" id="btn-pack-step4-yt">▶ Ссылка YouTube (+⭐)</button>
+            <button type="button" class="social-pill-btn" id="btn-pack-open-share-hub">Ещё соцсети (WA / VK / IG)</button>
+          </div>
         </div>
 
         <button type="button" class="btn-secondary btn-full share-go-premiere-btn" id="btn-pack-go-premiere">
@@ -879,6 +892,14 @@
               <span data-i18n="questFriends">За каждого друга, открывшего твою бочку</span>
             </div>
             <span class="quest-counter-pill" id="quest-friends-pill">0 × 2</span>
+          </div>
+
+          <div class="quest-row" id="quest-row-step4-trailer">
+            <div class="quest-row-text">
+              <strong>+1 ❤️</strong>
+              <span data-i18n="questStep4Trailer">Шаг 4 (после отправки фото): скинуть другу ссылку на трейлер (+150 ⭐)</span>
+            </div>
+            <button type="button" class="quest-action-btn" id="quest-btn-step4-trailer" data-i18n="questOpen">ВЫПОЛНИТЬ</button>
           </div>
         </div>
       </div>
@@ -1111,8 +1132,9 @@
         <div class="trailer-progress-track" aria-label="Прогресс просмотра">
           <div class="trailer-progress-fill" id="trailer-progress-fill"></div>
         </div>
-        <span class="trailer-time-readout" id="trailer-time-readout">0:00 / 1:31</span>
-        <button type="button" class="hud-mini-btn" id="btn-trailer-mute">ЗВУК</button>
+        <span class="trailer-time-readout" id="trailer-time-readout">0:00 / 1:32</span>
+        <button type="button" class="hud-mini-btn" id="btn-trailer-fast-mp4" title="Включить быстрый плеер без зависаний">⚡ ВИСНЕТ?</button>
+        <button type="button" class="hud-mini-btn" id="btn-trailer-mute">🔊 ВЫКЛ ЗВУК</button>
       </div>
 
       <div class="trailer-rescue-box" id="trailer-rescue-box" hidden>
@@ -1133,12 +1155,15 @@
         Смотри без перемотки — на 40-й секунде начисляется жетон «Крышка» (и спасённая жизнь в цеху).
       </p>
 
-      <div class="trailer-social-likes-row" id="trailer-social-likes-row" style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 10px;">
-        <button type="button" class="btn-secondary trailer-social-like-btn" id="btn-trailer-like-yt" style="flex:1 1 180px;" data-i18n="btnLikeYoutube">
-          👍 ЛАЙК НА YOUTUBE (+50 ⭐) ↗
+      <div class="trailer-social-likes-row" id="trailer-social-likes-row">
+        <button type="button" class="btn-secondary trailer-social-like-btn" id="btn-trailer-like-yt" data-i18n="btnLikeYoutube">
+          👍 ЛАЙК ТРЕЙЛЕРУ (+50 ⭐) ↗
         </button>
-        <button type="button" class="btn-secondary trailer-social-like-btn" id="btn-trailer-like-ig" style="flex:1 1 180px;" data-i18n="btnLikeInstagram">
-          ❤️ ЛАЙК В INSTAGRAM (+50 ⭐) ↗
+        <button type="button" class="btn-secondary trailer-social-like-btn" id="btn-trailer-sub-yt" data-i18n="btnSubYoutube">
+          🔔 ПОДПИСКА «КИНОЦЕХ» (+50 ⭐) ↗
+        </button>
+        <button type="button" class="btn-secondary trailer-social-like-btn" id="btn-trailer-like-ig" data-i18n="btnLikeInstagram">
+          ❤️ INSTAGRAM (+50 ⭐) ↗
         </button>
       </div>
 

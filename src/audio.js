@@ -21,6 +21,7 @@ class WorkshopAudio {
     this.ctx = null;
     this.master = null;
     this.enabled = false;
+    this.modalDucked = false;
     this.buffers = new Map();
     this.loadingStarted = false;
 
@@ -54,7 +55,7 @@ class WorkshopAudio {
     if (!this.ctx) {
       this.ctx = new AudioCtx();
       this.master = this.ctx.createGain();
-      this.master.gain.value = this.enabled ? 0.92 : 0.0;
+      this.master.gain.value = (this.enabled && !this.modalDucked) ? 0.92 : 0.0;
       this.master.connect(this.ctx.destination);
       this.noiseBuffer = this._createNoiseBuffer(2.5);
       this._setupListener(0, 1.55, 4.6);
@@ -80,7 +81,7 @@ class WorkshopAudio {
       });
     }
 
-    this.master.gain.setTargetAtTime(this.enabled ? 0.92 : 0.0, this.ctx.currentTime, 0.04);
+    this.master.gain.setTargetAtTime((this.enabled && !this.modalDucked) ? 0.92 : 0.0, this.ctx.currentTime, 0.04);
 
     if (!this.loadingStarted) {
       this.loadingStarted = true;
@@ -110,13 +111,20 @@ class WorkshopAudio {
     if (this.enabled && !this.ambientStarted) {
       this._startAmbientBed();
     }
-    this.master.gain.setTargetAtTime(this.enabled ? 0.92 : 0.0, this.ctx.currentTime, 0.05);
+    this.master.gain.setTargetAtTime((this.enabled && !this.modalDucked) ? 0.92 : 0.0, this.ctx.currentTime, 0.05);
     if (!this.enabled) {
       this.stopListening();
       this.stopMuffledVoiceLoop();
       this.stopOceanEasterEggAudio();
     }
     return this.enabled;
+  }
+
+  setModalAudioDuck(ducked = false) {
+    this.modalDucked = Boolean(ducked);
+    if (!this.ctx || !this.master) return;
+    const targetGain = (this.enabled && !this.modalDucked) ? 0.92 : 0.0;
+    this.master.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.04);
   }
 
   setBarrelLayout(positions, targetIdx = 0) {
