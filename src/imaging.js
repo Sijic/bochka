@@ -386,6 +386,7 @@ export function drawBarrelInteriorFX(ctx, size, frameStyle = 'flashlight') {
 
   ctx.save();
   ctx.globalCompositeOperation = 'destination-in';
+  ctx.fillStyle = '#ffffff';
   ctx.beginPath();
   ctx.arc(half, half, size * 0.485, 0, Math.PI * 2);
   ctx.fill();
