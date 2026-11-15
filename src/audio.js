@@ -33,6 +33,7 @@ class WorkshopAudio {
     this.breathTimer = null;
     this.ambientStarted = false;
     this.noiseBuffer = null;
+    this._resumeHooksBound = false;
 
     // Голосовое послание отправителя (глухая петля в бочке + чистое раскрытие в финале)
     this.senderVoiceUrl = '';
@@ -64,6 +65,19 @@ class WorkshopAudio {
       try {
         await this.ctx.resume();
       } catch { /* ignore */ }
+    }
+
+    if (!this._resumeHooksBound && typeof document !== 'undefined') {
+      this._resumeHooksBound = true;
+      const wakeAudio = () => {
+        if (this.enabled && this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume().catch(() => {});
+        }
+      };
+      document.addEventListener('pointerdown', wakeAudio, { passive: true });
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) wakeAudio();
+      });
     }
 
     this.master.gain.setTargetAtTime(this.enabled ? 0.92 : 0.0, this.ctx.currentTime, 0.04);
@@ -1073,9 +1087,9 @@ class WorkshopAudio {
     drone2.frequency.value = 69.2;
 
     lp.type = 'lowpass';
-    lp.frequency.value = 125;
+    lp.frequency.value = 240;
     g.gain.setValueAtTime(0.001, now);
-    g.gain.linearRampToValueAtTime(0.11, now + 1.8);
+    g.gain.linearRampToValueAtTime(0.18, now + 1.4);
 
     drone.connect(lp);
     drone2.connect(lp);
@@ -1102,7 +1116,7 @@ class WorkshopAudio {
       src.buffer = humBuf;
       src.loop = true;
       const g = this.ctx.createGain();
-      g.gain.value = 0.16;
+      g.gain.value = 0.28;
       src.connect(g).connect(this.master);
       try { src.start(0); } catch { /* ignore */ }
     }

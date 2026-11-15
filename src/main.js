@@ -67,7 +67,7 @@ import { WorkshopDuelController, createBarrelWatchChannel } from './duel.js';
 import { mountTestBogHUD } from './testbog.js';
 
 const AIR_DURATION_SEC = 30.0;
-const KP_MIN_AWAY_SEC = 15.0;
+const KP_MIN_AWAY_SEC = 3.5;
 const TRAILER_UNLOCK_SEC = 40.0;
 
 const SCREAMER_META = [
@@ -4229,6 +4229,7 @@ function bindUIEvents() {
   // 5-ходовая модалка Спасения
   document.getElementById('btn-rescue-kp-open')?.addEventListener('click', () => handleRescueKpOpenClick());
   document.getElementById('btn-rescue-kp-claim')?.addEventListener('click', () => claimKinopoiskFourthLife());
+  document.getElementById('btn-rescue-kp-fallback-trailer')?.addEventListener('click', () => openRescueTrailerDirectly());
   document.getElementById('btn-rescue-watch-trailer')?.addEventListener('click', () => {
     document.getElementById('modal-rescue')?.setAttribute('hidden', '');
     openTrailerModal({ forRescue: true });
