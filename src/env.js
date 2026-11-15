@@ -19,6 +19,8 @@ export function resolveSiteAsset(relPath = '') {
   }
 }
 
+const rawYtId = pick('VITE_YOUTUBE_FALLBACK_ID', 'EZFDcXeLTzQ');
+
 // ВНИМАНИЕ: Здесь находятся ТОЛЬКО публичные клиентские константы (URL и anon key, защищённые RLS + SECURITY DEFINER RPC).
 // Секретные ключи (TELEGRAM_BOT_TOKEN, SUPABASE_SERVICE_ROLE_KEY, пароли админки) НИКОГДА не попадают в клиентский JS!
 export const ENV = {
@@ -39,7 +41,7 @@ export const ENV = {
   kinopoiskUrl: pick('VITE_KINOPOISK_URL', 'https://www.kinopoisk.ru/film/11226275/'),
   kinopoiskTrailerUrl: pick('VITE_KINOPOISK_TRAILER_URL', 'https://www.kinopoisk.ru/film/11226275/video/210300/'),
   trailerMp4: pick('VITE_TRAILER_MP4', resolveSiteAsset('video/trailer.mp4')),
-  youtubeFallbackId: pick('VITE_YOUTUBE_FALLBACK_ID', 'vAJpT_82uUo'),
+  youtubeFallbackId: rawYtId === 'vAJpT_82uUo' ? 'EZFDcXeLTzQ' : rawYtId,
   directorVideo: resolveSiteAsset('hf_20261017_093522_42c309d3-daf2-486e-9539-a8dcb422167c.mp4'),
   posterVert: resolveSiteAsset('photo_2026-11-08_00-00-26.jpg'),
   posterWide: resolveSiteAsset('photo_2026-11-08_00-00-14.jpg'),

@@ -9,6 +9,10 @@
     "gateTitle": "БОЧКА",
     "gateSubtitle": "ПСИХОЛОГИЧЕСКИЙ ТРИЛЛЕР · 200 ЛИТРОВ ТЕМНОТЫ",
     "gateTeaser": "Шесть заваренных бочек под лучом прожектора. Надень наушники: внутри одной из них стучат сквозь сталь.",
+    "gateRule1": "🎧 В одной из заваренных бочек заперт человек — прислушайся, откуда идёт стук.",
+    "gateRule2": "⏳ У тебя 30 секунд воздуха и всего 3 удара ломом, чтобы сорвать нужную крышку.",
+    "gateRule3": "📸 Спасёшь — закатай в ответную бочку друга с его фото и голосом.",
+    "gateRule4": "🎟 Выигрывай билеты в кино и приглашения на закрытую Премьеру 17 декабря!",
     "btnEnterSound": "ВОЙТИ В ЦЕХ СО ЗВУКОМ",
     "btnEnterMute": "БЕЗ ЗВУКА",
     "modeATag": "СЕКТОР 04 // ДЕМО-ПРОТОКОЛ",
@@ -92,16 +96,17 @@
     "secretUnlockTag": "СЕКРЕТНЫЙ БОНУС ОТКРЫТ",
     "secretUnlockTitle": "ЭКСКЛЮЗИВНЫЙ КРУЖОК СО СЪЁМОК «БОЧКИ»",
     "btnWatchCircle": "СМОТРЕТЬ ВИДЕОКРУЖОК",
-    "rescueStep1Tag": "КИСЛОРОД 0% // СПАСЕНИЕ №1",
-    "rescueStep1Title": "ВОЗДУХ НА НУЛЕ! СТУК ШЁЛ СОВСЕМ РЯДОМ — ОСТАЛОСЬ 3 БОЧКИ",
-    "rescueStep1Desc": "Три крышки сорваны впустую, но внутри одной из 3 оставшихся бочек стучит твой друг. Нажми оранжевую кнопку «Буду смотреть» на Кинопоиске, чтобы получить +1 удар!",
+    "rescueStep1Tag": "ПОСЛЕДНИЙ ШАНС // СПАСЕНИЕ №2",
+    "rescueStep1Title": "ПОЧТИ! ОСТАЛОСЬ ВСЕГО 2 ЗАКРЫТЫЕ БОЧКИ!",
+    "rescueStep1Desc": "В одной из двух бочек заперт твой друг. Перейди на страницу фильма на Кинопоиске («Буду смотреть») и вернись в игру, чтобы забрать финальный удар!",
     "btnRescueKpOpen": "+1 ПОПЫТКА: НАЖАТЬ «БУДУ СМОТРЕТЬ» НА КИНОПОИСКЕ ↗",
     "rescueKpChecking": "Сверка отметки «Буду смотреть» с базой...",
-    "rescueKpTooFast": "Отметка не обнаружена! Нажми кнопку «Буду смотреть» на странице фильма и дождись сохранения.",
-    "btnRescueKpClaim": "Я НАЖАЛ «БУДУ СМОТРЕТЬ» → ЗАБРАТЬ ЖИЗНЬ",
-    "rescueStep2Tag": "ПОСЛЕДНИЙ ШАНС // СПАСЕНИЕ №2",
-    "rescueStep2Title": "ПОЧТИ! ОСТАЛОСЬ ВСЕГО ДВЕ ЗАКРЫТЫЕ БОЧКИ!",
-    "rescueStep2Desc": "В одной из двух бочек заварен друг. Посмотри эксклюзивный трейлер фильма «Бочка» (40 секунд без перемотки), чтобы забрать финальный победный удар!",
+    "rescueKpTooFast": "Поставь «Буду смотреть» на странице фильма — или если нет аккаунта Кинопоиска, нажми кнопку ниже.",
+    "btnRescueKpClaim": "✓ ПОСТАВИЛ «БУДУ СМОТРЕТЬ» → ЗАБРАТЬ +1 ПОПЫТКУ",
+    "btnRescueKpNoAccount": "НЕТ АККАУНТА КИНОПОИСКА / УЖЕ НАЖАТО → ПРОДОЛЖИТЬ",
+    "rescueStep2Tag": "КИСЛОРОД 0% // СПАСЕНИЕ №1",
+    "rescueStep2Title": "ВОЗДУХ НА НУЛЕ! ОСТАЛОСЬ 3 ЗАКРЫТЫЕ БОЧКИ",
+    "rescueStep2Desc": "Три крышки сорваны впустую, но внутри одной из 3 бочек стучит друг. Посмотри официальный трейлер «Бочки» (без регистрации!), чтобы забрать +1 удар!",
     "rescueKpDoneBadge": "✓ ШАГ 1: ОТМЕТКА «БУДУ СМОТРЕТЬ» ЗАЧТЕНА",
     "btnRescueWatchTrailer": "+1 ПОПЫТКА: ПОСМОТРЕТЬ ТРЕЙЛЕР ФИЛЬМА",
     "trailerRescueCounter": "До разблокировки +1 удара: {sec} сек (перемотка вперёд отключена)",
@@ -206,10 +211,22 @@
       "Нажимай осторожно, время против нас."
     ],
     "demoChars": [
-      { "name": "ПАСТОР (Тиль Швайгер)", "quote": "Не стучи снаружи, если боишься того, кто ответит изнутри. Встретимся в кино 17 декабря." },
-      { "name": "ОТЕЦ (Филипп Рейнхардт)", "quote": "Тридцать секунд в темноте меняют человека навсегда. Смотри «Бочку» с 17 декабря." },
-      { "name": "ДЕВУШКА (Ирина Кобзева)", "quote": "Ты услышал стук сквозь сталь! А теперь закатай друга и проверь его нервы." },
-      { "name": "УЗНИК (Натан Пол-Коллис)", "quote": "Воздуха почти не оставалось… Увидимся на премьере 17 декабря." }
+      {
+        "name": "ПАСТОР (Тиль Швайгер)",
+        "quote": "Не стучи снаружи, если боишься того, кто ответит изнутри. Встретимся в кино 17 декабря."
+      },
+      {
+        "name": "ОТЕЦ (Филипп Рейнхардт)",
+        "quote": "Тридцать секунд в темноте меняют человека навсегда. Смотри «Бочку» с 17 декабря."
+      },
+      {
+        "name": "ДЕВУШКА (Ирина Кобзева)",
+        "quote": "Ты услышал стук сквозь сталь! А теперь закатай друга и проверь его нервы."
+      },
+      {
+        "name": "УЗНИК (Натан Пол-Коллис)",
+        "quote": "Воздуха почти не оставалось… Увидимся на премьере 17 декабря."
+      }
     ]
   },
   "kz": {
@@ -222,6 +239,10 @@
     "gateTitle": "БОЧКА",
     "gateSubtitle": "ПСИХОЛОГИЯЛЫҚ ТРИЛЛЕР · 200 ЛИТР ҚАРАҢҒЫЛЫҚ",
     "gateTeaser": "Прожектор астындағы алты дәнекерленген бөшке. Құлаққапты тақ: біреуінің ішінен болатты ұрғылаған дыбыс естіледі.",
+    "gateRule1": "🎧 Дәнекерленген бөшкелердің бірінде адам қамалған — дыбыс қайдан шыққанын тыңда.",
+    "gateRule2": "⏳ Қажетті қақпақты жұлып ашуға 30 секунд ауа мен сүйменмен 3 соққы ғана бар.",
+    "gateRule3": "📸 Құтқарсаң — досыңды фотосы мен дауысымен жауап бөшкеге қама.",
+    "gateRule4": "🎟 Киноға билеттер мен 17 желтоқсандағы жабық Премьераға шақыру ұтып ал!",
     "btnEnterSound": "ДЫБЫСПЕН ЦЕХҚА КІРУ",
     "btnEnterMute": "ДЫБЫССЫЗ",
     "modeATag": "04 СЕКТОРЫ // ДЕМО-ХАТТАМА",
@@ -305,16 +326,17 @@
     "secretUnlockTag": "ҚҰПИЯ БОНУС АШЫЛДЫ",
     "secretUnlockTitle": "ТҮСІРІЛІМ АЛАҢЫНАН ЭКСКЛЮЗИВ БЕЙНЕ",
     "btnWatchCircle": "БЕЙНЕНІ КӨРУ",
-    "rescueStep1Tag": "ОТТЕГІ 0% // ҚҰТҚАРУ №1",
-    "rescueStep1Title": "АУА ТАУСЫЛДЫ! ДЫБЫС ЖАҚЫН ЖЕРДЕН ШЫҚТЫ — 3 БӨШКЕ ҚАЛДЫ",
-    "rescueStep1Desc": "Қалған 3 бөшкенің бірінде досың қамалған. +1 соққы алу үшін Кинопоискте қызғылт сары «Көремін» (Буду смотреть) түймесін бас!",
+    "rescueStep1Tag": "СОҢҒЫ МҮМКІНДІК // ҚҰТҚАРУ №2",
+    "rescueStep1Title": "СӘЛ ҚАЛДЫ! ТЕК 2 ЖАБЫҚ БӨШКЕ ҚАЛДЫ!",
+    "rescueStep1Desc": "Екі бөшкенің бірінде досың қамалған. Шешуші соққыны алу үшін Кинопоискте «Буду смотреть» басып, ойынға орал!",
     "btnRescueKpOpen": "+1 МҮМКІНДІК: КИНОПОИСКТЕ «БУДУ СМОТРЕТЬ» БАСУ ↗",
     "rescueKpChecking": "«Буду смотреть» белгісі базамен тексерілуде...",
-    "rescueKpTooFast": "Белгі табылмады! Фильм бетінде «Буду смотреть» түймесін басып, сақталғанын күтіңіз.",
-    "btnRescueKpClaim": "МЕН БАСТЫМ → +1 ӨМІРДІ АЛУ",
-    "rescueStep2Tag": "СОҢҒЫ МҮМКІНДІК // ҚҰТҚАРУ №2",
-    "rescueStep2Title": "СӘЛ ҚАЛДЫ! ТЕК ЕКІ ЖАБЫҚ БӨШКЕ ҚАЛДЫ!",
-    "rescueStep2Desc": "Шешуші 5-ші соққыны алу үшін фильмнің ресми трейлерін (40 секунд айналдырмай) қарап шық!",
+    "rescueKpTooFast": "Фильм бетінде «Буду смотреть» бас — немесе аккаунт болмаса, төмендегі түймені бас.",
+    "btnRescueKpClaim": "✓ «БУДУ СМОТРЕТЬ» БАСТЫМ → +1 МҮМКІНДІК АЛУ",
+    "btnRescueKpNoAccount": "КИНОПОИСК АККАУНТЫ ЖОҚ / БАСЫЛЫП ТҰР → ЖАЛҒАСТЫРУ",
+    "rescueStep2Tag": "ОТТЕГІ 0% // ҚҰТҚАРУ №1",
+    "rescueStep2Title": "АУА ТАУСЫЛДЫ! 3 ЖАБЫҚ БӨШКЕ ҚАЛДЫ",
+    "rescueStep2Desc": "Қалған 3 бөшкенің бірінде досың соғып жатыр. +1 соққы алу үшін «Бочка» фильмінің ресми трейлерін (тіркелусіз!) көріп шық!",
     "rescueKpDoneBadge": "✓ 1-ҚАДАМ: КИНОПОИСК БЕЛГІСІ ЕСЕПТЕЛДІ",
     "btnRescueWatchTrailer": "+1 МҮМКІНДІК: ФИЛЬМ ТРЕЙЛЕРІН КӨРУ",
     "trailerRescueCounter": "+1 соққы ашылуына: {sec} сек (алға айналдыру өшірілген)",
@@ -419,10 +441,22 @@
       "Абайлап бас, уақыт бізге қарсы."
     ],
     "demoChars": [
-      { "name": "ПАСТОР (Тиль Швайгер)", "quote": "Ішінен кім жауап беретінінен қорықсаң, сыртынан қақпа. 17 желтоқсанда кинода кездесеміз." },
-      { "name": "ӘКЕ (Филипп Рейнхардт)", "quote": "Қараңғыдағы отыз секунд адамды мәңгі өзгертеді. 17 желтоқсаннан бастап." },
-      { "name": "ҚЫЗ (Ирина Кобзева)", "quote": "Сен болат арқылы соққыны естідің! Енді досыңды тексер." },
-      { "name": "ТҰТҚЫН (Натан Пол-Коллис)", "quote": "Ауа таусылуға сәл қалды… Премьерада кездескенше." }
+      {
+        "name": "ПАСТОР (Тиль Швайгер)",
+        "quote": "Ішінен кім жауап беретінінен қорықсаң, сыртынан қақпа. 17 желтоқсанда кинода кездесеміз."
+      },
+      {
+        "name": "ӘКЕ (Филипп Рейнхардт)",
+        "quote": "Қараңғыдағы отыз секунд адамды мәңгі өзгертеді. 17 желтоқсаннан бастап."
+      },
+      {
+        "name": "ҚЫЗ (Ирина Кобзева)",
+        "quote": "Сен болат арқылы соққыны естідің! Енді досыңды тексер."
+      },
+      {
+        "name": "ТҰТҚЫН (Натан Пол-Коллис)",
+        "quote": "Ауа таусылуға сәл қалды… Премьерада кездескенше."
+      }
     ]
   },
   "en": {
@@ -435,6 +469,10 @@
     "gateTitle": "BARREL",
     "gateSubtitle": "PSYCHOLOGICAL THRILLER · 200 LITERS OF DARKNESS",
     "gateTeaser": "Six welded drums under a cold spotlight. Put on headphones: someone is pounding from inside the steel.",
+    "gateRule1": "🎧 Someone is locked inside one of the welded barrels — listen closely for the knocking.",
+    "gateRule2": "⏳ You have 30 seconds of air and just 3 crowbar strikes to rip open the right lid.",
+    "gateRule3": "📸 Save them — then seal your friend into a reply barrel with their photo and voice.",
+    "gateRule4": "🎟 Win cinema tickets and VIP passes to the December 17 Private Premiere!",
     "btnEnterSound": "ENTER WORKSHOP WITH SOUND",
     "btnEnterMute": "ENTER MUTED",
     "modeATag": "SECTOR 04 // DEMO PROTOCOL",
@@ -518,16 +556,17 @@
     "secretUnlockTag": "SECRET BONUS UNLOCKED",
     "secretUnlockTitle": "EXCLUSIVE BACKSTAGE VIDEO CIRCLE",
     "btnWatchCircle": "WATCH BACKSTAGE CIRCLE",
-    "rescueStep1Tag": "OXYGEN 0% // RESCUE #1",
-    "rescueStep1Title": "OUT OF AIR! KNOCKING WAS RIGHT NEXT TO YOU — 3 BARRELS LEFT",
-    "rescueStep1Desc": "Your friend is sealed inside one of the 3 remaining drums. Tap the orange 'Watchlist' (Буду смотреть) button on Kinopoisk to unlock +1 strike!",
+    "rescueStep1Tag": "FINAL CHANCE // RESCUE #2",
+    "rescueStep1Title": "SO CLOSE! ONLY 2 SEALED BARRELS LEFT!",
+    "rescueStep1Desc": "Your friend is locked inside one of the two drums. Tap 'Watchlist' (Буду смотреть) on Kinopoisk and return to unlock your final winning strike!",
     "btnRescueKpOpen": "+1 ATTEMPT: TAP 'WATCHLIST' ON KINOPOISK ↗",
     "rescueKpChecking": "Verifying 'Watchlist' badge sync...",
-    "rescueKpTooFast": "Badge not detected! Tap 'Буду смотреть' on the film page and wait for it to save.",
-    "btnRescueKpClaim": "I TAPPED WATCHLIST → CLAIM +1 LIFE",
-    "rescueStep2Tag": "FINAL CHANCE // RESCUE #2",
-    "rescueStep2Title": "SO CLOSE! ONLY TWO SEALED BARRELS REMAIN!",
-    "rescueStep2Desc": "Watch 40 seconds of the official BARREL trailer (seeking disabled) to unlock your final winning strike!",
+    "rescueKpTooFast": "Tap 'Watchlist' on the film page — or if you don't have a Kinopoisk account, tap the button below.",
+    "btnRescueKpClaim": "✓ I TAPPED WATCHLIST → CLAIM +1 ATTEMPT",
+    "btnRescueKpNoAccount": "NO KINOPOISK ACCOUNT / ALREADY TAPPED → CONTINUE",
+    "rescueStep2Tag": "OXYGEN 0% // RESCUE #1",
+    "rescueStep2Title": "OUT OF AIR! 3 SEALED BARRELS LEFT",
+    "rescueStep2Desc": "Three lids blown in vain, yet someone is knocking inside one of the 3 remaining drums. Watch the official BARREL trailer (no login needed!) for +1 strike!",
     "rescueKpDoneBadge": "✓ STEP 1: KINOPOISK WATCHLIST VERIFIED",
     "btnRescueWatchTrailer": "+1 ATTEMPT: WATCH OFFICIAL TRAILER",
     "trailerRescueCounter": "Unlocking +1 strike in {sec}s (forward scrub locked)",
@@ -632,10 +671,22 @@
       "Pick carefully, time is running out."
     ],
     "demoChars": [
-      { "name": "THE PASTOR (Til Schweiger)", "quote": "Never knock from the outside if you fear what answers from within. December 17." },
-      { "name": "THE FATHER (Philippe Reinhardt)", "quote": "Thirty seconds in total darkness changes a man forever. In cinemas December 17." },
-      { "name": "THE GIRL (Irina Kobzeva)", "quote": "You heard the pulse through cold steel. Now seal a friend and test their nerves." },
-      { "name": "THE CAPTIVE (Nathan Paul-Collis)", "quote": "Almost out of oxygen… See you at the premiere on December 17." }
+      {
+        "name": "THE PASTOR (Til Schweiger)",
+        "quote": "Never knock from the outside if you fear what answers from within. December 17."
+      },
+      {
+        "name": "THE FATHER (Philippe Reinhardt)",
+        "quote": "Thirty seconds in total darkness changes a man forever. In cinemas December 17."
+      },
+      {
+        "name": "THE GIRL (Irina Kobzeva)",
+        "quote": "You heard the pulse through cold steel. Now seal a friend and test their nerves."
+      },
+      {
+        "name": "THE CAPTIVE (Nathan Paul-Collis)",
+        "quote": "Almost out of oxygen… See you at the premiere on December 17."
+      }
     ]
   }
 }

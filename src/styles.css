@@ -1248,6 +1248,7 @@ body {
 .modal-card {
   width: min(640px, 100%);
   max-height: calc(100dvh - 24px);
+  overflow-x: hidden;
   overflow-y: auto;
   margin: auto;
   background: var(--bg-panel-solid);
@@ -1492,13 +1493,20 @@ button:disabled {
   color: #f87171;
 }
 
-/* 5-ходовая модалка Спасения (Кинопоиск >= 15 сек + Трейлер 40 сек) */
+/* 5-ходовая модалка Спасения (Кинопоиск >= 3.5 сек + Трейлер) */
 .rescue-modal-card {
   position: relative;
   width: min(520px, 100%);
   padding: 22px 20px;
   border: 1px solid var(--accent);
   box-shadow: 0 28px 80px rgba(0, 0, 0, 0.94);
+  overflow: hidden;
+}
+@media (max-height: 620px) {
+  .rescue-modal-card {
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
 }
 
 .rescue-title {
