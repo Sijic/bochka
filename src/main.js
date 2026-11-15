@@ -61,6 +61,7 @@ import {
   completeWorkshopLevel,
   claimSocialOrPromoBonus,
   fetchPremiereLeaderboard,
+  fetchPublicRaffleTransparency,
 } from './backend.js';
 import { WorkshopDuelController, createBarrelWatchChannel } from './duel.js';
 import { mountTestBogHUD } from './testbog.js';
@@ -3744,20 +3745,25 @@ async function openLeaderboardModal() {
   modal?.removeAttribute('hidden');
   if (listEl) listEl.innerHTML = '<div class="mono-tag">Синхронизация ТОП-10 с сервером...</div>';
 
+  renderRetentionAndTransparencyPanels();
+
   const res = await fetchPremiereLeaderboard(state.tg?.user);
   const myUid = getViewerUid(state.tg?.user);
   const me = res.me || {};
+  const myPts = Number(me.premiere_points ?? state.profile.premierePoints ?? 0);
+  const myFriends = Number(me.friends_brought ?? state.profile.friendsBrought ?? 0);
+  const myBonusPct = Number(me.friend_bonus_pct ?? Math.min(5, myFriends) * 10);
+  const myEffective = Number(me.effective_points ?? Math.round(myPts * (1 + myBonusPct / 100)));
 
   if (rankEl) rankEl.textContent = me.rank ? `#${me.rank}` : '#—';
-  if (ptsEl) ptsEl.textContent = `⭐ ${Number(me.premiere_points ?? state.profile.premierePoints ?? 0)}`;
+  if (ptsEl) ptsEl.textContent = myBonusPct > 0 ? `⭐ ${myEffective} (+${myBonusPct}%)` : `⭐ ${myEffective}`;
   if (gapEl) {
-    const friendsCount = Number(me.friends_brought ?? state.profile.friendsBrought ?? 0);
-    const needFriendsNote = friendsCount < 2
-      ? ` · 🔓 Нужно ≥2 приведённых друзей для ТОП-10 (сейчас ${friendsCount}/2)`
-      : '';
+    const bonusHint = myBonusPct < 50
+      ? ` · 🤝 +10% за каждого друга (сейчас +${myBonusPct}%, макс +50%)`
+      : ' · 🤝 Макс. бонус за друзей +50%';
     gapEl.textContent = me.in_top10
-      ? '🔥 ТЫ В ЗОНЕ ПРИГЛАШЕНИЯ НА ЗАКРЫТУЮ ПРЕМЬЕРУ (ТОП-10)!'
-      : `До входа в ТОП-10: +${Math.max(10, Number(me.points_to_top10 || 150))} ⭐${needFriendsNote}`;
+      ? `🔥 ТЫ В ЗОНЕ ПРИГЛАШЕНИЯ НА ЗАКРЫТУЮ ПРЕМЬЕРУ (ТОП-10)!${bonusHint}`
+      : `До входа в ТОП-10: +${Math.max(10, Number(me.points_to_top10 || 150))} ⭐${bonusHint}`;
   }
 
   if (!listEl) return;
@@ -3773,7 +3779,9 @@ async function openLeaderboardModal() {
       const isMe = row.uid === myUid;
       const cls = `leader-row ${rank <= 3 ? 'is-top3' : ''} ${isMe ? 'is-me' : ''}`.trim();
       const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
-      const subMeta = `Ур.${row.current_level || 1} · Друзей: ${row.friends_brought || 0} · Побед: ${row.duels_won || 0}`;
+      const rowBonusPct = Number(row.friend_bonus_pct ?? Math.min(5, Number(row.friends_brought || 0)) * 10);
+      const rowEffPts = Number(row.effective_points ?? Math.round(Number(row.premiere_points || 0) * (1 + rowBonusPct / 100)));
+      const subMeta = `Ур.${row.current_level || 1} · Друзей: ${row.friends_brought || 0} (+${rowBonusPct}%) · Побед: ${row.duels_won || 0}`;
       return `
         <div class="${cls}">
           <span class="leader-rank">${medal}</span>
@@ -3781,11 +3789,102 @@ async function openLeaderboardModal() {
             <strong>${escapeHtmlSafe(row.name || 'Узник цеха')}${isMe ? ' (ВЫ)' : ''}</strong>
             <small>${escapeHtmlSafe(subMeta)}</small>
           </div>
-          <span class="leader-pts">⭐ ${Number(row.premiere_points || 0)}</span>
+          <span class="leader-pts">⭐ ${rowEffPts}</span>
         </div>
       `;
     })
     .join('');
+}
+
+function getDailyMiniEventSpec() {
+  const dow = new Date().getDay();
+  if (dow === 0 || dow === 3) {
+    return { code: 'DOUBLE_BLITZ', title: '⚡ МИНИ-ИВЕНТ ДНЯ: ДВОЙНОЙ БЛИЦ', desc: '+30% к очкам на уровнях 8+ (кулдаун снижен до 12с, лимит 2000 ⭐/день).' };
+  }
+  if (dow === 1 || dow === 4) {
+    return { code: 'SPEED_SHIFT', title: '⏱ МИНИ-ИВЕНТ ДНЯ: СКОРОСТНАЯ СМЕНА', desc: '+25% к бонусу за оставшееся время (кулдаун Блица 12с).' };
+  }
+  return { code: 'IRON_STREAK', title: '🛡 МИНИ-ИВЕНТ ДНЯ: СТАЛЬНОЙ ХАРАКТЕР', desc: '+35 ⭐ гарантированно за каждый пройденный уровень (кулдаун Блица 12с).' };
+}
+
+async function renderRetentionAndTransparencyPanels() {
+  const evTitle = document.getElementById('daily-event-title');
+  const evDesc = document.getElementById('daily-event-desc');
+  const remBtn = document.getElementById('btn-toggle-reminders');
+  const questsEl = document.getElementById('daily-quests-box');
+  const transpEl = document.getElementById('raffle-transparency-box');
+
+  const ev = getDailyMiniEventSpec();
+  if (evTitle) evTitle.textContent = ev.title;
+  if (evDesc) evDesc.textContent = ev.desc;
+
+  if (remBtn) {
+    const syncRemLabel = () => {
+      const enabled = localStorage.getItem('bochka_reminders_on') === '1';
+      remBtn.textContent = enabled ? '🔔 Напоминания ВКЛ' : '🔔 Напоминать';
+      remBtn.classList.toggle('is-on', enabled);
+    };
+    syncRemLabel();
+    if (!remBtn.dataset.bound) {
+      remBtn.dataset.bound = '1';
+      remBtn.addEventListener('click', async () => {
+        const next = localStorage.getItem('bochka_reminders_on') !== '1';
+        if (next && typeof Notification !== 'undefined' && Notification.permission === 'default') {
+          try { await Notification.requestPermission(); } catch {}
+        }
+        localStorage.setItem('bochka_reminders_on', next ? '1' : '0');
+        syncRemLabel();
+        showToast(next ? 'Напоминания о мини-ивентах дня включены!' : 'Напоминания отключены.');
+      });
+    }
+  }
+
+  if (questsEl) {
+    const prof = state.profile || {};
+    const lvl = Number(prof.currentLevel || 1);
+    const friends = Number(prof.friendsBrought || 0);
+    const packed = Number(prof.packedCount || 0);
+    const duels = Number(prof.duelsWon || 0);
+    const quests = [
+      { label: 'Пройти уровень цеха (≥ Ур.3)', done: lvl >= 3, val: `${Math.min(lvl, 3)}/3` },
+      { label: 'Упаковать бочку другу', done: packed >= 1, val: `${Math.min(packed, 1)}/1` },
+      { label: 'Привести 1-го друга (+10% к ТОП-10)', done: friends >= 1, val: `${Math.min(friends, 1)}/1` },
+    ];
+    const badges = [
+      { name: '🔥 Спринтер Ур.8', ok: lvl >= 8 },
+      { name: '🤝 Связной +1', ok: friends >= 1 },
+      { name: '⚔️ Дуэлянт', ok: duels >= 1 },
+      { name: '🏆 Мастер цеха', ok: Number(prof.premierePoints || 0) >= 1500 },
+    ];
+    questsEl.innerHTML = `
+      <span class="mono-label">ЗАДАНИЯ СМЕНЫ И ДОСТИЖЕНИЯ:</span>
+      <div class="quests-list">
+        ${quests.map((q) => `<div class="quest-row ${q.done ? 'is-done' : ''}"><span>${q.done ? '✓' : '○'} ${escapeHtmlSafe(q.label)}</span><strong>${escapeHtmlSafe(q.val)}</strong></div>`).join('')}
+      </div>
+      <div class="badges-row">
+        ${badges.map((b) => `<span class="badge-chip ${b.ok ? 'is-unlocked' : ''}">${escapeHtmlSafe(b.name)}</span>`).join('')}
+      </div>
+    `;
+  }
+
+  if (transpEl) {
+    transpEl.innerHTML = '<span class="mono-label">ПРОЗРАЧНЫЙ ФОНД ПРИЗОВ:</span><small>Загрузка живых счётчиков...</small>';
+    const tr = await fetchPublicRaffleTransparency();
+    if (tr?.ok) {
+      const leftDaily = Math.max(0, Number(tr.max_daily_tickets || 0) - Number(tr.daily_tickets_issued || 0));
+      const leftPremiere = Math.max(0, Number(tr.max_premiere_winners || 0) - Number(tr.premiere_winners_count || 0));
+      transpEl.innerHTML = `
+        <span class="mono-label">ПРОЗРАЧНЫЙ ФОНД ПРИЗОВ (LIVE SUPABASE):</span>
+        <div class="transparency-grid">
+          <span>👥 Игроков в цеху: <strong>${Number(tr.total_players || 0)}</strong></span>
+          <span>🎟 Билетов сегодня: <strong>${Number(tr.daily_tickets_issued || 0)}/${Number(tr.max_daily_tickets || 0)}</strong> (осталось ${leftDaily})</span>
+          <span>🏆 Приглашений на премьеру: <strong>${Number(tr.premiere_winners_count || 0)}/${Number(tr.max_premiere_winners || 0)}</strong> (свободно ${leftPremiere})</span>
+        </div>
+      `;
+    } else {
+      transpEl.innerHTML = '<span class="mono-label">ПРОЗРАЧНЫЙ ФОНД ПРИЗОВ:</span><small>Статистика временно недоступна.</small>';
+    }
+  }
 }
 
 function getActiveShareBundle(kind = 'trailer') {

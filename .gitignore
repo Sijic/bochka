@@ -30,6 +30,7 @@ ui_ux.md
 # Local QA artifacts, heavy raw refs & assistant config
 film_refs/
 qa_screenshots/
+QA_SCREENSHOTS/
 *_СИНОПСИС_ПАПКИ.md
 GEMINI.md
 Code_Generated_Image.jpg

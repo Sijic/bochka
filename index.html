@@ -1330,16 +1330,31 @@
 
       <!-- Справочник начисления очков -->
       <div class="points-guide-box">
-        <span class="mono-label">КАК БЫСТРО ВЫРВАТЬСЯ В ТОП-10 (ВХОД ОТ 2+ ДРУЗЕЙ):</span>
+        <span class="mono-label">КАК БЫСТРО ВЫРВАТЬСЯ В ТОП-10 (+10% К РЕЙТИНГУ ЗА КАЖДОГО ДРУГА, ДО +50%):</span>
         <div class="points-guide-grid">
           <span>🎟 Подарить билет другу: <strong>+3500 ⭐ (+4 ❤️)</strong></span>
           <span>🆕 Привести нового друга в цех: <strong>+2500 ⭐ (+2 ❤️)</strong></span>
           <span>📸 Скриншот «Буду смотреть» КП: <strong>+500 ⭐</strong></span>
           <span id="points-guide-duel-item" class="stage4-only-item">⚔️ Победа втроём «На счёт три!»: <strong>+450 ⭐</strong></span>
           <span>🎬 Трейлер + рассылка по соцсетям: <strong>+250 / +150 ⭐</strong></span>
-          <span id="points-guide-levels-item">🛢 Уровни и ⚡ Блиц (18с кулдаун): <strong>до +220 ⭐/раунд · макс 1500/день</strong></span>
+          <span id="points-guide-levels-item">🛢 Уровни и ⚡ Блиц (12с кулдаун): <strong>до +280 ⭐/раунд · макс 2000/день</strong></span>
         </div>
       </div>
+
+      <!-- Мини-ивент дня и напоминания -->
+      <div class="retention-card" id="daily-event-banner">
+        <div class="retention-card-head">
+          <span class="mono-label" id="daily-event-title">⚡ МИНИ-ИВЕНТ ДНЯ: ЗАГРУЗКА...</span>
+          <button type="button" class="reminder-btn" id="btn-toggle-reminders">🔔 Напоминать</button>
+        </div>
+        <small id="daily-event-desc">Ежедневный модификатор очков активен.</small>
+      </div>
+
+      <!-- Квесты смены и достижения -->
+      <div class="retention-card" id="daily-quests-box"></div>
+
+      <!-- Прозрачный фонд призов -->
+      <div class="retention-card" id="raffle-transparency-box"></div>
 
       <div class="finale-dual-row">
         <button type="button" class="btn-primary" id="btn-leader-go-share">📤 СОБРАТЬ ОЧКИ В СОЦСЕТЯХ</button>

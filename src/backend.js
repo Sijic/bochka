@@ -1619,10 +1619,15 @@ export async function fetchPremiereLeaderboard(tgUser = null) {
     tickets_gifted: prof.ticketsGifted || 0,
     duels_won: prof.duelsWon || 0,
   });
-  mockLeaders.sort((a, b) => b.premiere_points - a.premiere_points);
+  mockLeaders.forEach((r) => {
+    const bonusPct = Math.min(5, Number(r.friends_brought || 0)) * 10;
+    r.friend_bonus_pct = bonusPct;
+    r.effective_points = Math.round(Number(r.premiere_points || 0) * (1 + bonusPct / 100));
+  });
+  mockLeaders.sort((a, b) => b.effective_points - a.effective_points);
   mockLeaders.forEach((r, idx) => { r.rank = idx + 1; });
   const meEntry = mockLeaders.find((r) => r.uid === uid);
-  const tenth = mockLeaders[9]?.premiere_points || 0;
+  const tenth = mockLeaders[9]?.effective_points || 0;
 
   return {
     ok: true,
@@ -1633,14 +1638,39 @@ export async function fetchPremiereLeaderboard(tgUser = null) {
       rank: meEntry?.rank || 11,
       in_top10: (meEntry?.rank || 11) <= 10,
       premiere_points: myPts,
+      effective_points: meEntry?.effective_points || myPts,
+      friend_bonus_pct: meEntry?.friend_bonus_pct || 0,
       premiere_score: prof.premiereScore || 0,
       current_level: prof.currentLevel || 1,
       friends_brought: prof.friendsBrought || 0,
       tickets_gifted: prof.ticketsGifted || 0,
       duels_won: prof.duelsWon || 0,
-      points_to_top10: Math.max(0, tenth - myPts + ((meEntry?.rank || 11) > 10 ? 10 : 0)),
+      points_to_top10: Math.max(0, tenth - (meEntry?.effective_points || myPts) + ((meEntry?.rank || 11) > 10 ? 10 : 0)),
     },
   };
+}
+
+export async function fetchPublicRaffleTransparency() {
+  const db = getSupabase();
+  if (!db) {
+    return {
+      ok: true,
+      total_players: 16,
+      total_strikes: 0,
+      daily_tickets_issued: 0,
+      max_daily_tickets: 5,
+      premiere_winners_count: 0,
+      max_premiere_winners: 20,
+      is_paused: false,
+    };
+  }
+  try {
+    const { data, error } = await db.rpc('get_public_raffle_transparency');
+    if (error || !data?.ok) throw error || new Error('raffle_transparency_failed');
+    return data;
+  } catch {
+    return { ok: false };
+  }
 }
 
 export function patchTestBogProfile(patch = {}) {
