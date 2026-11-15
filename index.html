@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0d0d'/%3E%3Crect x='8' y='4' width='16' height='24' rx='2' fill='none' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='11' x2='25' y2='11' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='21' x2='25' y2='21' stroke='%23eab308' stroke-width='2'/%3E%3C/svg%3E" />
   <title>БОЧКА — Упакуй друга | В кино с 17 декабря</title>
-  <meta name="bochka-build" content="v6.1-film-art" />
+  <meta name="bochka-build" content="v6.2-security-and-balance" />
   <meta name="description" content="Шесть заваренных стальных бочек в тёмном цеху. Запиши фото и голос на дно бочки, проверь интуицию друга и выиграй допуск на закрытую Премьеру 17 декабря." />
 
   <!-- Open Graph / Telegram Link Preview -->
@@ -58,7 +58,7 @@
     <div class="topbar-right">
       <button type="button" class="nav-link nav-prize" id="nav-prize" title="Допуск на Премьеру">
         <span class="topbar-meter-ico" aria-hidden="true">🔥</span>
-        <span class="topbar-meter-text" id="top-premiere-pct">88.0%</span>
+        <span class="topbar-meter-text" id="top-premiere-pct">72.0%</span>
         <span class="cap-badge" id="top-caps-count" hidden>0</span>
       </button>
 
@@ -134,12 +134,19 @@
         Мокрый бетон, кафельные колонны с ржавыми цепями и шесть заваренных бочек под лучом прожектора. Надень наушники: внутри одной из них стучат ладонями и зовут сквозь сталь.
       </p>
 
+      <div class="gate-quick-rules" aria-label="Правила игры">
+        <div>🛢 Друг заперт в одной из ржавых бочек — 30 сек воздуха и 3 удара ломом.</div>
+        <div>🎧 Слушай стук сквозь сталь и найди живую крышку (ищи секрет 19·97).</div>
+        <div>🎬 Закатай ответную бочку и зови друзей за стол «На счёт три!».</div>
+        <div>🎟 Добивай шкалу к Премьере или выигрывай билет в кино с 17 декабря!</div>
+      </div>
+
       <div class="gate-actions">
-        <button type="button" class="btn-primary" id="btn-enter-sound">
+        <button type="button" class="btn-primary" id="btn-enter-sound" disabled>
           <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13v-1a8 8 0 0 1 16 0v1M4 13h3v6H5a1 1 0 0 1-1-1v-5Zm16 0h-3v6h2a1 1 0 0 0 1-1v-5Z"/></svg>
           <span data-i18n="btnEnterSound">ВОЙТИ В ЦЕХ СО ЗВУКОМ</span>
         </button>
-        <button type="button" class="btn-ghost" id="btn-enter-mute" data-i18n="btnEnterMute">
+        <button type="button" class="btn-ghost" id="btn-enter-mute" data-i18n="btnEnterMute" disabled>
           БЕЗ ЗВУКА
         </button>
       </div>
@@ -895,23 +902,23 @@
         ВНУТРИ НАСТОЯЩИЙ БИЛЕТ В КИНО! СЕБЕ ЗАБРАТЬ НЕЛЬЗЯ
       </h3>
       <p class="modal-hint" data-i18n="goldenForkDesc">
-        По закону цеха обычный билет нельзя забрать себе в карман. Решай: сожги его в топке ради двойного запаса ударов к Премьере — или оформи именной билет с фото для друга и тоже получи ×2 жизней!
+        По закону цеха обычный билет нельзя забрать себе в карман. Решай: сожги его в топке ради запаса жизней к Премьере (×2 до 12 ❤️ + 150 ⭐) — или оформи именной билет другу и получи +4 ❤️ и +3500 ⭐ в ТОП-10!
       </p>
 
       <div class="fork-choices-stack" id="fork-choices-stack">
         <button type="button" class="btn-burn-furnace btn-full" id="btn-burn-ticket-x2">
-          <span data-i18n="btnBurnTicketX2">🔥 ПУТЬ А: СЖЕЧЬ БИЛЕТ В ОБМЕН НА ×2 ЖИЗНЕЙ</span>
+          <span data-i18n="btnBurnTicketX2">🔥 ПУТЬ А: СЖЕЧЬ БИЛЕТ (×2 ДО 12 ❤️ + 150 ⭐)</span>
         </button>
 
         <button type="button" class="btn-primary btn-full" id="btn-gift-ticket-toggle">
-          <span data-i18n="btnGiftTicketToggle">🎟 ПУТЬ Б: ПОДАРИТЬ ИМЕННОЙ БИЛЕТ ДРУГУ (+×2 ЖИЗНЕЙ)</span>
+          <span data-i18n="btnGiftTicketToggle">🎟 ПУТЬ Б: ПОДАРИТЬ БИЛЕТ ДРУГУ (+4 ❤️ И +3500 ⭐)</span>
         </button>
       </div>
 
       <!-- Форма оформления подарочной ссылки startapp=gift_<id> (Путь Б) -->
       <div class="gift-pass-form" id="gift-pass-form" hidden>
         <p class="gift-face-warn" data-i18n="giftFaceWarn">
-          🎟 Друг откроет спецссылку в Telegram, подтвердит свой номер (`request_contact`) и выберет кинотеатр в своём городе — тебе сразу начислится ×2 жизней, а продюсеры оформят ему электронный билет!
+          🎟 Друг откроет спецссылку в Telegram, подтвердит свой номер (`request_contact`) и выберет кинотеатр в своём городе — тебе сразу начислится +4 ❤️ и +3500 ⭐ в ТОП-10, а продюсеры оформят ему электронный билет!
         </p>
 
         <div class="gift-photo-row">
@@ -1323,14 +1330,14 @@
 
       <!-- Справочник начисления очков -->
       <div class="points-guide-box">
-        <span class="mono-label">КАК БЫСТРО ВЫРВАТЬСЯ В ТОП-10:</span>
+        <span class="mono-label">КАК БЫСТРО ВЫРВАТЬСЯ В ТОП-10 (ВХОД ОТ 2+ ДРУЗЕЙ):</span>
         <div class="points-guide-grid">
-          <span>🎟 Подарить билет другу: <strong>+1000 ⭐</strong></span>
+          <span>🎟 Подарить билет другу: <strong>+3500 ⭐ (+4 ❤️)</strong></span>
+          <span>🆕 Привести нового друга в цех: <strong>+2500 ⭐ (+2 ❤️)</strong></span>
           <span>📸 Скриншот «Буду смотреть» КП: <strong>+500 ⭐</strong></span>
           <span id="points-guide-duel-item" class="stage4-only-item">⚔️ Победа втроём «На счёт три!»: <strong>+450 ⭐</strong></span>
-          <span>🆕 Привести нового друга в цех: <strong>+400 ⭐</strong></span>
           <span>🎬 Трейлер + рассылка по соцсетям: <strong>+250 / +150 ⭐</strong></span>
-          <span id="points-guide-levels-item">🛢 Уровни 3..10 бочек: <strong>до +750 ⭐</strong> <em class="blitz-rule-note">(⚡ Блиц с Ур.8+)</em></span>
+          <span id="points-guide-levels-item">🛢 Уровни и ⚡ Блиц (18с кулдаун): <strong>до +220 ⭐/раунд · макс 1500/день</strong></span>
         </div>
       </div>
 
@@ -1369,13 +1376,13 @@
         <div class="temu-bar-scale">
           <span>0</span>
           <span>50</span>
-          <span class="temu-scale-hot">88.0 ⚡</span>
+          <span class="temu-scale-hot">72.0 ⚡</span>
           <span class="temu-scale-win">100 🏆</span>
         </div>
       </div>
 
       <button type="button" class="btn-primary btn-full btn-temu-pulse" id="btn-temu-unlock-accept">
-        <span data-i18n="temuUnlockBtn">ЗАБРАТЬ +88.0% И ПОЕХАЛИ ДАЛЬШЕ!</span>
+        <span data-i18n="temuUnlockBtn">ЗАБРАТЬ +72.0% И ПОЕХАЛИ ДАЛЬШЕ!</span>
       </button>
     </div>
   </div>
@@ -1389,14 +1396,20 @@
         <span class="mono-tag accent-tag">ПРАВИЛА ЦЕХА // КРАСНАЯ ДОРОЖКА 17 ДЕКАБРЯ</span>
         <button type="button" class="icon-close" id="btn-close-rules" aria-label="Закрыть">✕</button>
       </div>
-      <h3 class="section-title rescue-title">КАК ИДЁТ ГОНКА ЗА ПРЕМЬЕРОЙ</h3>
+      <h3 class="section-title rescue-title">ПРАВИЛА И ГОНКА ЗА ПРЕМЬЕРОЙ</h3>
+      <div class="rules-core-4lines">
+        <div>🛢 Друг заперт в одной из ржавых бочек — у тебя есть 30 секунд воздуха и 3 удара ломом.</div>
+        <div>🎧 Включи звук, прислушайся к стуку и голосу сквозь металл и найди нужную крышку (а в цеху ищи секрет 19·97).</div>
+        <div>🎬 Спаси друга, закатай ответную бочку со своим фото и голосом — и вызывай своих за стол «На счёт три!» (до 3 игроков, выбывший гремит цепями).</div>
+        <div>🎟 Добивай шкалу к Премьере или выигрывай живой билет в кино на фильм «БОЧКА» с 17 декабря!</div>
+      </div>
       <ul class="rules-compact-list">
         <li>🛢 <strong>Стучи по бочкам:</strong> прислушивайся к живому звуку сквозь сталь и открывай бочки.</li>
-        <li>🔥 <strong>Шкала Допуска 0..100:</strong> после 1-й упакованной бочки получаешь старт 88.0% — добери оставшиеся проценты!</li>
-        <li>🏆 <strong>Лига ТОП-10:</strong> 10 лидеров по рейтинговым очкам (⭐) гарантированно попадают на закрытую Премьеру со съёмочной группой.</li>
-        <li>🎟 <strong>Обычный билет:</strong> по закону цеха его нельзя забрать себе — сожги ради ×2 жизней или подари другу (+1000 ⭐ и ×2 жизней).</li>
+        <li>🔥 <strong>Шкала Допуска 0..100:</strong> после 1-й упакованной бочки получаешь старт 72.0% — добери оставшиеся проценты!</li>
+        <li>🏆 <strong>Лига ТОП-10:</strong> 10 лидеров с ≥2 приведёнными друзьями по рейтинговым очкам (⭐) гарантированно попадают на закрытую Премьеру.</li>
+        <li>🎟 <strong>Обычный билет:</strong> по закону цеха его нельзя забрать себе — сожги (×2 до 12 ❤️ + 150 ⭐) или подари другу (+4 ❤️ и +3500 ⭐).</li>
         <li class="stage4-only-item">⚔️ <strong>«На счёт три!»:</strong> вызов друзей по повторной ссылке — ставки жизнями и быстрый подъём в рейтинге.</li>
-        <li class="blitz-rule-note">⚡ <strong>Блиц-режим (Уровень 8+):</strong> бочки закрыты на скорость и приносят максимум ⭐ в ТОП-10.</li>
+        <li class="blitz-rule-note">⚡ <strong>Блиц-режим (Уровень 8+):</strong> бочки закрыты на скорость и приносят до +220 ⭐ за раунд (макс 1500 ⭐/день).</li>
       </ul>
       <button type="button" class="btn-primary btn-full" id="btn-rules-ok">ПОНЯТНО, ВЕРНУТЬСЯ</button>
     </div>

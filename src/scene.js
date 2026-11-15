@@ -43,10 +43,12 @@ export class WorkshopScene {
     this.raycaster = new THREE.Raycaster();
     this.barrels = [];
     this.hitMeshes = [];
+    this.proxyHitMeshes = [];
     this.activeBarrelCount = 6;
     this.hoveredIndex = -1;
     this.interactive = false;
     this.goldenMode = false;
+    this.contextLost = false;
 
     this.diving = false;
     this.diveProgress = 0;
@@ -679,6 +681,15 @@ export class WorkshopScene {
     const portraitGeo = new THREE.CircleGeometry(0.365, 40);
     portraitGeo.rotateX(-Math.PI * 0.5);
 
+    // Расширенный невидимый цилиндр-хитбокс (BUG-UX11: уверенный тап по мелким бочкам Блица на 375px и дальней бочке 97)
+    const proxyHitGeo = new THREE.CylinderGeometry(0.60, 0.60, 1.78, 12);
+    const proxyHitMat = new THREE.MeshBasicMaterial({
+      colorWrite: false,
+      depthWrite: false,
+      transparent: true,
+      opacity: 0,
+    });
+
     const defaultPortraitTex = this._createDefaultPortraitTexture();
     this.cachedPortraitTex = defaultPortraitTex;
 
@@ -774,8 +785,14 @@ export class WorkshopScene {
       ringMesh.position.y = 0.012;
       group.add(ringMesh);
 
+      const proxyMesh = new THREE.Mesh(proxyHitGeo, proxyHitMat);
+      proxyMesh.position.y = 0.80;
+      proxyMesh.userData.barrelIndex = i;
+      group.add(proxyMesh);
+
       this.scene.add(group);
       this.hitMeshes.push(bodyMesh, lidPlate);
+      this.proxyHitMeshes.push(proxyMesh);
 
       this.barrels.push({
         index: i,
@@ -1000,10 +1017,10 @@ export class WorkshopScene {
       }
 
       this.camera.fov = 50;
-      const crowdPull = n >= 9 ? 1.13 : n >= 7 ? 1.07 : 1.0;
+      const crowdPull = n >= 9 ? 1.15 : n >= 7 ? 1.09 : 1.0;
       const distScale = Math.max(1, 0.52 / Math.max(0.36, aspect)) * crowdPull;
-      this.baseCamPos.set(0, 3.25 * distScale, 5.75 * distScale);
-      this.baseLookAt.set(0, 0.68, -0.62);
+      this.baseCamPos.set(0, 3.36 * distScale, 5.85 * distScale);
+      this.baseLookAt.set(0, n >= 7 ? 0.94 : 0.98, -0.62);
     } else {
       if (n <= 6) {
         const maxAng = n === 2 ? 0.32 : n === 3 ? 0.62 : n === 4 ? 0.84 : n === 5 ? 1.02 : 1.16;
@@ -1021,15 +1038,17 @@ export class WorkshopScene {
           b.bodyMesh.rotation.y = Math.PI - a * 0.65;
         }
       } else {
-        const backCount = Math.ceil(n / 2);
+        // Шахматная расстановка на ПК (для 10 бочек: 6 сзади / 4 спереди), чтобы передняя бочка не перекрывала дальнюю 97 (idx=2)
+        const backCount = n === 10 ? 6 : Math.ceil(n / 2);
         const frontCount = n - backCount;
         const bScale = n >= 9 ? 0.88 : 0.92;
+        const angleJitter = frontCount === backCount ? 0.14 : 0;
         let ptr = 0;
         for (let i = 0; i < backCount; i++) {
           const t = backCount === 1 ? 0 : (i / (backCount - 1)) * 2 - 1;
-          const a = t * 1.12;
-          const x = Math.sin(a) * 3.45;
-          const z = 1.35 - Math.cos(a) * 3.45;
+          const a = t * 1.16;
+          const x = Math.sin(a) * 3.48;
+          const z = 1.32 - Math.cos(a) * 3.48;
           const b = this.barrels[ptr++];
           b.group.position.set(x, 0, z);
           b.group.scale.setScalar(bScale);
@@ -1037,9 +1056,9 @@ export class WorkshopScene {
         }
         for (let j = 0; j < frontCount; j++) {
           const t = frontCount === 1 ? 0 : (j / (frontCount - 1)) * 2 - 1;
-          const a = t * 0.96;
-          const x = Math.sin(a) * 2.25;
-          const z = 1.68 - Math.cos(a) * 2.25;
+          const a = t * 0.94 + angleJitter;
+          const x = Math.sin(a) * 2.24;
+          const z = 1.72 - Math.cos(a) * 2.24;
           const b = this.barrels[ptr++];
           b.group.position.set(x, 0, z);
           b.group.scale.setScalar(bScale);
@@ -1061,10 +1080,12 @@ export class WorkshopScene {
       }
 
       this.camera.fov = 42;
-      const crowdAdjust = n >= 7 ? 1.09 : 1.0;
+      const crowdAdjust = n >= 7 ? 1.12 : 1.0;
       const wideAdjust = (aspect < 1.35 ? 1.14 : 1.0) * crowdAdjust;
-      this.baseCamPos.set(0, 2.18 * wideAdjust, 5.88 * wideAdjust);
-      this.baseLookAt.set(0, 0.74, -0.62);
+      const camY = n >= 7 ? 2.62 * wideAdjust : 2.22 * wideAdjust;
+      const camZ = n >= 7 ? 6.24 * wideAdjust : 5.88 * wideAdjust;
+      this.baseCamPos.set(0, camY, camZ);
+      this.baseLookAt.set(0, n >= 7 ? 0.80 : 0.74, -0.62);
     }
 
     this.camera.aspect = aspect;
@@ -1150,12 +1171,30 @@ export class WorkshopScene {
       this.pointerDownInfo = null;
       if (this.hoveredIndex !== -1) this._setHovered(-1);
     });
+
+    this.canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this.contextLost = true;
+    });
+
+    this.canvas.addEventListener('webglcontextrestored', () => {
+      this.contextLost = false;
+      this.renderer.setSize(this.width, this.height);
+      this._applyResponsiveCameraAndLayout();
+    });
   }
 
   _pickBarrel() {
     this.raycaster.setFromCamera(this.pointerNDC, this.camera);
     const hits = this.raycaster.intersectObjects(this.hitMeshes, false);
     for (const h of hits) {
+      const idx = h.object.userData.barrelIndex;
+      if (typeof idx === 'number' && idx >= 0 && idx < this.activeBarrelCount && this.barrels[idx]?.group.visible) {
+        return { index: idx, point: h.point };
+      }
+    }
+    const proxyHits = this.raycaster.intersectObjects(this.proxyHitMeshes, false);
+    for (const h of proxyHits) {
       const idx = h.object.userData.barrelIndex;
       if (typeof idx === 'number' && idx >= 0 && idx < this.activeBarrelCount && this.barrels[idx]?.group.visible) {
         return { index: idx, point: h.point };
@@ -1211,6 +1250,7 @@ export class WorkshopScene {
   _animate() {
     this.rafId = requestAnimationFrame(() => this._animate());
     const dt = Math.min(0.05, this.clock.getDelta());
+    if (this.contextLost || document.hidden) return;
     const elapsed = this.clock.elapsedTime;
 
     // 1. Камера или нырок в горловину

@@ -75,6 +75,15 @@ const SCREAMER_META = [
   { key: 'father', img: './assets/keyed/screamer_father.webp', i18n: 'screamerFather' },
   { key: 'blogger', img: './assets/keyed/screamer_blogger.webp', i18n: 'screamerBlogger' },
 ];
+const SCREAMER_IMAGE_CACHE = new Map();
+if (typeof Image !== 'undefined') {
+  SCREAMER_META.forEach((meta) => {
+    const pre = new Image();
+    pre.decoding = 'async';
+    pre.src = meta.img;
+    SCREAMER_IMAGE_CACHE.set(meta.key, pre);
+  });
+}
 
 const state = {
   tg: null,
@@ -168,6 +177,7 @@ const state = {
     usingYtFallback: false,
     ytTimer: null,
     ytWatchedSec: 0,
+    rescueSafetyTimer: null,
   },
 
   // Состояние конструктора пранка (Экран 4)
@@ -309,13 +319,13 @@ function toggleBurgerDrawer() {
   else closeBurgerDrawer();
 }
 
-function openTemuUnlockModal(targetScore = 88.0) {
+function openTemuUnlockModal(targetScore = 72.0) {
   const modal = document.getElementById('modal-temu-unlock');
   const numEl = document.getElementById('temu-unlock-score-num');
   const fillEl = document.getElementById('temu-unlock-bar-fill');
   if (!modal || !numEl || !fillEl) return;
 
-  const target = Math.max(88.0, Math.min(100, Number(targetScore || 88.0)));
+  const target = Math.max(72.0, Math.min(100, Number(targetScore || 72.0)));
   numEl.textContent = '0.0';
   fillEl.style.transition = 'none';
   fillEl.style.width = '0%';
@@ -427,6 +437,8 @@ async function bootstrap() {
   initVoiceRecorderInstance();
   initVisibilityAndAntiSeekGuards();
   bindUIEvents();
+  document.getElementById('btn-enter-sound')?.removeAttribute('disabled');
+  document.getElementById('btn-enter-mute')?.removeAttribute('disabled');
   await initPackConstructorDefaults();
 
   state.profile = await fetchPlayerProfile(state.tg?.user);
@@ -439,11 +451,8 @@ async function bootstrap() {
   updatePremiereBarsUI();
   await refreshQuestUI();
 
-  // Реферальный визит по прямой ссылке на трейлер (?trailer=1&ref=...)
+  // Автооткрытие трейлера по прямой ссылке (?trailer=1&ref=...)
   if (state.tg.trailerAutoOpen) {
-    if (state.tg.trailerRefUid) {
-      claimSocialOrPromoBonus(state.tg?.user, 'trailer_ref_visit', 'tg', state.tg.trailerRefUid).catch(() => {});
-    }
     openTrailerModal({ forRescue: false });
   }
 
@@ -505,7 +514,7 @@ async function bootstrap() {
                     uiStage: 3,
                     temuSurgeClaimed: true,
                     packedCount: Math.max(1, Number(state.profile.packedCount || 0)),
-                    premiereScore: Math.max(88.0, Number(state.profile.premiereScore || 0)),
+                    premiereScore: Math.max(72.0, Number(state.profile.premiereScore || 0)),
                     hasSocialConnection: false,
                     duelsPlayed: 0,
                     friendsBrought: 0,
@@ -514,7 +523,7 @@ async function bootstrap() {
                     uiStage: 4,
                     temuSurgeClaimed: true,
                     packedCount: Math.max(1, Number(state.profile.packedCount || 0)),
-                    premiereScore: Math.max(88.0, Number(state.profile.premiereScore || 0)),
+                    premiereScore: Math.max(72.0, Number(state.profile.premiereScore || 0)),
                     hasSocialConnection: true,
                   };
         await syncUiStage(null, sNum, { force: true });
@@ -577,7 +586,7 @@ async function bootstrap() {
             uiStage: 3,
             temuSurgeClaimed: true,
             packedCount: Math.max(1, Number(state.profile.packedCount || 0)),
-            premiereScore: 88.0,
+            premiereScore: 72.0,
             hasSocialConnection: false,
             duelsPlayed: 0,
             friendsBrought: 0,
@@ -585,7 +594,7 @@ async function bootstrap() {
           applyProgressiveDisclosureUI({ forceStage: 3, skipPromoteFromSocial: true });
           updatePremiereBarsUI();
           if (state.activeScreen === 'gate') showScreen('pack');
-          openTemuUnlockModal(88.0);
+          openTemuUnlockModal(72.0);
         } else if (target === 'duel') {
           await openDuelTable(`tbog_${Date.now().toString(36).slice(-4)}`, { autoAddTestBots: true });
         } else if (target === 'leaders') {
@@ -1757,6 +1766,8 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
     const showPulse =
       !alreadyStruck &&
       state.round.modeType !== 'premiere' &&
+      !state.round.isBlitz &&
+      Number(state.round.workshopLevel || 1) <= 2 &&
       index === state.round.targetIndex;
     reticle.classList.toggle('is-knocking', showPulse);
   }
@@ -1884,7 +1895,7 @@ async function handleBarrelStrike(index, worldPoint) {
       scene.assignTargetBarrelNow(index);
       scene.triggerStrikeFX(index, worldPoint);
       audio.playStrike(index);
-      state.watchChannel?.send('strike', { barrelIndex: index, rescued: true });
+      state.watchChannel?.send('strike', { barrelIndex: index, rescued: true, hitTarget: true });
       finishRound(true);
       return;
     }
@@ -1992,17 +2003,40 @@ function triggerMiniScreamer(explicitVariant = null) {
   const cap = document.getElementById('screamer-caption');
   if (!el) return;
 
-  el.setAttribute('data-variant', meta.key);
-  if (img) img.src = meta.img;
-  if (cap) cap.textContent = t(meta.i18n);
+  const showOverlay = () => {
+    el.setAttribute('data-variant', meta.key);
+    if (cap) cap.textContent = t(meta.i18n);
 
-  el.removeAttribute('hidden');
-  el.style.animation = 'none';
-  void el.offsetWidth;
-  el.style.animation = '';
-  window.setTimeout(() => {
-    el.setAttribute('hidden', '');
-  }, 420);
+    el.removeAttribute('hidden');
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = '';
+    window.setTimeout(() => {
+      el.setAttribute('hidden', '');
+    }, 420);
+  };
+
+  if (img) {
+    img.src = meta.img;
+    if (img.complete && img.naturalWidth > 0) {
+      showOverlay();
+    } else {
+      let shown = false;
+      const done = () => {
+        if (shown) return;
+        shown = true;
+        showOverlay();
+      };
+      if (typeof img.decode === 'function') {
+        img.decode().then(done).catch(done);
+      } else {
+        img.addEventListener('load', done, { once: true });
+      }
+      window.setTimeout(done, 120);
+    }
+  } else {
+    showOverlay();
+  }
 }
 
 /* ============================================================================
@@ -2599,6 +2633,9 @@ async function finishRound(survived) {
   }
 
   if (!state.round.isDemo && state.incomingPack) {
+    state.uiStage = Math.max(Number(state.uiStage || 1), 4);
+    applyProgressiveDisclosureUI({ forceStage: 4 });
+    syncUiStage(state.tg?.user, 4).catch(() => {});
     recordBarrelResult(state.incomingPack, {
       survived,
       attemptsUsed: state.round.attemptsUsed || 5,
@@ -2771,7 +2808,7 @@ async function handleSealBarrelClick() {
 
     state.profile.premiereScore = Math.max(
       Number(state.profile.premiereScore || 0),
-      Number(created.premiereScore || 88)
+      Number(created.premiereScore || 72)
     );
     state.profile.temuSurgeClaimed = true;
     state.profile.packedCount = Math.max(1, Number(state.profile.packedCount || 0) + 1);
@@ -2783,7 +2820,7 @@ async function handleSealBarrelClick() {
 
     if (created.surgeTriggered || wasPreStage3) {
       await syncUiStage(state.tg?.user, 3);
-      openTemuUnlockModal(state.profile.premiereScore || 88.0);
+      openTemuUnlockModal(state.profile.premiereScore || 72.0);
       applyProgressiveDisclosureUI({ forceStage: 3, skipPromoteFromSocial: true });
     } else {
       applyProgressiveDisclosureUI();
@@ -3242,19 +3279,40 @@ function openTrailerModal({ forRescue = false } = {}) {
   const closeBtn = document.getElementById('btn-close-trailer');
   const vid = document.getElementById('trailer-video');
 
-  modal?.classList.toggle('is-rescue-only', Boolean(forRescue && state.uiStage <= 2));
+  if (state.trailer.rescueSafetyTimer) {
+    clearTimeout(state.trailer.rescueSafetyTimer);
+    state.trailer.rescueSafetyTimer = null;
+  }
+
+  const lockClose = Boolean(forRescue && state.uiStage <= 2);
+  modal?.classList.toggle('is-rescue-only', lockClose);
   modal?.removeAttribute('hidden');
+
+  if (closeBtn) {
+    closeBtn.style.visibility = '';
+    closeBtn.classList.toggle('is-rescue-locked', lockClose);
+  }
 
   if (forRescue) {
     state.trailer.maxTime = 0;
     state.trailer.ytWatchedSec = 0;
     state.trailer.unlocked40 = false;
     rescueBox?.removeAttribute('hidden');
-    if (closeBtn) closeBtn.style.visibility = state.uiStage <= 2 ? 'hidden' : 'visible';
+    if (lockClose) {
+      state.trailer.rescueSafetyTimer = window.setTimeout(() => {
+        document.getElementById('btn-close-trailer')?.classList.remove('is-rescue-locked');
+      }, 6500);
+      vid?.addEventListener(
+        'error',
+        () => {
+          document.getElementById('btn-close-trailer')?.classList.remove('is-rescue-locked');
+        },
+        { once: true }
+      );
+    }
     updateTrailerRescueBanner(0);
   } else {
     rescueBox?.setAttribute('hidden', '');
-    if (closeBtn) closeBtn.style.visibility = 'visible';
   }
 
   if (vid && !state.trailer.usingYtFallback) {
@@ -3272,7 +3330,12 @@ function openTrailerModal({ forRescue = false } = {}) {
 function closeTrailerModal() {
   const modal = document.getElementById('modal-trailer');
   modal?.classList.remove('is-rescue-only');
+  document.getElementById('btn-close-trailer')?.classList.remove('is-rescue-locked');
   modal?.setAttribute('hidden', '');
+  if (state.trailer.rescueSafetyTimer) {
+    clearTimeout(state.trailer.rescueSafetyTimer);
+    state.trailer.rescueSafetyTimer = null;
+  }
   const vid = document.getElementById('trailer-video');
   if (vid) vid.pause();
   if (state.ytPlayer && typeof state.ytPlayer.pauseVideo === 'function') {
@@ -3322,6 +3385,11 @@ function updateTrailerRescueBanner(watchedSec) {
 async function unlockTrailerReward() {
   if (state.trailer.unlocked40) return;
   state.trailer.unlocked40 = true;
+  document.getElementById('btn-close-trailer')?.classList.remove('is-rescue-locked');
+  if (state.trailer.rescueSafetyTimer) {
+    clearTimeout(state.trailer.rescueSafetyTimer);
+    state.trailer.rescueSafetyTimer = null;
+  }
   if (state.trailer.ytTimer) {
     clearInterval(state.trailer.ytTimer);
     state.trailer.ytTimer = null;
@@ -3334,7 +3402,12 @@ async function unlockTrailerReward() {
 
   markTrailerCompleted();
   recordFunnelEvent('trailer_completions', state.tg?.user).catch(() => {});
-  const bonus = await claimSocialOrPromoBonus(state.tg?.user, 'trailer_watched', 'app').catch(() => null);
+  const bonus = await claimSocialOrPromoBonus(
+    state.tg?.user,
+    'trailer_watched',
+    'app',
+    state.tg?.trailerRefUid || ''
+  ).catch(() => null);
   if (bonus?.ok) {
     state.profile.premierePoints = bonus.premierePoints;
     state.profile.lives = bonus.lives;
@@ -3678,9 +3751,13 @@ async function openLeaderboardModal() {
   if (rankEl) rankEl.textContent = me.rank ? `#${me.rank}` : '#—';
   if (ptsEl) ptsEl.textContent = `⭐ ${Number(me.premiere_points ?? state.profile.premierePoints ?? 0)}`;
   if (gapEl) {
+    const friendsCount = Number(me.friends_brought ?? state.profile.friendsBrought ?? 0);
+    const needFriendsNote = friendsCount < 2
+      ? ` · 🔓 Нужно ≥2 приведённых друзей для ТОП-10 (сейчас ${friendsCount}/2)`
+      : '';
     gapEl.textContent = me.in_top10
       ? '🔥 ТЫ В ЗОНЕ ПРИГЛАШЕНИЯ НА ЗАКРЫТУЮ ПРЕМЬЕРУ (ТОП-10)!'
-      : `До входа в ТОП-10: +${Math.max(10, Number(me.points_to_top10 || 150))} ⭐`;
+      : `До входа в ТОП-10: +${Math.max(10, Number(me.points_to_top10 || 150))} ⭐${needFriendsNote}`;
   }
 
   if (!listEl) return;
@@ -3722,7 +3799,7 @@ function getActiveShareBundle(kind = 'trailer') {
       text: `🛢 Кто-то заварил тебя в цеху «БОЧКИ»! Надень наушники — 3 попытки и 30 сек воздуха: «${phrase}»`,
     };
   }
-  const trLinks = buildTrailerReferralLinks(uid);
+  const trLinks = buildTrailerReferralLinks(state.tg?.user);
   return {
     action: 'share_trailer',
     url: state.tg?.inTelegram ? trLinks.tgUrl : trLinks.webUrl,
@@ -3784,13 +3861,12 @@ async function triggerMultiSocialShare(platform = 'tg', kind = 'trailer') {
       },
     });
     const igRes = await openInstagramShareFlow({
-      pngBlob,
-      fileName: `bochka-${kind}-${Date.now()}.png`,
-      shareUrl: bundle.webUrl,
-      caption: `${bundle.text} ${bundle.webUrl}`,
+      url: bundle.webUrl || bundle.url,
+      text: `${bundle.text} ${bundle.webUrl || bundle.url}`,
+      posterBlob: pngBlob,
     });
-    if (igRes === 'downloaded_and_copied') {
-      showToast('📸 Постер 9:16 скачан, а ссылка скопирована для стикера Instagram Stories!');
+    if (igRes === 'copied_and_opened' || igRes === 'shared_story') {
+      showToast('📸 Постер 9:16 и подпись скопированы для Instagram Stories!');
     }
   } else if (platform === 'copy') {
     await copyToClipboard(bundle.url);

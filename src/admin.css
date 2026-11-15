@@ -24,6 +24,8 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100%;
+  max-width: 100%;
+  overflow-x: clip;
   background: radial-gradient(circle at 50% 0%, #171b22 0%, #090a0c 65%);
   color: var(--text);
   font-family: var(--font-body);
@@ -41,6 +43,8 @@ code {
 
 .admin-shell {
   min-height: 100vh;
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 /* ================= АВТОРИЗАЦИЯ ================= */
@@ -349,7 +353,7 @@ code {
 /* ================= ПАНЕЛИ И ВОРОНКА ================= */
 .adm-two-col {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
   gap: 16px;
 }
 
@@ -358,6 +362,8 @@ code {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 18px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .panel-head {
@@ -687,5 +693,49 @@ code {
   color: var(--gold-bright);
   font-size: 13px;
   font-weight: 600;
+  pointer-events: none;
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.65);
+}
+
+@media (max-width: 680px) {
+  .dashboard-wrap {
+    padding: 12px 10px 72px;
+  }
+
+  .adm-topbar {
+    padding: 12px;
+  }
+
+  .adm-tabs {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    gap: 6px;
+  }
+
+  .adm-tab {
+    min-height: 38px;
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(165px, 100%), 1fr));
+  }
+
+  .adm-panel {
+    padding: 14px 12px;
+  }
+
+  .adm-btn,
+  .pill-btn {
+    min-height: 38px;
+  }
+
+  .adm-toast {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    max-width: calc(100vw - 20px);
+    text-align: center;
+  }
 }

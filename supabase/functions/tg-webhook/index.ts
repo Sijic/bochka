@@ -3,11 +3,12 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-telegram-bot-api-secret-token",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 const BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN") || "";
+const WEBHOOK_SECRET = Deno.env.get("TELEGRAM_WEBHOOK_SECRET") || "";
 const ADMIN_CHAT_ID = Deno.env.get("ADMIN_TG_CHAT_ID") || "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -20,6 +21,8 @@ const adminDb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 
+const encoder = new TextEncoder();
+
 async function tgApi(method: string, payload: Record<string, unknown>) {
   if (!BOT_TOKEN) return { ok: false, description: "missing_bot_token" };
   const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
@@ -27,7 +30,7 @@ async function tgApi(method: string, payload: Record<string, unknown>) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  return await res.json().catch(() => ({ ok: false }));
+  return await res.json().catch(() => ({ ok: false, description: "invalid_tg_json" }));
 }
 
 function jsonResp(body: unknown, status = 200) {
@@ -35,6 +38,75 @@ function jsonResp(body: unknown, status = 200) {
     status,
     headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
   });
+}
+
+function timingSafeEq(a: string, b: string): boolean {
+  if (!a || !b || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+async function hmacSha256Raw(keyBytes: Uint8Array, message: string): Promise<ArrayBuffer> {
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    keyBytes,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  return await crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(message));
+}
+
+function bufToHex(buf: ArrayBuffer): string {
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function verifyTelegramInitData(
+  initDataRaw: string,
+  botToken: string
+): Promise<{ valid: boolean; userId: string | null }> {
+  if (!initDataRaw || !botToken) return { valid: false, userId: null };
+  try {
+    const params = new URLSearchParams(initDataRaw);
+    const hash = params.get("hash") || "";
+    const authDate = Number(params.get("auth_date") || "0");
+    if (!hash || !Number.isFinite(authDate)) {
+      return { valid: false, userId: null };
+    }
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (nowSec - authDate > 86400 * 7) {
+      return { valid: false, userId: null };
+    }
+
+    const pairs: string[] = [];
+    for (const [k, v] of params.entries()) {
+      if (k !== "hash") pairs.push(`${k}=${v}`);
+    }
+    pairs.sort();
+    const dataCheckString = pairs.join("\n");
+
+    const secretKeyBuf = await hmacSha256Raw(encoder.encode("WebAppData"), botToken);
+    const computedBuf = await hmacSha256Raw(new Uint8Array(secretKeyBuf), dataCheckString);
+    const computedHex = bufToHex(computedBuf);
+    if (!timingSafeEq(computedHex, hash.toLowerCase())) {
+      return { valid: false, userId: null };
+    }
+
+    let userId: string | null = null;
+    const userJson = params.get("user");
+    if (userJson) {
+      const parsed = JSON.parse(userJson);
+      if (parsed?.id) userId = String(parsed.id);
+    }
+    return { valid: true, userId };
+  } catch {
+    return { valid: false, userId: null };
+  }
 }
 
 async function verifyAdminCaller(req: Request): Promise<boolean> {
@@ -56,6 +128,11 @@ async function verifyAdminCaller(req: Request): Promise<boolean> {
     .maybeSingle();
 
   return Boolean(adminRow?.user_id);
+}
+
+function normalizePhone(raw: string): string {
+  const digits = String(raw || "").replace(/[^0-9]/g, "");
+  return digits ? `+${digits}` : "";
 }
 
 Deno.serve(async (req: Request) => {
@@ -85,14 +162,23 @@ Deno.serve(async (req: Request) => {
 
     if (body.adminAction === "send_ticket") {
       const { orderId, bookingCode = "", ticketFileUrl = "" } = body;
+      const cleanOrderId = String(orderId || "").trim();
+      if (!cleanOrderId) {
+        return jsonResp({ ok: false, tgSent: false, error: "invalid_order_id" }, 400);
+      }
+
       const { data: ord, error: ordErr } = await adminDb
         .from("ticket_orders")
         .select("*")
-        .eq("id", orderId)
+        .eq("id", cleanOrderId)
         .maybeSingle();
 
       if (ordErr || !ord) {
-        return jsonResp({ ok: false, error: "order_not_found" }, 404);
+        return jsonResp({ ok: false, tgSent: false, error: "order_not_found" }, 404);
+      }
+
+      if (!ord.receiver_tg_id) {
+        return jsonResp({ ok: false, tgSent: false, error: "missing_receiver_tg_id" });
       }
 
       const captionLines = [
@@ -104,29 +190,36 @@ Deno.serve(async (req: Request) => {
         "Покажи этот билет или код бронирования на кассе/терминале кинотеатра. До встречи в темноте с 17 декабря!",
       ].filter(Boolean).join("\n");
 
-      let tgSent = { ok: false };
-      if (ord.receiver_tg_id) {
-        if (ticketFileUrl && /\.(png|jpe?g|webp)(\?|$)/i.test(ticketFileUrl)) {
-          tgSent = await tgApi("sendPhoto", {
-            chat_id: ord.receiver_tg_id,
-            photo: ticketFileUrl,
-            caption: captionLines,
-            parse_mode: "HTML",
-          });
-        } else if (ticketFileUrl) {
-          tgSent = await tgApi("sendDocument", {
-            chat_id: ord.receiver_tg_id,
-            document: ticketFileUrl,
-            caption: captionLines,
-            parse_mode: "HTML",
-          });
-        } else {
-          tgSent = await tgApi("sendMessage", {
-            chat_id: ord.receiver_tg_id,
-            text: captionLines,
-            parse_mode: "HTML",
-          });
-        }
+      let tgSent: Record<string, any> = { ok: false, description: "send_not_attempted" };
+      if (ticketFileUrl && /\.(png|jpe?g|webp)(\?|$)/i.test(ticketFileUrl)) {
+        tgSent = await tgApi("sendPhoto", {
+          chat_id: ord.receiver_tg_id,
+          photo: ticketFileUrl,
+          caption: captionLines,
+          parse_mode: "HTML",
+        });
+      } else if (ticketFileUrl) {
+        tgSent = await tgApi("sendDocument", {
+          chat_id: ord.receiver_tg_id,
+          document: ticketFileUrl,
+          caption: captionLines,
+          parse_mode: "HTML",
+        });
+      } else {
+        tgSent = await tgApi("sendMessage", {
+          chat_id: ord.receiver_tg_id,
+          text: captionLines,
+          parse_mode: "HTML",
+        });
+      }
+
+      // BUG-ADM3: НЕ переводим заявку в 'sent', если Telegram не доставил сообщение!
+      if (!tgSent?.ok) {
+        return jsonResp({
+          ok: false,
+          tgSent: false,
+          error: tgSent?.description || "telegram_delivery_failed",
+        });
       }
 
       await adminDb
@@ -137,13 +230,13 @@ Deno.serve(async (req: Request) => {
           ticket_file_url: ticketFileUrl || ord.ticket_file_url,
           sent_at: new Date().toISOString(),
         })
-        .eq("id", orderId);
+        .eq("id", cleanOrderId);
 
       if (ord.gift_id) {
         await adminDb.from("ticket_passes").update({ status: "sent" }).eq("short_id", ord.gift_id);
       }
 
-      return jsonResp({ ok: true, tgSent: Boolean(tgSent?.ok) });
+      return jsonResp({ ok: true, tgSent: true });
     }
 
     if (body.adminAction === "reject_order") {
@@ -151,14 +244,15 @@ Deno.serve(async (req: Request) => {
       await adminDb
         .from("ticket_orders")
         .update({ status: "rejected", booking_code: reason })
-        .eq("id", orderId);
+        .eq("id", String(orderId || "").trim());
       return jsonResp({ ok: true });
     }
 
     if (body.adminAction === "notify_premiere_winner") {
       const { tgUserId, premiereCode, displayName = "" } = body;
+      let tgRes: Record<string, any> = { ok: false };
       if (tgUserId) {
-        await tgApi("sendMessage", {
+        tgRes = await tgApi("sendMessage", {
           chat_id: tgUserId,
           parse_mode: "HTML",
           text:
@@ -168,7 +262,7 @@ Deno.serve(async (req: Request) => {
             `Ответь на это сообщение своим ФИО для внесения в списки гостей на входе.`,
         });
       }
-      return jsonResp({ ok: true });
+      return jsonResp({ ok: Boolean(tgRes?.ok), tgSent: Boolean(tgRes?.ok) });
     }
 
     return jsonResp({ ok: false, error: "unknown_admin_action" }, 400);
@@ -178,10 +272,25 @@ Deno.serve(async (req: Request) => {
   // 2. ЛЁГКИЕ СОЦИАЛЬНЫЕ ПУШИ МЕЖДУ ДРУЗЬЯМИ ИЗ ВЕБ-ИГРЫ / MINI APP
   // =========================================================================
   if (body.clientAction || body.event) {
+    if (body.initData) {
+      const check = await verifyTelegramInitData(String(body.initData), BOT_TOKEN);
+      if (!check.valid) {
+        return jsonResp({ ok: false, error: "invalid_telegram_init_data" }, 401);
+      }
+    }
+
     const action = body.clientAction || body.event;
 
-    // ТРИГГЕР А: Друг открыл ссылку и нажал старт поиска -> пуш отправителю + кнопка подглядывать!
-    if (action === "barrel_search_started" && body.senderTgId) {
+    if (action === "barrel_search_started" && body.senderTgId && body.barrelId) {
+      const { data: bRow } = await adminDb
+        .from("barrels")
+        .select("short_id, sender_tg_id")
+        .eq("short_id", String(body.barrelId))
+        .maybeSingle();
+      if (!bRow || bRow.sender_tg_id !== String(body.senderTgId)) {
+        return jsonResp({ ok: true, skipped: true });
+      }
+
       const opener = escapeHtml(body.openerName || "Твой друг");
       const credited = Number(body.creditedLives || 0);
       const barrelId = String(body.barrelId || "");
@@ -193,7 +302,7 @@ Deno.serve(async (req: Request) => {
         : MINI_APP_LINK;
 
       const bonusLine = credited > 0
-        ? `Лови <b>+${credited} ❤️ жизни</b> и <b>+400 ⭐ очков</b> в рейтинг ТОП-10 Премьеры! Заходи подглядывать в реальном времени, по каким бочкам он лупит:`
+        ? `Лови <b>+${credited} ❤️ жизни</b> и <b>+2500 ⭐ очков</b> в рейтинг ТОП-10 Премьеры! Заходи подглядывать в реальном времени, по каким бочкам он лупит:`
         : `Заходи подглядывать в реальном времени за его ударами или перехвати его на стол дуэли:`;
 
       await tgApi("sendMessage", {
@@ -211,6 +320,14 @@ Deno.serve(async (req: Request) => {
     }
 
     if ((action === "barrel_opened" || action === "opened") && body.senderTgId) {
+      const { data: sUser } = await adminDb
+        .from("users")
+        .select("tg_user_id")
+        .eq("tg_user_id", String(body.senderTgId))
+        .limit(1)
+        .maybeSingle();
+      if (!sUser) return jsonResp({ ok: true, skipped: true });
+
       const opener = body.openerName ? ` (${escapeHtml(body.openerName)})` : "";
       const survived = body.survived !== false;
       await tgApi("sendMessage", {
@@ -226,8 +343,15 @@ Deno.serve(async (req: Request) => {
       return jsonResp({ ok: true });
     }
 
-    // ТРИГГЕР Б (Кнопка 1): «Идём в кино 17 декабря!»
     if ((action === "reaction_cinema" || action === "cinema_accept" || action === "accepted_cinema") && body.senderTgId) {
+      const { data: sUser } = await adminDb
+        .from("users")
+        .select("tg_user_id")
+        .eq("tg_user_id", String(body.senderTgId))
+        .limit(1)
+        .maybeSingle();
+      if (!sUser) return jsonResp({ ok: true, skipped: true });
+
       const opener = escapeHtml(body.openerName || "Твой друг");
       await tgApi("sendMessage", {
         chat_id: body.senderTgId,
@@ -245,8 +369,15 @@ Deno.serve(async (req: Request) => {
       return jsonResp({ ok: true });
     }
 
-    // ТРИГГЕР Б (Кнопка 2): «Подари мне билет!»
     if (action === "reaction_ask_ticket" && body.senderTgId) {
+      const { data: sUser } = await adminDb
+        .from("users")
+        .select("tg_user_id")
+        .eq("tg_user_id", String(body.senderTgId))
+        .limit(1)
+        .maybeSingle();
+      if (!sUser) return jsonResp({ ok: true, skipped: true });
+
       const opener = escapeHtml(body.openerName || "Твой друг");
       await tgApi("sendMessage", {
         chat_id: body.senderTgId,
@@ -254,7 +385,7 @@ Deno.serve(async (req: Request) => {
         text:
           `🎟 <b>ДРУГ ПРОСИТ ЛИШНИЙ БИЛЕТ!</b>\n` +
           `<b>${opener}</b> вытащил тебя из бочки и просит подогнать ему выигранный билет в кино!\n` +
-          `<i>За передачу билета другу ты получаешь ×2 ❤️ жизней и +1000 ⭐ очков в ТОП-10 Премьеры!</i>`,
+          `<i>За передачу билета другу ты получаешь +4 ❤️ жизней и +3500 ⭐ очков в ТОП-10 Премьеры!</i>`,
         reply_markup: {
           inline_keyboard: [
             [{ text: "🎁 Подарить / Выбить билет другу", url: `${MINI_APP_LINK}?startapp=giftfork` }],
@@ -264,8 +395,15 @@ Deno.serve(async (req: Request) => {
       return jsonResp({ ok: true });
     }
 
-    // ТРИГГЕР Б (Кнопка 3): «Разыграем третьего втроём!»
     if (action === "reaction_duel_3p" && body.senderTgId) {
+      const { data: sUser } = await adminDb
+        .from("users")
+        .select("tg_user_id")
+        .eq("tg_user_id", String(body.senderTgId))
+        .limit(1)
+        .maybeSingle();
+      if (!sUser) return jsonResp({ ok: true, skipped: true });
+
       const opener = escapeHtml(body.openerName || "Твой друг");
       const roomId = String(body.roomId || "room3");
       await tgApi("sendMessage", {
@@ -283,8 +421,15 @@ Deno.serve(async (req: Request) => {
       return jsonResp({ ok: true });
     }
 
-    // ВЫЗОВ НА СИНХРОННУЮ ДУЭЛЬ (при повторной ссылке или кнопке «Вызвать на дуэль» в списке друзей)
     if (action === "duel_challenge" && body.targetTgId) {
+      const { data: tUser } = await adminDb
+        .from("users")
+        .select("tg_user_id")
+        .eq("tg_user_id", String(body.targetTgId))
+        .limit(1)
+        .maybeSingle();
+      if (!tUser) return jsonResp({ ok: true, skipped: true });
+
       const challenger = escapeHtml(body.challengerName || "Кент из Цеха");
       const roomId = String(body.roomId || "duel");
       await tgApi("sendMessage", {
@@ -304,6 +449,17 @@ Deno.serve(async (req: Request) => {
 
     if (action === "gift_order_created") {
       const { senderTgId, receiverTgId, receiverName = "", receiverUsername = "", phone = "", cityCinema = "" } = body;
+      const { data: ordRow } = await adminDb
+        .from("ticket_orders")
+        .select("id")
+        .eq("receiver_tg_id", String(receiverTgId || ""))
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!ordRow) {
+        return jsonResp({ ok: true, skipped: true });
+      }
 
       if (senderTgId) {
         await tgApi("sendMessage", {
@@ -311,7 +467,7 @@ Deno.serve(async (req: Request) => {
           parse_mode: "HTML",
           text:
             `🎟 <b>Друг активировал твой подарочный билет!</b>\n` +
-            `Твой запас жизней в Гонке за Премьерой мгновенно <b>удвоен (×2 ❤️)</b> — жми в цех!`,
+            `Тебе начислено <b>+4 ❤️ жизней и +3500 ⭐ очков</b> в ТОП-10 Премьеры — жми в цех!`,
           reply_markup: {
             inline_keyboard: [[{ text: "🔥 ШТУРМОВАТЬ ПРЕМЬЕРУ", url: MINI_APP_LINK }]],
           },
@@ -325,7 +481,7 @@ Deno.serve(async (req: Request) => {
           text:
             `✅ <b>Заявка передана продюсерам триллера «Бочка»!</b>\n\n` +
             `📍 Город / кинотеатр: <b>${escapeHtml(cityCinema)}</b>\n` +
-            `📱 Подтверждённый номер: <code>${escapeHtml(phone)}</code>\n\n` +
+            `📱 Подтверждённый номер: <code>${escapeHtml(normalizePhone(phone))}</code>\n\n` +
             `Электронный билет придёт на твой номер и прямо в этот бот @bochka_film_bot к старту проката 17 декабря.`,
         });
       }
@@ -337,7 +493,7 @@ Deno.serve(async (req: Request) => {
           text:
             `🆕 <b>НОВАЯ ЗАЯВКА НА БИЛЕТ В «БОЧКУ»</b>\n` +
             `👤 Получатель: ${escapeHtml(receiverName)} ${receiverUsername ? `(@${escapeHtml(receiverUsername)})` : ""}\n` +
-            `📱 Телефон: <code>${escapeHtml(phone)}</code>\n` +
+            `📱 Телефон: <code>${escapeHtml(normalizePhone(phone))}</code>\n` +
             `📍 Город/зал: <b>${escapeHtml(cityCinema)}</b>\n` +
             `🔗 Кабинет продюсера: ${PUBLIC_WEB_URL}/admin/`,
         });
@@ -350,8 +506,16 @@ Deno.serve(async (req: Request) => {
   }
 
   // =========================================================================
-  // 3. ВХОДЯЩИЕ ОБНОВЛЕНИЯ TELEGRAM BOT API (setWebhook)
+  // 3. ВХОДЯЩИЕ ОБНОВЛЕНИЯ TELEGRAM BOT API (setWebhook + Secret Token)
   // =========================================================================
+  if (!WEBHOOK_SECRET) {
+    return jsonResp({ ok: false, error: "webhook_secret_not_configured" }, 500);
+  }
+  const incomingSecret = req.headers.get("X-Telegram-Bot-Api-Secret-Token") || "";
+  if (!timingSafeEq(incomingSecret, WEBHOOK_SECRET)) {
+    return jsonResp({ ok: false, error: "unauthorized_webhook" }, 401);
+  }
+
   const msg = body.message;
   if (!msg || !msg.chat) {
     return jsonResp({ ok: true });
@@ -364,10 +528,8 @@ Deno.serve(async (req: Request) => {
   // 3A. Обработка системного контакта request_contact (защита от мультиаккаунтов!)
   if (msg.contact && fromId) {
     const contactUserId = msg.contact.user_id ? String(msg.contact.user_id) : "";
-    if (contactUserId === fromId && msg.contact.phone_number) {
-      const rawPhone = String(msg.contact.phone_number);
-      const cleanPhone = (rawPhone.startsWith("+") ? "+" : "+") + rawPhone.replace(/[^0-9]/g, "");
-
+    const cleanPhone = normalizePhone(String(msg.contact.phone_number || ""));
+    if (contactUserId === fromId && cleanPhone.length >= 10) {
       await adminDb.from("verified_contacts").upsert(
         {
           tg_user_id: fromId,
@@ -442,7 +604,10 @@ Deno.serve(async (req: Request) => {
       text:
         `🛢 <b>БОЧКА: Достучаться до небес</b>\n` +
         `<i>Триллер Алексея Звонцова · В кино с 17 декабря 2026</i>\n\n` +
-        `Темнота, шесть заваренных 200-литровых бочек и 15 секунд воздуха. Закатай друга с голосовым посланием изнутри металла, выбей билет в кино для кента и дойди до 100 баллов ради пригласительного на Закрытую Премьеру!`,
+        `🛢 Друг заперт в одной из ржавых бочек — у тебя есть 30 секунд воздуха и 3 удара ломом.\n` +
+        `🎧 Включи звук, прислушайся к стуку и голосу сквозь металл и найди нужную крышку (а в цеху ищи секрет 19·97).\n` +
+        `🎬 Спаси друга, закатай ответную бочку со своим фото и голосом — и вызывай своих за стол «На счёт три!» (до 3 игроков, выбывший гремит цепями).\n` +
+        `🎟 Добивай шкалу к Премьере или выигрывай живой билет в кино на фильм «БОЧКА» с 17 декабря!`,
       reply_markup: {
         inline_keyboard: [
           [{ text: "▶ ВОЙТИ В ЦЕХ «БОЧКИ»", url: launchUrl }],

@@ -46,6 +46,9 @@ export class WorkshopDuelController {
     this.claimInterval = null;
     this.rafId = null;
     this.timeouts = [];
+    this.roundParticipants = [];
+    this._lastRemoteRattleAt = 0;
+    this.roundWatchdogTimer = null;
     this.lastRattleAt = 0;
     this.botCounter = 0;
   }
@@ -63,6 +66,10 @@ export class WorkshopDuelController {
   clearAllTimers() {
     this.timeouts.forEach((id) => clearTimeout(id));
     this.timeouts = [];
+    if (this.roundWatchdogTimer) {
+      clearTimeout(this.roundWatchdogTimer);
+      this.roundWatchdogTimer = null;
+    }
     if (this.claimInterval) {
       clearInterval(this.claimInterval);
       this.claimInterval = null;
@@ -81,6 +88,7 @@ export class WorkshopDuelController {
     this.phase = 'lobby';
     this.roundKey = '';
     this.antePaidForRound = '';
+    this.roundParticipants = [];
     this.openedIndices = [];
     this.claims = {};
     this.spectatorUids = [];
@@ -209,6 +217,22 @@ export class WorkshopDuelController {
         this.players = merged;
         if (this.phase === 'lobby' || this.phase === 'finished') {
           this.renderLobbyUI();
+        } else if (this.phase === 'countdown' || this.phase === 'claim') {
+          const presentUids = merged.map((p) => p.uid);
+          const presentContenders = this.contenderUids.filter((u) => presentUids.includes(u));
+          if (presentContenders.length < 2) {
+            this.clearAllTimers();
+            this.phase = 'lobby';
+            this.antePaidForRound = null;
+            this.scene.setInteractive(false);
+            this.onToast?.('⚠️ Соперник вышел из дуэли — возврат в лобби стола.');
+            this.renderLobbyUI();
+          } else if (this.isHost() && this.phase === 'claim') {
+            const allPresentClaimed = presentContenders.every((u) => Boolean(this.claims[u]));
+            if (allPresentClaimed) {
+              this.finalizeClaimsAndBroadcastReveal();
+            }
+          }
         }
       }
     });
@@ -223,6 +247,23 @@ export class WorkshopDuelController {
       this.applyBarrelClaim(payload, false);
     });
 
+    ch.on('broadcast', { event: 'duel_ante_failed' }, ({ payload }) => {
+      if (!this.active || !payload || payload.roundKey !== this.roundKey) return;
+      this.contenderUids = this.contenderUids.filter((u) => u !== payload.uid);
+      this.roundParticipants = this.roundParticipants.filter((u) => u !== payload.uid);
+      if (this.contenderUids.length < 2) {
+        this.clearAllTimers();
+        this.phase = 'lobby';
+        this.antePaidForRound = null;
+        this.scene.setInteractive(false);
+        this.onToast?.(`⚠️ У ${payload.name || 'игрока'} закончились ❤️ для ставки — раунд остановлен.`);
+        this.renderLobbyUI();
+      } else if (this.isHost() && this.phase === 'claim') {
+        const allLeftClaimed = this.contenderUids.every((u) => Boolean(this.claims[u]));
+        if (allLeftClaimed) this.finalizeClaimsAndBroadcastReveal();
+      }
+    });
+
     ch.on('broadcast', { event: 'duel_reveal' }, ({ payload }) => {
       if (!this.active || !payload) return;
       this.executeReveal(payload);
@@ -230,6 +271,9 @@ export class WorkshopDuelController {
 
     ch.on('broadcast', { event: 'chain_rattle' }, ({ payload }) => {
       if (!this.active || !payload) return;
+      const now = Date.now();
+      if (now - this._lastRemoteRattleAt < 2500) return;
+      this._lastRemoteRattleAt = now;
       this.audio.playChainRattle(1.0);
       this.scene.triggerScreamerShake(0.42);
       Haptics.heavy();
@@ -278,11 +322,11 @@ export class WorkshopDuelController {
     if (potEl) {
       if (count >= 3) {
         potEl.innerHTML =
-          '🔥 <strong>БАНК НА ТРОИХ: 3 ❤️</strong> + БОНУС ЦЕХА: <strong>+450 ⭐ ОЧКОВ · +0.25 ШКАЛЫ · 28% ЗОЛОТАЯ БОЧКА 🎟</strong>';
+          '🔥 <strong>БАНК НА ТРОИХ: 3 ❤️</strong> + БОНУС ЦЕХА: <strong>+450 ⭐ ОЧКОВ · +0.25 ШКАЛЫ · 8% ЗОЛОТАЯ БОЧКА 🎟</strong>';
         potEl.classList.add('is-triple-bonus');
       } else {
         potEl.innerHTML =
-          '⚔️ <strong>БАНК ДУЭЛИ: 2 ❤️</strong> (ставки по 1 ❤️ · Победитель забирает всё + 200 ⭐ в ТОП-10)';
+          '⚔️ <strong>БАНК ДУЭЛИ: 2 ❤️</strong> (ставки по 1 ❤️ · Победитель забирает банк + 120 ⭐ в ТОП-10)';
         potEl.classList.remove('is-triple-bonus');
       }
     }
@@ -293,7 +337,7 @@ export class WorkshopDuelController {
         invite3Btn.textContent =
           count === 1
             ? '📲 ПОЗВАТЬ ДРУГА ЗА СТОЛ «НА СЧЁТ ТРИ!»'
-            : '➕ ПОЗВАТЬ 3-ГО КЕНТА (ЦЕХ ДОБАВИТ +450 ⭐ И ЗОЛОТУЮ БОЧКУ!)';
+            : '➕ ПОЗВАТЬ 3-ГО КЕНТА (ЦЕХ ДОБАВИТ +450 ⭐ И ШАНС БИЛЕТА!)';
       } else {
         invite3Btn.setAttribute('hidden', '');
       }
@@ -342,8 +386,8 @@ export class WorkshopDuelController {
           startBtn.disabled = true;
           startBtn.textContent = '⏳ ОЖИДАНИЕ 2-ГО ИГРОКА В КОМНАТЕ...';
         } else if (!this.isHost()) {
-          startBtn.disabled = false;
-          startBtn.textContent = `🔥 НА СЧЁТ ТРИ! СТАРТ (${count} ИГРОКА · СТАВКА 1 ❤️)`;
+          startBtn.disabled = true;
+          startBtn.textContent = '⏳ ЖДЁМ СТАРТА ОТ ХОСТА...';
         } else {
           startBtn.disabled = false;
           startBtn.textContent = `🔥 НА СЧЁТ ТРИ! СТАРТ (${count} ИГРОКА · СТАВКА 1 ❤️)`;
@@ -400,6 +444,7 @@ export class WorkshopDuelController {
       resetRack: needFreshRack,
       isSuddenDeath: Boolean(suddenDeathContenders),
       contenderUids: contenders,
+      roundParticipants: Array.from(new Set(contenders)),
       spectatorUids: this.players.map((p) => p.uid).filter((u) => !contenders.includes(u)),
       barrelCount,
       safeIndices,
@@ -416,6 +461,13 @@ export class WorkshopDuelController {
 
     this.roundKey = payload.roundKey;
     this.contenderUids = payload.contenderUids || this.players.map((p) => p.uid);
+    if (!payload.isFreeRerack) {
+      this.roundParticipants = Array.from(
+        new Set(payload.roundParticipants || this.players.map((p) => p.uid))
+      );
+    } else if (!this.roundParticipants?.length) {
+      this.roundParticipants = Array.from(new Set(this.contenderUids));
+    }
     this.spectatorUids = payload.spectatorUids || [];
     this.barrelCount = payload.barrelCount || 10;
     this.safeIndices = payload.safeIndices || [0, 2, 4, 6, 8];
@@ -437,6 +489,11 @@ export class WorkshopDuelController {
     if (!payload.isFreeRerack && !amISpectator && this.antePaidForRound !== this.roundKey) {
       const ante = await startDuelAnte(this.getTgUser?.(), this.roomId, this.roundKey);
       if (!ante.ok) {
+        this.broadcast('duel_ante_failed', {
+          uid: this.myUid,
+          name: this.myName,
+          roundKey: this.roundKey,
+        });
         this.phase = 'finished';
         this.showNoLivesPrompt();
         return;
@@ -513,6 +570,22 @@ export class WorkshopDuelController {
     if (!amISpectator) {
       this.scene.setInteractive(true);
     }
+
+    if (this.roundWatchdogTimer) {
+      clearTimeout(this.roundWatchdogTimer);
+    }
+    this.roundWatchdogTimer = window.setTimeout(() => {
+      if (!this.active || (this.phase !== 'countdown' && this.phase !== 'claim')) return;
+      if (this.isHost()) {
+        this.finalizeClaimsAndBroadcastReveal();
+      } else if (this.players.filter((p) => this.contenderUids.includes(p.uid)).length < 2) {
+        this.clearAllTimers();
+        this.phase = 'lobby';
+        this.antePaidForRound = null;
+        this.scene.setInteractive(false);
+        this.renderLobbyUI();
+      }
+    }, 8500);
 
     const bannerText = document.getElementById('duel-countdown-text');
     const bannerSub = document.getElementById('duel-countdown-sub');
@@ -744,7 +817,13 @@ export class WorkshopDuelController {
         roomId: this.roomId,
         roundKey: this.roundKey,
         winnerUid: winner.uid,
-        playerUids: this.players.map((p) => p.uid),
+        playerUids: Array.from(
+          new Set(
+            this.roundParticipants?.length
+              ? this.roundParticipants
+              : this.players.map((p) => p.uid)
+          )
+        ),
         tgUser: this.getTgUser?.(),
       });
 

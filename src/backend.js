@@ -212,8 +212,8 @@ export async function createBarrelPack({
   saveQuestState(q);
 
   const prevProf = getLocalPreviewProfile();
-  let surgeTriggered = !prevProf.temuSurgeClaimed && Number(prevProf.premiereScore || 0) < 88;
-  let nextScore = Math.max(Number(prevProf.premiereScore || 0), 88);
+  let surgeTriggered = !prevProf.temuSurgeClaimed && Number(prevProf.premiereScore || 0) < 72;
+  let nextScore = Math.max(Number(prevProf.premiereScore || 0), 72);
   let nextUiStage = Math.max(
     Number(prevProf.uiStage || 1),
     getStoredUiStage(),
@@ -444,11 +444,12 @@ export async function sendCinemaInviteReply(pack, viewerTgUser = null) {
 async function sendTelegramPing(payload) {
   if (isTestBogActive()) return true;
   if (!ENV.tgNotifyWebhook) return false;
+  const initData = typeof window !== 'undefined' ? String(window.Telegram?.WebApp?.initData || '') : '';
   try {
     const res = await fetch(ENV.tgNotifyWebhook, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, initData }),
     });
     return res.ok;
   } catch {
@@ -1205,9 +1206,13 @@ export function buildDuelShareLinks(roomId) {
   const base = resolveShareBaseUrl();
   const bot = ENV.tgBotUsername || 'bochka_film_bot';
   const app = ENV.tgAppName || 'play';
+  const webUrl = `${base}/?duel=${clean}`;
+  const tgMiniAppUrl = `https://t.me/${bot}/${app}?startapp=duel_${clean}`;
+  const shareText = '⚔️ Залетай за стол «НА СЧЁТ ТРИ!» в цеху «БОЧКИ»!';
   return {
-    webUrl: `${base}/?duel=${clean}`,
-    tgMiniAppUrl: `https://t.me/${bot}/${app}?startapp=duel_${clean}`,
+    webUrl,
+    tgMiniAppUrl,
+    tgUrl: `https://t.me/share/url?url=${encodeURIComponent(tgMiniAppUrl)}&text=${encodeURIComponent(shareText)}`,
   };
 }
 
@@ -1216,9 +1221,13 @@ export function buildTrailerReferralLinks(tgUser = null) {
   const base = resolveShareBaseUrl();
   const bot = ENV.tgBotUsername || 'bochka_film_bot';
   const app = ENV.tgAppName || 'play';
+  const webUrl = `${base}/?trailer=1&ref=${uid}`;
+  const tgMiniAppUrl = `https://t.me/${bot}/${app}?startapp=trailer_${uid}`;
+  const shareText = '🎬 Смотри трейлер триллера «БОЧКА» и проверь интуицию в 3D-цеху:';
   return {
-    webUrl: `${base}/?trailer=1&ref=${uid}`,
-    tgMiniAppUrl: `https://t.me/${bot}/${app}?startapp=trailer_${uid}`,
+    webUrl,
+    tgMiniAppUrl,
+    tgUrl: `https://t.me/share/url?url=${encodeURIComponent(tgMiniAppUrl)}&text=${encodeURIComponent(shareText)}`,
   };
 }
 

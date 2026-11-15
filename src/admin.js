@@ -130,11 +130,11 @@ function renderAnalyticsPane() {
   const trailers = Number(s.trailer_completions || 0);
   const cinema = Number(s.cinema_intent_clicks || 0);
   const ocean = Number(s.ocean_secret_opens || 0);
-  const totalHits = Number(s.total_hits || 0);
-  const won = Number(s.tickets_won || 0);
-  const burned = Number(s.tickets_burned || 0);
-  const dailyIssued = Number(s.daily_tickets_issued || 0);
-  const maxDaily = Number(s.max_daily_tickets || 5);
+  const totalHits = Number(s.total_strikes ?? s.total_hits ?? 0);
+  const won = Number(s.tickets_won ?? s.premiere_winners_count ?? s.premiere_winners ?? 0);
+  const burned = Number(s.tickets_burned ?? 0);
+  const dailyIssued = Number(s.daily_tickets_issued ?? 0);
+  const maxDaily = Number(s.max_daily_tickets ?? 5);
 
   const kFactor = players > 0 ? (opened / players).toFixed(2) : '0.00';
 
@@ -248,22 +248,24 @@ function renderOrdersPane() {
       const sendUser = o.sender_username ? `@${o.sender_username}` : o.sender_name || o.sender_uid || '—';
 
       const links = [];
-      if (o.kp_screenshot_url) {
+      if (isSafeHttpsUrl(o.kp_screenshot_url)) {
         links.push(`<a href="${escapeAttr(o.kp_screenshot_url)}" target="_blank" rel="noopener noreferrer">Скриншот Кинопоиска ↗</a>`);
       }
-      if (o.recipient_photo_url) {
+      if (isSafeHttpsUrl(o.recipient_photo_url)) {
         links.push(`<a href="${escapeAttr(o.recipient_photo_url)}" target="_blank" rel="noopener noreferrer">Фото получателя ↗</a>`);
       }
-      if (o.ticket_file_url) {
+      if (isSafeHttpsUrl(o.ticket_file_url)) {
         links.push(`<a href="${escapeAttr(o.ticket_file_url)}" target="_blank" rel="noopener noreferrer">Загруженный билет ↗</a>`);
       }
 
+      const safeOrderId = escapeAttr(String(o.id || ''));
+
       return `
-        <article class="order-card" data-order-id="${o.id}">
+        <article class="order-card" data-order-id="${safeOrderId}">
           <div class="order-meta">
             <div class="order-head-line">
               <span class="status-badge ${badge.cls}">${badge.txt}</span>
-              <span class="mono-muted">#${o.id} · ${escapeHtml(dt)}</span>
+              <span class="mono-muted">#${escapeHtml(String(o.id || ''))} · ${escapeHtml(dt)}</span>
             </div>
             <div><strong>Получатель:</strong> ${escapeHtml(o.receiver_name || 'Гость')} (<code>${escapeHtml(recvUser)}</code>)</div>
             <div><strong>Телефон (Telegram Verified):</strong> <code>${escapeHtml(o.verified_phone || '—')}</code></div>
@@ -285,10 +287,10 @@ function renderOrdersPane() {
             <input type="file" class="adm-input js-order-file" accept="image/png,image/jpeg,image/webp,application/pdf" />
 
             <div class="order-actions-row">
-              <button type="button" class="adm-btn adm-btn-gold js-send-ticket" data-id="${o.id}">
+              <button type="button" class="adm-btn adm-btn-gold js-send-ticket" data-id="${safeOrderId}">
                 📨 Отправить билет в @bochka_film_bot
               </button>
-              <button type="button" class="adm-btn adm-btn-danger js-reject-order" data-id="${o.id}">
+              <button type="button" class="adm-btn adm-btn-danger js-reject-order" data-id="${safeOrderId}">
                 ✕ Отклонить
               </button>
             </div>
@@ -299,10 +301,10 @@ function renderOrdersPane() {
     .join('');
 
   listEl.querySelectorAll('.js-send-ticket').forEach((btn) => {
-    btn.addEventListener('click', () => handleSendTicketToBot(Number(btn.getAttribute('data-id')), btn));
+    btn.addEventListener('click', () => handleSendTicketToBot(String(btn.getAttribute('data-id') || '').trim(), btn));
   });
   listEl.querySelectorAll('.js-reject-order').forEach((btn) => {
-    btn.addEventListener('click', () => handleRejectOrder(Number(btn.getAttribute('data-id')), btn));
+    btn.addEventListener('click', () => handleRejectOrder(String(btn.getAttribute('data-id') || '').trim(), btn));
   });
 }
 
@@ -345,13 +347,16 @@ async function handleSendTicketToBot(orderId, btn) {
 
     const res = await callAdminWebhook({
       adminAction: 'send_ticket',
-      orderId,
+      orderId: String(orderId),
       bookingCode,
       ticketFileUrl,
     });
 
-    if (!res.ok) {
-      showAdmToast(`Ошибка отправки: ${res.error || 'проверьте сессию'}`);
+    if (!res.ok || res.tgSent === false) {
+      const msg = res.error === 'telegram_delivery_failed' || res.tgSent === false
+        ? 'Бот Telegram не доставил файл игроку (возможно, @bochka_film_bot заблокирован). Заказ оставлен в очереди.'
+        : (res.error || 'проверьте сессию');
+      showAdmToast(`Ошибка отправки: ${msg}`);
       return;
     }
 
@@ -369,12 +374,14 @@ async function handleRejectOrder(orderId, btn) {
   try {
     const res = await callAdminWebhook({
       adminAction: 'reject_order',
-      orderId,
+      orderId: String(orderId),
       reason: 'Отклонено модератором',
     });
     if (res.ok) {
       showAdmToast('Заявка переведена в отклонённые.');
       await refreshDashboardData();
+    } else {
+      showAdmToast(`Не удалось отклонить заявку: ${res.error || 'ошибка сервера'}`);
     }
   } finally {
     btn.disabled = false;
@@ -410,7 +417,11 @@ function handleExportOrdersCsv() {
     o.ticket_file_url || '',
   ]);
 
-  const csvCell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const csvCell = (v) => {
+    let s = String(v ?? '');
+    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+    return `"${s.replace(/"/g, '""')}"`;
+  };
   const csvBody = [headers.map(csvCell).join(';'), ...rows.map((r) => r.map(csvCell).join(';'))].join('\r\n');
   const blob = new Blob(['\uFEFF' + csvBody], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -430,7 +441,7 @@ function renderLeadersPane() {
   const s = admState.stats || {};
   setText(
     'premiere-quota-badge',
-    `Выдано мест на Премьеру: ${Number(s.premiere_winners || 0)} / ${Number(s.max_premiere_winners || 20)}`
+    `Выдано мест на Премьеру: ${Number(s.premiere_winners_count ?? s.premiere_winners ?? 0)} / ${Number(s.max_premiere_winners ?? 20)}`
   );
 
   const tbody = document.getElementById('leaders-tbody');
@@ -448,7 +459,7 @@ function renderLeadersPane() {
       const lvl = Number(u.current_level || 1);
       const duelsWon = Number(u.duels_won || 0);
       const tgLabel = u.tg_username ? `@${u.tg_username}` : u.tg_user_id ? `tg:${u.tg_user_id}` : u.uid;
-      const kpHtml = u.kp_screenshot_url
+      const kpHtml = isSafeHttpsUrl(u.kp_screenshot_url)
         ? `<a href="${escapeAttr(u.kp_screenshot_url)}" target="_blank" rel="noopener noreferrer" style="color:#fde047">✓ Скриншот ↗</a>`
         : u.kp_verified
           ? '✓ Да'
@@ -534,9 +545,12 @@ async function handleSaveLimitsSubmit(e) {
   if (btn) btn.disabled = true;
 
   try {
-    const p_win_every_n_hits = Math.max(1, Number(document.getElementById('cfg-win-every')?.value || 100));
-    const p_max_daily_tickets = Math.max(0, Number(document.getElementById('cfg-max-daily')?.value || 5));
-    const p_max_premiere_winners = Math.max(0, Number(document.getElementById('cfg-max-premiere')?.value || 20));
+    const rawWin = document.getElementById('cfg-win-every')?.value;
+    const rawDaily = document.getElementById('cfg-max-daily')?.value;
+    const rawPrem = document.getElementById('cfg-max-premiere')?.value;
+    const p_win_every_n_hits = Math.max(1, Number(rawWin !== '' && rawWin != null ? rawWin : 100));
+    const p_max_daily_tickets = Math.max(0, Number(rawDaily !== '' && rawDaily != null ? rawDaily : 5));
+    const p_max_premiere_winners = Math.max(0, Number(rawPrem !== '' && rawPrem != null ? rawPrem : 20));
     const p_is_paused = Boolean(document.getElementById('cfg-is-paused')?.checked);
 
     const { data, error } = await adminSupabase.rpc('admin_update_config', {
@@ -645,6 +659,11 @@ function escapeHtml(s) {
 
 function escapeAttr(s) {
   return escapeHtml(s).replace(/'/g, '&#39;');
+}
+
+function isSafeHttpsUrl(u) {
+  const s = String(u || '').trim();
+  return /^https:\/\/[^\s"'<>]+$/i.test(s);
 }
 
 let admToastTimer = null;
