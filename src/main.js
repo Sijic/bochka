@@ -3829,11 +3829,11 @@ async function renderRetentionAndTransparencyPanels() {
       remBtn.dataset.bound = '1';
       remBtn.addEventListener('click', async () => {
         const next = localStorage.getItem('bochka_reminders_on') !== '1';
+        localStorage.setItem('bochka_reminders_on', next ? '1' : '0');
+        syncRemLabel();
         if (next && typeof Notification !== 'undefined' && Notification.permission === 'default') {
           try { await Notification.requestPermission(); } catch {}
         }
-        localStorage.setItem('bochka_reminders_on', next ? '1' : '0');
-        syncRemLabel();
         showToast(next ? 'Напоминания о мини-ивентах дня включены!' : 'Напоминания отключены.');
       });
     }

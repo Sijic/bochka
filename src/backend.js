@@ -1651,7 +1651,7 @@ export async function fetchPremiereLeaderboard(tgUser = null) {
 }
 
 export async function fetchPublicRaffleTransparency() {
-  const db = getSupabase();
+  const db = getCloudDb();
   if (!db) {
     return {
       ok: true,
