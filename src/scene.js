@@ -679,7 +679,7 @@ export class WorkshopScene {
     const ringGeo = new THREE.RingGeometry(0.48, 0.525, 40);
     ringGeo.rotateX(-Math.PI * 0.5);
 
-    const portraitGeo = new THREE.CircleGeometry(0.365, 40);
+    const portraitGeo = new THREE.CircleGeometry(0.382, 44);
     portraitGeo.rotateX(-Math.PI * 0.5);
 
     // Расширенный невидимый цилиндр-хитбокс (BUG-UX11: уверенный тап по мелким бочкам Блица на 375px и дальней бочке 97)
@@ -770,9 +770,10 @@ export class WorkshopScene {
 
       const portraitMat = new THREE.MeshBasicMaterial({
         map: defaultPortraitTex,
+        toneMapped: false,
       });
       const portraitMesh = new THREE.Mesh(portraitGeo, portraitMat);
-      portraitMesh.position.set(0, 0.56, 0);
+      portraitMesh.position.set(0, 0.61, 0);
       portraitMesh.visible = false;
       group.add(portraitMesh);
 

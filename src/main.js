@@ -191,6 +191,15 @@ const state = {
     rescueSafetyTimer: null,
   },
 
+  // Синхронизация внешних переходов на лайки YouTube / Instagram (@kinoceh_bel)
+  externalLikeSync: {
+    active: false,
+    platform: '',
+    departedAt: 0,
+    leftTab: false,
+    fallbackTimer: null,
+  },
+
   // Состояние конструктора пранка (Экран 4)
   pack: {
     mode: 'friend',
@@ -418,6 +427,7 @@ async function bootstrap() {
     renderPresetChips();
     refreshSoundButtonLabel();
     refreshQuestUI();
+    syncExternalLikeButtonsUI();
     applyProgressiveDisclosureUI();
   });
 
@@ -461,6 +471,7 @@ async function bootstrap() {
   }
   updatePremiereBarsUI();
   await refreshQuestUI();
+  initLiveFriendFeedbackMonitor();
 
   // Автооткрытие трейлера по прямой ссылке (?trailer=1&ref=...)
   if (state.tg.trailerAutoOpen) {
@@ -2823,7 +2834,7 @@ async function rebuildPackPortraitPreview(newSource = undefined) {
     const previewImg = document.getElementById('pack-preview-img');
     const sizeTag = document.getElementById('pack-size-tag');
     if (previewImg) previewImg.src = processed.dataUrl;
-    if (sizeTag) sizeTag.textContent = `320×320 WEBP · ${processed.sizeKb} КБ`;
+    if (sizeTag) sizeTag.textContent = `${processed.width || 420}×${processed.height || 420} HD WEBP · ${processed.sizeKb} КБ`;
   } catch {
     const fallback = await processPortraitToWebP(null, state.pack.frameStyle);
     state.pack.processed = fallback;
@@ -3347,6 +3358,10 @@ function initVisibilityAndAntiSeekGuards() {
         state.kpSync.leftTab = true;
         state.kpSync.departedAt = Date.now();
       }
+      if (state.externalLikeSync.active) {
+        state.externalLikeSync.leftTab = true;
+        state.externalLikeSync.departedAt = Date.now();
+      }
       const vid = document.getElementById('trailer-video');
       if (vid && !vid.paused) {
         vid.pause();
@@ -3355,8 +3370,13 @@ function initVisibilityAndAntiSeekGuards() {
       if (state.trailer.usingYtFallback && state.ytPlayer && typeof state.ytPlayer.pauseVideo === 'function') {
         try { state.ytPlayer.pauseVideo(); } catch { /* ignore */ }
       }
-    } else if (state.kpSync.waiting && state.kpSync.leftTab) {
-      evaluateKinopoiskReturn();
+    } else {
+      if (state.kpSync.waiting && state.kpSync.leftTab) {
+        evaluateKinopoiskReturn();
+      }
+      if (state.externalLikeSync.active && state.externalLikeSync.leftTab) {
+        evaluateExternalLikeReturn();
+      }
     }
   });
 
@@ -3365,11 +3385,18 @@ function initVisibilityAndAntiSeekGuards() {
       state.kpSync.leftTab = true;
       state.kpSync.departedAt = Date.now();
     }
+    if (state.externalLikeSync.active && !state.externalLikeSync.leftTab) {
+      state.externalLikeSync.leftTab = true;
+      state.externalLikeSync.departedAt = Date.now();
+    }
   });
 
   window.addEventListener('focus', () => {
     if (state.kpSync.waiting && state.kpSync.leftTab) {
       evaluateKinopoiskReturn();
+    }
+    if (state.externalLikeSync.active && state.externalLikeSync.leftTab) {
+      evaluateExternalLikeReturn();
     }
   });
 
@@ -3427,10 +3454,189 @@ function initVisibilityAndAntiSeekGuards() {
   });
 }
 
+const EXTERNAL_LIKE_META = {
+  yt: {
+    urlKey: 'youtubeWatchUrl',
+    action: 'yt_like_clicked',
+    storageKey: 'bochka_yt_liked',
+    btnId: 'btn-trailer-like-yt',
+    doneLabel: '✓ YOUTUBE +50 ⭐',
+    i18nKey: 'btnLikeYoutube',
+  },
+  ig: {
+    urlKey: 'instagramTrailerUrl',
+    action: 'ig_like_clicked',
+    storageKey: 'bochka_ig_liked',
+    btnId: 'btn-trailer-like-ig',
+    doneLabel: '✓ INSTAGRAM +50 ⭐',
+    i18nKey: 'btnLikeInstagram',
+  },
+};
+
+function syncExternalLikeButtonsUI() {
+  for (const meta of Object.values(EXTERNAL_LIKE_META)) {
+    const btn = document.getElementById(meta.btnId);
+    if (!btn) continue;
+    let claimed = false;
+    try { claimed = localStorage.getItem(meta.storageKey) === '1'; } catch { /* ignore */ }
+    btn.classList.toggle('is-done', claimed);
+    btn.textContent = claimed ? meta.doneLabel : t(meta.i18nKey);
+  }
+}
+
+async function completeExternalLikeBonus(platform) {
+  const meta = EXTERNAL_LIKE_META[platform];
+  if (!meta) return;
+  try { localStorage.setItem(meta.storageKey, '1'); } catch { /* ignore */ }
+  syncExternalLikeButtonsUI();
+
+  const res = await claimSocialOrPromoBonus(state.tg?.user, meta.action, platform).catch(() => null);
+  if (res?.pointsAdded > 0) {
+    state.profile.premierePoints = res.premierePoints;
+    updatePremiereBarsUI();
+  }
+  Haptics.success();
+  showToast('🔥 Спасибо за поддержку фильма! +50 ⭐ в рейтинг');
+}
+
+function handleExternalTrailerLike(platform) {
+  const meta = EXTERNAL_LIKE_META[platform];
+  if (!meta) return;
+  const targetUrl = ENV[meta.urlKey] || ENV.youtubeWatchUrl;
+
+  let alreadyClaimed = false;
+  try { alreadyClaimed = localStorage.getItem(meta.storageKey) === '1'; } catch { /* ignore */ }
+
+  openExternalLink(targetUrl);
+  if (alreadyClaimed) {
+    showToast('Лайк уже засчитан (+50 ⭐)!');
+    return;
+  }
+
+  if (state.externalLikeSync.fallbackTimer) {
+    clearTimeout(state.externalLikeSync.fallbackTimer);
+  }
+  state.externalLikeSync = {
+    active: true,
+    platform,
+    departedAt: Date.now(),
+    leftTab: false,
+    fallbackTimer: window.setTimeout(() => {
+      if (!state.externalLikeSync.active || state.externalLikeSync.platform !== platform) return;
+      state.externalLikeSync.active = false;
+      state.externalLikeSync.fallbackTimer = null;
+      completeExternalLikeBonus(platform);
+    }, 3800),
+  };
+}
+
+function evaluateExternalLikeReturn() {
+  if (!state.externalLikeSync.active) return;
+  const { platform, departedAt, fallbackTimer } = state.externalLikeSync;
+  state.externalLikeSync.active = false;
+  state.externalLikeSync.fallbackTimer = null;
+  if (fallbackTimer) clearTimeout(fallbackTimer);
+
+  const awaySec = (Date.now() - departedAt) / 1000;
+  if (awaySec < 3.0) {
+    Haptics.error();
+    showToast('Поставь лайк под роликом (подожди пару секунд) — и +50 ⭐ начислятся!');
+    return;
+  }
+  completeExternalLikeBonus(platform);
+}
+
+function initLiveFriendFeedbackMonitor() {
+  const SEEN_KEY = 'bochka_seen_friend_opens_v1';
+  const INIT_KEY = 'bochka_seen_friend_init_v1';
+  let baselineFriendsBrought = Number(state.profile?.friendsBrought || 0);
+  let lastCheckAt = 0;
+  let inFlight = false;
+
+  const readSeen = () => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(SEEN_KEY) || '[]');
+      return new Set(Array.isArray(raw) ? raw : []);
+    } catch {
+      return new Set();
+    }
+  };
+  const writeSeen = (set) => {
+    try { localStorage.setItem(SEEN_KEY, JSON.stringify([...set].slice(-60))); } catch { /* ignore */ }
+  };
+
+  const checkLiveFriendFeedback = async (seedOnly = false) => {
+    if (isTestBogSessionActive() || inFlight) return;
+    const packedCount = Number(state.profile?.packedCount || 0) || Number(getQuestState()?.packedCount || 0);
+    if (!seedOnly && packedCount < 1) return;
+
+    const now = Date.now();
+    if (!seedOnly && now - lastCheckAt < 8000) return;
+    lastCheckAt = now;
+    inFlight = true;
+
+    try {
+      const [friends, prof] = await Promise.all([
+        fetchMyWorkshopFriends(state.tg?.user).catch(() => []),
+        fetchPlayerProfile(state.tg?.user).catch(() => null),
+      ]);
+      const seen = readSeen();
+      const openedNow = Array.isArray(friends) ? friends.filter((f) => Boolean(f.opened_barrel) && f.friend_uid) : [];
+      const isInitialized = (() => {
+        try { return localStorage.getItem(INIT_KEY) === '1'; } catch { return true; }
+      })();
+
+      if (seedOnly || !isInitialized) {
+        openedNow.forEach((f) => seen.add(f.friend_uid));
+        writeSeen(seen);
+        try { localStorage.setItem(INIT_KEY, '1'); } catch { /* ignore */ }
+        if (prof) baselineFriendsBrought = Math.max(baselineFriendsBrought, Number(prof.friendsBrought || 0));
+        return;
+      }
+
+      const newlyOpened = openedNow.filter((f) => !seen.has(f.friend_uid));
+      newlyOpened.forEach((f) => seen.add(f.friend_uid));
+      if (newlyOpened.length > 0) writeSeen(seen);
+
+      const nextBrought = prof ? Number(prof.friendsBrought || 0) : baselineFriendsBrought;
+      if (prof) {
+        state.profile = { ...state.profile, ...prof };
+        updatePremiereBarsUI();
+        refreshQuestUI();
+        if (state.activeScreen === 'pack') refreshPackFriendsStrip();
+      }
+
+      if (newlyOpened.length > 0 || nextBrought > baselineFriendsBrought) {
+        baselineFriendsBrought = Math.max(baselineFriendsBrought, nextBrought);
+        const first = newlyOpened[0];
+        const friendLabel = first?.friend_name || (first?.friend_username ? `@${first.friend_username}` : 'Друг');
+        Haptics.success();
+        showToast(
+          newlyOpened.length > 0
+            ? `🔥 Кент «${friendLabel}» вскрыл твою бочку! +2500 ⭐ и +2 ❤️`
+            : '🔥 Твой друг зашёл в игру по бочке! +2500 ⭐ и +2 ❤️'
+        );
+      }
+    } finally {
+      inFlight = false;
+    }
+  };
+
+  checkLiveFriendFeedback(true);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) checkLiveFriendFeedback(false);
+  });
+  window.addEventListener('focus', () => checkLiveFriendFeedback(false));
+  window.setInterval(() => {
+    if (!document.hidden) checkLiveFriendFeedback(false);
+  }, 25000);
+}
+
 function openTrailerModal({ forRescue = false } = {}) {
   state.trailer.forRescue = Boolean(forRescue);
   audio.stopListening();
   audio.stopMuffledVoiceLoop();
+  syncExternalLikeButtonsUI();
 
   const modal = document.getElementById('modal-trailer');
   const rescueBox = document.getElementById('trailer-rescue-box');
@@ -4769,6 +4975,8 @@ function bindUIEvents() {
   document.getElementById('btn-modal-kinopoisk')?.addEventListener('click', goKinopoiskAction);
 
   document.getElementById('btn-close-trailer')?.addEventListener('click', () => closeTrailerModal());
+  document.getElementById('btn-trailer-like-yt')?.addEventListener('click', () => handleExternalTrailerLike('yt'));
+  document.getElementById('btn-trailer-like-ig')?.addEventListener('click', () => handleExternalTrailerLike('ig'));
   document.getElementById('btn-modal-calendar')?.addEventListener('click', () => downloadPremiereCalendarICS());
 
   // =========================================================================

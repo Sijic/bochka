@@ -23,43 +23,51 @@ export function createDefaultSilhouetteCanvas(seedText = '200L') {
   c.height = 512;
   const ctx = c.getContext('2d');
 
-  ctx.fillStyle = '#0d1318';
-  ctx.fillRect(0, 0, 512, 512);
-
-  const bg = ctx.createRadialGradient(256, 214, 24, 256, 256, 256);
-  bg.addColorStop(0, '#243442');
-  bg.addColorStop(0.6, '#121a21');
-  bg.addColorStop(1, '#07090b');
+  const bg = ctx.createRadialGradient(256, 204, 24, 256, 256, 256);
+  bg.addColorStop(0, '#334e63');
+  bg.addColorStop(0.58, '#192632');
+  bg.addColorStop(1, '#0b1015');
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, 512, 512);
 
-  ctx.fillStyle = '#090c0f';
+  // Тёплый контровой свет и силуэт героя внутри бочки
+  const rimGlow = ctx.createRadialGradient(256, 232, 62, 256, 232, 165);
+  rimGlow.addColorStop(0, 'rgba(250, 204, 21, 0.24)');
+  rimGlow.addColorStop(0.65, 'rgba(56, 189, 248, 0.12)');
+  rimGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = rimGlow;
+  ctx.fillRect(0, 0, 512, 512);
+
+  ctx.fillStyle = '#0e141b';
   ctx.beginPath();
   ctx.ellipse(256, 426, 158, 110, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = '#18222b';
+  ctx.fillStyle = '#1f2d3b';
+  ctx.strokeStyle = 'rgba(234, 179, 8, 0.45)';
+  ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.ellipse(256, 234, 78, 96, 0, 0, Math.PI * 2);
   ctx.fill();
+  ctx.stroke();
 
-  ctx.fillStyle = 'rgba(226, 238, 248, 0.55)';
+  ctx.fillStyle = 'rgba(248, 250, 252, 0.85)';
   ctx.beginPath();
-  ctx.arc(227, 226, 5, 0, Math.PI * 2);
-  ctx.arc(285, 226, 5, 0, Math.PI * 2);
+  ctx.arc(227, 226, 5.5, 0, Math.PI * 2);
+  ctx.arc(285, 226, 5.5, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = 'rgba(234, 179, 8, 0.22)';
-  ctx.font = '700 24px monospace';
+  ctx.fillStyle = 'rgba(250, 204, 21, 0.45)';
+  ctx.font = '800 24px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText(seedText, 256, 380);
+  ctx.fillText(seedText, 256, 382);
 
   return c;
 }
 
 /**
- * Сжимает, кропает в квадрат 512x512, красит в холодный сине-ржавый тон
- * под свет фонарика с каплями воды и гарантирует размер WebP <= 60 КБ.
+ * Сжимает, кропает в квадрат 420x420 HD, вытягивает экспозицию и сочность лица,
+ * добавляет яркие кино-эффекты по контуру бочки и гарантирует размер WebP <= 44 КБ.
  */
 export async function processPortraitToWebP(source, frameStyle = 'flashlight') {
   let drawable = null;
@@ -99,13 +107,13 @@ export async function processPortraitToWebP(source, frameStyle = 'flashlight') {
     sh = img.naturalHeight || img.height;
   }
 
-  const SIZE = 320;
+  const SIZE = 420;
   const canvas = document.createElement('canvas');
   canvas.width = SIZE;
   canvas.height = SIZE;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-  ctx.fillStyle = '#090b0e';
+  ctx.fillStyle = '#0d1117';
   ctx.fillRect(0, 0, SIZE, SIZE);
 
   const side = Math.min(sw, sh);
@@ -120,18 +128,18 @@ export async function processPortraitToWebP(source, frameStyle = 'flashlight') {
   ctx.drawImage(drawable, sx, sy, side, side, 0, 0, SIZE, SIZE);
   ctx.restore();
 
-  applyColdRustGrade(ctx, SIZE);
+  applyVividCinemaGrade(ctx, SIZE);
   drawBarrelInteriorFX(ctx, SIZE, frameStyle);
 
-  // Экономия 1 ГБ бесплатного Supabase Storage: 320x320 WebP (~18 КБ, строго <= 38 КБ)
-  let quality = 0.72;
+  // Баланс чёткости и лимита Supabase Storage: 420x420 HD WebP (строго <= 44 КБ)
+  let quality = 0.82;
   let blob = await canvasToBlob(canvas, 'image/webp', quality);
-  while (blob && blob.size > 36 * 1024 && quality > 0.28) {
+  while (blob && blob.size > 42 * 1024 && quality > 0.34) {
     quality -= 0.08;
     blob = await canvasToBlob(canvas, 'image/webp', quality);
   }
-  if (!blob || blob.size > 40 * 1024) {
-    blob = await canvasToBlob(canvas, 'image/webp', 0.35);
+  if (!blob || blob.size > 46 * 1024) {
+    blob = await canvasToBlob(canvas, 'image/webp', 0.42);
   }
 
   const dataUrl = await blobToDataUrl(blob);
@@ -145,22 +153,60 @@ export async function processPortraitToWebP(source, frameStyle = 'flashlight') {
   };
 }
 
-function applyColdRustGrade(ctx, size) {
+function applyVividCinemaGrade(ctx, size) {
   const imgData = ctx.getImageData(0, 0, size, size);
   const d = imgData.data;
+  const half = size * 0.5;
+  const radiusSqLimit = (size * 0.36) * (size * 0.36);
+
+  let lumaSum = 0;
+  let lumaCount = 0;
+  for (let y = 0; y < size; y += 4) {
+    const dy = y - half;
+    for (let x = 0; x < size; x += 4) {
+      const dx = x - half;
+      if (dx * dx + dy * dy < radiusSqLimit) {
+        const idx = (y * size + x) * 4;
+        lumaSum += 0.299 * d[idx] + 0.587 * d[idx + 1] + 0.114 * d[idx + 2];
+        lumaCount += 1;
+      }
+    }
+  }
+
+  const avgLuma = lumaCount > 0 ? lumaSum / lumaCount : 120;
+  const gain = avgLuma < 95 ? 1.28 : avgLuma < 125 ? 1.14 : 1.04;
+  const shadowLift = avgLuma < 105 ? 10 : 4;
+
   for (let i = 0; i < d.length; i += 4) {
-    const r = d[i];
-    const g = d[i + 1];
-    const b = d[i + 2];
+    let r = Math.min(255, d[i] * gain + shadowLift);
+    let g = Math.min(255, d[i + 1] * gain + shadowLift);
+    let b = Math.min(255, d[i + 2] * gain + shadowLift);
+
+    // Плавный кино-контраст без завала теней и пересвета кожи
+    r = ((r - 128) * 1.12) + 128;
+    g = ((g - 128) * 1.12) + 128;
+    b = ((b - 128) * 1.12) + 128;
+
     const luma = 0.299 * r + 0.587 * g + 0.114 * b;
-    const contrast = Math.max(0, Math.min(255, (luma - 118) * 1.24 + 108));
-    const mix = 0.62;
-    const nr = r * (1 - mix) + (contrast * 0.82 + 10) * mix;
-    const ng = g * (1 - mix) + (contrast * 0.94 + 8) * mix;
-    const nb = b * (1 - mix) + (contrast * 1.12 + 22) * mix;
-    d[i] = Math.max(0, Math.min(255, nr));
-    d[i + 1] = Math.max(0, Math.min(255, ng));
-    d[i + 2] = Math.max(0, Math.min(255, nb));
+    const maxCh = Math.max(r, g, b);
+    const minCh = Math.min(r, g, b);
+    const sat = maxCh > 0 ? (maxCh - minCh) / maxCh : 0;
+    // Мягкий vibrance (+28% для тусклых тонов, защита яркой кожи от неона)
+    const vibBoost = 1 + 0.28 * (1 - sat * 0.72);
+    r = luma + (r - luma) * vibBoost;
+    g = luma + (g - luma) * vibBoost;
+    b = luma + (b - luma) * vibBoost;
+
+    // Лёгкий тёплый акцент в светах
+    if (luma > 145) {
+      const hiFactor = Math.min(1, (luma - 145) / 110);
+      r += 4 * hiFactor;
+      g += 2 * hiFactor;
+    }
+
+    d[i] = Math.max(0, Math.min(255, r));
+    d[i + 1] = Math.max(0, Math.min(255, g));
+    d[i + 2] = Math.max(0, Math.min(255, b));
   }
   ctx.putImageData(imgData, 0, 0);
 }
@@ -168,67 +214,106 @@ function applyColdRustGrade(ctx, size) {
 export function drawBarrelInteriorFX(ctx, size, frameStyle = 'flashlight') {
   const half = size * 0.5;
 
-  const beam = ctx.createRadialGradient(half * 0.92, half * 0.68, size * 0.04, half, half, size * 0.56);
-  beam.addColorStop(0, 'rgba(225, 242, 255, 0.24)');
-  beam.addColorStop(0.42, 'rgba(130, 175, 205, 0.06)');
-  beam.addColorStop(0.75, 'rgba(25, 16, 10, 0.58)');
-  beam.addColorStop(1, 'rgba(5, 6, 8, 0.96)');
-  ctx.fillStyle = beam;
+  // Центр (0..0.74 радиуса) всегда яркий и чистый; стальная кромка только снаружи
+  const outerRim = ctx.createRadialGradient(half, half, size * 0.36, half, half, size * 0.505);
+  outerRim.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  outerRim.addColorStop(0.55, 'rgba(12, 16, 22, 0.22)');
+  outerRim.addColorStop(0.84, 'rgba(12, 16, 22, 0.82)');
+  outerRim.addColorStop(1, 'rgba(6, 8, 12, 0.96)');
+  ctx.fillStyle = outerRim;
   ctx.fillRect(0, 0, size, size);
 
-  ctx.save();
-  const rust = ctx.createRadialGradient(half, half, size * 0.34, half, half, size * 0.5);
-  rust.addColorStop(0, 'rgba(0,0,0,0)');
-  rust.addColorStop(0.68, 'rgba(120, 53, 18, 0.28)');
-  rust.addColorStop(0.92, 'rgba(24, 14, 10, 0.88)');
-  rust.addColorStop(1, '#070809');
-  ctx.fillStyle = rust;
-  ctx.fillRect(0, 0, size, size);
-  ctx.restore();
+  if (frameStyle === 'flashlight') {
+    const beam = ctx.createRadialGradient(half * 0.72, half * 0.58, size * 0.02, half * 0.9, half * 0.82, size * 0.54);
+    beam.addColorStop(0, 'rgba(224, 246, 255, 0.22)');
+    beam.addColorStop(0.52, 'rgba(125, 211, 252, 0.05)');
+    beam.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = beam;
+    ctx.fillRect(0, 0, size, size);
 
-  const drops = [
-    [0.26, 0.24, 5.0], [0.71, 0.21, 3.8], [0.64, 0.34, 6.2],
-    [0.22, 0.58, 5.4], [0.78, 0.54, 4.4], [0.35, 0.74, 4.0],
-    [0.68, 0.72, 5.6], [0.48, 0.19, 3.2], [0.31, 0.41, 3.0],
-  ];
-  for (const [nx, ny, r] of drops) {
-    const x = nx * size;
-    const y = ny * size;
-    const dg = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, 0.5, x, y, r);
-    dg.addColorStop(0, 'rgba(235, 246, 255, 0.65)');
-    dg.addColorStop(0.45, 'rgba(125, 165, 190, 0.22)');
-    dg.addColorStop(1, 'rgba(8, 12, 16, 0.35)');
-    ctx.fillStyle = dg;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.78)';
+    ctx.lineWidth = size * 0.012;
     ctx.beginPath();
-    ctx.ellipse(x, y, r * 0.85, r * 1.18, 0.12, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  ctx.save();
-  if (frameStyle === 'weld') {
-    ctx.strokeStyle = 'rgba(168, 92, 38, 0.7)';
-    ctx.lineWidth = size * 0.022;
-    ctx.setLineDash([12, 7]);
-    ctx.beginPath();
-    ctx.arc(half, half, size * 0.455, 0, Math.PI * 2);
+    ctx.arc(half, half, size * 0.44, -Math.PI * 0.82, -Math.PI * 0.16);
     ctx.stroke();
-    ctx.setLineDash([]);
-    for (let a = 0; a < 8; a++) {
-      const ang = (a / 8) * Math.PI * 2;
-      const bx = half + Math.cos(ang) * size * 0.455;
-      const by = half + Math.sin(ang) * size * 0.455;
-      ctx.fillStyle = '#3b2416';
+    ctx.strokeStyle = 'rgba(250, 204, 21, 0.55)';
+    ctx.lineWidth = size * 0.008;
+    ctx.beginPath();
+    ctx.arc(half, half, size * 0.455, Math.PI * 0.12, Math.PI * 0.65);
+    ctx.stroke();
+    ctx.restore();
+
+    const drops = [
+      [0.16, 0.26, 5.2], [0.84, 0.28, 4.4], [0.13, 0.56, 5.0],
+      [0.86, 0.58, 4.6], [0.24, 0.81, 4.2], [0.76, 0.80, 5.4], [0.50, 0.12, 3.8],
+    ];
+    for (const [nx, ny, r] of drops) {
+      const x = nx * size;
+      const y = ny * size;
+      const dg = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, 0.5, x, y, r);
+      dg.addColorStop(0, 'rgba(240, 249, 255, 0.88)');
+      dg.addColorStop(0.5, 'rgba(125, 211, 252, 0.34)');
+      dg.addColorStop(1, 'rgba(15, 23, 42, 0.38)');
+      ctx.fillStyle = dg;
       ctx.beginPath();
-      ctx.arc(bx, by, size * 0.015, 0, Math.PI * 2);
+      ctx.ellipse(x, y, r * 0.88, r * 1.15, 0.12, 0, Math.PI * 2);
       ctx.fill();
     }
+  } else if (frameStyle === 'weld') {
+    ctx.save();
+    ctx.shadowColor = '#f97316';
+    ctx.shadowBlur = 12;
+    ctx.strokeStyle = '#fb923c';
+    ctx.lineWidth = size * 0.018;
+    ctx.setLineDash([16, 8]);
+    ctx.beginPath();
+    ctx.arc(half, half, size * 0.445, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.shadowColor = '#facc15';
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = 'rgba(254, 240, 138, 0.9)';
+    ctx.lineWidth = size * 0.006;
+    ctx.setLineDash([7, 14]);
+    ctx.beginPath();
+    ctx.arc(half, half, size * 0.445, 0.2, Math.PI * 2 + 0.2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    for (let i = 0; i < 14; i++) {
+      const ang = (i / 14) * Math.PI * 2 + 0.15;
+      const dist = size * (0.405 + (i % 3) * 0.022);
+      const sx1 = half + Math.cos(ang) * dist;
+      const sy1 = half + Math.sin(ang) * dist;
+      const sx2 = half + Math.cos(ang + 0.09) * (dist - size * 0.035);
+      const sy2 = half + Math.sin(ang + 0.09) * (dist - size * 0.035);
+      ctx.strokeStyle = i % 2 === 0 ? '#fef08a' : '#f97316';
+      ctx.lineWidth = i % 2 === 0 ? 2.6 : 2.0;
+      ctx.beginPath();
+      ctx.moveTo(sx1, sy1);
+      ctx.lineTo(sx2, sy2);
+      ctx.stroke();
+    }
+    ctx.restore();
   } else if (frameStyle === 'rec') {
-    ctx.fillStyle = 'rgba(18, 255, 140, 0.04)';
-    for (let y = 0; y < size; y += 4) ctx.fillRect(0, y, size, 1);
-    ctx.strokeStyle = 'rgba(234, 179, 8, 0.55)';
-    ctx.lineWidth = 2;
-    const pad = size * 0.15;
-    const len = size * 0.05;
+    ctx.save();
+    // Сканлайны строго по краю, лицо в центре чистое
+    ctx.strokeStyle = 'rgba(34, 197, 94, 0.14)';
+    ctx.lineWidth = 1;
+    for (let y = 0; y < size; y += 6) {
+      if (y < size * 0.14 || y > size * 0.86) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(size, y);
+        ctx.stroke();
+      }
+    }
+
+    ctx.strokeStyle = 'rgba(34, 197, 94, 0.85)';
+    ctx.lineWidth = 3;
+    const pad = size * 0.16;
+    const len = size * 0.055;
     ctx.beginPath();
     ctx.moveTo(pad, pad + len); ctx.lineTo(pad, pad); ctx.lineTo(pad + len, pad);
     ctx.moveTo(size - pad - len, pad); ctx.lineTo(size - pad, pad); ctx.lineTo(size - pad, pad + len);
@@ -236,24 +321,70 @@ export function drawBarrelInteriorFX(ctx, size, frameStyle = 'flashlight') {
     ctx.moveTo(size - pad - len, size - pad); ctx.lineTo(size - pad, size - pad); ctx.lineTo(size - pad, size - pad - len);
     ctx.stroke();
 
+    const pillW = size * 0.44;
+    const pillH = size * 0.068;
+    const pillX = half - pillW * 0.5;
+    const pillY = size * 0.075;
+    ctx.fillStyle = 'rgba(9, 13, 18, 0.82)';
+    ctx.fillRect(pillX, pillY, pillW, pillH);
+    ctx.strokeStyle = 'rgba(250, 204, 21, 0.82)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(pillX, pillY, pillW, pillH);
+
     ctx.fillStyle = '#ef4444';
     ctx.beginPath();
-    ctx.arc(size * 0.36, size * 0.17, 4.5, 0, Math.PI * 2);
+    ctx.arc(pillX + size * 0.042, pillY + pillH * 0.5, size * 0.014, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = 'rgba(234, 179, 8, 0.82)';
-    ctx.font = `700 ${Math.round(size * 0.028)}px monospace`;
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = `800 ${Math.round(size * 0.03)}px monospace`;
     ctx.textAlign = 'left';
-    ctx.fillText('REC // BLOCK-B 200L', size * 0.39, size * 0.179);
+    ctx.fillText('REC // БОЧКА №06', pillX + size * 0.072, pillY + pillH * 0.68);
+
+    const botW = size * 0.40;
+    const botX = half - botW * 0.5;
+    const botY = size * 0.855;
+    ctx.fillStyle = 'rgba(9, 13, 18, 0.78)';
+    ctx.fillRect(botX, botY, botW, size * 0.058);
+    ctx.fillStyle = '#4ade80';
+    ctx.font = `700 ${Math.round(size * 0.026)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText('ISO 1600 · O2 29S', half, botY + size * 0.04);
+    ctx.restore();
   } else if (frameStyle === 'stencil') {
     ctx.save();
-    ctx.translate(half, size * 0.83);
-    ctx.fillStyle = 'rgba(234, 179, 8, 0.82)';
-    ctx.font = `700 ${Math.round(size * 0.042)}px monospace`;
+    ctx.strokeStyle = '#eab308';
+    ctx.lineWidth = size * 0.024;
+    ctx.setLineDash([14, 14]);
+    ctx.beginPath();
+    ctx.arc(half, half, size * 0.452, -Math.PI * 0.85, -Math.PI * 0.15);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.strokeStyle = 'rgba(250, 204, 21, 0.45)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(half, half, size * 0.428, 0, Math.PI * 2);
+    ctx.stroke();
+
+    const plateW = size * 0.62;
+    const plateH = size * 0.076;
+    const plateX = half - plateW * 0.5;
+    const plateY = size * 0.805;
+    ctx.fillStyle = 'rgba(13, 13, 13, 0.88)';
+    ctx.fillRect(plateX, plateY, plateW, plateH);
+    ctx.strokeStyle = '#facc15';
+    ctx.lineWidth = 2.2;
+    ctx.strokeRect(plateX, plateY, plateW, plateH);
+
+    ctx.fillStyle = '#facc15';
+    ctx.font = `900 ${Math.round(size * 0.032)}px monospace`;
     ctx.textAlign = 'center';
-    ctx.fillText('ГРУЗ №06 // 200L', 0, 0);
+    ctx.fillText('ОПАСНЫЙ ГРУЗ · 17.12', half, plateY + plateH * 0.68);
     ctx.restore();
   }
 
+  ctx.save();
   ctx.globalCompositeOperation = 'destination-in';
   ctx.beginPath();
   ctx.arc(half, half, size * 0.485, 0, Math.PI * 2);
@@ -477,11 +608,19 @@ export async function generateStoriesPosterPNG({
     ctx.drawImage(def, cx - innerR, cy - innerR, innerR * 2, innerR * 2);
   }
 
-  const abyss = ctx.createRadialGradient(cx, cy, innerR * 0.52, cx, cy, innerR);
+  const abyss = ctx.createRadialGradient(cx, cy, innerR * 0.74, cx, cy, innerR);
   abyss.addColorStop(0, 'rgba(0,0,0,0)');
-  abyss.addColorStop(1, 'rgba(4,5,7,0.88)');
+  abyss.addColorStop(1, 'rgba(4,5,7,0.52)');
   ctx.fillStyle = abyss;
   ctx.fillRect(cx - innerR, cy - innerR, innerR * 2, innerR * 2);
+  ctx.restore();
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(234, 179, 8, 0.78)';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(cx, cy, innerR - 2, 0, Math.PI * 2);
+  ctx.stroke();
   ctx.restore();
 
   ctx.save();
