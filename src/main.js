@@ -64,6 +64,7 @@ import {
   fetchPublicRaffleTransparency,
   getPlayerRecoveryCode,
   restoreProfileByRecoveryCode,
+  recordTrafficSource,
 } from './backend.js';
 import { WorkshopDuelController, createBarrelWatchChannel } from './duel.js';
 import { mountTestBogHUD } from './testbog.js';
@@ -580,6 +581,10 @@ async function bootstrap() {
   await initPackConstructorDefaults();
 
   state.profile = await fetchPlayerProfile(state.tg?.user);
+  if (state.tg?.trafficSource) {
+    state.profile.trafficSource = state.tg.trafficSource;
+    recordTrafficSource(state.tg?.user, state.tg.trafficSource).catch(() => {});
+  }
   if (state.tg?.duelRoomParam) {
     await syncUiStage(state.tg?.user, 4);
     applyProgressiveDisclosureUI({ forceStage: 4 });
@@ -595,9 +600,14 @@ async function bootstrap() {
     openTrailerModal({ forRescue: false });
   }
 
-  // Если открыта ссылка защищённого Именного пропуска (?gift=ID) — сразу показываем экран кассового контроля!
+  // Единый разбор входящего трафика (Deep Links: gift_ / duel_ / pack_)
   if (state.incomingPassId) {
     await openIncomingPassScreen(state.incomingPassId);
+  } else if (state.tg?.duelRoomParam) {
+    state.entered = true;
+    await openDuelTable(state.tg.duelRoomParam);
+  } else if (state.tg?.autoOpenPack && state.incomingParam) {
+    await enterWorkshopGate(false);
   }
 
   // Если активирована сессия «ТЕСТ-БОГА» (/testbog/) — монтируем плавающий пульт песочницы (0 запросов в БД)

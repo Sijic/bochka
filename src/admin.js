@@ -12,6 +12,7 @@ const adminSupabase = createClient(ENV.supabaseUrl, ENV.supabaseAnonKey, {
 const admState = {
   session: null,
   stats: null,
+  traffic: null,
   daily: [],
   orders: [],
   leaders: [],
@@ -102,6 +103,7 @@ async function refreshDashboardData() {
   }
 
   admState.stats = data.stats || {};
+  admState.traffic = data.traffic || null;
   admState.daily = Array.isArray(data.daily) ? data.daily : [];
   admState.orders = Array.isArray(data.orders) ? data.orders : [];
   admState.leaders = Array.isArray(data.leaders) ? data.leaders : [];
@@ -213,6 +215,105 @@ function renderAnalyticsPane() {
       `;
     }
   }
+
+  renderTrafficSourcesSummary(players);
+}
+
+function renderTrafficSourcesSummary(totalPlayers = 0) {
+  const tr = admState.traffic || {};
+  const leaders = Array.isArray(admState.leaders) ? admState.leaders : [];
+
+  let friendsSeed = Number(tr.friends_seed || 0);
+  let bloggersTil = Number(tr.bloggers_til || 0);
+  let socialAds = Number(tr.social_ads || 0);
+  let referralsViral = Number(tr.referrals_viral || 0);
+  let byTag = Array.isArray(tr.by_tag) ? tr.by_tag : [];
+
+  if (!admState.traffic && leaders.length > 0) {
+    const counts = {};
+    leaders.forEach((u) => {
+      const src = String(u.traffic_source || 'organic').toLowerCase();
+      counts[src] = (counts[src] || 0) + 1;
+      if (src.includes('friend')) friendsSeed += 1;
+      else if (src.includes('til') || src.includes('blogger')) bloggersTil += 1;
+      else if (src.includes('insta') || src.includes('whatsapp')) socialAds += 1;
+      else referralsViral += 1;
+    });
+    byTag = Object.entries(counts).map(([tag, players]) => ({
+      tag,
+      players,
+      barrels_packed: 0,
+      friends_brought: 0,
+    }));
+  } else if (!admState.traffic && totalPlayers > 0 && referralsViral === 0) {
+    referralsViral = totalPlayers;
+  }
+
+  setText('traffic-friends-seed', fmtInt(friendsSeed));
+  setText('traffic-bloggers-til', fmtInt(bloggersTil));
+  setText('traffic-referrals-viral', fmtInt(referralsViral));
+  setText('traffic-social-ads', fmtInt(socialAds));
+
+  const tagsEl = document.getElementById('traffic-tags-bars');
+  if (!tagsEl) return;
+
+  const tagLabels = {
+    src_friends: '🤝 Друзья продюсеров (src_friends)',
+    src_til: '🎬 Видео-приглашение Тиля (src_til)',
+    src_blogger1: '📹 Блогер #1 (src_blogger1)',
+    src_blogger2: '📹 Блогер #2 (src_blogger2)',
+    src_blogger3: '📹 Блогер #3 (src_blogger3)',
+    src_blogger4: '📹 Блогер #4 (src_blogger4)',
+    src_blogger5: '📹 Блогер #5 (src_blogger5)',
+    src_insta: '📸 Instagram Stories / Reels (src_insta)',
+    src_whatsapp: '💬 WhatsApp посев (src_whatsapp)',
+    organic: '🌱 Органика и вирусные пересылки (organic / ref_*)',
+  };
+
+  const rows = byTag.length
+    ? byTag
+    : [
+        { tag: 'src_friends', players: friendsSeed, barrels_packed: 0, friends_brought: 0 },
+        { tag: 'src_til', players: bloggersTil, barrels_packed: 0, friends_brought: 0 },
+        { tag: 'src_insta', players: socialAds, barrels_packed: 0, friends_brought: 0 },
+        { tag: 'organic', players: referralsViral, barrels_packed: 0, friends_brought: 0 },
+      ];
+
+  const maxTagPlayers = Math.max(1, totalPlayers, ...rows.map((r) => Number(r.players || 0)));
+  tagsEl.replaceChildren(
+    ...rows.map((r) => {
+      const pCount = Number(r.players || 0);
+      const pct = Math.min(100, Math.round((pCount / maxTagPlayers) * 100));
+      const label = tagLabels[r.tag] || `🔗 Метка: ${r.tag}`;
+      const packed = Number(r.barrels_packed || 0);
+      const invited = Number(r.friends_brought || 0);
+
+      const rowEl = document.createElement('div');
+      rowEl.className = 'funnel-row';
+
+      const topEl = document.createElement('div');
+      topEl.className = 'funnel-row-top';
+
+      const spanEl = document.createElement('span');
+      spanEl.textContent = label;
+
+      const strongEl = document.createElement('strong');
+      strongEl.textContent = `${fmtInt(pCount)} игр. · Закатано бочек: ${fmtInt(packed)} · Привели друзей: ${fmtInt(invited)}`;
+
+      topEl.append(spanEl, strongEl);
+
+      const trackEl = document.createElement('div');
+      trackEl.className = 'funnel-track';
+
+      const fillEl = document.createElement('div');
+      fillEl.className = 'funnel-fill';
+      fillEl.style.width = `${Math.max(2, pct)}%`;
+
+      trackEl.appendChild(fillEl);
+      rowEl.append(topEl, trackEl);
+      return rowEl;
+    })
+  );
 }
 
 /* ============================================================================

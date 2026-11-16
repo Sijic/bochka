@@ -275,8 +275,8 @@ export async function createBarrelPack({
   const bogFlag = isTestBogActive() ? 'testbog=1&' : '';
   const webUrl = `${baseOrigin}${sep}${bogFlag}b=${encodeURIComponent(id)}`;
   const tgMiniAppUrl =
-    ENV.tgBotUsername && storedInCloud && !isTestBogActive()
-      ? `https://t.me/${ENV.tgBotUsername}/${ENV.tgAppName}?startapp=${encodeURIComponent(id)}`
+    !isTestBogActive()
+      ? `https://t.me/${ENV.tgBotUsername || 'bochka_film_bot'}?startapp=pack_${encodeURIComponent(id)}`
       : webUrl;
 
   return {
@@ -300,9 +300,10 @@ export async function loadBarrelPack(rawParam) {
     decodedParam = decodeURIComponent(rawParam);
   } catch { /* keep as is */ }
 
-  const dotIdx = decodedParam.indexOf('.');
-  const id = (dotIdx > 0 ? decodedParam.slice(0, dotIdx) : decodedParam).trim();
-  const legacyToken = dotIdx > 0 ? decodedParam.slice(dotIdx + 1) : '';
+  const strippedParam = decodedParam.startsWith('pack_') ? decodedParam.slice(5) : decodedParam;
+  const dotIdx = strippedParam.indexOf('.');
+  const id = (dotIdx > 0 ? strippedParam.slice(0, dotIdx) : strippedParam).trim();
+  const legacyToken = dotIdx > 0 ? strippedParam.slice(dotIdx + 1) : '';
 
   const db = getCloudDb();
   if (db && id) {
@@ -968,7 +969,7 @@ export async function createGiftTicketPass({
   const webUrl = `${baseOrigin}${sep}${bogFlag}gift=${encodeURIComponent(giftId)}`;
   const tgUrl = isTestBogActive()
     ? webUrl
-    : `https://t.me/${ENV.tgBotUsername || 'bochka_film_bot'}/${ENV.tgAppName || 'play'}?startapp=${encodeURIComponent('gift_' + giftId)}`;
+    : `https://t.me/${ENV.tgBotUsername || 'bochka_film_bot'}?startapp=${encodeURIComponent('gift_' + giftId)}`;
 
   return {
     ok: true,
@@ -1289,9 +1290,8 @@ export function buildDuelShareLinks(roomId) {
   const clean = encodeURIComponent(String(roomId || 'room'));
   const base = resolveShareBaseUrl();
   const bot = ENV.tgBotUsername || 'bochka_film_bot';
-  const app = ENV.tgAppName || 'play';
   const webUrl = `${base}/?duel=${clean}`;
-  const tgMiniAppUrl = `https://t.me/${bot}/${app}?startapp=duel_${clean}`;
+  const tgMiniAppUrl = `https://t.me/${bot}?startapp=duel_${clean}`;
   const shareText = '⚔️ Залетай за стол «НА СЧЁТ ТРИ!» в цеху «БОЧКИ»!';
   return {
     webUrl,
@@ -1304,15 +1304,38 @@ export function buildTrailerReferralLinks(tgUser = null) {
   const uid = encodeURIComponent(getViewerUid(tgUser));
   const base = resolveShareBaseUrl();
   const bot = ENV.tgBotUsername || 'bochka_film_bot';
-  const app = ENV.tgAppName || 'play';
   const webUrl = `${base}/?trailer=1&ref=${uid}`;
-  const tgMiniAppUrl = `https://t.me/${bot}/${app}?startapp=trailer_${uid}`;
+  const tgMiniAppUrl = `https://t.me/${bot}?startapp=ref_${uid}`;
   const shareText = '🎬 Смотри трейлер триллера «БОЧКА» и проверь интуицию в 3D-цеху:';
   return {
     webUrl,
     tgMiniAppUrl,
     tgUrl: `https://t.me/share/url?url=${encodeURIComponent(tgMiniAppUrl)}&text=${encodeURIComponent(shareText)}`,
   };
+}
+
+export async function recordTrafficSource(tgUser = null, sourceTag = '') {
+  const cleanSrc = String(sourceTag || '').trim().toLowerCase();
+  if (!cleanSrc) return { ok: false, skipped: true };
+  const uid = getViewerUid(tgUser);
+  const prof = getLocalPreviewProfile();
+  if (!prof.trafficSource || prof.trafficSource === 'organic') {
+    prof.trafficSource = cleanSrc;
+    saveLocalPreviewProfile(prof);
+  }
+  const db = getCloudDb();
+  if (db) {
+    try {
+      await db.rpc('record_traffic_source_rpc', {
+        p_uid: uid,
+        p_source: cleanSrc,
+        p_tg_id: tgUser?.id || null,
+        p_tg_username: tgUser?.username || null,
+        p_display_name: tgUser?.name || '',
+      });
+    } catch { /* ignore */ }
+  }
+  return { ok: true, uid, trafficSource: prof.trafficSource || cleanSrc };
 }
 
 export async function checkBarrelEntryRouting(barrelId, viewerTgUser = null) {

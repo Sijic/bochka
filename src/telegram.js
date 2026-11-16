@@ -13,9 +13,8 @@ export function isTelegramMiniApp() {
 
 export function buildTelegramStartAppUrl(param = '') {
   const bot = ENV.tgBotUsername || 'bochka_film_bot';
-  const app = ENV.tgAppName || 'play';
-  const base = `https://t.me/${bot}/${app}`;
-  return param ? `${base}?startapp=${encodeURIComponent(param)}` : base;
+  const base = `https://t.me/${bot}`;
+  return param ? `${base}?startapp=${encodeURIComponent(param)}` : `${base}?startapp=play`;
 }
 
 export function isAdminModeRequested() {
@@ -56,53 +55,88 @@ export function initTelegram() {
   const parseStartTokens = (raw) => {
     const res = {
       barrelParam: '',
+      autoOpenPack: false,
       passParam: '',
       duelRoomParam: '',
       watchBarrelParam: '',
       trailerAutoOpen: false,
       trailerRefUid: '',
       openGiftFork: false,
+      trafficSource: '',
     };
-    if (!raw) return res;
-    if (raw === 'giftfork') {
+    const clean = String(raw || '').trim();
+    if (!clean) return res;
+    if (clean === 'giftfork') {
       res.openGiftFork = true;
-    } else if (raw.startsWith('gift_') || raw.startsWith('pass_')) {
-      res.passParam = raw.slice(5);
-    } else if (raw.startsWith('duel_')) {
-      res.duelRoomParam = raw.slice(5);
-    } else if (raw.startsWith('watch_')) {
-      res.watchBarrelParam = raw.slice(6);
-    } else if (raw.startsWith('trailer_')) {
+    } else if (clean.startsWith('pack_')) {
+      res.barrelParam = clean.slice(5);
+      res.autoOpenPack = true;
+      res.trafficSource = clean;
+    } else if (clean.startsWith('gift_') || clean.startsWith('pass_')) {
+      res.passParam = clean.slice(5);
+      res.trafficSource = `gift_${res.passParam}`;
+    } else if (clean.startsWith('duel_')) {
+      res.duelRoomParam = clean.slice(5);
+      res.trafficSource = `duel_${res.duelRoomParam}`;
+    } else if (clean.startsWith('src_')) {
+      res.trafficSource = clean.toLowerCase();
+    } else if (clean.startsWith('ref_')) {
+      res.trailerRefUid = clean.slice(4);
+      res.trafficSource = clean;
+    } else if (clean.startsWith('watch_')) {
+      res.watchBarrelParam = clean.slice(6);
+    } else if (clean.startsWith('trailer_')) {
       res.trailerAutoOpen = true;
-      res.trailerRefUid = raw.slice(8);
-    } else {
-      res.barrelParam = raw;
+      res.trailerRefUid = clean.slice(8);
+      res.trafficSource = `ref_${res.trailerRefUid}`;
+    } else if (clean !== 'play') {
+      res.barrelParam = clean;
     }
     return res;
   };
 
+  const resolveTrafficSource = (parsedSrc, extras) => {
+    if (parsedSrc) return parsedSrc;
+    if (extras.src) {
+      return extras.src.startsWith('src_') ? extras.src.toLowerCase() : `src_${extras.src.toLowerCase()}`;
+    }
+    if (extras.utm) {
+      return extras.utm.startsWith('src_') ? extras.utm.toLowerCase() : `src_${extras.utm.toLowerCase()}`;
+    }
+    if (extras.ref) {
+      return extras.ref.startsWith('ref_') || extras.ref.startsWith('src_')
+        ? extras.ref
+        : `ref_${extras.ref}`;
+    }
+    return '';
+  };
+
   if (!tg) {
     const parsed = parseStartTokens(rawUrlStart);
+    const trafficSource = resolveTrafficSource(parsed.trafficSource, urlExtras);
     return {
       inTelegram: false,
       user: null,
+      rawStartParam: rawUrlStart || '',
       startParam: parsed.barrelParam,
+      autoOpenPack: Boolean(parsed.autoOpenPack),
       passParam: urlGift || parsed.passParam,
       duelRoomParam: urlExtras.duel || parsed.duelRoomParam,
       watchBarrelParam: urlExtras.watch || parsed.watchBarrelParam,
       trailerAutoOpen: urlExtras.trailer || parsed.trailerAutoOpen,
       trailerRefUid: urlExtras.ref || parsed.trailerRefUid,
       openGiftFork: urlExtras.giftfork || parsed.openGiftFork,
+      trafficSource,
     };
   }
 
   try {
-    tg.ready();
-    tg.expand();
+    if (typeof tg.ready === 'function') tg.ready();
+    if (typeof tg.expand === 'function') tg.expand();
+    if (typeof tg.disableVerticalSwipes === 'function') tg.disableVerticalSwipes();
     const hasVer = (v) => typeof tg.isVersionAtLeast === 'function' && tg.isVersionAtLeast(v);
     if (hasVer('6.1') && typeof tg.setHeaderColor === 'function') tg.setHeaderColor('#0d0d0d');
     if (hasVer('6.1') && typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor('#0d0d0d');
-    if (hasVer('7.7') && typeof tg.disableVerticalSwipes === 'function') tg.disableVerticalSwipes();
   } catch {
     /* ignore older client methods */
   }
@@ -110,9 +144,11 @@ export function initTelegram() {
   const u = tg.initDataUnsafe?.user || null;
   const rawStart = tg.initDataUnsafe?.start_param || rawUrlStart;
   const parsed = parseStartTokens(rawStart);
+  const inTg = Boolean((tg.initData && tg.initData.length > 0) || tg.initDataUnsafe?.start_param || u);
+  const trafficSource = resolveTrafficSource(parsed.trafficSource, urlExtras);
 
   return {
-    inTelegram: Boolean(tg.initData && tg.initData.length > 0),
+    inTelegram: inTg,
     user: u
       ? {
           id: String(u.id),
@@ -122,13 +158,16 @@ export function initTelegram() {
           lang: u.language_code || '',
         }
       : null,
+    rawStartParam: rawStart || '',
     startParam: parsed.barrelParam,
+    autoOpenPack: Boolean(parsed.autoOpenPack || (inTg && parsed.barrelParam)),
     passParam: urlGift || parsed.passParam,
     duelRoomParam: urlExtras.duel || parsed.duelRoomParam,
     watchBarrelParam: urlExtras.watch || parsed.watchBarrelParam,
     trailerAutoOpen: urlExtras.trailer || parsed.trailerAutoOpen,
     trailerRefUid: urlExtras.ref || parsed.trailerRefUid,
     openGiftFork: urlExtras.giftfork || parsed.openGiftFork,
+    trafficSource,
   };
 }
 
@@ -140,10 +179,12 @@ function extractUrlExtraParams() {
       watch: (sp.get('watch') || '').trim(),
       trailer: sp.get('trailer') === '1',
       ref: (sp.get('ref') || '').trim(),
+      src: (sp.get('src') || '').trim(),
+      utm: (sp.get('utm') || sp.get('utm_source') || sp.get('utm_campaign') || '').trim(),
       giftfork: sp.get('giftfork') === '1',
     };
   } catch {
-    return { duel: '', watch: '', trailer: false, ref: '', giftfork: false };
+    return { duel: '', watch: '', trailer: false, ref: '', src: '', utm: '', giftfork: false };
   }
 }
 
@@ -283,10 +324,53 @@ export const Haptics = {
   },
 };
 
+export function toTelegramBotDeepLink(rawUrl = '') {
+  const bot = ENV.tgBotUsername || 'bochka_film_bot';
+  const str = String(rawUrl || '').trim();
+  if (!str) return `https://t.me/${bot}?startapp=play`;
+  if (str.startsWith(`https://t.me/${bot}`)) {
+    return str.replace(`https://t.me/${bot}/${ENV.tgAppName || 'play'}?startapp=`, `https://t.me/${bot}?startapp=`);
+  }
+  try {
+    const u = new URL(str, typeof window !== 'undefined' ? window.location.origin : 'https://bochka.quest');
+    const b = u.searchParams.get('b');
+    if (b) {
+      const cleanB = b.startsWith('pack_') ? b : `pack_${b}`;
+      return `https://t.me/${bot}?startapp=${encodeURIComponent(cleanB)}`;
+    }
+    const gift = u.searchParams.get('gift') || u.searchParams.get('pass');
+    if (gift) {
+      const cleanG = gift.startsWith('gift_') ? gift : `gift_${gift}`;
+      return `https://t.me/${bot}?startapp=${encodeURIComponent(cleanG)}`;
+    }
+    const duel = u.searchParams.get('duel');
+    if (duel) {
+      const cleanD = duel.startsWith('duel_') ? duel : `duel_${duel}`;
+      return `https://t.me/${bot}?startapp=${encodeURIComponent(cleanD)}`;
+    }
+    const ref = u.searchParams.get('ref');
+    if (ref) {
+      const cleanR = ref.startsWith('ref_') ? ref : `ref_${ref}`;
+      return `https://t.me/${bot}?startapp=${encodeURIComponent(cleanR)}`;
+    }
+    const startapp = u.searchParams.get('startapp');
+    if (startapp) {
+      return `https://t.me/${bot}?startapp=${encodeURIComponent(startapp)}`;
+    }
+  } catch {
+    /* ignore */
+  }
+  if (isTelegramMiniApp()) {
+    return `https://t.me/${bot}?startapp=play`;
+  }
+  return str;
+}
+
 export function openTelegramShare(shareUrl, shareText) {
-  const tgShare = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`;
+  const finalUrl = isTelegramMiniApp() ? toTelegramBotDeepLink(shareUrl) : shareUrl;
+  const tgShare = `https://t.me/share/url?url=${encodeURIComponent(finalUrl)}&text=${encodeURIComponent(shareText)}`;
   const tg = getWebApp();
-  if (tg && isTelegramMiniApp() && typeof tg.openTelegramLink === 'function') {
+  if (tg && typeof tg.openTelegramLink === 'function') {
     tg.openTelegramLink(tgShare);
     return;
   }

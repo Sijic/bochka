@@ -569,9 +569,49 @@ Deno.serve(async (req: Request) => {
     return jsonResp({ ok: true });
   }
 
-  // 3C. Команда /start (в т.ч. /start verify_<gift_id> или обычный вход)
+  // 3C. Команда /start (в т.ч. /start verify_<gift_id>, /start pack_<id>, /start src_<tag>)
   if (text.startsWith("/start")) {
     const startArg = text.split(/\s+/)[1] || "";
+    const playerUid = fromId ? `tg_${fromId}` : `chat_${chatId}`;
+    const firstName = msg.from?.first_name || "";
+    const lastName = msg.from?.last_name || "";
+    const displayName = [firstName, lastName].filter(Boolean).join(" ") || msg.from?.username || "Боец цеха";
+    const username = msg.from?.username || "";
+
+    // Регистрируем / обновляем tg_user_id, chat_id и источник трафика в Supabase
+    try {
+      await adminDb.rpc("get_or_create_player_profile", {
+        p_uid: playerUid,
+        p_tg_id: fromId || String(chatId),
+        p_tg_username: username || null,
+        p_display_name: displayName,
+      });
+      if (startArg && !startArg.startsWith("verify_")) {
+        await adminDb.rpc("record_traffic_source_rpc", {
+          p_uid: playerUid,
+          p_source: startArg,
+          p_tg_id: fromId || String(chatId),
+          p_tg_username: username || null,
+          p_display_name: displayName,
+        });
+      }
+      await adminDb
+        .from("users")
+        .update({ tg_chat_id: String(chatId), updated_at: new Date().toISOString() })
+        .eq("uid", playerUid);
+    } catch (_e) {
+      /* fallback */
+    }
+
+    // Устанавливаем постоянную кнопку меню «🛢 Играть» в чате с ботом
+    await tgApi("setChatMenuButton", {
+      chat_id: chatId,
+      menu_button: {
+        type: "web_app",
+        text: "🛢 Играть",
+        web_app: { url: `${PUBLIC_WEB_URL}/` },
+      },
+    });
 
     if (startArg.startsWith("verify_")) {
       const giftId = startArg.slice(7);
@@ -592,28 +632,96 @@ Deno.serve(async (req: Request) => {
           chat_id: chatId,
           text: "После отправки контакта открой подарочный пропуск по кнопке:",
           reply_markup: {
-            inline_keyboard: [[{ text: "🎟 ОТКРЫТЬ ПОДАРОЧНЫЙ БИЛЕТ", url: `${MINI_APP_LINK}?startapp=gift_${giftId}` }]],
+            inline_keyboard: [[{ text: "🎟 ОТКРЫТЬ ПОДАРОЧНЫЙ БИЛЕТ", web_app: { url: `${PUBLIC_WEB_URL}/?gift=${encodeURIComponent(giftId)}` } }]],
           },
         });
       }
       return jsonResp({ ok: true });
     }
 
-    const launchUrl = startArg ? `${MINI_APP_LINK}?startapp=${encodeURIComponent(startArg)}` : MINI_APP_LINK;
+    const isFriendBarrel = startArg.startsWith("pack_");
+    const webAppUrl = startArg
+      ? `${PUBLIC_WEB_URL}/?startapp=${encodeURIComponent(startArg)}`
+      : `${PUBLIC_WEB_URL}/`;
+    const primaryBtnText = isFriendBarrel ? "💥 Открыть бочку друга" : "🛢 Войти в цех";
+
     await tgApi("sendMessage", {
       chat_id: chatId,
       parse_mode: "HTML",
       text:
-        `🛢 <b>БОЧКА: Достучаться до небес</b>\n` +
-        `<i>Триллер Алексея Звонцова · В кино с 17 декабря 2026</i>\n\n` +
-        `🛢 Друг заперт в одной из ржавых бочек — у тебя есть 30 секунд воздуха и 3 удара ломом.\n` +
-        `🎧 Включи звук, прислушайся к стуку и голосу сквозь металл и найди нужную крышку (а в цеху ищи секрет 19·97).\n` +
-        `🎬 Спаси друга, закатай ответную бочку со своим фото и голосом — и вызывай своих за стол «На счёт три!» (до 3 игроков, выбывший гремит цепями).\n` +
-        `🎟 Добивай шкалу к Премьере или выигрывай живой билет в кино на фильм «БОЧКА» с 17 декабря!`,
+        `🛢 <b>БОЧКА: Достучаться до небес</b> (в кино с 17 декабря)\n` +
+        `В одной из заваренных бочек заперт человек — у тебя 30 секунд воздуха и 3 удара ломом, чтобы сорвать нужную крышку по звуку.\n` +
+        `Спаси друга, закатай ответную бочку со скримером и забери живые билеты на премьеру!`,
       reply_markup: {
         inline_keyboard: [
-          [{ text: "▶ ВОЙТИ В ЦЕХ «БОЧКИ»", url: launchUrl }],
+          [{ text: primaryBtnText, web_app: { url: webAppUrl } }],
           [{ text: "🎬 «Буду смотреть» на Кинопоиске", url: "https://www.kinopoisk.ru/film/11226275/" }],
+        ],
+      },
+    });
+    return jsonResp({ ok: true });
+  }
+
+  // 3D. Команда /my_ticket — показать выигранный билет или код восстановления BCK-...
+  if (text.startsWith("/my_ticket")) {
+    const playerUid = fromId ? `tg_${fromId}` : `chat_${chatId}`;
+    const recoveryCode = `BCK-TG_${fromId || chatId}`;
+    const { data: uRow } = await adminDb
+      .from("users")
+      .select("premiere_code, premiere_won, has_pending_ticket, premiere_points")
+      .eq("uid", playerUid)
+      .maybeSingle();
+
+    const { data: ordRow } = await adminDb
+      .from("ticket_orders")
+      .select("status, booking_code, city_cinema")
+      .eq("receiver_tg_id", fromId || String(chatId))
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const statusLine = ordRow?.booking_code
+      ? `🎟 <b>Твой билет в кино (${escapeHtml(ordRow.city_cinema || "")}):</b> <code>${escapeHtml(ordRow.booking_code)}</code>`
+      : uRow?.premiere_code
+        ? `🏆 <b>VIP-пропуск на Премьеру 17 декабря:</b> <code>${escapeHtml(uRow.premiere_code)}</code>`
+        : uRow?.has_pending_ticket
+          ? `🎁 <b>У тебя есть нераспакованный Подарочный билет для друга!</b> Открой цех и подари его новичку.`
+          : `🛢 <b>Статус:</b> В гонке за билетами (${Number(uRow?.premiere_points || 0)} ⭐ очков). Сорви крышку в цеху!`;
+
+    await tgApi("sendMessage", {
+      chat_id: chatId,
+      parse_mode: "HTML",
+      text:
+        `${statusLine}\n` +
+        `🔑 <b>Код восстановления профиля:</b> <code>${escapeHtml(recoveryCode)}</code>\n` +
+        `Сохрани этот код — по нему можно восстановить жизни и билеты на любом устройстве.`,
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🛢 Войти в цех", web_app: { url: `${PUBLIC_WEB_URL}/` } }],
+        ],
+      },
+    });
+    return jsonResp({ ok: true });
+  }
+
+  // 3E. Команда /invite — персональная реферальная ссылка t.me/bochka_film_bot?startapp=ref_<uid>
+  if (text.startsWith("/invite")) {
+    const playerUid = fromId ? `tg_${fromId}` : `chat_${chatId}`;
+    const refLink = `https://t.me/bochka_film_bot?startapp=ref_${encodeURIComponent(playerUid)}`;
+    const shareText = "🛢 Тебя заварили в 3D-цеху триллера «БОЧКА»! 30 секунд воздуха и 3 удара ломом — попробуй выбраться:";
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(refLink)}&text=${encodeURIComponent(shareText)}`;
+
+    await tgApi("sendMessage", {
+      chat_id: chatId,
+      parse_mode: "HTML",
+      text:
+        `🔗 <b>Твоя личная ссылка для приглашения друзей в цех:</b>\n` +
+        `<code>${escapeHtml(refLink)}</code>\n` +
+        `За каждого нового друга ты получаешь <b>+2 ❤️ жизни, +2500 ⭐ очков и +10%</b> к рейтингу ТОП-10 Премьеры!`,
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📲 Переслать ссылку другу в Telegram", url: shareUrl }],
+          [{ text: "🛢 Заварить именную бочку со скримером", web_app: { url: `${PUBLIC_WEB_URL}/` } }],
         ],
       },
     });

@@ -176,6 +176,36 @@
             <div class="daily-chart-box" id="daily-chart-box"></div>
           </div>
         </div>
+
+        <div class="adm-panel" id="traffic-sources-panel" style="margin-top: 16px;">
+          <div class="panel-head">
+            <h2>Откуда пришёл трафик (эффективность посева до 17 декабря)</h2>
+            <span class="mono-muted">ДРУЗЬЯ ПРОДЮСЕРОВ · БЛОГЕРЫ / ТИЛЬ · ОРГАНИКА / РЕФЕРАЛЫ</span>
+          </div>
+          <div class="kpi-grid" id="traffic-kpi-grid" style="margin-bottom: 12px;">
+            <div class="kpi-card">
+              <span class="kpi-label">ДРУЗЬЯ ПРОДЮСЕРОВ (src_friends)</span>
+              <strong class="kpi-val" id="traffic-friends-seed">0</strong>
+              <span class="kpi-foot">Личный посев 10 друзей команды</span>
+            </div>
+            <div class="kpi-card kpi-gold">
+              <span class="kpi-label">БЛОГЕРЫ И ВИДЕО ТИЛЯ (src_til / src_blogger1..5)</span>
+              <strong class="kpi-val" id="traffic-bloggers-til">0</strong>
+              <span class="kpi-foot">Персональные приглашения и интеграции</span>
+            </div>
+            <div class="kpi-card kpi-accent">
+              <span class="kpi-label">ОРГАНИКА И РЕФЕРАЛЫ (ref_* / pack_*)</span>
+              <strong class="kpi-val" id="traffic-referrals-viral">0</strong>
+              <span class="kpi-foot">Вирусные пересылки бочек и /invite</span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-label">СОЦСЕТИ И РЕКЛАМА (src_insta / whatsapp)</span>
+              <strong class="kpi-val" id="traffic-social-ads">0</strong>
+              <span class="kpi-foot">Instagram Stories, Reels и WhatsApp</span>
+            </div>
+          </div>
+          <div class="funnel-bars" id="traffic-tags-bars"></div>
+        </div>
       </section>
 
       <!-- ================================================================
