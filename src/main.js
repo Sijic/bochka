@@ -808,6 +808,10 @@ function showScreen(name) {
   if (!document.getElementById('modal-trailer')?.hasAttribute('hidden')) {
     closeTrailerModal();
   }
+  for (const mid of ['modal-leaderboard', 'modal-share-hub', 'modal-prize', 'modal-rules']) {
+    document.getElementById(mid)?.setAttribute('hidden', '');
+  }
+  document.getElementById('topbar')?.toggleAttribute('hidden', name === 'gate');
   document.getElementById('nav-workshop')?.classList.toggle('is-active', name === 'workshop' || name === 'modeA');
   const ids = {
     gate: 'screen-gate',
@@ -934,13 +938,7 @@ async function enterWorkshopGate(withSound) {
     }
     await startViralFriendRound(state.incomingPack);
   } else {
-    const q = getQuestState();
-    const packedTotal = Math.max(Number(q.packedCount || 0), Number(state.profile?.packedCount || 0));
-    if (state.uiStage <= 2 && packedTotal < 1) {
-      await startNewbieOnboardingRound();
-    } else {
-      showScreen('modeA');
-    }
+    await startNewbieOnboardingRound();
   }
 }
 
@@ -4660,6 +4658,23 @@ async function handleFinaleFriendReaction(reactionType) {
   }
 }
 
+function closeLeaderboardModal({ startOrResumeGame = false } = {}) {
+  document.getElementById('modal-leaderboard')?.setAttribute('hidden', '');
+  state.round.pausedForModal = false;
+
+  if (startOrResumeGame) {
+    state.entered = true;
+    if (state.round.running) {
+      showScreen('workshop');
+      scene?.setInteractive(true);
+    } else {
+      startDemoRound();
+    }
+  } else if (state.activeScreen === 'workshop' && state.round.running) {
+    scene?.setInteractive(true);
+  }
+}
+
 async function openLeaderboardModal() {
   const modal = document.getElementById('modal-leaderboard');
   const listEl = document.getElementById('leaderboard-list');
@@ -4667,6 +4682,9 @@ async function openLeaderboardModal() {
   const ptsEl = document.getElementById('leader-me-points');
   const gapEl = document.getElementById('leader-me-gap');
 
+  if (state.round.running) {
+    state.round.pausedForModal = true;
+  }
   modal?.removeAttribute('hidden');
   if (listEl) listEl.innerHTML = '<div class="mono-tag">Синхронизация ТОП-10 с сервером...</div>';
 
@@ -5727,15 +5745,56 @@ function bindUIEvents() {
 
   // Модалка «🏆 Рейтинг ТОП-10 на закрытую Премьеру»
   document.getElementById('btn-close-leaderboard')?.addEventListener('click', () => {
-    document.getElementById('modal-leaderboard')?.setAttribute('hidden', '');
+    closeLeaderboardModal({ startOrResumeGame: false });
+  });
+  document.getElementById('btn-leader-close-bottom')?.addEventListener('click', () => {
+    closeLeaderboardModal({ startOrResumeGame: false });
+  });
+  document.getElementById('btn-leader-play-now')?.addEventListener('click', () => {
+    closeLeaderboardModal({ startOrResumeGame: true });
   });
   document.getElementById('btn-leader-go-share')?.addEventListener('click', () => {
-    document.getElementById('modal-leaderboard')?.setAttribute('hidden', '');
+    closeLeaderboardModal({ startOrResumeGame: false });
     openShareHubModal('trailer');
   });
   document.getElementById('btn-leader-go-duel')?.addEventListener('click', () => {
-    document.getElementById('modal-leaderboard')?.setAttribute('hidden', '');
+    closeLeaderboardModal({ startOrResumeGame: false });
     openDuelTable();
+  });
+
+  // Закрытие информационных модалок по клику на тёмный фон (backdrop) и по клавише Escape
+  for (const modalId of ['modal-leaderboard', 'modal-share-hub', 'modal-prize', 'modal-rules', 'modal-repeat-duel']) {
+    const backdropEl = document.getElementById(modalId);
+    backdropEl?.addEventListener('click', (e) => {
+      if (e.target !== backdropEl) return;
+      if (modalId === 'modal-leaderboard') {
+        closeLeaderboardModal({ startOrResumeGame: false });
+      } else {
+        backdropEl.setAttribute('hidden', '');
+        state.round.pausedForModal = false;
+        if (state.activeScreen === 'workshop' && state.round.running) {
+          scene?.setInteractive(true);
+        }
+      }
+    });
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!document.getElementById('modal-leaderboard')?.hasAttribute('hidden')) {
+      closeLeaderboardModal({ startOrResumeGame: false });
+      return;
+    }
+    for (const modalId of ['modal-share-hub', 'modal-prize', 'modal-rules', 'modal-repeat-duel']) {
+      const m = document.getElementById(modalId);
+      if (m && !m.hasAttribute('hidden')) {
+        m.setAttribute('hidden', '');
+        state.round.pausedForModal = false;
+        if (state.activeScreen === 'workshop' && state.round.running) {
+          scene?.setInteractive(true);
+        }
+      }
+    }
   });
 
   // Модалка Мульти-Шеринга (Бочка + Трейлер во все соцсети)

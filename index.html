@@ -1465,14 +1465,10 @@
        ==================================================================== -->
   <div class="modal-backdrop" id="modal-leaderboard" hidden>
     <div class="modal-card leaderboard-modal-card">
-      <div class="modal-head">
-        <span class="mono-tag accent-tag">КРАСНАЯ ДОРОЖКА 17 ДЕКАБРЯ // ОФИЦИАЛЬНЫЙ РЕЙТИНГ</span>
-        <button type="button" class="icon-close" id="btn-close-leaderboard" aria-label="Закрыть">✕</button>
+      <div class="modal-head modal-head-sticky">
+        <span class="mono-tag accent-tag">🏆 РЕЙТИНГ ТОП-10 НА ПРЕМЬЕРУ</span>
+        <button type="button" class="btn-secondary btn-compact" id="btn-close-leaderboard" aria-label="Закрыть">✕ ЗАКРЫТЬ</button>
       </div>
-      <h3 class="section-title rescue-title">🏆 ТОП-10 ЛИДЕРОВ ИДУТ НА ЗАКРЫТУЮ ПРЕМЬЕРУ!</h3>
-      <p class="modal-hint">
-        Даже если шкала замерла в миллиметре от 100%, <strong>первые 10 игроков по очкам активности (⭐)</strong> получают именные пригласительные на закрытый показ триллера «БОЧКА» со съёмочной группой!
-      </p>
 
       <!-- Личная карточка игрока в рейтинге -->
       <div class="leader-me-banner" id="leader-me-banner">
@@ -1491,37 +1487,33 @@
         <div class="mono-tag">Загрузка рейтинга из Supabase...</div>
       </div>
 
-      <!-- Справочник начисления очков -->
+      <!-- Компактная подсказка без перегруза экрана -->
       <div class="points-guide-box">
-        <span class="mono-label">КАК БЫСТРО ВЫРВАТЬСЯ В ТОП-10 (+10% К РЕЙТИНГУ ЗА КАЖДОГО ДРУГА, ДО +50%):</span>
+        <span class="mono-label">КАК НАБРАТЬ ОЧКИ (⭐):</span>
         <div class="points-guide-grid">
-          <span>🎟 Подарить билет другу: <strong>+3500 ⭐ (+4 ❤️)</strong></span>
-          <span>🆕 Привести нового друга в цех: <strong>+2500 ⭐ (+2 ❤️)</strong></span>
-          <span>📸 Скриншот «Буду смотреть» КП: <strong>+500 ⭐</strong></span>
-          <span id="points-guide-duel-item" class="stage4-only-item">⚔️ Победа втроём «На счёт три!»: <strong>+450 ⭐</strong></span>
-          <span>🎬 Трейлер + рассылка по соцсетям: <strong>+250 / +150 ⭐</strong></span>
-          <span id="points-guide-levels-item">🛢 Уровни и ⚡ Блиц (12с кулдаун): <strong>до +280 ⭐/раунд · макс 2000/день</strong></span>
+          <span>📸 Бочка другу: <strong>+2500 ⭐ (+2 ❤️)</strong></span>
+          <span>🎬 Трейлер / КП: <strong>+250..500 ⭐</strong></span>
         </div>
       </div>
 
-      <!-- Мини-ивент дня и напоминания -->
-      <div class="retention-card" id="daily-event-banner">
+      <div class="retention-card" id="daily-event-banner" hidden>
         <div class="retention-card-head">
-          <span class="mono-label" id="daily-event-title">⚡ МИНИ-ИВЕНТ ДНЯ: ЗАГРУЗКА...</span>
+          <span class="mono-label" id="daily-event-title">⚡ МИНИ-ИВЕНТ ДНЯ</span>
           <button type="button" class="reminder-btn" id="btn-toggle-reminders">🔔 Напоминать</button>
         </div>
-        <small id="daily-event-desc">Ежедневный модификатор очков активен.</small>
+        <small id="daily-event-desc"></small>
       </div>
+      <div class="retention-card" id="daily-quests-box" hidden></div>
+      <div class="retention-card" id="raffle-transparency-box" hidden></div>
 
-      <!-- Квесты смены и достижения -->
-      <div class="retention-card" id="daily-quests-box"></div>
-
-      <!-- Прозрачный фонд призов -->
-      <div class="retention-card" id="raffle-transparency-box"></div>
-
-      <div class="finale-dual-row">
-        <button type="button" class="btn-primary" id="btn-leader-go-share">📤 СОБРАТЬ ОЧКИ В СОЦСЕТЯХ</button>
-        <button type="button" class="btn-secondary stage4-only-item" id="btn-leader-go-duel">⚔️ В БОЙ «НА СЧЁТ ТРИ!»</button>
+      <div class="finale-cta-stack" style="margin-top:10px">
+        <button type="button" class="btn-primary btn-full" id="btn-leader-play-now">
+          ▶ ИГРАТЬ В ЦЕХУ (ВЕРНУТЬСЯ К БОЧКАМ)
+        </button>
+        <div class="finale-dual-row">
+          <button type="button" class="btn-secondary" id="btn-leader-go-share">📤 СОЦСЕТИ (+⭐)</button>
+          <button type="button" class="btn-ghost" id="btn-leader-close-bottom">✕ ЗАКРЫТЬ ОКНО</button>
+        </div>
       </div>
     </div>
   </div>
