@@ -1222,6 +1222,23 @@ class WorkshopAudio {
     }
   }
 
+  playSteamWarningHiss() {
+    Haptics.light();
+    if (!this.ctx || !this.enabled || !this.noiseBuffer) return;
+    const now = this.ctx.currentTime;
+    const nSrc = this.ctx.createBufferSource();
+    nSrc.buffer = this.noiseBuffer;
+    const hp = this.ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.setValueAtTime(2400, now);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.24, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+    nSrc.connect(hp).connect(g).connect(this.master);
+    nSrc.start(now);
+    nSrc.stop(now + 0.17);
+  }
+
   playSteamPenaltyBurst() {
     Haptics.heavy();
     if (!this.ctx || !this.enabled || !this.noiseBuffer) return;

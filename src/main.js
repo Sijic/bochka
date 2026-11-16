@@ -541,6 +541,7 @@ async function bootstrap() {
       },
       getRecoveryCode: () => getPlayerRecoveryCode(state.tg?.user),
       restoreByCode: (code) => restoreProfileByRecoveryCode(code, state.tg?.user),
+      hoverBarrel: (idx) => handleBarrelHover(idx, 200, 200, false),
     };
   }
 
@@ -2009,6 +2010,8 @@ async function handleDownloadOceanPostcard() {
 /* ============================================================================
    ПРОСЛУШКА МЕТАЛЛА И ДРАМАТУРГИЯ УДАРОВ / 4 ФИЛЬМОВЫХ СКРИМЕРА
    ============================================================================ */
+let lastSteamWarnAt = 0;
+
 function handleBarrelHover(index, sx, sy, alreadyStruck) {
   const reticle = document.getElementById('barrel-reticle');
   const retId = document.getElementById('reticle-id');
@@ -2017,6 +2020,20 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
     reticle?.setAttribute('hidden', '');
     audio.stopListening();
     return;
+  }
+
+  const isSteamHazard =
+    !alreadyStruck &&
+    state.round.zoneId === 2 &&
+    index === state.round.steamHazardIndex;
+
+  if (isSteamHazard) {
+    const now = performance.now();
+    if (now - lastSteamWarnAt > 650) {
+      lastSteamWarnAt = now;
+      scene?.triggerGaugeHazardJitter?.();
+      audio.playSteamWarningHiss?.();
+    }
   }
 
   if (reticle && retId) {
@@ -2028,7 +2045,9 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
     const labelBase = `${t('reticleBatch')}${batchNum}`;
     retId.textContent = alreadyStruck
       ? `${labelBase} // ${t('reticleEmpty')}`
-      : `${labelBase} // ${t('reticleListening')}`;
+      : isSteamHazard
+        ? `${labelBase} // ⚠️ ПАРОВАЯ ТРУБА (−4с O₂)`
+        : `${labelBase} // ${t('reticleListening')}`;
 
     const showPulse =
       !alreadyStruck &&
@@ -3460,17 +3479,20 @@ function buildSpoilerFreeReport() {
     ? `📅 Смена дня ${r.dailyShiftCode} · ${zoneSpec.zoneTitle}`
     : `${zoneSpec.zoneTitle} (${r.barrelCount || zoneSpec.barrelCount}Б)`;
   const replaySummary = survived
-    ? `🎬 Авто-повтор: вскрыл живую бочку с ${attempts}-го удара (остаток O₂: ${Number(r.airLeft || 0).toFixed(1)}с)${r.micBlowUsed ? ' · 💨 пар сдут' : ''}`
+    ? `🎬 Авто-повтор: вскрыл живую бочку с ${attempts}-го удара (остаток O₂: ${Number(r.airLeft || 0).toFixed(1)}с)`
     : `🎬 Авто-повтор: цех сомкнулся на ${attempts}-м ударе — возьми реванш!`;
   const challengeUrl = state.pack.lastShareUrl || 'https://bochka.quest/';
 
-  const reportText = [
+  const reportLines = [
     `🏭 БОЧКА // ${shiftLabel}`,
     `🏅 Ранг слуха: ${rank}`,
     `🔨 ${pathStr}`,
-    replaySummary,
-    `👉 Проверь свой слух: ${challengeUrl}`,
-  ].join('\n');
+  ];
+  if (r.micBlowUsed) {
+    reportLines.push('💨 Пар сдут микрофоном (+4с O₂) · На стене: На небе только и разговоров, что о море');
+  }
+  reportLines.push(replaySummary, `👉 Проверь свой слух: ${challengeUrl}`);
+  const reportText = reportLines.join('\n');
 
   return { rank, reportText, challengeUrl };
 }
@@ -5447,6 +5469,26 @@ function bindUIEvents() {
   document.getElementById('btn-close-camera')?.addEventListener('click', () => closeSelfieCamera());
   document.getElementById('btn-cancel-camera')?.addEventListener('click', () => closeSelfieCamera());
   document.getElementById('btn-snap-photo')?.addEventListener('click', () => captureSelfieFrame());
+
+  let memeTemplateCursor = 0;
+  document.getElementById('btn-pack-meme-template')?.addEventListener('click', async () => {
+    const frames = ['flashlight', 'weld', 'rec', 'stencil'];
+    const idx = memeTemplateCursor % DEMO_PORTRAITS.length;
+    const nextFrame = frames[memeTemplateCursor % frames.length];
+    memeTemplateCursor += 1;
+
+    state.pack.frameStyle = nextFrame;
+    document.querySelectorAll('[data-frame]').forEach((c) => {
+      c.classList.toggle('is-active', c.getAttribute('data-frame') === nextFrame);
+    });
+
+    const src = state.tg?.user?.photoUrl && memeTemplateCursor === 1
+      ? state.tg.user.photoUrl
+      : DEMO_PORTRAITS[idx];
+    await rebuildPackPortraitPreview(src);
+    showToast('🎲 Готовый мем-шаблон подставлен в 1 клик!');
+    Haptics.light();
+  });
 
   document.getElementById('btn-tg-avatar')?.addEventListener('click', async () => {
     if (state.tg?.user?.photoUrl) {

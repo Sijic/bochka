@@ -98,6 +98,9 @@ export class WorkshopScene {
     this.wallQuoteMesh = null;
     this.wallQuoteMat = null;
     this.wallQuoteText = 'НА НЕБЕ ТОЛЬКО И РАЗГОВОРОВ, ЧТО О МОРЕ';
+    this.boilerTargetRippleTimer = 0.6;
+    this.gaugeJitterCount = 0;
+    this.boilerRipplesSpawned = 0;
     this._isPortraitLayout = false;
     this._projVec = new THREE.Vector3();
 
@@ -1001,15 +1004,15 @@ export class WorkshopScene {
     drop.mesh.visible = true;
   }
 
-  _spawnFloorRipple(x, z) {
+  _spawnFloorRipple(x, z, yPos = 0.015) {
     const rip = this.floorRipples.find((r) => !r.active);
     if (!rip) return;
     rip.active = true;
     rip.age = 0;
     rip.duration = 1.15 + Math.random() * 0.35;
-    rip.mesh.position.set(x, 0.015, z);
-    rip.mesh.scale.setScalar(0.4);
-    rip.mesh.material.opacity = 0.52;
+    rip.mesh.position.set(x, yPos, z);
+    rip.mesh.scale.setScalar(0.45);
+    rip.mesh.material.opacity = 0.62;
     rip.mesh.visible = true;
   }
 
@@ -1455,6 +1458,17 @@ export class WorkshopScene {
         const rx = (Math.random() - 0.5) * 3.6;
         const rz = -1.6 + Math.random() * 2.6;
         this._spawnRustDust(new THREE.Vector3(rx, 0.22, rz), 2);
+      }
+
+      // Расходящиеся круги по воде (floorRipples) раз в 2.5с вокруг целевой бочки (для ориентира без звука)
+      this.boilerTargetRippleTimer -= dt;
+      if (this.boilerTargetRippleTimer <= 0) {
+        this.boilerTargetRippleTimer = 2.5;
+        const tb = this.barrels[this.diveTargetIndex];
+        if (tb && tb.group.visible && !tb.struck) {
+          this._spawnFloorRipple(tb.group.position.x, tb.group.position.z, 0.155);
+          this.boilerRipplesSpawned += 1;
+        }
       }
     }
 
@@ -2136,6 +2150,22 @@ export class WorkshopScene {
     this._spawnSparks(new THREE.Vector3(0, 2.85, -3.2), 14);
   }
 
+  triggerGaugeHazardJitter() {
+    this.gaugeJitterCount += 1;
+    this.clockSimSeconds += 4.2;
+    if (this.clockSecPivot) {
+      this.clockSecPivot.rotation.z -= 0.48;
+    }
+    if (this.clockRimMat) {
+      this.clockRimMat.emissive.setHex(0xf97316);
+      this.clockRimMat.emissiveIntensity = 1.25;
+    }
+    if (this.steamPipeGroup?.visible) {
+      const p = this.steamPipeGroup.position;
+      this._spawnRustDust(new THREE.Vector3(p.x, p.y - 0.08, p.z), 6);
+    }
+  }
+
   triggerSteamHazardBurst(index) {
     const b = this.barrels[index];
     if (!b) return;
@@ -2312,6 +2342,8 @@ export class WorkshopScene {
       wallQuoteVisible: Boolean(this.wallQuoteMesh?.visible),
       wallQuoteText: this.wallQuoteText,
       numbersObscured: this.numbersObscured,
+      gaugeJitterCount: this.gaugeJitterCount,
+      boilerRipplesSpawned: this.boilerRipplesSpawned,
       hasCharacterSprites: false,
     };
   }
