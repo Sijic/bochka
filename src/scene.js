@@ -2304,6 +2304,7 @@ export class WorkshopScene {
     return {
       activeZoneId: this.activeZoneId,
       activeBarrelCount: this.activeBarrelCount,
+      spotColorHex: this.mainSpot ? this.mainSpot.color.getHexString() : '',
       steamHazardIndex: this.steamHazardIndex,
       steamPipeVisible: Boolean(this.steamPipeGroup?.visible),
       floodWaterVisible: Boolean(this.floodWaterMesh?.visible),

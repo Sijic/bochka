@@ -117,6 +117,7 @@ export async function createBarrelPack({
   message = '',
   frameStyle = 'flashlight',
   zoneId = 1,
+  targetBarrelIndex = -1,
   senderName = '',
   tgUser = null,
   processedImage,
@@ -125,7 +126,11 @@ export async function createBarrelPack({
   const id = randomShortId(7);
   const cleanZone = Math.max(1, Math.min(4, Number(zoneId) || 1));
   const zoneBarrels = cleanZone === 1 ? 3 : cleanZone === 2 ? 6 : cleanZone === 3 ? 9 : 12;
-  const targetIndex = Math.floor(Math.random() * Math.min(6, zoneBarrels));
+  const maxIdx = Math.min(6, zoneBarrels);
+  const targetIndex =
+    Number.isInteger(targetBarrelIndex) && targetBarrelIndex >= 0 && targetBarrelIndex < maxIdx
+      ? targetBarrelIndex
+      : Math.floor(Math.random() * maxIdx);
   const encodedFrame = `${String(frameStyle || 'flashlight').split(':z')[0]}:z${cleanZone}`;
   const senderUid = getViewerUid(tgUser);
   const senderTgId = tgUser?.id || '';

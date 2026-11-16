@@ -231,6 +231,7 @@ const state = {
     mode: 'friend',
     frameStyle: 'flashlight',
     zoneId: 1,
+    targetBarrelIndex: -1,
     useBarrelFilter: true,
     rawSource: null,
     processed: null,
@@ -276,7 +277,7 @@ function getFactoryZoneSpecByZoneId(rawZoneId = 1) {
   if (z === 1) {
     return {
       zoneId: 1,
-      barrelCount: 4,
+      barrelCount: 3,
       airSec: 30.0,
       hasSteamHazard: false,
       numbersObscured: false,
@@ -532,6 +533,14 @@ async function bootstrap() {
       },
       triggerMicBlow: () => triggerWorkshopMicBlow(),
       startDailyShift: () => startDailyShiftRound(),
+      getSpoilerReport: () => buildSpoilerFreeReport(),
+      setLang: (l) => setLang(l),
+      strikeBarrel: (idx) => {
+        const b = scene?.barrels?.[idx];
+        return handleBarrelStrike(idx, b ? b.group.position.clone() : null);
+      },
+      getRecoveryCode: () => getPlayerRecoveryCode(state.tg?.user),
+      restoreByCode: (code) => restoreProfileByRecoveryCode(code, state.tg?.user),
     };
   }
 
@@ -3156,6 +3165,7 @@ async function handleSealBarrelClick() {
       message: phrase,
       frameStyle: state.pack.frameStyle,
       zoneId: state.pack.zoneId || 1,
+      targetBarrelIndex: state.pack.targetBarrelIndex ?? -1,
       senderName,
       tgUser: state.tg.user,
       processedImage: state.pack.processed,
@@ -5386,6 +5396,15 @@ function bindUIEvents() {
       chip.classList.add('is-active');
       const z = Math.max(1, Math.min(4, Number(chip.getAttribute('data-pack-zone') || 1)));
       state.pack.zoneId = z;
+      Haptics.light();
+    });
+  });
+
+  document.querySelectorAll('[data-pack-barrel]').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('[data-pack-barrel]').forEach((c) => c.classList.remove('is-active'));
+      chip.classList.add('is-active');
+      state.pack.targetBarrelIndex = Number(chip.getAttribute('data-pack-barrel') ?? -1);
       Haptics.light();
     });
   });
