@@ -118,6 +118,7 @@ export async function createBarrelPack({
   frameStyle = 'flashlight',
   zoneId = 1,
   targetBarrelIndex = -1,
+  screamerType = 'weld',
   senderName = '',
   tgUser = null,
   processedImage,
@@ -131,7 +132,9 @@ export async function createBarrelPack({
     Number.isInteger(targetBarrelIndex) && targetBarrelIndex >= 0 && targetBarrelIndex < maxIdx
       ? targetBarrelIndex
       : Math.floor(Math.random() * maxIdx);
-  const encodedFrame = `${String(frameStyle || 'flashlight').split(':z')[0]}:z${cleanZone}`;
+  const validScreamers = new Set(['weld', 'lunge', 'siren_cam', 'custom_scream']);
+  const cleanScreamer = validScreamers.has(screamerType) ? screamerType : 'weld';
+  const encodedFrame = `${String(frameStyle || 'flashlight').split(':z')[0]}:z${cleanZone}:s_${cleanScreamer}`;
   const senderUid = getViewerUid(tgUser);
   const senderTgId = tgUser?.id || '';
   const senderUsername = tgUser?.username || '';
@@ -217,6 +220,7 @@ export async function createBarrelPack({
     hasLocalMedia: true,
     frameStyle: String(frameStyle || 'flashlight').split(':z')[0],
     zoneId: cleanZone,
+    screamerType: cleanScreamer,
     targetIndex,
     senderUid,
     senderTgId,
@@ -316,7 +320,8 @@ export async function loadBarrelPack(rawParam) {
           if (!voiceUrl && localMedia?.voiceObjectUrl) voiceUrl = localMedia.voiceObjectUrl;
         }
         const rawFs = String(data.frame_style || 'flashlight');
-        const [cleanFs, zPart] = rawFs.split(':z');
+        const [cleanFs, restPart = ''] = rawFs.split(':z');
+        const [zStr = '1', scrStr = 'weld'] = restPart.split(':s_');
         return {
           id: data.id,
           mode: data.mode || 'friend',
@@ -324,7 +329,8 @@ export async function loadBarrelPack(rawParam) {
           photoUrl,
           voiceUrl,
           frameStyle: cleanFs || 'flashlight',
-          zoneId: Math.max(1, Math.min(4, Number(zPart) || 1)),
+          zoneId: Math.max(1, Math.min(4, Number(zStr) || 1)),
+          screamerType: scrStr || 'weld',
           targetIndex: Number.isInteger(data.target_index) ? data.target_index : 0,
           senderUid: data.sender_uid || '',
           senderTgId: data.sender_tg_id || '',
@@ -415,7 +421,10 @@ export async function recordFunnelEvent(event, tgUser = null, kpScreenshotBlob =
   }
 }
 
-export async function recordBarrelResult(pack, { survived, attemptsUsed, timeLeft, viewerTgUser = null }) {
+export async function recordBarrelResult(
+  pack,
+  { survived, attemptsUsed, timeLeft, elapsedSec = 12, screamerLabel = '', viewerTgUser = null }
+) {
   if (!pack || !pack.id) return { notified: false };
 
   const viewerUid = getViewerUid(viewerTgUser);
@@ -450,12 +459,22 @@ export async function recordBarrelResult(pack, { survived, attemptsUsed, timeLef
     safeWriteJson(PACKS_STORAGE_KEY, localPacks);
   }
 
+  // Антиспам-троттлинг уведомлений отправителю (не чаще 1 раза в 15с на бочку и исход)
+  const throttleKey = `bochka_ping_ts_${pack.id}_${survived ? 'win' : 'lose'}`;
+  const lastPingTs = Number(safeRead(throttleKey, '0') || 0);
+  if (Date.now() - lastPingTs < 15000) {
+    return { notified: false, throttled: true, senderBonusCredited };
+  }
+  safeWrite(throttleKey, String(Date.now()));
+
   const notified = await sendTelegramPing({
     clientAction: 'barrel_opened',
     senderTgId,
     openerName: viewerTgUser?.name || '',
     barrelId: pack.id,
     survived,
+    elapsedSec: Math.max(1, Math.round(Number(elapsedSec || 12))),
+    screamerLabel,
   });
 
   return { notified, senderBonusCredited };
@@ -966,6 +985,17 @@ export async function createGiftTicketPass({
 export async function loadGiftTicketPass(giftId, viewerTgUser = null) {
   if (!giftId) return null;
   const cleanId = giftId.trim();
+  const viewerUid = getViewerUid(viewerTgUser);
+  const localProf = getLocalPreviewProfile();
+  const localQuest = getQuestState();
+  const localIsExistingPlayer = Boolean(
+    safeRead('bochka_existing_fighter', '') === '1' ||
+      Number(localProf.premierePoints || 0) > 0 ||
+      Number(localProf.packedCount || 0) > 0 ||
+      Number(localQuest.packedCount || 0) > 0 ||
+      Number(localProf.currentLevel || 1) > 1
+  );
+
   const db = getCloudDb();
 
   if (db) {
@@ -976,9 +1006,12 @@ export async function loadGiftTicketPass(giftId, viewerTgUser = null) {
       });
       if (!error && data?.ok) {
         const serverNowMs = Number(data.server_now_ms || Date.now());
+        const isNotSender = data.sender_uid !== viewerUid;
         return {
           id: data.gift_id,
           status: data.status || 'issued',
+          expiredReturned: Boolean(data.expired_returned || data.status === 'expired_returned'),
+          isExistingPlayer: Boolean(isNotSender && (data.is_existing_player || localIsExistingPlayer)),
           orderStatus: data.order_status || '',
           recipientName: data.recipient_name || '',
           recipientPhotoUrl: data.recipient_photo_url || '',
@@ -996,29 +1029,40 @@ export async function loadGiftTicketPass(giftId, viewerTgUser = null) {
     } catch { /* ignore */ }
   }
 
-  if (isTestBogActive()) {
-    const passes = safeReadJson(PASSES_STORAGE_KEY, {}) || {};
-    if (passes[cleanId]) {
-      return { ...passes[cleanId], serverOffsetMs: 0 };
-    }
-    return {
-      id: cleanId,
-      status: 'issued',
-      orderStatus: '',
-      recipientName: 'АЛЕКСЕЙ (ТЕСТ ПОЛУЧАТЕЛЯ)',
-      recipientPhotoUrl: '',
-      senderName: 'Друг из Цеха (Sandbox)',
-      senderUid: 'sandbox_other_sender',
-      senderTgId: '',
-      hasVerifiedPhone: false,
-      verifiedPhone: '',
-      cityCinema: '',
-      bookingCode: '',
-      ticketFileUrl: '',
-      serverOffsetMs: 0,
-    };
+  const passes = safeReadJson(PASSES_STORAGE_KEY, {}) || {};
+  const entry = passes[cleanId] || {
+    id: cleanId,
+    status: 'issued',
+    orderStatus: '',
+    recipientName: 'АЛЕКСЕЙ (ПОЛУЧАТЕЛЬ БИЛЕТА)',
+    recipientPhotoUrl: '',
+    senderName: 'Друг из Цеха',
+    senderUid: 'sandbox_other_sender',
+    senderTgId: '',
+    hasVerifiedPhone: false,
+    verifiedPhone: '',
+    cityCinema: '',
+    bookingCode: '',
+    ticketFileUrl: '',
+    createdAtMs: Date.now(),
+  };
+
+  let expiredReturned = Boolean(entry.status === 'expired_returned');
+  if (entry.status === 'issued' && entry.createdAtMs && Date.now() - entry.createdAtMs > 86400000) {
+    entry.status = 'expired_returned';
+    expiredReturned = true;
+    passes[cleanId] = entry;
+    safeWriteJson(PASSES_STORAGE_KEY, passes);
+    localProf.hasPendingTicket = true;
+    saveLocalPreviewProfile(localProf);
   }
-  return null;
+
+  return {
+    ...entry,
+    expiredReturned,
+    isExistingPlayer: Boolean(entry.senderUid !== viewerUid && localIsExistingPlayer),
+    serverOffsetMs: 0,
+  };
 }
 
 /**
@@ -1327,14 +1371,19 @@ export async function notifyBarrelSearchStarted(pack, viewerTgUser = null) {
   }
 
   if (senderTgId) {
-    await sendTelegramPing({
-      clientAction: 'barrel_search_started',
-      senderTgId,
-      openerName: viewerTgUser?.name || 'Кент из чата',
-      barrelId: pack.id,
-      roomId,
-      creditedLives,
-    });
+    const throttleKey = `bochka_ping_start_${pack.id}`;
+    const lastTs = Number(safeRead(throttleKey, '0') || 0);
+    if (Date.now() - lastTs > 15000) {
+      safeWrite(throttleKey, String(Date.now()));
+      await sendTelegramPing({
+        clientAction: 'barrel_search_started',
+        senderTgId,
+        openerName: viewerTgUser?.name || 'Кент из чата',
+        barrelId: pack.id,
+        roomId,
+        creditedLives,
+      });
+    }
   }
 
   return { creditedLives, roomId };

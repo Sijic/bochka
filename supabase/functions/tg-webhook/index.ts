@@ -308,7 +308,7 @@ Deno.serve(async (req: Request) => {
       await tgApi("sendMessage", {
         chat_id: body.senderTgId,
         parse_mode: "HTML",
-        text: `🔦 <b>${opener} вошёл в цех и ищет твою бочку по звуку!</b>\n${bonusLine}`,
+        text: `👀 <b>${opener} зашёл в цех и стучит по твоей бочке...</b>\n${bonusLine}`,
         reply_markup: {
           inline_keyboard: [
             [{ text: "👀 Подглядывать за игрой", url: watchUrl }],
@@ -328,14 +328,16 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
       if (!sUser) return jsonResp({ ok: true, skipped: true });
 
-      const opener = body.openerName ? ` (${escapeHtml(body.openerName)})` : "";
+      const openerName = escapeHtml(body.openerName || "Твой друг");
       const survived = body.survived !== false;
+      const elapsedSec = Math.max(1, Math.round(Number(body.elapsedSec || 12)));
+      const screamerLabel = body.screamerLabel ? ` (${escapeHtml(String(body.screamerLabel))})` : "";
       await tgApi("sendMessage", {
         chat_id: body.senderTgId,
         parse_mode: "HTML",
         text: survived
-          ? `💥 <b>Твой кент${opener} сорвал крышку с твоей бочки!</b>\nГолосовое послание прозвучало — сейчас прилетит его ответ из цеха!`
-          : `💀 <b>Твой кент${opener} задохнулся в цеху и не нашёл твою бочку!</b>\nЗови его на реванш «На счёт три!»!`,
+          ? `🔓 <b>${openerName} выбрался за ${elapsedSec} сек и уже закатывает ответную бочку!</b>\nГолосовое послание прозвучало — готовься встречать ответный вызов!`
+          : `💥 <b>${openerName} спустил весь воздух на ${elapsedSec}-й секунде и словил твой скример${screamerLabel}!</b>\nСобери карточку для чата или закатай его снова.`,
         reply_markup: {
           inline_keyboard: [[{ text: "🏆 В ЦЕХ: РЕЙТИНГ И ПРЕМЬЕРА", url: MINI_APP_LINK }]],
         },

@@ -1222,6 +1222,32 @@ class WorkshopAudio {
     }
   }
 
+  playFactorySirenKlaxon() {
+    Haptics.heavy();
+    if (!this.ctx || !this.enabled) return;
+    const now = this.ctx.currentTime;
+    const osc1 = this.ctx.createOscillator();
+    const osc2 = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc1.type = 'sawtooth';
+    osc2.type = 'square';
+    osc1.frequency.setValueAtTime(440, now);
+    osc1.frequency.linearRampToValueAtTime(680, now + 0.24);
+    osc1.frequency.linearRampToValueAtTime(410, now + 0.52);
+    osc2.frequency.setValueAtTime(446, now);
+    osc2.frequency.linearRampToValueAtTime(688, now + 0.24);
+    osc2.frequency.linearRampToValueAtTime(415, now + 0.52);
+    g.gain.setValueAtTime(0.38, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+    osc1.connect(g);
+    osc2.connect(g);
+    g.connect(this.master);
+    osc1.start(now);
+    osc2.start(now);
+    osc1.stop(now + 0.56);
+    osc2.stop(now + 0.56);
+  }
+
   playSteamWarningHiss() {
     Haptics.light();
     if (!this.ctx || !this.enabled || !this.noiseBuffer) return;

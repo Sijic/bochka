@@ -168,6 +168,8 @@ const state = {
     portraitDataUrl: '',
     voiceUrl: '',
     useBarrelFilter: true,
+    screamerType: 'weld',
+    victimCardDataUrl: '',
     message: '',
     senderLabel: '',
     lastUrgentSec: 9,
@@ -230,6 +232,7 @@ const state = {
   pack: {
     mode: 'friend',
     frameStyle: 'flashlight',
+    screamerType: 'weld',
     zoneId: 1,
     targetBarrelIndex: -1,
     useBarrelFilter: true,
@@ -542,6 +545,8 @@ async function bootstrap() {
       getRecoveryCode: () => getPlayerRecoveryCode(state.tg?.user),
       restoreByCode: (code) => restoreProfileByRecoveryCode(code, state.tg?.user),
       hoverBarrel: (idx) => handleBarrelHover(idx, 200, 200, false),
+      openPassScreen: (id) => openIncomingPassScreen(id),
+      triggerScreamer: (v) => triggerMiniScreamer(v),
     };
   }
 
@@ -1210,6 +1215,8 @@ async function startViralFriendRound(pack) {
     portraitDataUrl,
     voiceUrl,
     useBarrelFilter: true,
+    screamerType: pack?.screamerType || 'weld',
+    victimCardDataUrl: '',
     message: pack?.message || t('presetsSelf')[0],
     senderLabel: pack?.senderName ? `${t('revealFromFriend')} · ${pack.senderName}` : t('revealFromFriend'),
     lastUrgentSec: 9,
@@ -2300,15 +2307,127 @@ async function handleBarrelStrike(index, worldPoint) {
   }
 }
 
+function createVictimCardDataUrl(sourceImgUrl = '') {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 480;
+    canvas.height = 480;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return sourceImgUrl || DEMO_PORTRAITS[0];
+
+    ctx.fillStyle = '#0d090a';
+    ctx.fillRect(0, 0, 480, 480);
+
+    // Заводские красно-чёрные полосы опасности
+    for (let x = -480; x < 960; x += 48) {
+      ctx.fillStyle = 'rgba(255, 42, 42, 0.16)';
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x + 24, 0);
+      ctx.lineTo(x + 120, 480);
+      ctx.lineTo(x + 96, 480);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Силуэт / прожектор по центру
+    const rad = ctx.createRadialGradient(240, 230, 20, 240, 230, 170);
+    rad.addColorStop(0, 'rgba(255, 68, 56, 0.34)');
+    rad.addColorStop(0.6, 'rgba(24, 12, 14, 0.92)');
+    rad.addColorStop(1, 'rgba(9, 7, 8, 0.98)');
+    ctx.fillStyle = rad;
+    ctx.fillRect(28, 66, 424, 330);
+
+    // Металлический трафарет бочки и штамп жертвы
+    ctx.strokeStyle = '#ff4b4b';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(18, 18, 444, 444);
+
+    ctx.fillStyle = '#ff3b3b';
+    ctx.fillRect(18, 18, 444, 52);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 21px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🚨 ЖЕРТВА ЦЕХА №19 // СКРИМЕР', 240, 51);
+
+    ctx.fillStyle = '#ffd166';
+    ctx.font = 'bold 64px monospace';
+    ctx.fillText('19·97', 240, 225);
+
+    const victimName = state.tg?.user?.name || 'ИГРОК ЦЕХА';
+    ctx.fillStyle = '#f8f9fa';
+    ctx.font = 'bold 24px sans-serif';
+    ctx.fillText(`ПОЙМАН НА ЛОВУШКЕ: ${victimName.toUpperCase()}`, 240, 285);
+
+    ctx.fillStyle = '#ff8787';
+    ctx.font = '18px monospace';
+    ctx.fillText('СИРЕНА СРАБОТАЛА · ЗАВОД БОЧКА', 240, 325);
+
+    ctx.fillStyle = '#141115';
+    ctx.fillRect(18, 404, 444, 58);
+    ctx.fillStyle = '#ffd166';
+    ctx.font = 'bold 19px sans-serif';
+    ctx.fillText('🎬 bochka.quest · В КИНО С 17 ДЕКАБРЯ', 240, 440);
+
+    return canvas.toDataURL('image/webp', 0.86);
+  } catch (_err) {
+    return sourceImgUrl || DEMO_PORTRAITS[0];
+  }
+}
+
 function triggerMiniScreamer(explicitVariant = null) {
+  const screamerKey = state.round?.screamerType || state.pack?.screamerType || 'weld';
+  const screamerMap = {
+    weld: 0,
+    lunge: 1,
+    siren_cam: 2,
+    custom_scream: 3,
+  };
   const v =
     typeof explicitVariant === 'number'
       ? Math.abs(explicitVariant) % 4
-      : (state.screamerCursor++) % 4;
+      : typeof screamerMap[screamerKey] === 'number'
+        ? screamerMap[screamerKey]
+        : (state.screamerCursor++) % 4;
 
   const meta = SCREAMER_META[v] || SCREAMER_META[0];
-  audio.playMiniScreamer(v);
-  scene?.triggerScreamerShake(0.38);
+  const targetIdx = typeof state.round?.targetIndex === 'number' ? state.round.targetIndex : 0;
+
+  if (screamerKey === 'weld' || v === 0) {
+    audio.playMiniScreamer(0);
+    scene?.triggerWeldDropImpact?.(targetIdx);
+    scene?.triggerScreamerShake(0.46);
+    try {
+      navigator.vibrate?.([120, 40, 220]);
+    } catch (_e) {}
+  } else if (screamerKey === 'lunge' || v === 1) {
+    audio.playMiniScreamer(1);
+    scene?.triggerDarkLungeImpulse?.(targetIdx);
+    try {
+      navigator.vibrate?.([90, 30, 160]);
+    } catch (_e) {}
+  } else if (screamerKey === 'siren_cam' || v === 2) {
+    if (typeof audio.playFactorySirenKlaxon === 'function') {
+      audio.playFactorySirenKlaxon();
+    } else {
+      audio.playMiniScreamer(2);
+    }
+    scene?.triggerScreamerShake(0.5);
+    state.round.victimCardDataUrl = createVictimCardDataUrl(state.round.portraitDataUrl || DEMO_PORTRAITS[0]);
+    try {
+      navigator.vibrate?.([180, 60, 180]);
+    } catch (_e) {}
+  } else {
+    audio.playMiniScreamer(2);
+    if (state.round?.voiceUrl) {
+      audio.playCleanSenderVoice(state.round.voiceUrl, { useBarrelFilter: true });
+    }
+    scene?.triggerScreamerShake(0.52);
+    try {
+      navigator.vibrate?.([150, 40, 200]);
+    } catch (_e) {}
+  }
+
   if (state.round.zoneId === 4) {
     scene?.triggerWiringArcFlash?.(1.1);
   }
@@ -2318,7 +2437,13 @@ function triggerMiniScreamer(explicitVariant = null) {
   if (!el) return;
 
   el.setAttribute('data-variant', meta.key);
-  if (cap) cap.textContent = t(meta.i18n);
+  const customLabels = {
+    weld: '⚡ СВАРКА И ПАДАЮЩАЯ БОЧКА!',
+    lunge: '🔦 БРОСОК ИЗ ТЕМНОТЫ!',
+    siren_cam: '🚨 СИРЕНА ЦЕХА №19 // СНИМОК ЖЕРТВЫ!',
+    custom_scream: '🎙 КРИК ИЗ ЗАВАРЕННОЙ БОЧКИ!',
+  };
+  if (cap) cap.textContent = customLabels[screamerKey] || t(meta.i18n);
 
   el.removeAttribute('hidden');
   el.style.animation = 'none';
@@ -2326,7 +2451,7 @@ function triggerMiniScreamer(explicitVariant = null) {
   el.style.animation = '';
   window.setTimeout(() => {
     el.setAttribute('hidden', '');
-  }, 420);
+  }, 460);
 }
 
 /* ============================================================================
@@ -2487,6 +2612,8 @@ async function openIncomingPassScreen(passId) {
   const nameEl = document.getElementById('pass-holder-name');
   const senderEl = document.getElementById('pass-sender-line');
   const selfWarn = document.getElementById('pass-self-warning');
+  const expiredWarn = document.getElementById('pass-expired-returned-warning');
+  const existingUpsell = document.getElementById('pass-existing-player-upsell');
   const claimForm = document.getElementById('pass-claim-form');
   const claimErr = document.getElementById('pass-claim-error');
   const phoneBadge = document.getElementById('pass-verified-phone-badge');
@@ -2502,6 +2629,8 @@ async function openIncomingPassScreen(passId) {
   }
 
   claimErr?.setAttribute('hidden', '');
+  expiredWarn?.setAttribute('hidden', '');
+  existingUpsell?.setAttribute('hidden', '');
 
   const viewerUid = getViewerUid(state.tg?.user);
   const isOwnPass = Boolean(
@@ -2509,7 +2638,19 @@ async function openIncomingPassScreen(passId) {
       (passData.senderTgId && state.tg?.user?.id && String(passData.senderTgId) === String(state.tg.user.id))
   );
 
-  if (isOwnPass) {
+  const isAlreadyFighter = Boolean(
+    passData.isExistingPlayer ||
+      Number(state.profile?.premierePoints || 0) > 0 ||
+      Number(state.profile?.packedCount || 0) > 0 ||
+      Number(state.profile?.currentLevel || 1) > 1
+  );
+
+  if (passData.expiredReturned || passData.status === 'expired_returned') {
+    selfWarn?.setAttribute('hidden', '');
+    claimForm?.setAttribute('hidden', '');
+    codeBox?.setAttribute('hidden', '');
+    expiredWarn?.removeAttribute('hidden');
+  } else if (isOwnPass) {
     selfWarn?.removeAttribute('hidden');
     claimForm?.setAttribute('hidden', '');
     codeBox?.setAttribute('hidden', '');
@@ -2522,6 +2663,11 @@ async function openIncomingPassScreen(passId) {
     selfWarn?.setAttribute('hidden', '');
     claimForm?.setAttribute('hidden', '');
     renderPassOrderStatusBox(passData);
+  } else if (isAlreadyFighter) {
+    selfWarn?.setAttribute('hidden', '');
+    claimForm?.setAttribute('hidden', '');
+    codeBox?.setAttribute('hidden', '');
+    existingUpsell?.removeAttribute('hidden');
   } else {
     selfWarn?.setAttribute('hidden', '');
     codeBox?.setAttribute('hidden', '');
@@ -2994,10 +3140,22 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
     state.uiStage = Math.max(Number(state.uiStage || 1), 4);
     applyProgressiveDisclosureUI({ forceStage: 4 });
     syncUiStage(state.tg?.user, 4).catch(() => {});
+    const elapsedSec = Math.max(
+      1,
+      Math.min(30, Math.round(AIR_DURATION_SEC - Number(state.round.airLeft || 0)))
+    );
+    const screamerNames = {
+      weld: 'Сварка и падающая бочка',
+      lunge: 'Бросок из темноты',
+      siren_cam: 'Сирена цеха + Кадр жертвы',
+      custom_scream: 'Свой 2-сек крик из бочки',
+    };
     recordBarrelResult(state.incomingPack, {
       survived,
       attemptsUsed: state.round.attemptsUsed || 5,
       timeLeft: state.round.airLeft,
+      elapsedSec,
+      screamerLabel: screamerNames[state.round.screamerType] || 'Сварка и падающая бочка',
       viewerTgUser: state.tg.user,
     }).catch(() => {});
   }
@@ -3183,6 +3341,7 @@ async function handleSealBarrelClick() {
       mode: state.pack.mode,
       message: phrase,
       frameStyle: state.pack.frameStyle,
+      screamerType: state.pack.screamerType || 'weld',
       zoneId: state.pack.zoneId || 1,
       targetBarrelIndex: state.pack.targetBarrelIndex ?? -1,
       senderName,
@@ -3362,6 +3521,18 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
   const msgEl = document.getElementById('finale-message');
   const voiceRow = document.getElementById('finale-voice-row');
   const notifyEl = document.getElementById('finale-notify-line');
+  const victimCardBox = document.getElementById('finale-victim-card-box');
+  const victimCardImg = document.getElementById('victim-card-img');
+
+  if (!premiereResult && (!r.survived || r.screamerType === 'siren_cam')) {
+    if (!r.victimCardDataUrl) {
+      r.victimCardDataUrl = createVictimCardDataUrl(r.portraitDataUrl || DEMO_PORTRAITS[0]);
+    }
+    if (victimCardImg) victimCardImg.src = r.victimCardDataUrl;
+    victimCardBox?.removeAttribute('hidden');
+  } else {
+    victimCardBox?.setAttribute('hidden', '');
+  }
 
   if (premiereResult) {
     if (subtag) subtag.textContent = t('premiereRaceTag');
@@ -5504,6 +5675,85 @@ function bindUIEvents() {
       await rebuildPackPortraitPreview();
       Haptics.light();
     });
+  });
+
+  document.querySelectorAll('[data-pack-screamer]').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('[data-pack-screamer]').forEach((c) => c.classList.remove('is-active'));
+      chip.classList.add('is-active');
+      const nextScreamer = chip.getAttribute('data-pack-screamer') || 'weld';
+      state.pack.screamerType = nextScreamer;
+      state.round.screamerType = nextScreamer;
+      if (nextScreamer === 'custom_scream') {
+        showToast('🎙 Запиши 2-секундный крик ниже — он ударит по ушам при промахе!');
+      } else if (nextScreamer === 'siren_cam') {
+        showToast('🚨 Сирена цеха №19 + Авто-карточка жертвы активированы!');
+      }
+      Haptics.light();
+    });
+  });
+
+  document.getElementById('btn-upsell-invite-pair')?.addEventListener('click', () => {
+    openTelegramShare(
+      'https://bochka.quest/',
+      '🍿 Пойдём вдвоём в кино на триллер «БОЧКА» 17 декабря! Бери соседнее место:'
+    );
+    Haptics.light();
+  });
+
+  document.getElementById('btn-snap-victim-cam')?.addEventListener('click', async () => {
+    try {
+      if (navigator.mediaDevices?.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: 480, height: 480 },
+          audio: false,
+        });
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        video.muted = true;
+        await video.play();
+        const canvas = document.createElement('canvas');
+        canvas.width = 480;
+        canvas.height = 480;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, 480, 480);
+          ctx.strokeStyle = '#ff3b3b';
+          ctx.lineWidth = 10;
+          ctx.strokeRect(5, 5, 470, 470);
+          ctx.fillStyle = '#ff3b3b';
+          ctx.fillRect(0, 0, 480, 48);
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold 20px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('🚨 ЖЕРТВА ЦЕХА №19 // ПОЙМАН НА СКРИМЕРЕ', 240, 32);
+          state.round.victimCardDataUrl = canvas.toDataURL('image/webp', 0.86);
+        }
+        stream.getTracks().forEach((tr) => tr.stop());
+      } else {
+        state.round.victimCardDataUrl = createVictimCardDataUrl(state.round.portraitDataUrl);
+      }
+    } catch (_e) {
+      state.round.victimCardDataUrl = createVictimCardDataUrl(state.round.portraitDataUrl);
+    }
+    const imgEl = document.getElementById('victim-card-img');
+    if (imgEl && state.round.victimCardDataUrl) imgEl.src = state.round.victimCardDataUrl;
+    showToast('📸 Снимок «Жертва цеха №19» готов к отправке в чат!');
+    Haptics.success();
+  });
+
+  document.getElementById('btn-share-victim-card')?.addEventListener('click', async () => {
+    const shareUrl = state.pack.lastShareUrl || 'https://bochka.quest/';
+    const caption = '🚨 Меня поймала ловушка «Жертва цеха №19» в триллере «БОЧКА»! Попробуй выбраться за 3 удара:';
+    const res = await shareNativeOrFallback({
+      title: 'Жертва цеха №19 — БОЧКА',
+      text: caption,
+      url: shareUrl,
+    });
+    if (res === 'copied') {
+      openTelegramShare(shareUrl, caption);
+    }
+    Haptics.success();
   });
 
   const phraseInput = document.getElementById('input-custom-phrase');

@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0d0d'/%3E%3Crect x='8' y='4' width='16' height='24' rx='2' fill='none' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='11' x2='25' y2='11' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='21' x2='25' y2='21' stroke='%23eab308' stroke-width='2'/%3E%3C/svg%3E" />
   <title>БОЧКА — Заводской триллер | Вызволи друга за 3 удара ломом</title>
-  <meta name="bochka-build" content="v6.4.4-factory-evolution" />
+  <meta name="bochka-build" content="v6.5-screamers-and-ticket-guard" />
   <meta name="description" content="Четыре цеха завода, заваренные 200-литровые бочки и 30 секунд кислорода. Запиши фото и голос друга на дно бочки, проверь его слух и забери допуск на закрытую Премьеру 17 декабря." />
 
   <!-- Open Graph / Telegram / WhatsApp Link Preview -->
@@ -479,6 +479,45 @@
         ⛔ Это твоя собственная подарочная ссылка! Забрать подарок себе нельзя — перешли её другу в Telegram, чтобы мгновенно получить ×2 жизней.
       </div>
 
+      <!-- Авто-возврат билета владельцу через 24 часа -->
+      <div class="rescue-error-box" id="pass-expired-returned-warning" hidden>
+        ⏳ Срок активации этого подарка (24 часа) истёк — бесплатный билет автоматически вернулся владельцу, чтобы не сгореть впустую!
+      </div>
+
+      <!-- Экран для игрока, который УЖЕ есть в базе (total_strikes > 0): «Только для новичка» + Upsell 2-го билета рядом -->
+      <div class="golden-winner-box pass-code-box" id="pass-existing-player-upsell" hidden>
+        <span class="mono-tag accent-tag">ПРАВИЛО ЦЕХА // БЕСПЛАТНЫЙ БИЛЕТ ТОЛЬКО ДЛЯ НОВИЧКА</span>
+        <h3 class="section-title rescue-title" style="margin:8px 0 6px;">
+          🔥 ЭТОТ БОЕЦ УЖЕ В ЦЕХУ!
+        </h3>
+        <p class="golden-winner-contact" id="pass-existing-upsell-desc">
+          Выигранный билет работает только для новичка, которого ещё не было в базе (0 ударов). Но ты можешь купить второй билет на соседнее место для половинки или друга и пойти на премьеру «БОЧКИ» 17 декабря вдвоём!
+        </p>
+        <div class="finale-cta-stack" style="margin-top:10px;">
+          <a
+            class="btn-primary btn-full"
+            id="btn-upsell-buy-kp"
+            href="https://www.kinopoisk.ru/film/11226275/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            🎟 КУПИТЬ 2-Й БИЛЕТ РЯДОМ (КИНОПОИСК / КАССА) ↗
+          </a>
+          <a
+            class="btn-secondary btn-full"
+            id="btn-upsell-buy-ticketon"
+            href="https://ticketon.kz/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            🎟 КУПИТЬ 2-Й БИЛЕТ РЯДОМ (FREEDOM TICKETON) ↗
+          </a>
+          <button type="button" class="btn-secondary btn-full" id="btn-upsell-invite-pair">
+            💑 ПОЗВАТЬ С СОБОЙ В КИНО НА 17 ДЕКАБРЯ (TELEGRAM)
+          </button>
+        </div>
+      </div>
+
       <!-- Форма подтверждения контакта Telegram + Город/кинотеатр -->
       <div class="pass-claim-form" id="pass-claim-form" hidden>
         <p class="modal-hint pass-claim-desc">
@@ -632,6 +671,16 @@
               <button type="button" class="chip" data-pack-barrel="1">№19</button>
               <button type="button" class="chip" data-pack-barrel="2">№97</button>
               <button type="button" class="chip" data-pack-barrel="3">№12</button>
+            </div>
+          </div>
+
+          <div class="frame-picker" id="pack-screamer-picker">
+            <span class="mono-label">ЛОВУШКА-СКРИМЕР ПРИ ПРОМАХЕ ДРУГА:</span>
+            <div class="frame-chips">
+              <button type="button" class="chip is-active" data-pack-screamer="weld">⚡ 1. Сварка и падающая бочка</button>
+              <button type="button" class="chip" data-pack-screamer="lunge">🐕 2. Бросок из темноты</button>
+              <button type="button" class="chip" data-pack-screamer="siren_cam">🚨 3. Сирена цеха + Кадр жертвы</button>
+              <button type="button" class="chip" data-pack-screamer="custom_scream">🎙 4. Свой 2-сек крик / видео</button>
             </div>
           </div>
         </div>
@@ -829,6 +878,26 @@
       <p class="finale-notify-line" id="finale-notify-line" data-i18n="finaleNotified">
         Отправителю ушёл сигнал о твоём результате (+2 жизни на его счёт!).
       </p>
+
+      <!-- Авто-карточка «Жертва цеха №19» при срабатывании скримера «Сирена цеха + Кадр жертвы» (v6.5) -->
+      <div class="spoiler-report-box" id="finale-victim-card-box" hidden>
+        <div class="spoiler-report-head">
+          <span class="mono-tag danger-tag">🚨 ЖЕРТВА ЦЕХА №19 // ПОЙМАН НА СКРИМЕРЕ</span>
+          <span class="mono-label">КАДР РЕАКЦИИ ДЛЯ ПЕРЕСЫЛКИ В ЧАТ:</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin:8px 0;">
+          <img id="victim-card-img" alt="Кадр жертвы цеха №19" style="width:92px;height:92px;object-fit:cover;border:1px solid #ef4444;" />
+          <div style="flex:1;">
+            <small id="victim-card-caption" style="display:block;margin-bottom:6px;color:#fca5a5;">
+              Скример сработал! Сними кадр своей реакции с фронталки или отправь карточку «Жертва цеха №19» в чат:
+            </small>
+            <div class="spoiler-report-actions">
+              <button type="button" class="btn-secondary btn-compact" id="btn-snap-victim-cam">📸 СНЯТЬ РЕАКЦИЮ С ФРОНТАЛКИ</button>
+              <button type="button" class="btn-primary btn-compact" id="btn-share-victim-card">📤 КАРТОЧКУ В ЧАТ</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <!-- Генератор спойлеробезопасного отчёта смены для вставки в чат в 1 клик (v6.4) -->
       <div class="spoiler-report-box" id="finale-spoiler-report-box">

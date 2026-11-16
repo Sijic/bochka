@@ -2166,6 +2166,32 @@ export class WorkshopScene {
     }
   }
 
+  triggerWeldDropImpact(index = 0) {
+    const b = this.barrels[index] || this.barrels[0];
+    this.wiringArcFlash = 1.5;
+    this.shakeIntensity = Math.max(this.shakeIntensity, 0.56);
+    this._impulseChains(2.1);
+    if (b) {
+      const s = b.group.scale.y || 1;
+      const origin = b.group.position.clone().add(new THREE.Vector3(0, 1.38 * s, 0));
+      this._spawnSparks(origin, 34);
+      this._spawnRustDust(origin, 18);
+    }
+  }
+
+  triggerDarkLungeImpulse(index = 0) {
+    const b = this.barrels[index] || this.barrels[0];
+    this.shakeIntensity = Math.max(this.shakeIntensity, 0.48);
+    this.swayCurrent.y -= 0.22;
+    this._impulseChains(1.8);
+    if (b) {
+      const s = b.group.scale.y || 1;
+      const origin = b.group.position.clone().add(new THREE.Vector3(0, 1.42 * s, 0.25));
+      this._spawnRustDust(origin, 28);
+      this._spawnSparks(origin, 16);
+    }
+  }
+
   triggerSteamHazardBurst(index) {
     const b = this.barrels[index];
     if (!b) return;
