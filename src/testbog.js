@@ -181,9 +181,11 @@ export function mountTestBogHUD(hooks) {
       <div class="tbog-grid">
         <button type="button" class="tbog-btn tbog-btn-gold" data-tbog-jump="temu88">🔥 Анимация 88.0% (Ст.3)</button>
         <button type="button" class="tbog-btn" data-tbog-jump="gate">🚪 1. Входной шлюз</button>
-        <button type="button" class="tbog-btn" data-tbog-jump="demo">🛢 Ур. 1 (3 бочки)</button>
-        <button type="button" class="tbog-btn" data-tbog-jump="level8">🛢 Ур. 8 (10 бочек)</button>
-        <button type="button" class="tbog-btn tbog-btn-gold" data-tbog-jump="blitz">⚡ Блиц 10Б (Ур.9+)</button>
+        <button type="button" class="tbog-btn" data-tbog-jump="zone1">🛢 Ур.1 Шлюз (3 бочки)</button>
+        <button type="button" class="tbog-btn" data-tbog-jump="zone2">💨 Ур.2 Конвейер (6Б·Пар)</button>
+        <button type="button" class="tbog-btn" data-tbog-jump="zone3">🚨 Ур.3 Котельная (9Б)</button>
+        <button type="button" class="tbog-btn tbog-btn-gold" data-tbog-jump="zone4">⚡ Ур.4 Пресс-цех (12Б)</button>
+        <button type="button" class="tbog-btn tbog-btn-gold" data-tbog-jump="blitz">⚡ Блиц 12Б (Ур.8+)</button>
         <button type="button" class="tbog-btn tbog-btn-gold" data-tbog-jump="duel">⚔️ Стол «На счёт три!»</button>
         <button type="button" class="tbog-btn tbog-btn-gold" data-tbog-jump="leaders">🏆 Рейтинг ТОП-10</button>
         <button type="button" class="tbog-btn" data-tbog-jump="sharehub">📤 Шеринг + Трейлер</button>

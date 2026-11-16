@@ -62,6 +62,8 @@ import {
   claimSocialOrPromoBonus,
   fetchPremiereLeaderboard,
   fetchPublicRaffleTransparency,
+  getPlayerRecoveryCode,
+  restoreProfileByRecoveryCode,
 } from './backend.js';
 import { WorkshopDuelController, createBarrelWatchChannel } from './duel.js';
 import { mountTestBogHUD } from './testbog.js';
@@ -76,20 +78,29 @@ const OFFICIAL_YT_TRAILER_ID = (ENV.youtubeFallbackId && !STALE_YT_IDS.has(ENV.y
 const OFFICIAL_YT_WATCH_URL = `https://www.youtube.com/watch?v=${OFFICIAL_YT_TRAILER_ID}`;
 
 const SCREAMER_META = [
-  { key: 'hand', img: resolveSiteAsset('assets/keyed/screamer_hand.webp'), i18n: 'screamerHand' },
-  { key: 'pastor', img: resolveSiteAsset('assets/keyed/screamer_pastor.webp'), i18n: 'screamerPastor' },
-  { key: 'father', img: resolveSiteAsset('assets/keyed/screamer_father.webp'), i18n: 'screamerFather' },
-  { key: 'blogger', img: resolveSiteAsset('assets/keyed/screamer_blogger.webp'), i18n: 'screamerBlogger' },
+  { key: 'steam', i18n: 'screamerHand' },
+  { key: 'valve', i18n: 'screamerPastor' },
+  { key: 'rust', i18n: 'screamerFather' },
+  { key: 'arc', i18n: 'screamerBlogger' },
 ];
-const SCREAMER_IMAGE_CACHE = new Map();
-if (typeof Image !== 'undefined') {
-  SCREAMER_META.forEach((meta) => {
-    const pre = new Image();
-    pre.decoding = 'async';
-    pre.src = meta.img;
-    SCREAMER_IMAGE_CACHE.set(meta.key, pre);
-  });
-}
+
+const VOICE_PROMPT_PACKS = [
+  [
+    '🗣 «Брат, я во второй слева, клянусь!»',
+    '🗣 «Не бей по ржавой — там пар!»',
+    '🗣 «Слушай дыхание у самого дна...»',
+  ],
+  [
+    '🗣 «Стучу ключом по ободу, слышишь?!»',
+    '🗣 «Крышка №19 пустая, ищи правее!»',
+    '🗣 «Кислород кончается, бей с размаху!»',
+  ],
+  [
+    '🗣 «В котельной эхо, слушай паузу!»',
+    '🗣 «Тут заварено наглухо, давай ломом!»',
+    '🗣 «На небе только и разговоров, что о море...»',
+  ],
+];
 
 const state = {
   tg: null,
@@ -132,11 +143,18 @@ const state = {
   round: {
     modeType: 'demo',
     isDemo: true,
-    barrelCount: 6,
+    zoneId: 1,
+    barrelCount: 3,
     workshopLevel: 1,
     isBlitz: false,
     blitzTargetsCleared: 0,
     targetIndex: 0,
+    steamHazardIndex: -1,
+    micBlowUsed: false,
+    strikeLog: [],
+    isDailyShift: false,
+    dailyShiftCode: '',
+    startedAtMs: 0,
     attemptsLeft: 3,
     attemptsUsed: 0,
     rescueStage: 0, // 0: базовые 3 удара, 1: ждём Кинопоиск, 2: 4-й удар, 3: ждём Трейлер, 4: 5-й победный удар
@@ -149,6 +167,7 @@ const state = {
     reactionLocked: false,
     portraitDataUrl: '',
     voiceUrl: '',
+    useBarrelFilter: true,
     message: '',
     senderLabel: '',
     lastUrgentSec: 9,
@@ -167,10 +186,7 @@ const state = {
   },
 
   screamerCursor: 0,
-  fatherBubbleInterval: null,
-  fatherBubbleInitialTimer: null,
-  fatherBubbleHideTimer: null,
-  fatherBubbleCursor: 0,
+  voicePromptCursor: 0,
 
   // Сверка отметки «Буду смотреть» по отсутствию на вкладке >= 3.5 сек (+ 4.5 сек фоллбэк WebView)
   kpSync: {
@@ -214,6 +230,8 @@ const state = {
   pack: {
     mode: 'friend',
     frameStyle: 'flashlight',
+    zoneId: 1,
+    useBarrelFilter: true,
     rawSource: null,
     processed: null,
     voice: null,
@@ -253,21 +271,79 @@ let scene = null;
 let voiceRecorder = null;
 let duelCtrl = null;
 
+function getFactoryZoneSpecByZoneId(rawZoneId = 1) {
+  const z = Math.max(1, Math.min(4, Math.round(Number(rawZoneId || 1))));
+  if (z === 1) {
+    return {
+      zoneId: 1,
+      barrelCount: 3,
+      airSec: 30.0,
+      hasSteamHazard: false,
+      numbersObscured: false,
+      canMicBlow: false,
+      zoneTitle: t('zone1Name') || 'УР.1 · РАЗГРУЗОЧНЫЙ ШЛЮЗ',
+    };
+  }
+  if (z === 2) {
+    return {
+      zoneId: 2,
+      barrelCount: 6,
+      airSec: 28.0,
+      hasSteamHazard: true,
+      numbersObscured: false,
+      canMicBlow: false,
+      zoneTitle: t('zone2Name') || 'УР.2 · СБОРОЧНЫЙ КОНВЕЙЕР',
+    };
+  }
+  if (z === 3) {
+    return {
+      zoneId: 3,
+      barrelCount: 9,
+      airSec: 27.0,
+      hasSteamHazard: false,
+      numbersObscured: false,
+      canMicBlow: false,
+      zoneTitle: t('zone3Name') || 'УР.3 · ЗАТОПЛЕННАЯ КОТЕЛЬНАЯ',
+    };
+  }
+  return {
+    zoneId: 4,
+    barrelCount: 12,
+    airSec: 26.0,
+    hasSteamHazard: false,
+    numbersObscured: true,
+    canMicBlow: true,
+    zoneTitle: t('zone4Name') || 'УР.4 · ПРЕСС-ЦЕХ (19·97)',
+  };
+}
+
 function getWorkshopLevelSpec(rawLevel = 1) {
   const level = Math.max(1, Math.round(Number(rawLevel || 1)));
-  if (level <= 8) {
-    const barrelCount = Math.min(10, level + 2); // Ур.1 = 3 бочки ... Ур.8 = 10 бочек!
+  if (level === 1) {
+    const z = getFactoryZoneSpecByZoneId(1);
+    return { level, ...z, isBlitz: false };
+  }
+  if (level === 2) {
+    const z = getFactoryZoneSpecByZoneId(2);
+    return { level, ...z, isBlitz: false };
+  }
+  if (level === 3) {
+    const z = getFactoryZoneSpecByZoneId(3);
+    return { level, ...z, isBlitz: false };
+  }
+  const z4 = getFactoryZoneSpecByZoneId(4);
+  if (level <= 7) {
     return {
       level,
-      barrelCount,
+      ...z4,
       isBlitz: false,
-      airSec: Math.max(22.0, 32.0 - level),
+      airSec: Math.max(24.0, 29.0 - level * 0.6),
     };
   }
   return {
     level,
-    barrelCount: 10,
-    isBlitz: true, // Ур. 9+: Чистая игра на время и комбо-очки на 10 бочках!
+    ...z4,
+    isBlitz: true,
     airSec: 25.0,
   };
 }
@@ -435,11 +511,29 @@ async function bootstrap() {
   onLangChange(() => {
     updateControlHintText();
     renderPresetChips();
+    renderVoicePromptChips();
     refreshSoundButtonLabel();
     refreshQuestUI();
     syncExternalLikeButtonsUI();
     applyProgressiveDisclosureUI();
+    scene?.setWallQuoteText?.(t('wallSeaQuote'));
   });
+
+  if (typeof window !== 'undefined') {
+    window.__bochkaDebug = {
+      getState: () => state,
+      getScene: () => scene,
+      getZoneState: () => scene?.getZoneState?.() || null,
+      setZoneLevel: async (lvl) => {
+        state.entered = true;
+        state.profile.currentLevel = lvl;
+        await startDemoRound();
+        return scene?.getZoneState?.() || null;
+      },
+      triggerMicBlow: () => triggerWorkshopMicBlow(),
+      startDailyShift: () => startDailyShiftRound(),
+    };
+  }
 
   // Предзагрузка входящей вирусной бочки (?b=jakaqgx или startapp=jakaqgx)
   if (state.incomingParam) {
@@ -599,14 +693,24 @@ async function bootstrap() {
         await audio.unlock(true);
         refreshSoundButtonLabel();
 
-        if (target === 'demo') {
+        if (target === 'demo' || target === 'zone1') {
+          state.profile = patchTestBogProfile({ currentLevel: 1 });
+          updatePremiereBarsUI();
           await startDemoRound();
-        } else if (target === 'level8') {
-          state.profile = patchTestBogProfile({ currentLevel: 8 });
+        } else if (target === 'zone2') {
+          state.profile = patchTestBogProfile({ currentLevel: 2 });
+          updatePremiereBarsUI();
+          await startDemoRound();
+        } else if (target === 'zone3') {
+          state.profile = patchTestBogProfile({ currentLevel: 3 });
+          updatePremiereBarsUI();
+          await startDemoRound();
+        } else if (target === 'zone4' || target === 'level8') {
+          state.profile = patchTestBogProfile({ currentLevel: 4 });
           updatePremiereBarsUI();
           await startDemoRound();
         } else if (target === 'blitz') {
-          state.profile = patchTestBogProfile({ currentLevel: 9 });
+          state.profile = patchTestBogProfile({ currentLevel: 8 });
           applyProgressiveDisclosureUI();
           updatePremiereBarsUI();
           await startDemoRound();
@@ -761,9 +865,11 @@ function showScreen(name) {
   if (name !== 'workshop') {
     document.getElementById('barrel-reticle')?.setAttribute('hidden', '');
     document.getElementById('hud-watch-banner')?.setAttribute('hidden', '');
+    document.getElementById('hud-mic-blow-box')?.setAttribute('hidden', '');
     closeActiveWatchChannel();
     audio.stopListening();
     audio.stopMuffledVoiceLoop();
+    audio.stopMicBlowDetector?.();
     if (!duelCtrl?.isActive) {
       scene?.setInteractive(false);
     }
@@ -843,26 +949,29 @@ async function startNewbieOnboardingRound() {
   const pickIdx = Math.floor(Math.random() * DEMO_PORTRAITS.length);
   const charMeta = Array.isArray(demoChars) && demoChars[pickIdx]
     ? demoChars[pickIdx]
-    : { name: 'УЗНИК ЦЕХА', quote: 'Смотри «Бочку» в кино с 17 декабря.' };
+    : { name: 'РАБОЧИЙ ШЛЮЗА', quote: 'Слышишь стук? Бей ломом по крышке!' };
 
   const graded = await processPortraitToWebP(DEMO_PORTRAITS[pickIdx], 'flashlight');
-  const candidates = [];
-  for (let i = 0; i < 6; i++) {
-    if (BARREL_BATCH_CODES[i] !== '19') candidates.push(i);
-  }
-  const pool = candidates.length ? candidates : [0];
-  const targetIndex = pool[Math.floor(Math.random() * pool.length)];
+  const candidates = [0, 2];
+  const targetIndex = candidates[Math.floor(Math.random() * candidates.length)];
 
   await audio.setSenderVoiceUrl('');
 
   state.round = {
-    modeType: 'viral',
+    modeType: 'demo',
     isDemo: true,
-    barrelCount: 6,
+    zoneId: 1,
+    barrelCount: 3,
     workshopLevel: 1,
     isBlitz: false,
     blitzTargetsCleared: 0,
     targetIndex,
+    steamHazardIndex: -1,
+    micBlowUsed: false,
+    strikeLog: [],
+    isDailyShift: false,
+    dailyShiftCode: '',
+    startedAtMs: performance.now(),
     attemptsLeft: 3,
     attemptsUsed: 0,
     rescueStage: 0,
@@ -875,13 +984,14 @@ async function startNewbieOnboardingRound() {
     reactionLocked: false,
     portraitDataUrl: graded.dataUrl,
     voiceUrl: '',
+    useBarrelFilter: true,
     message: charMeta.quote,
     senderLabel: charMeta.name,
     lastUrgentSec: 9,
   };
 
   const tagEl = document.getElementById('hud-mode-tag');
-  if (tagEl) tagEl.textContent = t('modeATag');
+  if (tagEl) tagEl.textContent = `${t('zone1Name')} // 3 БОЧКИ`;
   const titleEl = document.getElementById('hud-urgent-title');
   if (titleEl) titleEl.textContent = t('stage1TaskLine');
   document.getElementById('btn-hud-pack')?.setAttribute('hidden', '');
@@ -909,16 +1019,29 @@ async function startDemoRound() {
   const pool = candidates.length ? candidates : [0];
   const targetIndex = pool[Math.floor(Math.random() * pool.length)];
 
+  let steamHazardIndex = -1;
+  if (spec.hasSteamHazard) {
+    const hazardPool = pool.filter((idx) => idx !== targetIndex);
+    steamHazardIndex = hazardPool.length ? hazardPool[Math.floor(Math.random() * hazardPool.length)] : -1;
+  }
+
   await audio.setSenderVoiceUrl('');
 
   state.round = {
     modeType: 'demo',
     isDemo: true,
+    zoneId: spec.zoneId,
     barrelCount: spec.barrelCount,
     workshopLevel: spec.level,
     isBlitz: spec.isBlitz,
     blitzTargetsCleared: 0,
     targetIndex,
+    steamHazardIndex,
+    micBlowUsed: false,
+    strikeLog: [],
+    isDailyShift: false,
+    dailyShiftCode: '',
+    startedAtMs: performance.now(),
     attemptsLeft: spec.isBlitz ? 5 : 3,
     attemptsUsed: 0,
     rescueStage: 0,
@@ -931,17 +1054,93 @@ async function startDemoRound() {
     reactionLocked: false,
     portraitDataUrl: graded.dataUrl,
     voiceUrl: '',
+    useBarrelFilter: true,
     message: charMeta.quote,
     senderLabel: charMeta.name,
     lastUrgentSec: 9,
   };
 
   document.getElementById('hud-mode-tag').textContent = spec.isBlitz
-    ? `УРОВЕНЬ ${spec.level} // ⚡ БЛИЦ 10 БОЧЕК НА ВРЕМЯ`
-    : `УРОВЕНЬ ${spec.level} // ${spec.barrelCount} ${formatBarrelWord(spec.barrelCount)} В ЦЕХУ`;
+    ? `${spec.zoneTitle} // ⚡ БЛИЦ 12 БОЧЕК`
+    : `${spec.zoneTitle} // ${spec.barrelCount} ${formatBarrelWord(spec.barrelCount)}`;
   document.getElementById('hud-urgent-title').textContent = spec.isBlitz
-    ? 'БЛИЦ НА ВРЕМЯ И ОЧКИ: НАХОДИ ЖИВЫЕ БОЧКИ ПОДРЯД (+3.5 СЕК И КОМБО ⭐)!'
-    : `НАЙДИ ЖИВУЮ БОЧКУ ИЗ ${spec.barrelCount} ПО СТУКУ ЗА 3 ПОПЫТКИ (+⭐ В ТОП-10)`;
+    ? 'БЛИЦ В ПРЕСС-ЦЕХУ: НАХОДИ ЖИВЫЕ БОЧКИ ПОДРЯД (+3.5 СЕК И КОМБО ⭐)!'
+    : spec.zoneId === 2
+      ? `КОНВЕЙЕР (${spec.barrelCount} БОЧЕК): ОСТОРОЖНО, ТРУБА С ПАРОМ ОТНИМАЕТ −4 СЕК O₂!`
+      : spec.zoneId === 3
+        ? `ЗАТОПЛЕННАЯ КОТЕЛЬНАЯ (${spec.barrelCount} БОЧЕК): ГУЛКОЕ ЭХО И МИГАЮЩАЯ ТРЕВОГА!`
+        : spec.zoneId === 4
+          ? `ПРЕСС-ЦЕХ (${spec.barrelCount} БОЧЕК): ДУНЬ В МИКРОФОН 💨, ЧТОБЫ СДУТЬ ПАР С НОМЕРОВ (+4с O₂)!`
+          : `НАЙДИ ЖИВУЮ БОЧКУ ИЗ ${spec.barrelCount} ПО СТУКУ ЗА 3 ПОПЫТКИ (+⭐ В ТОП-10)`;
+  document.getElementById('btn-hud-pack')?.removeAttribute('hidden');
+  document.getElementById('hud-premiere-strip')?.setAttribute('hidden', '');
+  configureBottomAttemptsMode('squares');
+
+  launchWorkshopGameplay(false);
+}
+
+async function startDailyShiftRound() {
+  state.entered = true;
+  await audio.unlock(true);
+  refreshSoundButtonLabel();
+
+  const now = new Date();
+  const dateCode = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
+  let hash = 2166136261;
+  for (let i = 0; i < dateCode.length; i++) {
+    hash ^= dateCode.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  const seed = Math.abs(hash);
+  const zoneId = (seed % 3) + 2; // Ур. 2, 3 или 4 для дневной смены
+  const zoneSpec = getFactoryZoneSpecByZoneId(zoneId);
+  const targetIndex = seed % zoneSpec.barrelCount;
+  const steamHazardIndex = zoneId === 2 ? (targetIndex + 2) % zoneSpec.barrelCount : -1;
+
+  const demoChars = t('demoChars');
+  const pickIdx = seed % DEMO_PORTRAITS.length;
+  const charMeta = Array.isArray(demoChars) && demoChars[pickIdx]
+    ? demoChars[pickIdx]
+    : { name: 'СМЕНА ДНЯ', quote: 'Единый расклад цеха на 24 часа!' };
+  const graded = await processPortraitToWebP(DEMO_PORTRAITS[pickIdx], 'thermal');
+
+  await audio.setSenderVoiceUrl('');
+
+  state.round = {
+    modeType: 'demo',
+    isDemo: true,
+    zoneId,
+    barrelCount: zoneSpec.barrelCount,
+    workshopLevel: zoneId,
+    isBlitz: false,
+    blitzTargetsCleared: 0,
+    targetIndex,
+    steamHazardIndex,
+    micBlowUsed: false,
+    strikeLog: [],
+    isDailyShift: true,
+    dailyShiftCode: dateCode,
+    startedAtMs: performance.now(),
+    attemptsLeft: 3,
+    attemptsUsed: 0,
+    rescueStage: 0,
+    airLeft: zoneSpec.airSec,
+    running: true,
+    pausedForModal: false,
+    pausedForOcean: false,
+    strikeBusy: false,
+    survived: false,
+    reactionLocked: false,
+    portraitDataUrl: graded.dataUrl,
+    voiceUrl: '',
+    useBarrelFilter: true,
+    message: charMeta.quote,
+    senderLabel: `📅 СМЕНА ДНЯ (${dateCode})`,
+    lastUrgentSec: 9,
+  };
+
+  document.getElementById('hud-mode-tag').textContent = `📅 СМЕНА ДНЯ (${dateCode}) // ${zoneSpec.zoneTitle}`;
+  document.getElementById('hud-urgent-title').textContent = `ЕДИНЫЙ РАСКЛАД НА 24 ЧАСА: ВСКРОЙ СВОЮ БОЧКУ ИЗ ${zoneSpec.barrelCount} И СРАВНИ ОТЧЁТ В ЧАТЕ!`;
   document.getElementById('btn-hud-pack')?.removeAttribute('hidden');
   document.getElementById('hud-premiere-strip')?.setAttribute('hidden', '');
   configureBottomAttemptsMode('squares');
@@ -959,19 +1158,33 @@ async function startViralFriendRound(pack) {
   const voiceUrl = pack?.voiceUrl || '';
   await audio.setSenderVoiceUrl(voiceUrl);
 
+  const packZoneId = Math.max(1, Math.min(4, Number(pack?.zoneId || 2)));
+  const zoneSpec = getFactoryZoneSpecByZoneId(packZoneId);
+  const viralBarrelCount = Math.max(6, zoneSpec.barrelCount);
+
   const initialTarget =
-    typeof pack?.targetIndex === 'number' && pack.targetIndex >= 0 && pack.targetIndex < 6
+    typeof pack?.targetIndex === 'number' && pack.targetIndex >= 0 && pack.targetIndex < viralBarrelCount
       ? pack.targetIndex
-      : Math.floor(Math.random() * 6);
+      : Math.floor(Math.random() * viralBarrelCount);
+
+  const steamHazardIndex =
+    packZoneId === 2 ? (initialTarget + 1) % viralBarrelCount : -1;
 
   state.round = {
     modeType: 'viral',
     isDemo: false,
-    barrelCount: 6,
-    workshopLevel: 1,
+    zoneId: packZoneId,
+    barrelCount: viralBarrelCount,
+    workshopLevel: packZoneId,
     isBlitz: false,
     blitzTargetsCleared: 0,
     targetIndex: initialTarget,
+    steamHazardIndex,
+    micBlowUsed: false,
+    strikeLog: [],
+    isDailyShift: false,
+    dailyShiftCode: '',
+    startedAtMs: performance.now(),
     attemptsLeft: 3,
     attemptsUsed: 0,
     rescueStage: 0,
@@ -984,12 +1197,13 @@ async function startViralFriendRound(pack) {
     reactionLocked: false,
     portraitDataUrl,
     voiceUrl,
+    useBarrelFilter: true,
     message: pack?.message || t('presetsSelf')[0],
     senderLabel: pack?.senderName ? `${t('revealFromFriend')} · ${pack.senderName}` : t('revealFromFriend'),
     lastUrgentSec: 9,
   };
 
-  document.getElementById('hud-mode-tag').textContent = t('modeBTag');
+  document.getElementById('hud-mode-tag').textContent = `${t('modeBTag')} // ${zoneSpec.zoneTitle}`;
   document.getElementById('hud-urgent-title').textContent = state.uiStage <= 2 ? t('stage1TaskLine') : t('modeBTitle');
   document.getElementById('btn-hud-pack')?.setAttribute('hidden', '');
   document.getElementById('hud-premiere-strip')?.setAttribute('hidden', '');
@@ -1059,11 +1273,18 @@ async function startPremiereRaceRound() {
   state.round = {
     modeType: 'premiere',
     isDemo: false,
+    zoneId: 4,
     barrelCount: 6,
-    workshopLevel: state.profile.currentLevel || 1,
+    workshopLevel: state.profile.currentLevel || 4,
     isBlitz: false,
     blitzTargetsCleared: 0,
     targetIndex: Math.floor(Math.random() * 6),
+    steamHazardIndex: -1,
+    micBlowUsed: false,
+    strikeLog: [],
+    isDailyShift: false,
+    dailyShiftCode: '',
+    startedAtMs: performance.now(),
     attemptsLeft: state.profile.lives,
     attemptsUsed: 0,
     rescueStage: 0,
@@ -1076,6 +1297,7 @@ async function startPremiereRaceRound() {
     reactionLocked: false,
     portraitDataUrl: goldenEmblem,
     voiceUrl: '',
+    useBarrelFilter: true,
     message: t('nightShiftEmptyMsg'),
     senderLabel: t('premiereRaceTag'),
     lastUrgentSec: 9,
@@ -1143,8 +1365,8 @@ function updatePremiereBarsUI() {
   const startLbl = document.getElementById('btn-start-level-label');
   if (startLbl) {
     startLbl.textContent = spec.isBlitz
-      ? `⚡ УРОВЕНЬ ${spec.level} · БЛИЦ 10 БОЧЕК НА ВРЕМЯ (+⭐)`
-      : `▶ УРОВЕНЬ ${spec.level} · ${spec.barrelCount} ${formatBarrelWord(spec.barrelCount)} (+⭐ В ТОП-10)`;
+      ? `⚡ УРОВЕНЬ ${spec.level} · БЛИЦ 12 БОЧЕК В ПРЕСС-ЦЕХУ (+⭐)`
+      : `▶ ${spec.zoneTitle} · ${spec.barrelCount} ${formatBarrelWord(spec.barrelCount)} (+⭐ В ТОП-10)`;
   }
 
   const finLeaderBtn = document.getElementById('btn-finale-leaderboard');
@@ -1182,31 +1404,91 @@ function spawnFloatingScorePopup(delta, barrelIndex = -1, customLabel = '') {
   window.setTimeout(() => pop.remove(), 980);
 }
 
+function triggerWorkshopMicBlow() {
+  if (!state.round.running || state.round.micBlowUsed) return false;
+  state.round.micBlowUsed = true;
+  scene?.clearSteamFromBarrels?.();
+  audio.playAirBlowWhoosh?.();
+  audio.stopMicBlowDetector?.();
+
+  state.round.airLeft = Math.min(35.0, (state.round.airLeft || 20.0) + 4.0);
+  updateAirHUD(state.round.airLeft);
+
+  const blowBtn = document.getElementById('btn-hud-mic-blow');
+  const blowFill = document.getElementById('hud-mic-blow-fill');
+  if (blowBtn) {
+    blowBtn.disabled = true;
+    blowBtn.textContent = t('micBlowDone') || '✓ ПАР СДУТ (+4 СЕК O₂)';
+  }
+  if (blowFill) blowFill.style.width = '100%';
+
+  Haptics.success();
+  showToast('💨 Пар сдут с номеров бочек! +4 сек кислорода O₂');
+  return true;
+}
+
 function launchWorkshopGameplay(golden = false) {
   stopAirTimer();
   state.easterCombo = { stage: 0, lastAt: 0, knocks: 0 };
+  if (!state.round.startedAtMs) state.round.startedAtMs = performance.now();
+  if (!Array.isArray(state.round.strikeLog)) state.round.strikeLog = [];
   document.getElementById('modal-rescue')?.setAttribute('hidden', '');
   renderAttemptSquares(state.round.attemptsLeft, state.round.isBlitz ? 5 : 3);
   updateAirHUD(state.round.airLeft);
 
+  const zoneId = state.round.zoneId || 1;
   scene.resetRound({
-    barrelCount: state.round.barrelCount || 6,
+    barrelCount: state.round.barrelCount || 3,
     targetIndex: state.round.targetIndex,
     portraitUrl: state.round.portraitDataUrl,
     golden,
   });
+  scene.setWorkshopLevelDecor?.(state.round.workshopLevel || zoneId, state.round.modeType, {
+    zoneId,
+    steamHazardIndex: state.round.steamHazardIndex ?? -1,
+    numbersObscured: zoneId === 4 && !state.round.micBlowUsed,
+    wallQuoteText: t('wallSeaQuote'),
+  });
+  audio.setFactoryZoneAcoustics?.(zoneId);
   audio.setBarrelLayout(scene.getBarrelWorldPositions(), state.round.targetIndex);
   scene.setInteractive(true);
-  scene.setWorkshopLevelDecor?.(state.round.workshopLevel || 1, state.round.modeType);
   scene.setClockUrgency?.({
-    airActive: state.uiStage > 2,
+    airActive: state.uiStage > 2 || zoneId >= 2,
     airLeft: state.round.airLeft,
     isBlitz: Boolean(state.round.isBlitz),
   });
 
+  const micBox = document.getElementById('hud-mic-blow-box');
+  const micBtn = document.getElementById('btn-hud-mic-blow');
+  const micFill = document.getElementById('hud-mic-blow-fill');
+  audio.stopMicBlowDetector?.();
+  if (zoneId === 4 && state.round.modeType !== 'premiere') {
+    micBox?.removeAttribute('hidden');
+    if (micBtn) {
+      micBtn.disabled = Boolean(state.round.micBlowUsed);
+      micBtn.textContent = state.round.micBlowUsed
+        ? (t('micBlowDone') || '✓ ПАР СДУТ (+4 СЕК O₂)')
+        : (t('micBlowBtn') || '💨 ДУНЬ В МИКРОФОН / СДУТЬ ПАР (+4с O₂)');
+    }
+    if (micFill) micFill.style.width = state.round.micBlowUsed ? '100%' : '0%';
+    if (!state.round.micBlowUsed) {
+      audio.startMicBlowDetector?.({
+        onLevel: (lvl) => {
+          if (micFill && !state.round.micBlowUsed) {
+            micFill.style.width = `${Math.round(lvl * 100)}%`;
+          }
+        },
+        onBlow: () => {
+          triggerWorkshopMicBlow();
+        },
+      });
+    }
+  } else {
+    micBox?.setAttribute('hidden', '');
+  }
+
   showScreen('workshop');
   startAirCountdownLoop();
-  startFatherBubbleLoop();
 }
 
 function reloadPremiereBarrelsWave() {
@@ -1226,7 +1508,7 @@ function reloadPremiereBarrelsWave() {
 
 function startAirCountdownLoop() {
   stopAirTimer();
-  if (state.uiStage <= 2) return;
+  if (state.uiStage <= 2 && (state.round.zoneId || 1) === 1 && !state.round.isDailyShift) return;
   let lastTs = performance.now();
   state.airInterval = window.setInterval(() => {
     if (!state.round.running || state.round.pausedForModal) {
@@ -1288,7 +1570,7 @@ function handleAirDepleted() {
     return;
   }
 
-  // В режиме Блиц (Уровень 9+), если за время нашли хотя бы 1 живую бочку — уровень засчитывается как успешный с комбо-очками!
+  // В режиме Блиц (Уровень 8+), если за время нашли хотя бы 1 живую бочку — уровень засчитывается как успешный с комбо-очками!
   if (r.isBlitz && r.blitzTargetsCleared > 0) {
     finishRound(true, { diveBarrelIndex: -1, hitTarget: false });
     return;
@@ -1320,77 +1602,7 @@ function stopAirTimer() {
     clearInterval(state.airInterval);
     state.airInterval = null;
   }
-  stopFatherBubbleLoop();
   scene?.setClockUrgency?.({ airActive: false, airLeft: state.round.airLeft, isBlitz: false });
-}
-
-function stopFatherBubbleLoop() {
-  if (state.fatherBubbleInterval) {
-    clearInterval(state.fatherBubbleInterval);
-    state.fatherBubbleInterval = null;
-  }
-  if (state.fatherBubbleInitialTimer) {
-    clearTimeout(state.fatherBubbleInitialTimer);
-    state.fatherBubbleInitialTimer = null;
-  }
-  if (state.fatherBubbleHideTimer) {
-    clearTimeout(state.fatherBubbleHideTimer);
-    state.fatherBubbleHideTimer = null;
-  }
-  const el = document.getElementById('workshop-npc-bubble');
-  if (el) el.hidden = true;
-}
-
-function showFatherWorkshopBubble(urgentMiss = false) {
-  if (!state.round.running || state.round.pausedForModal) return;
-  const pos = scene?.projectFatherBubblePos?.();
-  if (!pos?.visible) return;
-  const el = document.getElementById('workshop-npc-bubble');
-  if (!el) return;
-
-  const lines = t('fatherWorkshopLines');
-  const pool = Array.isArray(lines) && lines.length ? lines : ['Тише... Слушай стук!'];
-  const idx = urgentMiss ? (2 + (state.fatherBubbleCursor % pool.length)) % pool.length : state.fatherBubbleCursor % pool.length;
-  state.fatherBubbleCursor = (state.fatherBubbleCursor + 1) % pool.length;
-
-  el.textContent = pool[idx];
-  el.style.opacity = '0';
-  el.hidden = false;
-
-  const rect = el.getBoundingClientRect();
-  const bw = rect.width || 168;
-  const bh = rect.height || 38;
-  const airEl = document.getElementById('hud-air-module');
-  const topEl = document.getElementById('hud-top-stack');
-  const airBottom = airEl && !airEl.hidden ? airEl.getBoundingClientRect().bottom : 0;
-  const topBottom = topEl && !topEl.hidden ? topEl.getBoundingClientRect().bottom : 0;
-  const hudBottom = Math.max(72, airBottom, topBottom);
-  const minBarrelTopY = scene?.getMinBarrelTopY?.() ?? 260;
-
-  const vw = window.innerWidth || 375;
-  const left = Math.max(8 + bw * 0.5, Math.min(vw - 8 - bw * 0.5, pos.x));
-  const minTop = hudBottom + 6;
-  const maxTop = Math.max(minTop, minBarrelTopY - bh - 10);
-  const top = Math.max(minTop, Math.min(maxTop, pos.y - bh - 6));
-
-  el.style.left = `${Math.round(left)}px`;
-  el.style.top = `${Math.round(top)}px`;
-  el.style.opacity = '1';
-
-  if (state.fatherBubbleHideTimer) clearTimeout(state.fatherBubbleHideTimer);
-  state.fatherBubbleHideTimer = window.setTimeout(() => {
-    el.style.opacity = '0';
-    state.fatherBubbleHideTimer = window.setTimeout(() => {
-      el.hidden = true;
-    }, 240);
-  }, 3800);
-}
-
-function startFatherBubbleLoop() {
-  stopFatherBubbleLoop();
-  if (!scene?.fatherPillarGroup?.visible) return;
-  state.fatherBubbleInitialTimer = window.setTimeout(() => showFatherWorkshopBubble(false), 1600);
-  state.fatherBubbleInterval = window.setInterval(() => showFatherWorkshopBubble(false), 10800);
 }
 
 function updateAirHUD(sec) {
@@ -1789,7 +2001,8 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
     reticle.removeAttribute('hidden');
     reticle.style.left = `${Math.max(78, Math.min(window.innerWidth - 78, sx))}px`;
     reticle.style.top = `${Math.max(96, Math.min(window.innerHeight - 90, sy))}px`;
-    const batchNum = BARREL_BATCH_CODES[index] || `0${index + 1}`;
+    const obscured = Boolean(scene?.numbersObscured && !state.round.micBlowUsed);
+    const batchNum = obscured ? '?? [ПАР]' : (BARREL_BATCH_CODES[index] || `0${index + 1}`);
     const labelBase = `${t('reticleBatch')}${batchNum}`;
     retId.textContent = alreadyStruck
       ? `${labelBase} // ${t('reticleEmpty')}`
@@ -1833,6 +2046,8 @@ async function handleBarrelStrike(index, worldPoint) {
   }
 
   if (barrelObj.struck) return;
+  if (!Array.isArray(r.strikeLog)) r.strikeLog = [];
+  const elapsedSec = Math.max(0.4, (performance.now() - (r.startedAtMs || performance.now())) / 1000).toFixed(1);
 
   // -------------------------------------------------------------------------
   // РЕЖИМ 1: ГЛАВНАЯ СУПЕРИГРА «ГОНКА ЗА ПРЕМЬЕРОЙ (0..100)» (Supabase RPC)
@@ -1867,6 +2082,7 @@ async function handleBarrelStrike(index, worldPoint) {
       r.targetIndex = index;
       r.portraitDataUrl = createGoldenTicketPortraitDataUrl(res.premiereCode || 'ПРЕМЬЕРА 17.12');
       scene.setTargetPortrait(index, r.portraitDataUrl);
+      r.strikeLog.push(`[Удар ${r.attemptsUsed}: 100/100 Премьера за ${elapsedSec} сек]`);
       finishPremiereRound(true, res);
       return;
     }
@@ -1876,6 +2092,7 @@ async function handleBarrelStrike(index, worldPoint) {
       scene.triggerEmptyBarrelOpen(index);
       audio.playLidBlowOff(true);
       r.pausedForModal = true;
+      r.strikeLog.push(`[Удар ${r.attemptsUsed}: Золотая бочка]`);
       window.setTimeout(() => {
         openGoldenTicketForkModal();
       }, 420);
@@ -1887,13 +2104,13 @@ async function handleBarrelStrike(index, worldPoint) {
       scene.triggerEmptyBarrelOpen(index);
       const ptsLabel = res.pointsGain ? `+${res.delta} · +${res.pointsGain}⭐` : '';
       spawnFloatingScorePopup(res.delta, index, ptsLabel);
+      r.strikeLog.push(`[Удар ${r.attemptsUsed}: +${res.delta}%]`);
       Haptics.success();
     } else {
-      // Исход Г: Пустая бочка -> 0.4 сек фильмовый скример (Рука / Пастор / Отец / Блогер)
+      // Исход Г: Пустая бочка -> индустриальный выброс пара/искр
       scene.triggerEmptyBarrelOpen(index);
+      r.strikeLog.push(`[Удар ${r.attemptsUsed}: Пусто]`);
       triggerMiniScreamer();
-      scene.triggerCharacterMissReaction?.();
-      showFatherWorkshopBubble(true);
     }
 
     if (res.lives <= 0) {
@@ -1927,6 +2144,7 @@ async function handleBarrelStrike(index, worldPoint) {
       scene.assignTargetBarrelNow(index);
       scene.triggerStrikeFX(index, worldPoint);
       audio.playStrike(index);
+      r.strikeLog.push(`[Удар ${r.attemptsUsed}: Спас за ${elapsedSec} сек]`);
       state.watchChannel?.send('strike', { barrelIndex: index, rescued: true, hitTarget: true });
       finishRound(true, { diveBarrelIndex: index, hitTarget: true });
       return;
@@ -1942,6 +2160,17 @@ async function handleBarrelStrike(index, worldPoint) {
     scene.triggerStrikeFX(index, worldPoint);
     scene.triggerEmptyBarrelOpen(index);
     audio.playStrike(index);
+
+    if (index === r.steamHazardIndex) {
+      r.airLeft = Math.max(0.5, r.airLeft - 4.0);
+      updateAirHUD(r.airLeft);
+      scene.triggerSteamHazardBurst?.(index);
+      audio.playSteamPenaltyBurst?.();
+      r.strikeLog.push(`[Удар ${r.attemptsUsed}: Пар]`);
+      showToast('⚠️ Пробитая труба с паром! −4 сек воздуха O₂');
+    } else {
+      r.strikeLog.push(`[Удар ${r.attemptsUsed}: Пусто]`);
+    }
 
     r.attemptsLeft = Math.max(0, r.attemptsLeft - 1);
     renderAttemptSquares(r.attemptsLeft, 3);
@@ -1971,13 +2200,14 @@ async function handleBarrelStrike(index, worldPoint) {
   }
 
   // -------------------------------------------------------------------------
-  // РЕЖИМ 3: ПРОГРЕССИЯ УРОВНЕЙ ЦЕХА (3..10 БОЧЕК + УР. 9+ БЛИЦ НА ВРЕМЯ И ОЧКИ)
+  // РЕЖИМ 3: ПРОГРЕССИЯ УРОВНЕЙ ЦЕХА (4 ЗОНЫ: 3, 6, 9, 12 БОЧЕК + БЛИЦ)
   // -------------------------------------------------------------------------
   scene.triggerStrikeFX(index, worldPoint);
   audio.playStrike(index);
   r.attemptsUsed += 1;
 
   if (index === r.targetIndex) {
+    r.strikeLog.push(`[Удар ${r.attemptsUsed}: Спас за ${elapsedSec} сек]`);
     if (r.isBlitz) {
       r.blitzTargetsCleared += 1;
       r.airLeft = Math.min(30.0, r.airLeft + 3.5);
@@ -1986,17 +2216,23 @@ async function handleBarrelStrike(index, worldPoint) {
       spawnFloatingScorePopup(0, index, `КОМБО ×${r.blitzTargetsCleared} · +3.5с!`);
       Haptics.success();
 
-      // Мгновенно перезаряжаем 10 бочек для следующей волны Блица!
+      // Мгновенно перезаряжаем 12 бочек Пресс-цеха для следующей волны Блица!
       const nextPool = [];
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 12; i++) {
         if (BARREL_BATCH_CODES[i] !== '19') nextPool.push(i);
       }
       r.targetIndex = nextPool[Math.floor(Math.random() * nextPool.length)];
       scene.resetRound({
-        barrelCount: 10,
+        barrelCount: 12,
         targetIndex: r.targetIndex,
         portraitUrl: r.portraitDataUrl,
         golden: false,
+      });
+      scene.setWorkshopLevelDecor?.(r.workshopLevel || 8, r.modeType, {
+        zoneId: 4,
+        steamHazardIndex: -1,
+        numbersObscured: !r.micBlowUsed,
+        wallQuoteText: t('wallSeaQuote'),
       });
       audio.setBarrelLayout(scene.getBarrelWorldPositions(), r.targetIndex);
       return;
@@ -2007,8 +2243,17 @@ async function handleBarrelStrike(index, worldPoint) {
   }
 
   scene.triggerEmptyBarrelOpen(index);
-  scene.triggerCharacterMissReaction?.();
-  showFatherWorkshopBubble(true);
+  if (index === r.steamHazardIndex) {
+    r.airLeft = Math.max(0.5, r.airLeft - 4.0);
+    updateAirHUD(r.airLeft);
+    scene.triggerSteamHazardBurst?.(index);
+    audio.playSteamPenaltyBurst?.();
+    r.strikeLog.push(`[Удар ${r.attemptsUsed}: Пар]`);
+    showToast('⚠️ Пробитая труба с паром! −4 сек воздуха O₂');
+  } else {
+    r.strikeLog.push(`[Удар ${r.attemptsUsed}: Пусто]`);
+  }
+
   r.attemptsLeft = Math.max(0, r.attemptsLeft - 1);
   renderAttemptSquares(r.attemptsLeft, r.isBlitz ? 5 : 3);
 
@@ -2032,46 +2277,24 @@ function triggerMiniScreamer(explicitVariant = null) {
   const meta = SCREAMER_META[v] || SCREAMER_META[0];
   audio.playMiniScreamer(v);
   scene?.triggerScreamerShake(0.38);
+  if (state.round.zoneId === 4) {
+    scene?.triggerWiringArcFlash?.(1.1);
+  }
 
   const el = document.getElementById('screamer-overlay');
-  const img = document.getElementById('screamer-img');
   const cap = document.getElementById('screamer-caption');
   if (!el) return;
 
-  const showOverlay = () => {
-    el.setAttribute('data-variant', meta.key);
-    if (cap) cap.textContent = t(meta.i18n);
+  el.setAttribute('data-variant', meta.key);
+  if (cap) cap.textContent = t(meta.i18n);
 
-    el.removeAttribute('hidden');
-    el.style.animation = 'none';
-    void el.offsetWidth;
-    el.style.animation = '';
-    window.setTimeout(() => {
-      el.setAttribute('hidden', '');
-    }, 420);
-  };
-
-  if (img) {
-    img.src = meta.img;
-    if (img.complete && img.naturalWidth > 0) {
-      showOverlay();
-    } else {
-      let shown = false;
-      const done = () => {
-        if (shown) return;
-        shown = true;
-        showOverlay();
-      };
-      if (typeof img.decode === 'function') {
-        img.decode().then(done).catch(done);
-      } else {
-        img.addEventListener('load', done, { once: true });
-      }
-      window.setTimeout(done, 120);
-    }
-  } else {
-    showOverlay();
-  }
+  el.removeAttribute('hidden');
+  el.style.animation = 'none';
+  void el.offsetWidth;
+  el.style.animation = '';
+  window.setTimeout(() => {
+    el.setAttribute('hidden', '');
+  }, 420);
 }
 
 /* ============================================================================
@@ -2697,7 +2920,9 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
 
   if (didHitTarget && state.round.voiceUrl) {
     window.setTimeout(() => {
-      audio.playCleanSenderVoice(state.round.voiceUrl);
+      audio.playCleanSenderVoice(state.round.voiceUrl, {
+        useBarrelFilter: state.round.useBarrelFilter !== false,
+      });
     }, 360);
   }
 
@@ -2816,7 +3041,36 @@ function initVoiceRecorderInstance() {
 
 async function initPackConstructorDefaults() {
   renderPresetChips();
+  renderVoicePromptChips();
   await rebuildPackPortraitPreview(DEMO_PORTRAITS[1]);
+}
+
+function renderVoicePromptChips() {
+  const wrap = document.getElementById('voice-prompt-chips');
+  if (!wrap) return;
+  const pack = VOICE_PROMPT_PACKS[state.voicePromptCursor % VOICE_PROMPT_PACKS.length] || VOICE_PROMPT_PACKS[0];
+  wrap.innerHTML = '';
+  pack.forEach((line, idx) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'voice-prompt-chip' + (idx === 0 ? ' is-active' : '');
+    btn.setAttribute('data-voice-prompt', String(idx));
+    btn.textContent = line;
+    btn.addEventListener('click', () => {
+      wrap.querySelectorAll('.voice-prompt-chip').forEach((b) => b.classList.remove('is-active'));
+      btn.classList.add('is-active');
+      const inputEl = document.getElementById('input-custom-phrase');
+      const counterEl = document.getElementById('phrase-counter');
+      const cleanPhrase = line.replace(/^🗣\s*[«"]?|[»"]?$/g, '').trim();
+      if (inputEl && cleanPhrase) {
+        state.pack.customEdited = true;
+        inputEl.value = cleanPhrase.slice(0, 45);
+        if (counterEl) counterEl.textContent = `${inputEl.value.length}/45`;
+      }
+      Haptics.light();
+    });
+    wrap.appendChild(btn);
+  });
 }
 
 function renderPresetChips() {
@@ -2897,6 +3151,7 @@ async function handleSealBarrelClick() {
       mode: state.pack.mode,
       message: phrase,
       frameStyle: state.pack.frameStyle,
+      zoneId: state.pack.zoneId || 1,
       senderName,
       tgUser: state.tg.user,
       processedImage: state.pack.processed,
@@ -3152,14 +3407,69 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
     } else {
       const nextSpec = getWorkshopLevelSpec(state.profile.currentLevel || 1);
       replayBtn.textContent = nextSpec.isBlitz
-        ? `⚡ БЛИЦ УР.${nextSpec.level} (10 БОЧЕК)`
+        ? `⚡ БЛИЦ УР.${nextSpec.level} (12 БОЧЕК)`
         : `▶ УР.${nextSpec.level} · ${nextSpec.barrelCount} ${formatBarrelWord(nextSpec.barrelCount)}`;
     }
   }
 
+  populateSpoilerFreeReportBox();
+
   await refreshQuestUI();
   renderBlitzCooldownMicroGoal();
   applyProgressiveDisclosureUI();
+}
+
+function buildSpoilerFreeReport() {
+  const r = state.round;
+  const zoneSpec = getFactoryZoneSpecByZoneId(r.zoneId || 1);
+  const attempts = Math.max(1, Number(r.attemptsUsed || 1));
+  const survived = Boolean(r.survived);
+
+  let rank = 'Практикант';
+  if (survived && (attempts === 1 || (r.zoneId || 1) >= 4)) {
+    rank = 'Легенда Пресс-цеха';
+  } else if (survived && attempts <= 3) {
+    rank = 'Слесарь-слухач';
+  }
+
+  const logEntries =
+    Array.isArray(r.strikeLog) && r.strikeLog.length
+      ? r.strikeLog
+      : [
+          survived
+            ? `[Удар ${attempts}: Спас за ${Math.max(1.2, 30 - (r.airLeft || 25)).toFixed(1)} сек]`
+            : `[Удар ${attempts}: Воздух 0%]`,
+        ];
+  const pathStr = logEntries.join(' -> ');
+
+  const shiftLabel = r.isDailyShift
+    ? `📅 Смена дня ${r.dailyShiftCode} · ${zoneSpec.zoneTitle}`
+    : `${zoneSpec.zoneTitle} (${r.barrelCount || zoneSpec.barrelCount}Б)`;
+  const replaySummary = survived
+    ? `🎬 Авто-повтор: вскрыл живую бочку с ${attempts}-го удара (остаток O₂: ${Number(r.airLeft || 0).toFixed(1)}с)${r.micBlowUsed ? ' · 💨 пар сдут' : ''}`
+    : `🎬 Авто-повтор: цех сомкнулся на ${attempts}-м ударе — возьми реванш!`;
+  const challengeUrl = state.pack.lastShareUrl || 'https://bochka.quest/';
+
+  const reportText = [
+    `🏭 БОЧКА // ${shiftLabel}`,
+    `🏅 Ранг слуха: ${rank}`,
+    `🔨 ${pathStr}`,
+    replaySummary,
+    `👉 Проверь свой слух: ${challengeUrl}`,
+  ].join('\n');
+
+  return { rank, reportText, challengeUrl };
+}
+
+function populateSpoilerFreeReportBox() {
+  const box = document.getElementById('finale-spoiler-report-box');
+  const badge = document.getElementById('finale-rank-badge');
+  const out = document.getElementById('output-spoiler-report');
+  if (!box || !out) return;
+
+  const { rank, reportText } = buildSpoilerFreeReport();
+  if (badge) badge.textContent = rank.toUpperCase();
+  out.value = reportText;
 }
 
 function renderBlitzCooldownMicroGoal() {
@@ -4750,6 +5060,69 @@ function bindUIEvents() {
   document.getElementById('btn-enter-sound')?.addEventListener('click', () => enterWorkshopGate(true));
   document.getElementById('btn-enter-mute')?.addEventListener('click', () => enterWorkshopGate(false));
 
+  document.getElementById('btn-gate-daily-shift')?.addEventListener('click', () => {
+    startDailyShiftRound();
+  });
+
+  const handleJoinDuelByShortCode = async () => {
+    const codeInput = document.getElementById('input-gate-duel-code');
+    const raw = (codeInput?.value || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (raw.length < 3) {
+      showToast('Введи 4-значный код стола «На счёт три!»');
+      return;
+    }
+    state.entered = true;
+    await audio.unlock(true);
+    refreshSoundButtonLabel();
+    await syncUiStage(state.tg?.user, 4);
+    applyProgressiveDisclosureUI({ forceStage: 4 });
+    await openDuelTable(`d_${raw.slice(0, 6)}`);
+  };
+
+  document.getElementById('btn-gate-duel-join')?.addEventListener('click', handleJoinDuelByShortCode);
+  document.getElementById('input-gate-duel-code')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleJoinDuelByShortCode();
+    }
+  });
+
+  document.getElementById('btn-gate-recovery-toggle')?.addEventListener('click', () => {
+    const box = document.getElementById('gate-recovery-box');
+    const out = document.getElementById('output-recovery-code');
+    if (!box) return;
+    const isHidden = box.hasAttribute('hidden');
+    if (isHidden) {
+      if (out) out.value = getPlayerRecoveryCode(state.tg?.user);
+      box.removeAttribute('hidden');
+    } else {
+      box.setAttribute('hidden', '');
+    }
+    Haptics.light();
+  });
+
+  document.getElementById('btn-copy-recovery-code')?.addEventListener('click', async () => {
+    const out = document.getElementById('output-recovery-code');
+    const code = out?.value || getPlayerRecoveryCode(state.tg?.user);
+    if (!code) return;
+    await copyToClipboard(code);
+    showToast('🔑 Код восстановления прогресса скопирован!');
+    Haptics.light();
+  });
+
+  document.getElementById('btn-restore-code-apply')?.addEventListener('click', async () => {
+    const inp = document.getElementById('input-restore-code');
+    const res = await restoreProfileByRecoveryCode(inp?.value || '', state.tg?.user);
+    if (!res.ok) {
+      showToast('Проверь формат кода восстановления (например, BK-...)');
+      return;
+    }
+    state.profile = res.profile || state.profile;
+    updatePremiereBarsUI();
+    showToast('✓ Прогресс цеха восстановлен!');
+    Haptics.success();
+  });
+
   // Экран 2 (Режим А)
   document.getElementById('btn-start-demo')?.addEventListener('click', () => startDemoRound());
   document.getElementById('btn-go-pack')?.addEventListener('click', () => showScreen('pack'));
@@ -4762,6 +5135,10 @@ function bindUIEvents() {
       audio.startMuffledVoiceLoop();
     }
     refreshSoundButtonLabel();
+  });
+
+  document.getElementById('btn-hud-mic-blow')?.addEventListener('click', () => {
+    triggerWorkshopMicBlow();
   });
 
   document.getElementById('btn-hud-pack')?.addEventListener('click', () => {
@@ -4956,8 +5333,31 @@ function bindUIEvents() {
 
   document.getElementById('btn-play-voice-clean')?.addEventListener('click', () => {
     if (state.pack.voice?.objectUrl) {
-      audio.playCleanSenderVoice(state.pack.voice.objectUrl);
+      audio.playCleanSenderVoice(state.pack.voice.objectUrl, {
+        useBarrelFilter: state.pack.useBarrelFilter !== false,
+      });
     }
+  });
+
+  document.getElementById('chk-voice-barrel-filter')?.addEventListener('change', (e) => {
+    state.pack.useBarrelFilter = Boolean(e.target?.checked);
+    Haptics.light();
+  });
+
+  document.getElementById('btn-voice-prompt-shuffle')?.addEventListener('click', () => {
+    state.voicePromptCursor = (state.voicePromptCursor + 1) % VOICE_PROMPT_PACKS.length;
+    renderVoicePromptChips();
+    Haptics.light();
+  });
+
+  document.querySelectorAll('[data-pack-zone]').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('[data-pack-zone]').forEach((c) => c.classList.remove('is-active'));
+      chip.classList.add('is-active');
+      const z = Math.max(1, Math.min(4, Number(chip.getAttribute('data-pack-zone') || 1)));
+      state.pack.zoneId = z;
+      Haptics.light();
+    });
   });
 
   document.getElementById('btn-clear-voice')?.addEventListener('click', () => {
@@ -5082,8 +5482,23 @@ function bindUIEvents() {
   // Экран 5: Финал раунда и Суперигра «Гонка за Премьерой»
   document.getElementById('btn-finale-replay-voice')?.addEventListener('click', () => {
     if (state.round.voiceUrl) {
-      audio.playCleanSenderVoice(state.round.voiceUrl);
+      audio.playCleanSenderVoice(state.round.voiceUrl, {
+        useBarrelFilter: state.round.useBarrelFilter !== false,
+      });
     }
+  });
+
+  document.getElementById('btn-copy-spoiler-report')?.addEventListener('click', async () => {
+    const { reportText } = buildSpoilerFreeReport();
+    await copyToClipboard(reportText);
+    showToast('📋 Отчёт цеха скопирован — кидай в чат без спойлеров!');
+    Haptics.success();
+  });
+
+  document.getElementById('btn-share-spoiler-tg')?.addEventListener('click', () => {
+    const { reportText, challengeUrl } = buildSpoilerFreeReport();
+    openTelegramShare(challengeUrl, reportText);
+    Haptics.light();
   });
 
   document.getElementById('btn-copy-ticket-code')?.addEventListener('click', async () => {

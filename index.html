@@ -8,17 +8,25 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0d0d'/%3E%3Crect x='8' y='4' width='16' height='24' rx='2' fill='none' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='11' x2='25' y2='11' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='21' x2='25' y2='21' stroke='%23eab308' stroke-width='2'/%3E%3C/svg%3E" />
-  <title>БОЧКА — Упакуй друга | В кино с 17 декабря</title>
-  <meta name="bochka-build" content="v6.10-dive-struck-barrel-fix" />
-  <meta name="description" content="Шесть заваренных стальных бочек в тёмном цеху. Запиши фото и голос на дно бочки, проверь интуицию друга и выиграй допуск на закрытую Премьеру 17 декабря." />
+  <title>БОЧКА — Заводской триллер | Вызволи друга за 3 удара ломом</title>
+  <meta name="bochka-build" content="v6.4-factory-evolution" />
+  <meta name="description" content="Четыре цеха завода, заваренные 200-литровые бочки и 30 секунд кислорода. Запиши фото и голос друга на дно бочки, проверь его слух и забери допуск на закрытую Премьеру 17 декабря." />
 
-  <!-- Open Graph / Telegram Link Preview -->
+  <!-- Open Graph / Telegram / WhatsApp Link Preview -->
   <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="БОЧКА · Заводской вызов 17.12" />
   <meta property="og:url" content="https://bochka.quest/" />
-  <meta property="og:title" content="БОЧКА — Кто-то заварил тебя в цеху. Найдёшь за 3 попытки?" />
-  <meta property="og:description" content="Надень наушники: сквозь сталь пробивается стук и знакомый голос. Триллер «Бочка» — в кино с 17 декабря." />
-  <meta property="og:image" content="https://bochka.quest/og.jpg" />
+  <meta property="og:title" content="БОЧКА — Тебя заварили в цеху. Сорвёшь нужную крышку за 3 удара?" />
+  <meta property="og:description" content="30 секунд воздуха, пробитая паровая труба и живой стук сквозь сталь. Открой без регистрации и проверь свой слух!" />
+  <meta property="og:image" content="https://bochka.quest/bochka_og_1280x720.jpg" />
+  <meta property="og:image:secure_url" content="https://bochka.quest/bochka_og_1280x720.jpg" />
+  <meta property="og:image:type" content="image/jpeg" />
+  <meta property="og:image:width" content="1280" />
+  <meta property="og:image:height" content="720" />
   <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="БОЧКА — Тебя заварили в цеху. Найдёшь за 3 удара ломом?" />
+  <meta name="twitter:description" content="Индустриальный триллер в браузере и Telegram: 4 цеха завода, упаковка друга с голосом из бочки и дуэль «На счёт три!»." />
+  <meta name="twitter:image" content="https://bochka.quest/bochka_og_1280x720.jpg" />
 
   <!-- Telegram Mini App SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -146,13 +154,50 @@
       </div>
 
       <div class="gate-actions">
-        <button type="button" class="btn-primary" id="btn-enter-sound" disabled>
+        <button type="button" class="btn-primary" id="btn-enter-sound">
           <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13v-1a8 8 0 0 1 16 0v1M4 13h3v6H5a1 1 0 0 1-1-1v-5Zm16 0h-3v6h2a1 1 0 0 0 1-1v-5Z"/></svg>
           <span data-i18n="btnEnterSound">ВОЙТИ В ЦЕХ СО ЗВУКОМ</span>
         </button>
-        <button type="button" class="btn-ghost" id="btn-enter-mute" data-i18n="btnEnterMute" disabled>
+        <button type="button" class="btn-ghost" id="btn-enter-mute" data-i18n="btnEnterMute">
           БЕЗ ЗВУКА
         </button>
+      </div>
+
+      <!-- Быстрый вход за 2 секунды: Заводская смена дня, 4-значный код комнаты «На счёт три!» и Код сохранения -->
+      <div class="gate-viral-bar" id="gate-viral-bar">
+        <div class="gate-viral-row">
+          <button type="button" class="btn-secondary btn-compact" id="btn-gate-daily-shift">
+            📅 СМЕНА ДНЯ (ОБЩИЙ СИД)
+          </button>
+          <div class="gate-duel-code-join">
+            <input
+              type="text"
+              id="input-gate-duel-code"
+              maxlength="6"
+              class="industrial-input input-code-4"
+              placeholder="КОД 4 СИМВ."
+              aria-label="4-значный код комнаты На счёт три"
+            />
+            <button type="button" class="btn-secondary btn-compact" id="btn-gate-duel-join">
+              ⚔️ В СТОЛ
+            </button>
+          </div>
+          <button type="button" class="btn-ghost btn-compact" id="btn-gate-recovery-toggle" title="Сохранение и восстановление прогресса">
+            🔑 КОД
+          </button>
+        </div>
+
+        <div class="gate-recovery-drawer" id="gate-recovery-box" hidden>
+          <div class="recovery-row">
+            <span class="mono-label">ТВОЙ КОД СОХРАНЕНИЯ (ОБЛАКО SUPABASE):</span>
+            <input type="text" id="output-recovery-code" class="industrial-input input-code-mini" readonly />
+            <button type="button" class="btn-ghost btn-compact" id="btn-copy-recovery-code">КОПИРОВАТЬ</button>
+          </div>
+          <div class="recovery-row">
+            <input type="text" id="input-restore-code" class="industrial-input input-code-mini" placeholder="Введи код BCK-..." maxlength="24" />
+            <button type="button" class="btn-secondary btn-compact" id="btn-restore-code-apply">ВОССТАНОВИТЬ</button>
+          </div>
+        </div>
       </div>
 
       <div class="gate-footer">
@@ -264,7 +309,16 @@
 
     <!-- Всплывающие очки при попадании в Гонке за Премьерой (+45 / +0.4) -->
     <div class="floating-score-layer" id="floating-score-layer" aria-hidden="true"></div>
-    <div class="workshop-npc-bubble" id="workshop-npc-bubble" hidden aria-live="polite"></div>
+
+    <!-- Интерактивный микрофонный продув на Уровне 4 (Пресс-цех): подуть в микрофон, чтобы сдуть пар с номеров и вернуть +4 сек воздуха -->
+    <div class="hud-mic-blow-box" id="hud-mic-blow-box" hidden>
+      <button type="button" class="btn-secondary btn-compact hud-mic-blow-btn" id="btn-hud-mic-blow" data-i18n="micBlowBtn">
+        💨 ПОДУТЬ В МИКРОФОН (СДУТЬ ПАР С НОМЕРОВ +4 СЕК O₂)
+      </button>
+      <div class="mic-blow-meter-track">
+        <div class="mic-blow-meter-fill" id="hud-mic-blow-fill"></div>
+      </div>
+    </div>
 
     <div class="barrel-reticle" id="barrel-reticle" hidden>
       <span class="reticle-id" id="reticle-id">ПАРТИЯ №01</span>
@@ -302,11 +356,10 @@
     </div>
   </section>
 
-  <!-- 4 аутентичных скримера из мира фильма (0.4 сек): Рука / Пастор / Отец / Блогер (БЕЗ СОБАК!) -->
+  <!-- Индустриальный импульс давления/пара при промахе (0.4 сек, без 2D-спрайтов духов/людей) -->
   <div class="screamer-overlay" id="screamer-overlay" data-variant="hand" hidden aria-hidden="true">
     <div class="screamer-fx-layer" id="screamer-fx-layer"></div>
-    <img src="./assets/keyed/screamer_hand.webp" alt="" class="screamer-img" id="screamer-img" />
-    <div class="screamer-caption" id="screamer-caption" data-i18n="screamerHand">РУКА ИЗ ГОРЛОВИНЫ // МИНУС ПОПЫТКА</div>
+    <div class="screamer-caption" id="screamer-caption" data-i18n="screamerHand">ВЫБРОС РЖАВОЙ ПЫЛИ // ПУСТАЯ БОЧКА</div>
   </div>
 
   <!-- Белый морской свет растворения стен цеха при вводе секретного кода 19 -> 97 -> 3 удара -->
@@ -556,15 +609,49 @@
               <button type="button" class="chip" data-frame="stencil" data-i18n="frame4">⚠️ Штамп 17.12</button>
             </div>
           </div>
+
+          <div class="frame-picker" id="pack-zone-picker">
+            <span class="mono-label">ЛОКАЦИЯ ЗАВОДА (КУДА ЗАКАТАТЬ ДРУГА):</span>
+            <div class="frame-chips">
+              <button type="button" class="chip is-active" data-pack-zone="1">1 · Шлюз (3Б)</button>
+              <button type="button" class="chip" data-pack-zone="2">2 · Конвейер (6Б · Пар)</button>
+              <button type="button" class="chip" data-pack-zone="3">3 · Котельная (9Б · Вода)</button>
+              <button type="button" class="chip" data-pack-zone="4">4 · Пресс-цех (12Б · 19·97)</button>
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- 3. ГОЛОСОВУХА С ЭФФЕКТОМ ЗАВАРЕННОЙ БОЧКИ (MediaRecorder <= 5 сек, <= 40 КБ) -->
       <div class="voice-pack-box" id="voice-pack-box">
-        <span class="mono-label" data-i18n="voiceLabel">ГОЛОС ИЗ ЗАВАРЕННОЙ БОЧКИ (ДО 5 СЕК · ОПЦИОНАЛЬНО)</span>
+        <div class="voice-head-row">
+          <span class="mono-label" data-i18n="voiceLabel">ГОЛОС ИЗ ЗАВАРЕННОЙ БОЧКИ (ДО 5 СЕК · ОПЦИОНАЛЬНО)</span>
+          <button type="button" class="chip" id="btn-voice-prompt-shuffle">🎲 Подсказать дерзкую фразу</button>
+        </div>
         <p class="voice-hint-text" data-i18n="voiceHint">
-          Во время поиска твой голос глухо звучит сквозь сталь (400 Гц), а при вскрытии крышки включается чисто.
+          Во время поиска твой голос глухо звучит сквозь сталь (400 Гц), а при вскрытии крышки включается с металлическим резонансом железной бочки.
         </p>
+
+        <!-- 3 быстрые голосовые фразы-суфлёры над микрофоном -->
+        <div class="voice-prompt-chips" id="voice-prompt-chips">
+          <button type="button" class="chip voice-prompt-chip is-active" data-voice-prompt="Серёга, выпусти, тут текила кончилась!">
+            🎙 «Серёга, выпусти, тут текила кончилась!»
+          </button>
+          <button type="button" class="chip voice-prompt-chip" data-voice-prompt="Не бей по девятнадцатой, там труба с паром!">
+            🎙 «Не бей по девятнадцатой, там труба с паром!»
+          </button>
+          <button type="button" class="chip voice-prompt-chip" data-voice-prompt="Я знаю, где лежат ключи от гелика!">
+            🎙 «Я знаю, где лежат ключи от гелика!»
+          </button>
+        </div>
+        <div class="voice-teleprompter-line" id="voice-teleprompter-line">
+          Суфлёр для записи: «Серёга, выпусти, тут текила кончилась!»
+        </div>
+
+        <label class="voice-filter-toggle">
+          <input type="checkbox" id="chk-voice-barrel-filter" checked />
+          <span>🛢 Акустический фильтр «Голос из железной бочки» (Web Audio BiquadFilter + эхо воды)</span>
+        </label>
 
         <button type="button" class="btn-secondary btn-full voice-rec-btn" id="btn-record-voice">
           <span class="rec-dot" id="voice-rec-dot"></span>
@@ -727,6 +814,28 @@
       <p class="finale-notify-line" id="finale-notify-line" data-i18n="finaleNotified">
         Отправителю ушёл сигнал о твоём результате (+2 жизни на его счёт!).
       </p>
+
+      <!-- Генератор спойлеробезопасного отчёта смены для вставки в чат в 1 клик (v6.4) -->
+      <div class="spoiler-report-box" id="finale-spoiler-report-box">
+        <div class="spoiler-report-head">
+          <span class="mono-tag accent-tag" id="finale-rank-badge">РАНГ: СЛЕСАРЬ-СЛУХАЧ</span>
+          <span class="mono-label">СПОЙЛЕРОБЕЗОПАСНЫЙ ОТЧЁТ ДЛЯ ЧАТА:</span>
+        </div>
+        <textarea
+          id="output-spoiler-report"
+          class="industrial-input spoiler-report-textarea"
+          rows="4"
+          readonly
+        ></textarea>
+        <div class="spoiler-report-actions">
+          <button type="button" class="btn-primary btn-compact" id="btn-copy-spoiler-report">
+            📋 СКОПИРОВАТЬ ОТЧЁТ В 1 КЛИК
+          </button>
+          <button type="button" class="btn-secondary btn-compact" id="btn-share-spoiler-tg">
+            ✈️ ОТПРАВИТЬ В TELEGRAM
+          </button>
+        </div>
+      </div>
 
       <!-- Быстрая реакция в 1 клик (Стадия 2 для соло-прохождения без внешней открытки) -->
       <div class="finale-stage2-react-box" id="finale-solo-stage2-reaction" hidden>

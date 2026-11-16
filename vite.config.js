@@ -17,10 +17,6 @@ const RUNTIME_ASSETS = [
   'assets/images_5.jpg',
   'assets/images_6.jpg',
   'assets/zvontsov.png',
-  'assets/keyed/screamer_hand.webp',
-  'assets/keyed/screamer_pastor.webp',
-  'assets/keyed/screamer_father.webp',
-  'assets/keyed/screamer_blogger.webp',
   'assets/keyed/ocean_panorama.webp',
   'assets/keyed/ocean_till_barrel.webp',
   'assets/keyed/ocean_beach_bg.webp',
@@ -38,12 +34,7 @@ const RUNTIME_ASSETS = [
   'assets/sfx/scream_2.mp3',
   'assets/sfx/water_drop_1.mp3',
   'assets/sfx/water_drop_2.mp3',
-  'assets/sfx/voices/priest_hit_1.mp3',
-  'assets/sfx/voices/screamer_0.mp3',
   'public/sprites/film_clock.webp',
-  'public/sprites/father_pillar.webp',
-  'public/sprites/pastor_walk_1.webp',
-  'public/sprites/pastor_walk_2.webp',
 ];
 
 function stripStaticImportMapAndCopyAssets() {

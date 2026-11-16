@@ -39,10 +39,10 @@
     "reticleBatch": "ПАРТИЯ №",
     "reticleEmpty": "ПУСТО",
     "screamerEmpty": "ПУСТАЯ БОЧКА // МИНУС ПОПЫТКА",
-    "screamerHand": "РУКА ИЗ ГОРЛОВИНЫ // МИНУС ПОПЫТКА",
-    "screamerPastor": "ПАСТОР С КРЕСТОМ // ПУСТАЯ БОЧКА",
-    "screamerFather": "ЛУЧ ФОНАРЯ: «NO, NO!» // ПРОМАХ",
-    "screamerBlogger": "ВСПЫШКА СМАРТФОНА // СБОЙ КАДРА",
+    "screamerHand": "ВЫБРОС РЖАВОЙ ПЫЛИ // ПУСТАЯ БОЧКА",
+    "screamerPastor": "ПРОРЫВ ПАРА // ДАВЛЕНИЕ ПАДАЕТ",
+    "screamerFather": "КОРОТКОЕ ЗАМЫКАНИЕ // ПРОМАХ",
+    "screamerBlogger": "ГИДРОУДАР В КОНТУРЕ // СБОЙ МАНОМЕТРА",
     "revealFoundStamp": "КРЫШКА СОРВАНА · ПОПЫТКА #{n}",
     "revealFailedStamp": "КИСЛОРОД 0% · ОСТАЛСЯ В ЦЕХУ",
     "revealFromFriend": "ПОСЛАНИЕ НА ДНЕ БОЧКИ",
@@ -211,28 +211,35 @@
     "temuUnlockSub": "Старт 72.0% уже твой! Формула 72% → 100%: вскрывай бочки (+%), зови друзей (+❤️) и забирай пропуск на закрытую Премьеру 17 декабря.",
     "temuUnlockBtn": "ЗАБРАТЬ 72.0% И ПОЕХАЛИ ДАЛЬШЕ!",
     "burgerRules": "ПРАВИЛА",
+    "wallSeaQuote": "НА НЕБЕ ТОЛЬКО И РАЗГОВОРОВ, ЧТО О МОРЕ",
+    "zone1Name": "УРОВЕНЬ 1 · РАЗГРУЗОЧНЫЙ ШЛЮЗ",
+    "zone2Name": "УРОВЕНЬ 2 · СБОРОЧНЫЙ КОНВЕЙЕР",
+    "zone3Name": "УРОВЕНЬ 3 · ЗАТОПЛЕННАЯ КОТЕЛЬНАЯ",
+    "zone4Name": "УРОВЕНЬ 4 · ПРЕСС-ЦЕХ (19·97)",
+    "micBlowBtn": "💨 ПОДУТЬ В МИКРОФОН (СДУТЬ ПАР С НОМЕРОВ +4 СЕК O₂)",
+    "micBlowDone": "✓ ПАР СДУТ · НОМЕРА ОЧИЩЕНЫ (+4 СЕК O₂)",
     "fatherWorkshopLines": [
-      "Тише... Пастор ходит рядом, слушай живой стук!",
-      "Не трать удары впустую — прислушайся к металлу.",
-      "Смотри на часы: воздух уходит быстрее с каждой ошибкой!",
-      "Нажимай осторожно, время против нас."
+      "Прислушайся к металлу — живой стук идёт изнутри.",
+      "Осторожно: прорыв пара в контуре снижает запас кислорода!",
+      "Манометр падает: воздух уходит быстрее с каждой ошибкой!",
+      "Слушай резонанс стали перед ударом ломом."
     ],
     "demoChars": [
       {
-        "name": "ПАСТОР (Тиль Швайгер)",
-        "quote": "Не стучи снаружи, если боишься того, кто ответит изнутри. Встретимся в кино 17 декабря."
+        "name": "ИНЖЕНЕР ШЛЮЗА",
+        "quote": "Холодный утренний шлюз — 3 бочки, слушай чистый металл. В кино с 17 декабря."
       },
       {
-        "name": "ОТЕЦ (Филипп Рейнхардт)",
-        "quote": "Тридцать секунд в темноте меняют человека навсегда. Смотри «Бочку» с 17 декабря."
+        "name": "СЛЕСАРЬ КОНВЕЙЕРА",
+        "quote": "Берегись пробитой паровой трубы над конвейером! Смотри «Бочку» с 17 декабря."
       },
       {
-        "name": "ДЕВУШКА (Ирина Кобзева)",
-        "quote": "Ты услышал стук сквозь сталь! А теперь закатай друга и проверь его нервы."
+        "name": "ОПЕРАТОР КОТЕЛЬНОЙ (Ирина Кобзева)",
+        "quote": "Ты услышал стук сквозь воду и сталь! А теперь закатай друга и проверь его нервы."
       },
       {
-        "name": "УЗНИК (Натан Пол-Коллис)",
-        "quote": "Воздуха почти не оставалось… Увидимся на премьере 17 декабря."
+        "name": "УЗНИК ПРЕСС-ЦЕХА",
+        "quote": "На небе только и разговоров, что о море… Увидимся на премьере 17 декабря."
       }
     ]
   },
@@ -276,10 +283,10 @@
     "reticleBatch": "ПАРТИЯ №",
     "reticleEmpty": "БОС",
     "screamerEmpty": "БОС БӨШКЕ // МИНУС МҮМКІНДІК",
-    "screamerHand": "БӨШКЕДЕН СОЗЫЛҒАН ҚОЛ // МИНУС МҮМКІНДІК",
-    "screamerPastor": "КРЕСТ ҰСТАҒАН ПАСТОР // БОС БӨШКЕ",
-    "screamerFather": "ФОНАРЬ СӘУЛЕСІ: «NO, NO!» // ҚАТЕ",
-    "screamerBlogger": "СМАРТФОН ЖАРҚЫЛЫ // КАДР АҚАУЫ",
+    "screamerHand": "ТАТТЫ ШАҢ АТҚЫЛАУЫ // БОС БӨШКЕ",
+    "screamerPastor": "БУ ЖАРЫЛЫСЫ // ҚЫСЫМ ТҮСУДЕ",
+    "screamerFather": "ҚЫСҚА ТҰЙЫҚТАЛУ // ҚАТЕ",
+    "screamerBlogger": "ГИДРОСОҚҚЫ // МАНОМЕТР АҚАУЫ",
     "revealFoundStamp": "ҚАҚПАҚ АШЫЛДЫ · #{n} МҮМКІНДІК",
     "revealFailedStamp": "ОТТЕГІ 0% · ЦЕХТА ҚАЛДЫ",
     "revealFromFriend": "БӨШКЕ ТҮБІНДЕГІ ХАТ",
@@ -448,28 +455,35 @@
     "temuUnlockSub": "72.0% старт сенде! 72% → 100% формуласы: бөшкелерді аш (+%), достарды шақыр (+❤️) және 17 желтоқсандағы жабық Премьераға жолдама ал.",
     "temuUnlockBtn": "72.0% АЛЫП, АЛҒА!",
     "burgerRules": "ЕРЕЖЕЛЕР",
+    "wallSeaQuote": "АСПАНДА ТЕК ТЕҢІЗ ТУРАЛЫ ҒАНА АЙТЫЛАДЫ",
+    "zone1Name": "1-ДЕҢГЕЙ · ТҮСІРУ ШЛЮЗІ",
+    "zone2Name": "2-ДЕҢГЕЙ · ҚҰРАСТЫРУ КОНВЕЙЕРІ",
+    "zone3Name": "3-ДЕҢГЕЙ · СУ БАСҚАН ҚАЗАНДЫҚ",
+    "zone4Name": "4-ДЕҢГЕЙ · ПРЕСС-ЦЕХ (19·97)",
+    "micBlowBtn": "💨 МИКРОФОНҒА ҮРЛЕУ (БУДЫ ТАЗАЛАУ +4 СЕК O₂)",
+    "micBlowDone": "✓ БУ ТАЗАЛАНДЫ · НӨМІРЛЕР АШЫҚ (+4 СЕК O₂)",
     "fatherWorkshopLines": [
-      "Тыныш... Пастор жақын жүр, тірі дыбысты тыңда!",
-      "Соққыны босқа жұмсама — темірдің үніне құлақ түр.",
-      "Сағатқа қара: әр қателік ауаны азайтады!",
-      "Абайлап бас, уақыт бізге қарсы."
+      "Темірдің үніне құлақ түр — тірі соққы ішінен шығады.",
+      "Абайла: бу құбырының жарылуы оттегіні азайтады!",
+      "Манометрге қара: әр қателік ауаны азайтады!",
+      "Соққы алдында болат резонансын тыңда."
     ],
     "demoChars": [
       {
-        "name": "ПАСТОР (Тиль Швайгер)",
-        "quote": "Ішінен кім жауап беретінінен қорықсаң, сыртынан қақпа. 17 желтоқсанда кинода кездесеміз."
+        "name": "ШЛЮЗ ИНЖЕНЕРІ",
+        "quote": "Суық таңғы шлюз — 3 бөшке, таза темірді тыңда. 17 желтоқсанда кинода."
       },
       {
-        "name": "ӘКЕ (Филипп Рейнхардт)",
-        "quote": "Қараңғыдағы отыз секунд адамды мәңгі өзгертеді. 17 желтоқсаннан бастап."
+        "name": "КОНВЕЙЕР СЛЕСАРІ",
+        "quote": "Конвейер үстіндегі жарылған бу құбырынан сақ бол! 17 желтоқсаннан бастап."
       },
       {
-        "name": "ҚЫЗ (Ирина Кобзева)",
+        "name": "ҚАЗАНДЫҚ ОПЕРАТОРЫ (Ирина Кобзева)",
         "quote": "Сен болат арқылы соққыны естідің! Енді досыңды тексер."
       },
       {
-        "name": "ТҰТҚЫН (Натан Пол-Коллис)",
-        "quote": "Ауа таусылуға сәл қалды… Премьерада кездескенше."
+        "name": "ПРЕСС-ЦЕХ ТҰТҚЫНЫ",
+        "quote": "Аспанда тек теңіз туралы ғана айтылады… Премьерада кездескенше."
       }
     ]
   },
@@ -513,10 +527,10 @@
     "reticleBatch": "BATCH #",
     "reticleEmpty": "EMPTY",
     "screamerEmpty": "EMPTY BARREL // ATTEMPT LOST",
-    "screamerHand": "HAND IN THE BARREL // ATTEMPT LOST",
-    "screamerPastor": "THE PASTOR'S CROSS // EMPTY DRUM",
-    "screamerFather": "FLASHLIGHT BEAM: 'NO, NO!' // MISS",
-    "screamerBlogger": "STROBE FLASH // VIDEO GLITCH",
+    "screamerHand": "RUST DUST BURST // EMPTY DRUM",
+    "screamerPastor": "STEAM PIPE RUPTURE // PRESSURE DROP",
+    "screamerFather": "SHORT CIRCUIT ARC // MISS",
+    "screamerBlogger": "HYDRAULIC SHOCK // GAUGE FAULT",
     "revealFoundStamp": "LID BLOWN OFF · ATTEMPT #{n}",
     "revealFailedStamp": "OXYGEN 0% · LEFT IN BLOCK B",
     "revealFromFriend": "MESSAGE AT THE BOTTOM",
@@ -685,28 +699,35 @@
     "temuUnlockSub": "72.0% head start unlocked! Bridge 72% → 100%: crack barrels (+%), invite friends (+❤️), and claim your Dec 17 Private Premiere pass.",
     "temuUnlockBtn": "CLAIM 72.0% SURGE & CONTINUE",
     "burgerRules": "RULES",
+    "wallSeaQuote": "IN HEAVEN, ALL THEY TALK ABOUT IS THE SEA",
+    "zone1Name": "LEVEL 1 · LOADING AIRLOCK",
+    "zone2Name": "LEVEL 2 · ASSEMBLY CONVEYOR",
+    "zone3Name": "LEVEL 3 · FLOODED BOILER ROOM",
+    "zone4Name": "LEVEL 4 · PRESS SHOP (19·97)",
+    "micBlowBtn": "💨 BLOW INTO MIC (CLEAR STEAM FROM NUMBERS +4s O₂)",
+    "micBlowDone": "✓ STEAM CLEARED · NUMBERS VISIBLE (+4s O₂)",
     "fatherWorkshopLines": [
-      "Quiet... The Pastor is close, listen for the knock!",
-      "Don't waste strikes — trust the echo inside the steel.",
-      "Watch the wall clock: oxygen drops faster on every miss!",
-      "Pick carefully, time is running out."
+      "Listen closely to the steel — the live knocking comes from inside.",
+      "Watch out: a ruptured steam pipe drops your oxygen reserves!",
+      "Watch the pressure gauge: air drops faster on every miss!",
+      "Trust the metallic echo before swinging the crowbar."
     ],
     "demoChars": [
       {
-        "name": "THE PASTOR (Til Schweiger)",
-        "quote": "Never knock from the outside if you fear what answers from within. December 17."
+        "name": "AIRLOCK ENGINEER",
+        "quote": "Cold morning airlock — 3 drums, listen to raw steel. December 17."
       },
       {
-        "name": "THE FATHER (Philippe Reinhardt)",
-        "quote": "Thirty seconds in total darkness changes a man forever. In cinemas December 17."
+        "name": "CONVEYOR MECHANIC",
+        "quote": "Watch out for the ruptured steam pipe over the conveyor! In cinemas December 17."
       },
       {
-        "name": "THE GIRL (Irina Kobzeva)",
+        "name": "BOILER OPERATOR (Irina Kobzeva)",
         "quote": "You heard the pulse through cold steel. Now seal a friend and test their nerves."
       },
       {
-        "name": "THE CAPTIVE (Nathan Paul-Collis)",
-        "quote": "Almost out of oxygen… See you at the premiere on December 17."
+        "name": "PRESS SHOP CAPTIVE",
+        "quote": "In heaven, all they talk about is the sea… See you at the premiere on December 17."
       }
     ]
   }

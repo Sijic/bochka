@@ -48,6 +48,24 @@ export function getViewerUid(tgUser = null) {
   return uid;
 }
 
+export function getPlayerRecoveryCode(tgUser = null) {
+  const uid = getViewerUid(tgUser);
+  const core = uid.replace(/^u_/, '').toUpperCase();
+  return `BCK-${core}`;
+}
+
+export async function restoreProfileByRecoveryCode(rawCode, tgUser = null) {
+  const clean = String(rawCode || '').trim();
+  if (!clean || clean.length < 4) {
+    return { ok: false, error: 'Введи код восстановления (например, BCK-...)' };
+  }
+  const stripped = clean.replace(/^BCK-/i, '').trim().toLowerCase();
+  const nextUid = stripped.startsWith('tg_') || stripped.startsWith('u_') ? stripped : `u_${stripped}`;
+  safeWrite(UID_STORAGE_KEY, nextUid);
+  const profile = await fetchPlayerProfile(tgUser || { id: nextUid.startsWith('tg_') ? nextUid.slice(3) : '' });
+  return { ok: true, uid: nextUid, code: `BCK-${nextUid.replace(/^u_/, '').toUpperCase()}`, profile };
+}
+
 export function randomShortId(len = 7) {
   const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
   const arr = new Uint8Array(len);
@@ -98,13 +116,17 @@ export async function createBarrelPack({
   mode = 'friend',
   message = '',
   frameStyle = 'flashlight',
+  zoneId = 1,
   senderName = '',
   tgUser = null,
   processedImage,
   recordedVoice = null,
 }) {
   const id = randomShortId(7);
-  const targetIndex = Math.floor(Math.random() * 6);
+  const cleanZone = Math.max(1, Math.min(4, Number(zoneId) || 1));
+  const zoneBarrels = cleanZone === 1 ? 3 : cleanZone === 2 ? 6 : cleanZone === 3 ? 9 : 12;
+  const targetIndex = Math.floor(Math.random() * Math.min(6, zoneBarrels));
+  const encodedFrame = `${String(frameStyle || 'flashlight').split(':z')[0]}:z${cleanZone}`;
   const senderUid = getViewerUid(tgUser);
   const senderTgId = tgUser?.id || '';
   const senderUsername = tgUser?.username || '';
@@ -156,7 +178,7 @@ export async function createBarrelPack({
         p_short_id: id,
         p_mode: mode,
         p_message: cleanMsg,
-        p_frame_style: frameStyle,
+        p_frame_style: encodedFrame,
         p_sender_uid: senderUid,
         p_sender_tg_id: senderTgId || null,
         p_sender_username: senderUsername || null,
@@ -188,7 +210,8 @@ export async function createBarrelPack({
     photoUrl: remotePhotoUrl || '',
     voiceUrl: remoteVoiceUrl || '',
     hasLocalMedia: true,
-    frameStyle,
+    frameStyle: String(frameStyle || 'flashlight').split(':z')[0],
+    zoneId: cleanZone,
     targetIndex,
     senderUid,
     senderTgId,
@@ -287,13 +310,16 @@ export async function loadBarrelPack(rawParam) {
           if (!photoUrl && localMedia?.photoObjectUrl) photoUrl = localMedia.photoObjectUrl;
           if (!voiceUrl && localMedia?.voiceObjectUrl) voiceUrl = localMedia.voiceObjectUrl;
         }
+        const rawFs = String(data.frame_style || 'flashlight');
+        const [cleanFs, zPart] = rawFs.split(':z');
         return {
           id: data.id,
           mode: data.mode || 'friend',
           message: data.message || '',
           photoUrl,
           voiceUrl,
-          frameStyle: data.frame_style || 'flashlight',
+          frameStyle: cleanFs || 'flashlight',
+          zoneId: Math.max(1, Math.min(4, Number(zPart) || 1)),
           targetIndex: Number.isInteger(data.target_index) ? data.target_index : 0,
           senderUid: data.sender_uid || '',
           senderTgId: data.sender_tg_id || '',

@@ -11,8 +11,6 @@ const SFX_PATHS = {
   chain2: './assets/sfx/chain_clink_2.mp3',
   scream1: './assets/sfx/scream_1.mp3',
   scream2: './assets/sfx/scream_2.mp3',
-  priestHit: './assets/sfx/voices/priest_hit_1.mp3',
-  whisper: './assets/sfx/voices/screamer_0.mp3',
   hum: './assets/sfx/factory_hum.mp3',
 };
 
@@ -29,6 +27,10 @@ class WorkshopAudio {
     this.panners = [];
     this.targetIndex = 0;
     this.activeBarrel = -1;
+    this.activeZoneId = 1;
+    this.barrelVoiceFilterEnabled = true;
+    this.micBlowStream = null;
+    this.micBlowRaf = 0;
 
     this.listenTimer = null;
     this.breathTimer = null;
@@ -257,9 +259,9 @@ class WorkshopAudio {
   }
 
   /**
-   * В финале после срыва крышки снимает фильтр бочки и включает чистый голос друга!
+   * В финале после срыва крышки воспроизводит голос друга (с акустическим фильтром «Голос из железной бочки» BiquadFilter + реверб)
    */
-  async playCleanSenderVoice(overrideUrl = '') {
+  async playCleanSenderVoice(overrideUrl = '', { useBarrelFilter = this.barrelVoiceFilterEnabled } = {}) {
     this.stopMuffledVoiceLoop();
     this.stopCleanVoice();
 
@@ -281,11 +283,45 @@ class WorkshopAudio {
         }
       }
       if (buf) {
+        const now = this.ctx.currentTime;
         const src = this.ctx.createBufferSource();
         src.buffer = buf;
         const g = this.ctx.createGain();
-        g.gain.value = 1.15;
-        src.connect(g).connect(this.master);
+        g.gain.value = 1.18;
+
+        if (useBarrelFilter) {
+          const hp = this.ctx.createBiquadFilter();
+          hp.type = 'highpass';
+          hp.frequency.setValueAtTime(175, now);
+
+          const resPeak = this.ctx.createBiquadFilter();
+          resPeak.type = 'peaking';
+          resPeak.frequency.setValueAtTime(510, now);
+          resPeak.Q.setValueAtTime(3.2, now);
+          resPeak.gain.setValueAtTime(7.5, now);
+
+          const lp = this.ctx.createBiquadFilter();
+          lp.type = 'lowpass';
+          lp.frequency.setValueAtTime(2850, now);
+
+          const tankDelay = this.ctx.createDelay(0.12);
+          tankDelay.delayTime.setValueAtTime(0.034, now);
+          const tankFb = this.ctx.createGain();
+          tankFb.gain.setValueAtTime(0.36, now);
+          tankDelay.connect(tankFb);
+          tankFb.connect(tankDelay);
+
+          src.connect(hp);
+          hp.connect(resPeak);
+          resPeak.connect(lp);
+          resPeak.connect(tankDelay);
+          tankDelay.connect(lp);
+          lp.connect(g);
+          g.connect(this.master);
+        } else {
+          src.connect(g).connect(this.master);
+        }
+
         this.cleanVoiceSrc = src;
         src.start(0);
         return true;
@@ -514,7 +550,22 @@ class WorkshopAudio {
       lp.frequency.value = 520;
       const g = this.ctx.createGain();
       g.gain.value = 0.68;
-      src.connect(lp).connect(g).connect(dest);
+      if (this.activeZoneId === 3) {
+        // Глубокое эхо Затопленной котельной при прослушивании
+        const echoDelay = this.ctx.createDelay(0.35);
+        echoDelay.delayTime.setValueAtTime(0.14, now);
+        const echoFb = this.ctx.createGain();
+        echoFb.gain.setValueAtTime(0.46, now);
+        echoDelay.connect(echoFb);
+        echoFb.connect(echoDelay);
+        src.connect(lp);
+        lp.connect(g);
+        lp.connect(echoDelay);
+        echoDelay.connect(g);
+        g.connect(dest);
+      } else {
+        src.connect(lp).connect(g).connect(dest);
+      }
       src.start(now);
     }
 
@@ -797,59 +848,23 @@ class WorkshopAudio {
     }
 
     if (v === 1) {
-      // Вариант 1: Священник Швайгера бьёт светящимся крестом под тяжёлый выдох
-      const pBuf = this.buffers.get('priestHit') || this.buffers.get('scream1');
-      if (pBuf) {
-        const src = this.ctx.createBufferSource();
-        src.buffer = pBuf;
-        src.playbackRate.value = 0.92;
-        const g = this.ctx.createGain();
-        g.gain.setValueAtTime(0.95, now);
-        g.gain.exponentialRampToValueAtTime(0.001, now + 0.44);
-        src.connect(g).connect(this.master);
-        src.start(now);
-        src.stop(now + 0.45);
-      }
-      // Медный диссонанс креста
-      [370, 554.37, 740].forEach((freq) => {
-        const osc = this.ctx.createOscillator();
-        const og = this.ctx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(freq, now);
-        osc.frequency.exponentialRampToValueAtTime(freq * 0.94, now + 0.39);
-        og.gain.setValueAtTime(0.14, now);
-        og.gain.exponentialRampToValueAtTime(0.001, now + 0.41);
-        osc.connect(og).connect(this.master);
-        osc.start(now);
-        osc.stop(now + 0.42);
-      });
+      // Вариант 1: Прорыв паровой магистрали под давлением (резкий выброс пара + гул контура)
+      this.playSteamPenaltyBurst();
       return;
     }
 
     if (v === 2) {
-      // Вариант 2: Отец в куртке слепит лучом фонаря в упор под глухое "No, no!"
-      const wBuf = this.buffers.get('whisper');
-      if (wBuf) {
-        const src = this.ctx.createBufferSource();
-        src.buffer = wBuf;
-        const g = this.ctx.createGain();
-        g.gain.setValueAtTime(0.96, now);
-        g.gain.exponentialRampToValueAtTime(0.001, now + 0.44);
-        src.connect(g).connect(this.master);
-        src.start(now);
-        src.stop(now + 0.45);
-      }
-      // Щелчок мощного фонаря + высоковольтный гул вспышки
+      // Вариант 2: Короткое замыкание силовой проводки цеха (треск дуги + гул трансформатора)
       const click = this.ctx.createOscillator();
       const cg = this.ctx.createGain();
-      click.type = 'square';
-      click.frequency.setValueAtTime(1950, now);
-      click.frequency.exponentialRampToValueAtTime(240, now + 0.06);
-      cg.gain.setValueAtTime(0.38, now);
-      cg.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+      click.type = 'sawtooth';
+      click.frequency.setValueAtTime(1850, now);
+      click.frequency.exponentialRampToValueAtTime(140, now + 0.14);
+      cg.gain.setValueAtTime(0.42, now);
+      cg.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
       click.connect(cg).connect(this.master);
       click.start(now);
-      click.stop(now + 0.09);
+      click.stop(now + 0.17);
       return;
     }
 
@@ -1186,6 +1201,122 @@ class WorkshopAudio {
         s.connect(hg).connect(this.master);
         try { s.start(now); } catch { /* ignore */ }
       }
+    }
+  }
+
+  setFactoryZoneAcoustics(zoneId = 1) {
+    this.activeZoneId = Math.max(1, Math.min(4, Number(zoneId) || 1));
+    if (!this.ctx || !this.enabled) return;
+    const now = this.ctx.currentTime;
+    // Лёгкий акустический импульс при смене цеха
+    if (this.activeZoneId === 2) {
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(62, now);
+      g.gain.setValueAtTime(0.08, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+      osc.connect(g).connect(this.master);
+      osc.start(now);
+      osc.stop(now + 0.46);
+    }
+  }
+
+  playSteamPenaltyBurst() {
+    Haptics.heavy();
+    if (!this.ctx || !this.enabled || !this.noiseBuffer) return;
+    const now = this.ctx.currentTime;
+    const nSrc = this.ctx.createBufferSource();
+    nSrc.buffer = this.noiseBuffer;
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(1950, now);
+    bp.frequency.exponentialRampToValueAtTime(620, now + 0.52);
+    bp.Q.value = 2.4;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.76, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+    nSrc.connect(bp).connect(g).connect(this.master);
+    nSrc.start(now);
+    nSrc.stop(now + 0.56);
+  }
+
+  playAirBlowWhoosh() {
+    Haptics.success();
+    if (!this.ctx || !this.enabled || !this.noiseBuffer) return;
+    const now = this.ctx.currentTime;
+    const nSrc = this.ctx.createBufferSource();
+    nSrc.buffer = this.noiseBuffer;
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(420, now);
+    bp.frequency.exponentialRampToValueAtTime(1480, now + 0.38);
+    bp.Q.value = 1.8;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.64, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
+    nSrc.connect(bp).connect(g).connect(this.master);
+    nSrc.start(now);
+    nSrc.stop(now + 0.44);
+  }
+
+  async startMicBlowDetector({ onBlow, onLevel } = {}) {
+    this.stopMicBlowDetector();
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      return false;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      });
+      this.micBlowStream = stream;
+      await this.unlock(true);
+      if (!this.ctx) return false;
+      const src = this.ctx.createMediaStreamSource(stream);
+      const analyser = this.ctx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.5;
+      src.connect(analyser);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      let sustainedFrames = 0;
+
+      const tick = () => {
+        if (!this.micBlowStream) return;
+        analyser.getByteFrequencyData(data);
+        let sum = 0;
+        for (let i = 1; i <= 18; i++) sum += data[i];
+        const avg = sum / 18;
+        const norm = Math.min(1, avg / 115);
+        onLevel?.(norm);
+        if (norm >= 0.52) {
+          sustainedFrames += 1;
+          if (sustainedFrames >= 10) {
+            this.stopMicBlowDetector();
+            onBlow?.();
+            return;
+          }
+        } else {
+          sustainedFrames = Math.max(0, sustainedFrames - 1);
+        }
+        this.micBlowRaf = window.requestAnimationFrame(tick);
+      };
+      this.micBlowRaf = window.requestAnimationFrame(tick);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  stopMicBlowDetector() {
+    if (this.micBlowRaf) {
+      window.cancelAnimationFrame(this.micBlowRaf);
+      this.micBlowRaf = 0;
+    }
+    if (this.micBlowStream) {
+      try {
+        this.micBlowStream.getTracks().forEach((tr) => tr.stop());
+      } catch { /* ignore */ }
+      this.micBlowStream = null;
     }
   }
 }
