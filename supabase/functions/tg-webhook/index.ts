@@ -359,12 +359,12 @@ Deno.serve(async (req: Request) => {
         chat_id: body.senderTgId,
         parse_mode: "HTML",
         text:
-          `🍿 <b>ИДЁМ В КИНО 17 ДЕКАБРЯ!</b>\n` +
-          `<b>${opener}</b> нашёл тебя в бочке и зовёт в кино на «БОЧКУ» 17 декабря! Берёте билеты?`,
+          `🍿 <b>Твой друг ${opener} прошёл игру и подтвердил, что идёт в кино 17 декабря!</b>\n` +
+          `Зови остальных в цех и занимайте соседние места на премьеру «БОЧКИ»!`,
         reply_markup: {
           inline_keyboard: [
             [{ text: "🎬 «Буду смотреть» на Кинопоиске", url: "https://www.kinopoisk.ru/film/11226275/" }],
-            [{ text: "🏆 Ответить в цеху", url: MINI_APP_LINK }],
+            [{ text: "🛢 Войти в цех", web_app: { url: `${PUBLIC_WEB_URL}/` } }],
           ],
         },
       });

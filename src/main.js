@@ -967,12 +967,36 @@ async function enterWorkshopGate(withSound) {
   }
 }
 
+function pickNextBarrelHeavenQuote() {
+  const pool = t('barrelHeavenQuotes');
+  const fallbackPool = [
+    'На небе только и разговоров, что о бочке… Увидимся на премьере 17 декабря.',
+    'На небе только и разговоров, что о бочке — и о том, кто в ней заперт.',
+    'На небе только и разговоров, что о бочке и нашей премьере 17 декабря.',
+    'На небе только и разговоров, что о бочке… и о тех, кто сорвал крышку с третьей попытки.',
+    'На небе только и разговоров, что о бочке — глупо не закатать в неё лучшего друга.',
+    'На небе только и разговоров, что о бочке, ржавой стали и 30 секундах кислорода.',
+    'На небе только и разговоров, что о бочке… Слышишь стук? Встречаемся в кино 17 декабря.',
+    'На небе только и разговоров, что о бочке — и о том, как грохочет лом в темноте цеха.',
+  ];
+  const quotes = Array.isArray(pool) && pool.length ? pool : fallbackPool;
+  let cursor = 0;
+  try {
+    const raw = Number.parseInt(localStorage.getItem('bochka_quote_cursor') || '0', 10);
+    cursor = Number.isFinite(raw) ? raw : 0;
+    localStorage.setItem('bochka_quote_cursor', String((cursor + 1) % quotes.length));
+  } catch {
+    cursor = Math.floor(Math.random() * quotes.length);
+  }
+  return quotes[Math.abs(cursor) % quotes.length];
+}
+
 async function startNewbieOnboardingRound() {
   const demoChars = t('demoChars');
   const pickIdx = Math.floor(Math.random() * DEMO_PORTRAITS.length);
   const charMeta = Array.isArray(demoChars) && demoChars[pickIdx]
     ? demoChars[pickIdx]
-    : { name: 'УЗНИК ЦЕХА', quote: 'Слышишь стук? Бей ломом по крышке!' };
+    : { name: 'УЗНИК ЦЕХА', quote: pickNextBarrelHeavenQuote() };
 
   const rawPortrait = DEMO_PORTRAITS[pickIdx] || DEMO_PORTRAITS[0];
   const targetIndex = 3;
@@ -1007,7 +1031,7 @@ async function startNewbieOnboardingRound() {
     portraitDataUrl: rawPortrait,
     voiceUrl: '',
     useBarrelFilter: true,
-    message: charMeta.quote,
+    message: pickNextBarrelHeavenQuote(),
     senderLabel: charMeta.name,
     lastUrgentSec: 9,
   };
@@ -2386,6 +2410,19 @@ function createVictimCardDataUrl(sourceImgUrl = '') {
 }
 
 function triggerMiniScreamer(explicitVariant = null) {
+  // Уровень 1 (Вход / Спасение): без жёсткого скримера на стартовом уровне, жёсткий скример — со 2-го уровня и в бочке друга
+  const isLevel1Intro =
+    explicitVariant === null &&
+    Boolean(state.round?.isDemo) &&
+    Number(state.round?.workshopLevel || 1) <= 1 &&
+    Number(state.profile?.currentLevel || 1) <= 1 &&
+    Number(state.uiStage || 1) <= 1 &&
+    !state.incomingPack;
+  if (isLevel1Intro) {
+    scene?.triggerScreamerShake(0.18);
+    return;
+  }
+
   const screamerKey = state.round?.screamerType || state.pack?.screamerType || 'weld';
   const screamerMap = {
     weld: 0,
@@ -3533,8 +3570,18 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
   const notifyEl = document.getElementById('finale-notify-line');
   const victimCardBox = document.getElementById('finale-victim-card-box');
   const victimCardImg = document.getElementById('victim-card-img');
+  const cinemaFeedbackBox = document.getElementById('finale-cinema-feedback-box');
+  const cinemaReplyBtn = document.getElementById('btn-cinema-reply');
+  const cinemaReplyText = document.getElementById('btn-cinema-reply-text');
+  const stageProgBar = document.getElementById('finale-stage-progression-bar');
+  const stageProgText = document.getElementById('finale-stage-progression-text');
+  const stageNextBtn = document.getElementById('btn-finale-stage-next');
 
-  if (!premiereResult && (!r.survived || r.screamerType === 'siren_cam')) {
+  cinemaFeedbackBox?.setAttribute('hidden', '');
+  if (cinemaReplyBtn) cinemaReplyBtn.disabled = false;
+  if (cinemaReplyText) cinemaReplyText.textContent = t('btnGoCinema');
+
+  if (!premiereResult && !r.isDemo && !r.survived && r.screamerType === 'siren_cam') {
     if (!r.victimCardDataUrl) {
       r.victimCardDataUrl = createVictimCardDataUrl(r.portraitDataUrl || DEMO_PORTRAITS[0]);
     }
@@ -3569,7 +3616,8 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
         ? t('finaleSurvivedTitle', { n: Math.max(1, r.attemptsUsed || 1) })
         : t('finaleFailedTitle');
     }
-    if (msgEl) msgEl.textContent = `«${r.message || t('presetsSelf')[0]}»`;
+    const quoteText = r.isDemo ? pickNextBarrelHeavenQuote() : (r.message || pickNextBarrelHeavenQuote());
+    if (msgEl) msgEl.textContent = `«${quoteText}»`;
     if (voiceRow) {
       if (r.voiceUrl) voiceRow.removeAttribute('hidden');
       else voiceRow.setAttribute('hidden', '');
@@ -3585,33 +3633,25 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
     applyProgressiveDisclosureUI({ forceStage: 2 });
   }
 
-  // ШАГ 8.2 (ТРИГГЕР Б): Если игрок вскрыл бочку друга — показываем реактивные кнопки (1 клик без спама)
-  const reactionsBox = document.getElementById('finale-friend-reactions');
-  const soloReactBox = document.getElementById('finale-solo-stage2-reaction');
-  const soloReactBtn = document.getElementById('btn-stage2-quick-react');
-  const cinemaBtn = document.getElementById('btn-cinema-reply');
-  const reactionStatus = document.getElementById('finale-reaction-status');
-  if (!premiereResult && !r.isDemo && state.incomingPack) {
-    reactionsBox?.removeAttribute('hidden');
-    soloReactBox?.setAttribute('hidden', '');
-    cinemaBtn?.setAttribute('hidden', '');
-    state.round.reactionLocked = false;
-    document.querySelectorAll('.js-finale-reaction').forEach((btn) => {
-      btn.disabled = false;
-    });
-    reactionStatus?.setAttribute('hidden', '');
-  } else if (state.uiStage <= 2 && !premiereResult) {
-    reactionsBox?.setAttribute('hidden', '');
-    soloReactBox?.removeAttribute('hidden');
-    if (soloReactBtn) {
-      soloReactBtn.disabled = false;
-      soloReactBtn.textContent = t('stage2QuickReactSolo');
+  // СТРОГО 2 ГЛАВНЫЕ КНОПКИ НА ЭКРАНЕ СПАСЕНИЯ (v6.7: без лишних чипов лайков и скролла)
+  document.getElementById('finale-friend-reactions')?.setAttribute('hidden', '');
+  document.getElementById('finale-solo-stage2-reaction')?.setAttribute('hidden', '');
+  document.getElementById('finale-spoiler-report-box')?.setAttribute('hidden', '');
+  document.getElementById('golden-hunt-card')?.setAttribute('hidden', '');
+  cinemaReplyBtn?.removeAttribute('hidden');
+
+  if (stageProgBar && stageProgText && stageNextBtn) {
+    if (state.uiStage >= 4) {
+      stageProgText.textContent = '🏆 Уровень 4 открыт: приглашай друзей в общую игру «На счёт три!» и дари выигранные билеты!';
+      stageNextBtn.textContent = '⚔️ В ОБЩУЮ ИГРУ С ДРУЗЬЯМИ И ПРИЗАМИ →';
+      stageProgBar.removeAttribute('hidden');
+    } else if (state.uiStage === 3) {
+      stageProgText.textContent = '🎟 Уровень 3 открыт: играй дальше — впереди розыгрыш бесплатных билетов на премьеру 17 декабря!';
+      stageNextBtn.textContent = '🎯 ИГРАТЬ НА БЕСПЛАТНЫЙ БИЛЕТ →';
+      stageProgBar.removeAttribute('hidden');
+    } else {
+      stageProgBar.setAttribute('hidden', '');
     }
-    cinemaBtn?.setAttribute('hidden', '');
-  } else {
-    reactionsBox?.setAttribute('hidden', '');
-    soloReactBox?.setAttribute('hidden', '');
-    cinemaBtn?.removeAttribute('hidden');
   }
 
   const replayBtn = document.getElementById('btn-replay-round');
@@ -5878,8 +5918,37 @@ function bindUIEvents() {
 
   document.getElementById('btn-cinema-reply')?.addEventListener('click', async () => {
     await sendCinemaInviteReply(state.incomingPack, state.tg?.user);
-    showToast(t('cinemaReplySent'));
-    openTrailerModal({ forRescue: false });
+    const feedbackBox = document.getElementById('finale-cinema-feedback-box');
+    const feedbackText = document.getElementById('finale-cinema-feedback-text');
+    const replyBtn = document.getElementById('btn-cinema-reply');
+    const replyText = document.getElementById('btn-cinema-reply-text');
+    if (feedbackText) {
+      feedbackText.textContent = state.incomingPack?.senderName
+        ? `Отлично! Сигнал отправлен ${state.incomingPack.senderName} в Telegram! Раз идёшь — зови друзей в цех, на премьере будет жарко!`
+        : 'Отлично! Раз идёшь — зови друзей в цех, на премьере будет жарко!';
+    }
+    feedbackBox?.removeAttribute('hidden');
+    if (replyText) replyText.textContent = '✓ ИДЁШЬ 17 ДЕКАБРЯ · ДРУГУ УШЛО СООБЩЕНИЕ!';
+    if (replyBtn) replyBtn.disabled = true;
+    showToast('🍿 Отлично! Раз идёшь — зови друзей в цех, на премьере будет жарко!');
+    Haptics.success();
+  });
+
+  document.getElementById('btn-cinema-fast-invite')?.addEventListener('click', () => {
+    const uid = encodeURIComponent(getViewerUid(state.tg?.user));
+    openTelegramShare(
+      `https://t.me/bochka_film_bot?startapp=ref_${uid}`,
+      '🍿 Я иду на триллер «БОЧКА» 17 декабря! Залетай в 3D-цех и попробуй выбраться за 3 удара:'
+    );
+    Haptics.light();
+  });
+
+  document.getElementById('btn-finale-stage-next')?.addEventListener('click', () => {
+    if (state.uiStage >= 4) {
+      openDuelTable();
+    } else {
+      startPremiereRaceRound();
+    }
   });
 
   document.getElementById('btn-pack-revenge')?.addEventListener('click', () => {

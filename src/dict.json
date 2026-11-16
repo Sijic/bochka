@@ -117,10 +117,10 @@
     "finaleFailedTitle": "ОСТАЛСЯ В ЦЕХУ // КРЫШКА СОРВАНА",
     "finaleReplayVoice": "🔊 ВКЛЮЧИТЬ ГОЛОС ИЗ БОЧКИ ЕЩЁ РАЗ",
     "finaleNotified": "Отправителю ушёл сигнал о твоём результате (+2 жизни на его счёт!).",
-    "btnGoCinema": "ИДЁМ В КИНО 17 ДЕКАБРЯ!",
-    "cinemaReplySent": "ОТВЕТ ОТПРАВЛЕН! ТРЕЙЛЕР И КИНОПОИСК ОТКРЫТЫ",
-    "btnPackBack": "📸 ОТПРАВИТЬ ДРУГУ ЕГО ФОТО С СООБЩЕНИЕМ (И ИГРАТЬ НА ПРИЗ)",
-    "btnPackBackHint": "Закатай фото друга (или любое фото) с сообщением — сразу откроется игра на главный Приз!",
+    "btnGoCinema": "🍿 ПОЙДУ В КИНО 17 ДЕКАБРЯ!",
+    "cinemaReplySent": "Отлично! Раз идёшь — зови друзей в цех, на премьере будет жарко!",
+    "btnPackBack": "🛢 ЗАКАТАТЬ ДРУГА И ОТПРАВИТЬ СКРИМЕР",
+    "btnPackBackHint": "Уровень 2: выбери другу жёсткий скример — следом откроется игра на бесплатный билет!",
     "btnDownloadStories": "СКАЧАТЬ СТОРИС 9:16",
     "btnPlayAgain": "ЕЩЁ РАУНД В ЦЕХУ",
     "premiereBarLabel": "ДОПУСК НА ПРЕМЬЕРУ",
@@ -204,14 +204,24 @@
     "storiesSlogan": "СТУЧИТЕ — И ОТВОРЯТ ВАМ",
     "storiesPremiere": "В КИНО С 17 ДЕКАБРЯ",
     "stage1TaskLine": "Стучи по бочкам — найди, кто внутри",
-    "stage2PackBonusBtn": "Закатать своего друга и забрать бонус",
-    "stage2QuickReactSolo": "🍿 Пойду в кино 17 декабря!",
+    "stage2PackBonusBtn": "🛢 ЗАКАТАТЬ ДРУГА И ОТПРАВИТЬ СКРИМЕР",
+    "stage2QuickReactSolo": "🍿 ПОЙДУ В КИНО 17 ДЕКАБРЯ!",
     "temuUnlockTag": "🔥 СТАРТОВЫЙ РЫВОК ОТКРЫТ!",
     "temuUnlockTitle": "ДОПУСК НА ЗАКРЫТУЮ ПРЕМЬЕРУ",
     "temuUnlockSub": "Старт 72.0% уже твой! Формула 72% → 100%: вскрывай бочки (+%), зови друзей (+❤️) и забирай пропуск на закрытую Премьеру 17 декабря.",
     "temuUnlockBtn": "ЗАБРАТЬ 72.0% И ПОЕХАЛИ ДАЛЬШЕ!",
     "burgerRules": "ПРАВИЛА",
-    "wallSeaQuote": "НА НЕБЕ ТОЛЬКО И РАЗГОВОРОВ, ЧТО О МОРЕ",
+    "wallSeaQuote": "НА НЕБЕ ТОЛЬКО И РАЗГОВОРОВ, ЧТО О БОЧКЕ",
+    "barrelHeavenQuotes": [
+      "На небе только и разговоров, что о бочке… Увидимся на премьере 17 декабря.",
+      "На небе только и разговоров, что о бочке — и о том, кто в ней заперт.",
+      "На небе только и разговоров, что о бочке и нашей премьере 17 декабря.",
+      "На небе только и разговоров, что о бочке… и о тех, кто сорвал крышку с третьей попытки.",
+      "На небе только и разговоров, что о бочке — глупо не закатать в неё лучшего друга.",
+      "На небе только и разговоров, что о бочке, ржавой стали и 30 секундах кислорода.",
+      "На небе только и разговоров, что о бочке… Слышишь стук? Встречаемся в кино 17 декабря.",
+      "На небе только и разговоров, что о бочке — и о том, как грохочет лом в темноте цеха."
+    ],
     "zone1Name": "УРОВЕНЬ 1 · РАЗГРУЗОЧНЫЙ ШЛЮЗ",
     "zone2Name": "УРОВЕНЬ 2 · СБОРОЧНЫЙ КОНВЕЙЕР",
     "zone3Name": "УРОВЕНЬ 3 · ЗАТОПЛЕННАЯ КОТЕЛЬНАЯ",
@@ -227,19 +237,19 @@
     "demoChars": [
       {
         "name": "ИНЖЕНЕР ШЛЮЗА",
-        "quote": "Холодный утренний шлюз — 3 бочки, слушай чистый металл. В кино с 17 декабря."
+        "quote": "На небе только и разговоров, что о бочке… Увидимся на премьере 17 декабря."
       },
       {
         "name": "СЛЕСАРЬ КОНВЕЙЕРА",
-        "quote": "Берегись пробитой паровой трубы над конвейером! Смотри «Бочку» с 17 декабря."
+        "quote": "На небе только и разговоров, что о бочке — и о том, кто в ней заперт."
       },
       {
         "name": "ОПЕРАТОР КОТЕЛЬНОЙ (Ирина Кобзева)",
-        "quote": "Ты услышал стук сквозь воду и сталь! А теперь закатай друга и проверь его нервы."
+        "quote": "На небе только и разговоров, что о бочке и нашей премьере 17 декабря."
       },
       {
         "name": "УЗНИК ПРЕСС-ЦЕХА",
-        "quote": "На небе только и разговоров, что о море… Увидимся на премьере 17 декабря."
+        "quote": "На небе только и разговоров, что о бочке — глупо не закатать в неё лучшего друга."
       }
     ]
   },
@@ -448,14 +458,22 @@
     "storiesSlogan": "ҚАҒЫҢДАР — СОНДА АШЫЛАДЫ",
     "storiesPremiere": "17 ЖЕЛТОҚСАННАН БАСТАП КИНОДА",
     "stage1TaskLine": "Бөшкелерді қақ — ішінде кім барын тап",
-    "stage2PackBonusBtn": "Досыңды бөшкеге салып, бонус ал",
-    "stage2QuickReactSolo": "🍿 17 желтоқсанда киноға барамын!",
+    "stage2PackBonusBtn": "🛢 ДОСЫҢДЫ БӨШКЕГЕ ЖАУЫП, СКРИМЕР ЖІБЕР",
+    "stage2QuickReactSolo": "🍿 17 ЖЕЛТОҚСАНДА КИНОҒА БАРАМЫН!",
     "temuUnlockTag": "🔥 БАСТАПҚЫ СЕРПІН АШЫЛДЫ!",
     "temuUnlockTitle": "ЖАБЫҚ ПРЕМЬЕРАҒА РҰҚСАТ",
     "temuUnlockSub": "72.0% старт сенде! 72% → 100% формуласы: бөшкелерді аш (+%), достарды шақыр (+❤️) және 17 желтоқсандағы жабық Премьераға жолдама ал.",
     "temuUnlockBtn": "72.0% АЛЫП, АЛҒА!",
     "burgerRules": "ЕРЕЖЕЛЕР",
-    "wallSeaQuote": "АСПАНДА ТЕК ТЕҢІЗ ТУРАЛЫ ҒАНА АЙТЫЛАДЫ",
+    "wallSeaQuote": "АСПАНДА ТЕК БӨШКЕ ТУРАЛЫ ҒАНА АЙТЫЛАДЫ",
+    "barrelHeavenQuotes": [
+      "Аспанда тек бөшке туралы ғана айтылады… 17 желтоқсанда премьерада кездескенше.",
+      "Аспанда тек бөшке және оның ішінде кім қамалғаны туралы айтылады.",
+      "Аспанда тек бөшке мен 17 желтоқсандағы премьера туралы ғана айтылады.",
+      "Аспанда тек бөшке туралы айтылады — ең жақын досыңды бөшкеге жаппау ақымақтық.",
+      "Аспанда тек бөшке, суық болат және 30 секунд оттегі туралы айтылады.",
+      "Аспанда тек бөшке туралы айтылады… Соққыны естідің бе? 17 желтоқсанда кинода кездесеміз."
+    ],
     "zone1Name": "1-ДЕҢГЕЙ · ТҮСІРУ ШЛЮЗІ",
     "zone2Name": "2-ДЕҢГЕЙ · ҚҰРАСТЫРУ КОНВЕЙЕРІ",
     "zone3Name": "3-ДЕҢГЕЙ · СУ БАСҚАН ҚАЗАНДЫҚ",
@@ -692,14 +710,22 @@
     "storiesSlogan": "KNOCK — AND IT SHALL BE OPENED",
     "storiesPremiere": "IN CINEMAS DECEMBER 17",
     "stage1TaskLine": "Knock on the barrels — find who is inside",
-    "stage2PackBonusBtn": "Seal a friend and claim your bonus",
-    "stage2QuickReactSolo": "🍿 I'm going to cinemas Dec 17!",
+    "stage2PackBonusBtn": "🛢 SEAL A FRIEND & SEND A SCREAMER",
+    "stage2QuickReactSolo": "🍿 GOING TO CINEMAS DEC 17!",
     "temuUnlockTag": "🔥 LAUNCH SURGE UNLOCKED!",
     "temuUnlockTitle": "CLOSED PREMIERE ACCESS",
     "temuUnlockSub": "72.0% head start unlocked! Bridge 72% → 100%: crack barrels (+%), invite friends (+❤️), and claim your Dec 17 Private Premiere pass.",
     "temuUnlockBtn": "CLAIM 72.0% SURGE & CONTINUE",
     "burgerRules": "RULES",
-    "wallSeaQuote": "IN HEAVEN, ALL THEY TALK ABOUT IS THE SEA",
+    "wallSeaQuote": "IN HEAVEN, ALL THEY TALK ABOUT IS THE BARREL",
+    "barrelHeavenQuotes": [
+      "In heaven, all they talk about is the barrel… See you at the premiere on December 17.",
+      "In heaven, all they talk about is the barrel — and who is locked inside it.",
+      "In heaven, all they talk about is the barrel and our December 17 premiere.",
+      "In heaven, all they talk about is the barrel — and it'd be foolish not to seal your best friend in it.",
+      "In heaven, all they talk about is the barrel, cold steel, and 30 seconds of oxygen.",
+      "In heaven, all they talk about is the barrel… Hear the knock? See you in cinemas Dec 17."
+    ],
     "zone1Name": "LEVEL 1 · LOADING AIRLOCK",
     "zone2Name": "LEVEL 2 · ASSEMBLY CONVEYOR",
     "zone3Name": "LEVEL 3 · FLOODED BOILER ROOM",

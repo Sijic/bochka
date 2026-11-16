@@ -3632,8 +3632,6 @@ body[data-ui-stage="1"] #screen-finale #golden-winner-box,
 body[data-ui-stage="2"] #screen-finale #golden-winner-box,
 body[data-ui-stage="1"] #screen-finale #finale-notify-line,
 body[data-ui-stage="2"] #screen-finale #finale-notify-line,
-body[data-ui-stage="1"] #screen-finale #btn-cinema-reply,
-body[data-ui-stage="2"] #screen-finale #btn-cinema-reply,
 body[data-ui-stage="1"] #screen-finale .finale-dual-row,
 body[data-ui-stage="2"] #screen-finale .finale-dual-row,
 body[data-ui-stage="1"] #screen-finale #golden-hunt-card,
@@ -4354,3 +4352,88 @@ body[data-blitz-unlocked="0"] .blitz-rule-note {
 .spoiler-report-actions button {
   flex: 1 1 140px;
 }
+
+/* ==========================================================================
+   v6.7: ЖЁСТКИЙ SINGLE-SCREEN LAYOUT (БЕЗ СКРОЛЛА НА 375x667 И TG DESKTOP 420x740)
+   ========================================================================== */
+#screen-finale {
+  overflow-y: hidden !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 6px 10px !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+}
+
+#screen-finale .finale-sheet {
+  padding: 12px 14px !important;
+  max-height: calc(100dvh - 16px) !important;
+  overflow: hidden !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+#screen-finale .finale-top-bar {
+  margin-bottom: 8px !important;
+}
+
+#screen-finale .finale-barrel-reveal {
+  margin-bottom: 6px !important;
+}
+
+#screen-finale .barrel-mouth-large {
+  width: 118px !important;
+  height: 118px !important;
+  border-width: 4px !important;
+}
+
+#screen-finale .finale-stamp {
+  margin-top: -12px !important;
+  padding: 4px 11px !important;
+  font-size: 13.5px !important;
+}
+
+#screen-finale .finale-message {
+  margin: 5px 0 6px !important;
+  font-size: 14px !important;
+  line-height: 1.28 !important;
+}
+
+#screen-finale .finale-notify-line {
+  margin: 0 0 6px !important;
+  font-size: 10.5px !important;
+}
+
+#screen-finale .finale-cta-stack {
+  gap: 7px !important;
+  margin-bottom: 0 !important;
+}
+
+#screen-finale #btn-cinema-reply,
+#screen-finale #btn-pack-revenge {
+  min-height: 44px !important;
+  padding: 9px 12px !important;
+  font-size: 13.5px !important;
+}
+
+#modal-trailer .trailer-modal-card {
+  padding: 12px !important;
+  max-height: calc(100dvh - 16px) !important;
+  overflow: hidden !important;
+}
+
+#modal-trailer .video-aspect {
+  max-height: 36dvh !important;
+}
+
+#modal-trailer .trailer-custom-bar {
+  margin-bottom: 8px !important;
+  padding: 5px 7px !important;
+}
+
+#modal-trailer .trailer-rescue-box {
+  margin-bottom: 0 !important;
+  padding: 9px 10px !important;
+}
+
