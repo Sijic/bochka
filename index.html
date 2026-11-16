@@ -140,13 +140,13 @@
       </div>
 
       <h1 class="metal-logo" data-i18n="gateTitle">БОЧКА</h1>
-      <p class="gate-subtitle" data-i18n="gateSubtitle">ПСИХОЛОГИЧЕСКИЙ ТРИЛЛЕР · 200 ЛИТРОВ ТЕМНОТЫ</p>
+      <p class="gate-subtitle" data-i18n="gateSubtitle">НАЙДИ ЧЕЛОВЕКА В БОЧКЕ ПО СТУКУ</p>
 
       <p class="gate-teaser" data-i18n="gateTeaser">
-        Шесть заваренных бочек под лучом прожектора. Надень наушники: внутри одной из них стучат сквозь сталь.
+        В одной из 4 заваренных бочек заперт человек. У тебя 3 попытки ломом — прислушайся, откуда идёт стук!
       </p>
 
-      <div class="gate-quick-rules" aria-label="Правила игры">
+      <div class="gate-quick-rules" aria-label="Правила игры" hidden>
         <div data-i18n="gateRule1">🎧 В одной из заваренных бочек заперт человек — прислушайся, откуда идёт стук.</div>
         <div data-i18n="gateRule2">⏳ У тебя 30 секунд воздуха и всего 3 удара ломом, чтобы сорвать нужную крышку.</div>
         <div data-i18n="gateRule3">📸 Спасёшь — закатай в ответную бочку друга с его фото и голосом.</div>
@@ -163,8 +163,8 @@
         </button>
       </div>
 
-      <!-- Быстрый вход за 2 секунды: Заводская смена дня, 4-значный код комнаты «На счёт три!» и Код сохранения -->
-      <div class="gate-viral-bar" id="gate-viral-bar">
+      <!-- Дополнительные инструменты доступны после первого раунда (Stage 4) -->
+      <div class="gate-viral-bar stage4-only-item" id="gate-viral-bar" hidden>
         <div class="gate-viral-row">
           <button type="button" class="btn-secondary btn-compact" id="btn-gate-daily-shift">
             📅 СМЕНА ДНЯ (ОБЩИЙ СИД)
@@ -613,7 +613,7 @@
           <div class="frame-picker" id="pack-zone-picker">
             <span class="mono-label">ЛОКАЦИЯ ЗАВОДА (КУДА ЗАКАТАТЬ ДРУГА):</span>
             <div class="frame-chips">
-              <button type="button" class="chip is-active" data-pack-zone="1">1 · Шлюз (3Б)</button>
+              <button type="button" class="chip is-active" data-pack-zone="1">1 · Шлюз (4Б)</button>
               <button type="button" class="chip" data-pack-zone="2">2 · Конвейер (6Б · Пар)</button>
               <button type="button" class="chip" data-pack-zone="3">3 · Котельная (9Б · Вода)</button>
               <button type="button" class="chip" data-pack-zone="4">4 · Пресс-цех (12Б · 19·97)</button>
@@ -868,12 +868,12 @@
           <span data-i18n="btnGoCinema">ИДЁМ В КИНО 17 ДЕКАБРЯ!</span>
         </button>
 
-        <button type="button" class="btn-secondary btn-full btn-with-sub" id="btn-pack-revenge">
+        <button type="button" class="btn-primary btn-full btn-with-sub" id="btn-pack-revenge">
           <span class="btn-main-line">
             <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="6" ry="2"/><path d="M6 5v14c0 1.1 2.7 2 6 2s6-.9 6-2V5M6 10c0 1.1 2.7 2 6 2s6-.9 6-2M6 15c0 1.1 2.7 2 6 2s6-.9 6-2"/></svg>
-            <span id="btn-pack-revenge-text" data-i18n="btnPackBack">ЗАКАТАТЬ ДРУГА В ОТВЕТ</span>
+            <span id="btn-pack-revenge-text" data-i18n="btnPackBack">📸 ОТПРАВИТЬ ДРУГУ ЕГО ФОТО С СООБЩЕНИЕМ (И ИГРАТЬ НА ПРИЗ)</span>
           </span>
-          <small class="btn-sub-line" data-i18n="btnPackBackHint">Открывает «Гонку за Премьерой (0 / 100)» и даёт жизни для ударов</small>
+          <small class="btn-sub-line" data-i18n="btnPackBackHint">Закатай фото друга (или любое фото) с сообщением — сразу откроется игра на главный Приз!</small>
         </button>
 
         <div class="finale-dual-row">
@@ -1202,19 +1202,19 @@
         </button>
       </div>
 
-      <!-- ШАГ 1: 4-я попытка за просмотр собственного MP4-трейлера (без регистрации) -->
+      <!-- ШАГ 1: 4-я победная попытка за просмотр официального трейлера -->
       <div id="rescue-step-2">
-        <span class="mono-tag accent-tag" data-i18n="rescueStep2Tag">КИСЛОРОД 0% // СПАСЕНИЕ №1</span>
+        <span class="mono-tag accent-tag" data-i18n="rescueStep2Tag">3 ПОПЫТКИ МИМО // ОСТАЛАСЬ 4-Я БОЧКА</span>
         <h3 class="section-title rescue-title" data-i18n="rescueStep2Title">
-          ВОЗДУХ НА НУЛЕ! ОСТАЛОСЬ 3 ЗАКРЫТЫЕ БОЧКИ
+          ОСТАЛАСЬ ПОСЛЕДНЯЯ 4-Я БОЧКА — ВНУТРИ СТУЧИТ ЧЕЛОВЕК!
         </h3>
         <p class="modal-hint" data-i18n="rescueStep2Desc">
-          Три крышки сорваны впустую, но внутри одной из 3 бочек стучит друг. Посмотри трейлер фильма «Бочка» (без регистрации!), чтобы забрать +1 удар!
+          Три крышки сорваны впустую! Посмотри официальный трейлер фильма «Бочка», чтобы получить финальный удар ломом и открыть оставшуюся 4-ю бочку!
         </p>
 
         <button type="button" class="btn-primary btn-full" id="btn-rescue-watch-trailer">
           <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>
-          <span data-i18n="btnRescueWatchTrailer">+1 ПОПЫТКА: ПОСМОТРЕТЬ ТРЕЙЛЕР ФИЛЬМА</span>
+          <span data-i18n="btnRescueWatchTrailer">+1 ПОПЫТКА: ПОСМОТРЕТЬ ТРЕЙЛЕР И СПАСТИ ЧЕЛОВЕКА</span>
         </button>
       </div>
     </div>

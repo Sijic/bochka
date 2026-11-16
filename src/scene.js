@@ -17,16 +17,16 @@ export class WorkshopScene {
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: this.width > 500,
+      antialias: false,
       powerPreference: 'high-performance',
       alpha: false,
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
     this.renderer.setSize(this.width, this.height);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.14;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0b0907);
@@ -379,7 +379,7 @@ export class WorkshopScene {
     this.mainSpot.position.set(0, 6.6, 1.35);
     this.mainSpot.target.position.set(0, 0.1, -0.55);
     this.mainSpot.castShadow = true;
-    this.mainSpot.shadow.mapSize.set(1024, 1024);
+    this.mainSpot.shadow.mapSize.set(512, 512);
     this.mainSpot.shadow.bias = -0.0005;
     this.scene.add(this.mainSpot, this.mainSpot.target);
 
@@ -694,7 +694,7 @@ export class WorkshopScene {
       new THREE.Vector2(0.390, 0.22),
       new THREE.Vector2(0.001, 0.22),
     ];
-    const sharedBodyGeo = new THREE.LatheGeometry(pts, 44);
+    const sharedBodyGeo = new THREE.LatheGeometry(pts, 28);
     const posAttr = sharedBodyGeo.attributes.position;
     const uvAttr = sharedBodyGeo.attributes.uv;
     for (let k = 0; k < posAttr.count; k++) {
@@ -706,20 +706,20 @@ export class WorkshopScene {
     uvAttr.needsUpdate = true;
     sharedBodyGeo.computeVertexNormals();
 
-    const lidPlateGeo = new THREE.CylinderGeometry(0.402, 0.402, 0.022, 36);
-    const lidRimGeo = new THREE.TorusGeometry(0.408, 0.014, 10, 36);
+    const lidPlateGeo = new THREE.CylinderGeometry(0.402, 0.402, 0.022, 24);
+    const lidRimGeo = new THREE.TorusGeometry(0.408, 0.014, 8, 24);
     lidRimGeo.rotateX(Math.PI * 0.5);
     const bungBigGeo = new THREE.CylinderGeometry(0.042, 0.042, 0.028, 8);
     const bungSmallGeo = new THREE.CylinderGeometry(0.024, 0.024, 0.026, 8);
 
-    const ringGeo = new THREE.RingGeometry(0.48, 0.525, 40);
+    const ringGeo = new THREE.RingGeometry(0.48, 0.525, 28);
     ringGeo.rotateX(-Math.PI * 0.5);
 
-    const portraitGeo = new THREE.CircleGeometry(0.382, 44);
+    const portraitGeo = new THREE.CircleGeometry(0.382, 28);
     portraitGeo.rotateX(-Math.PI * 0.5);
 
     // Невидимый цилиндр-хитбокс без завышения над крышкой, чтобы передние бочки не перекрывали крышки заднего ряда
-    const proxyHitGeo = new THREE.CylinderGeometry(0.50, 0.50, 1.44, 12);
+    const proxyHitGeo = new THREE.CylinderGeometry(0.50, 0.50, 1.44, 10);
     const proxyHitMat = new THREE.MeshBasicMaterial({
       colorWrite: false,
       depthWrite: false,
@@ -729,13 +729,21 @@ export class WorkshopScene {
 
     const defaultPortraitTex = this._createDefaultPortraitTexture();
     this.cachedPortraitTex = defaultPortraitTex;
-    const steamVeilGeo = new THREE.CylinderGeometry(0.452, 0.452, 0.56, 28, 1, true);
+    const steamVeilGeo = new THREE.CylinderGeometry(0.452, 0.452, 0.56, 20, 1, true);
     const sharedSmokeTex = this._createSoftSmokeSpriteTexture();
+    const sharedSurfaceMaps = this._createSharedBarrelSurfaceMaps();
+    const sharedLidMat = new THREE.MeshStandardMaterial({
+      color: 0x26292e,
+      metalness: 0.82,
+      roughness: 0.48,
+      bumpMap: sharedSurfaceMaps.bump,
+      bumpScale: 0.012,
+    });
 
     for (let i = 0; i < 12; i++) {
       const group = new THREE.Group();
       const batchCode = BARREL_BATCH_CODES[i] || `${i + 1}`;
-      const maps = this._createBarrelPBRTextures(batchCode, i + 1);
+      const maps = this._createBarrelPBRTextures(batchCode, i + 1, sharedSurfaceMaps);
 
       const dentUniforms = {
         uDentPos: { value: new THREE.Vector3(0, 0.8, 0.42) },
@@ -751,6 +759,7 @@ export class WorkshopScene {
         roughness: 0.46,
         envMapIntensity: 0.95,
       });
+      bodyMat.customProgramCacheKey = () => 'barrel-dent-v1';
 
       bodyMat.onBeforeCompile = (shader) => {
         shader.uniforms.uDentPos = dentUniforms.uDentPos;
@@ -778,7 +787,7 @@ export class WorkshopScene {
       };
 
       const bodyMesh = new THREE.Mesh(sharedBodyGeo, bodyMat);
-      bodyMesh.castShadow = true;
+      bodyMesh.castShadow = i < 6;
       bodyMesh.receiveShadow = true;
       bodyMesh.userData.barrelIndex = i;
       group.add(bodyMesh);
@@ -787,22 +796,15 @@ export class WorkshopScene {
       lidGroup.position.set(0, 1.355, 0);
       lidGroup.rotation.y = i * 0.9;
 
-      const lidMat = new THREE.MeshStandardMaterial({
-        color: 0x26292e,
-        metalness: 0.82,
-        roughness: 0.48,
-        bumpMap: maps.bump,
-        bumpScale: 0.012,
-      });
-      const lidPlate = new THREE.Mesh(lidPlateGeo, lidMat);
+      const lidPlate = new THREE.Mesh(lidPlateGeo, sharedLidMat);
       lidPlate.userData.barrelIndex = i;
-      const lidRim = new THREE.Mesh(lidRimGeo, lidMat);
+      const lidRim = new THREE.Mesh(lidRimGeo, sharedLidMat);
       lidRim.position.y = 0.01;
       lidRim.userData.barrelIndex = i;
-      const bung1 = new THREE.Mesh(bungBigGeo, lidMat);
+      const bung1 = new THREE.Mesh(bungBigGeo, sharedLidMat);
       bung1.position.set(0.21, 0.015, 0.05);
       bung1.userData.barrelIndex = i;
-      const bung2 = new THREE.Mesh(bungSmallGeo, lidMat);
+      const bung2 = new THREE.Mesh(bungSmallGeo, sharedLidMat);
       bung2.position.set(-0.2, 0.015, -0.06);
       bung2.userData.barrelIndex = i;
 
@@ -1436,9 +1438,11 @@ export class WorkshopScene {
       }
     }
 
-    if (this.activeZoneId === 3 && this.alarmRedLight) {
-      const alarmPulse = 0.35 + Math.pow(Math.max(0, Math.sin(elapsed * 4.4)), 2) * 8.5;
-      this.alarmRedLight.intensity = alarmPulse;
+    if (this.activeZoneId === 3) {
+      const alarmPulse = 0.35 + Math.pow(Math.max(0, Math.sin(elapsed * 4.4)), 2) * 6.5;
+      if (this.warmFillLight) {
+        this.warmFillLight.intensity = 1.6 + alarmPulse;
+      }
       if (this.alarmLampMat) {
         this.alarmLampMat.emissiveIntensity = 0.4 + alarmPulse * 0.22;
       }
@@ -1462,15 +1466,15 @@ export class WorkshopScene {
       }
       if (this.wiringArcFlash > 0.005) {
         const flicker = (0.65 + Math.random() * 0.7) * this.wiringArcFlash;
-        if (this.wiringArcLight) {
-          this.wiringArcLight.intensity = flicker * 26.0;
+        if (this.warmFillLight) {
+          this.warmFillLight.intensity = 2.2 + flicker * 14.0;
         }
         if (this.wallQuoteMat) {
           this.wallQuoteMat.opacity = Math.min(0.98, 0.22 + flicker * 0.82);
         }
         this.wiringArcFlash = Math.max(0, this.wiringArcFlash - dt * 2.4);
       } else {
-        if (this.wiringArcLight) this.wiringArcLight.intensity = 0;
+        if (this.warmFillLight) this.warmFillLight.intensity = 2.2;
         if (this.wallQuoteMat) {
           this.wallQuoteMat.opacity = 0.22 + Math.sin(elapsed * 1.7) * 0.04;
         }
@@ -1754,13 +1758,9 @@ export class WorkshopScene {
     return new THREE.CanvasTexture(c);
   }
 
-  _createBarrelPBRTextures(batchCode, num = 1) {
-    const W = 512;
-    const H = 512;
-    const cCol = document.createElement('canvas');
-    cCol.width = W; cCol.height = H;
-    const ctx = cCol.getContext('2d');
-
+  _createSharedBarrelSurfaceMaps() {
+    const W = 256;
+    const H = 256;
     const cRough = document.createElement('canvas');
     cRough.width = W; cRough.height = H;
     const rctx = cRough.getContext('2d');
@@ -1769,43 +1769,63 @@ export class WorkshopScene {
     cBump.width = W; cBump.height = H;
     const bctx = cBump.getContext('2d');
 
-    ctx.fillStyle = '#262b31';
-    ctx.fillRect(0, 0, W, H);
     rctx.fillStyle = '#747474';
     rctx.fillRect(0, 0, W, H);
     bctx.fillStyle = '#808080';
     bctx.fillRect(0, 0, W, H);
 
-    for (let i = 0; i < 42; i++) {
-      const rx = ((i * 97 + num * 53) % W);
-      const ry = ((i * 71 + num * 29) % H);
-      const rw = 22 + (i % 5) * 16;
-      const rh = 35 + (i % 7) * 24;
-
-      ctx.fillStyle = i % 2 === 0 ? 'rgba(138, 62, 24, 0.42)' : 'rgba(84, 41, 18, 0.36)';
-      ctx.beginPath();
-      ctx.ellipse(rx, ry, rw, rh, 0.2, 0, Math.PI * 2);
-      ctx.fill();
+    for (let i = 0; i < 24; i++) {
+      const rx = ((i * 53 + 17) % W);
+      const ry = ((i * 41 + 29) % H);
+      const rw = 12 + (i % 5) * 8;
+      const rh = 18 + (i % 7) * 12;
 
       rctx.fillStyle = 'rgba(235, 235, 235, 0.45)';
-      ctx.beginPath();
       rctx.beginPath();
       rctx.ellipse(rx, ry, rw, rh, 0.2, 0, Math.PI * 2);
       rctx.fill();
 
       bctx.fillStyle = 'rgba(195, 195, 195, 0.35)';
-      bctx.fillRect(rx - rw * 0.4, ry - 2, rw * 0.8, 4);
+      bctx.fillRect(rx - rw * 0.4, ry - 1, rw * 0.8, 2);
     }
 
-    for (let s = 0; s < 14; s++) {
-      const sx = ((s * 37 + num * 41) % W);
+    for (let s = 0; s < 10; s++) {
+      const sx = ((s * 23 + 19) % W);
       rctx.fillStyle = 'rgba(32, 32, 32, 0.55)';
-      rctx.fillRect(sx, 0, 5 + (s % 4) * 3, 180 + (s % 5) * 60);
+      rctx.fillRect(sx, 0, 3 + (s % 4) * 2, 90 + (s % 5) * 30);
+    }
+
+    return {
+      roughness: new THREE.CanvasTexture(cRough),
+      bump: new THREE.CanvasTexture(cBump),
+    };
+  }
+
+  _createBarrelPBRTextures(batchCode, num = 1, sharedMaps = null) {
+    const W = 256;
+    const H = 256;
+    const cCol = document.createElement('canvas');
+    cCol.width = W; cCol.height = H;
+    const ctx = cCol.getContext('2d');
+
+    ctx.fillStyle = '#262b31';
+    ctx.fillRect(0, 0, W, H);
+
+    for (let i = 0; i < 22; i++) {
+      const rx = ((i * 47 + num * 31) % W);
+      const ry = ((i * 37 + num * 19) % H);
+      const rw = 11 + (i % 5) * 8;
+      const rh = 18 + (i % 7) * 12;
+
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(138, 62, 24, 0.42)' : 'rgba(84, 41, 18, 0.36)';
+      ctx.beginPath();
+      ctx.ellipse(rx, ry, rw, rh, 0.2, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     ctx.fillStyle = 'rgba(165, 175, 185, 0.16)';
-    ctx.fillRect(0, H * 0.32, W, 6);
-    ctx.fillRect(0, H * 0.66, W, 6);
+    ctx.fillRect(0, H * 0.32, W, 3);
+    ctx.fillRect(0, H * 0.66, W, 3);
 
     // Потёртый заводской трафарет номера партии (01, 12, 17, 19, 26, 97)
     ctx.save();
@@ -1816,25 +1836,23 @@ export class WorkshopScene {
     ctx.strokeRect(W * 0.34, H * 0.37, W * 0.32, H * 0.21);
 
     ctx.fillStyle = 'rgba(234, 179, 8, 0.86)';
-    ctx.font = '900 72px Impact, "Arial Black", monospace';
+    ctx.font = '900 36px Impact, "Arial Black", monospace';
     ctx.textAlign = 'center';
     ctx.fillText(String(batchCode), W * 0.5, H * 0.505);
 
-    // Горизонтальная перемычка настоящего металлического трафарета + потёртости
     ctx.fillStyle = '#262b31';
-    ctx.fillRect(W * 0.36, H * 0.448, W * 0.28, 3.5);
+    ctx.fillRect(W * 0.36, H * 0.448, W * 0.28, 2);
 
-    ctx.font = '700 15px monospace';
+    ctx.font = '700 8px monospace';
     ctx.fillStyle = 'rgba(214, 185, 130, 0.56)';
     ctx.fillText(`ПАРТИЯ // ${batchCode}`, W * 0.5, H * 0.556);
     ctx.restore();
 
     const color = new THREE.CanvasTexture(cCol);
     color.colorSpace = THREE.SRGBColorSpace;
-    const roughness = new THREE.CanvasTexture(cRough);
-    const bump = new THREE.CanvasTexture(cBump);
+    const surf = sharedMaps || this._createSharedBarrelSurfaceMaps();
 
-    return { color, roughness, bump };
+    return { color, roughness: surf.roughness, bump: surf.bump };
   }
 
   _createWetConcreteTextures() {
@@ -2030,18 +2048,14 @@ export class WorkshopScene {
     this.floodWaterMesh = waterMesh;
     this.scene.add(waterMesh);
 
-    this.alarmRedLight = new THREE.PointLight(0xc92a2a, 0, 14, 1.5);
-    this.alarmRedLight.position.set(-1.8, 3.1, -1.9);
-    this.scene.add(this.alarmRedLight);
-
     this.alarmLampMat = new THREE.MeshStandardMaterial({
       color: 0xc92a2a,
       emissive: 0xc92a2a,
       emissiveIntensity: 0.0,
       roughness: 0.3,
     });
-    const alarmLamp = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 12), this.alarmLampMat);
-    alarmLamp.position.copy(this.alarmRedLight.position);
+    const alarmLamp = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 10), this.alarmLampMat);
+    alarmLamp.position.set(-1.8, 3.1, -1.9);
     alarmLamp.visible = false;
     this.alarmLampMesh = alarmLamp;
     this.scene.add(alarmLamp);
@@ -2058,10 +2072,6 @@ export class WorkshopScene {
     this.wiringArcGroup = arcGroup;
     this.scene.add(arcGroup);
 
-    this.wiringArcLight = new THREE.PointLight(0x93c5fd, 0, 13, 1.4);
-    this.wiringArcLight.position.set(0, 2.85, -3.2);
-    this.scene.add(this.wiringArcLight);
-
     const quoteTex = this._createWallQuoteTexture(this.wallQuoteText);
     this.wallQuoteMat = new THREE.MeshBasicMaterial({
       map: quoteTex,
@@ -2077,16 +2087,15 @@ export class WorkshopScene {
   }
 
   _createWallQuoteTexture(text) {
-    const W = 1024;
-    const H = 192;
+    const W = 512;
+    const H = 96;
     const c = document.createElement('canvas');
     c.width = W;
     c.height = H;
     const ctx = c.getContext('2d');
     ctx.clearRect(0, 0, W, H);
 
-    // Трафаретная подложка и следы кисти на бетоне
-    const g = ctx.createRadialGradient(W * 0.5, H * 0.5, 20, W * 0.5, H * 0.5, W * 0.48);
+    const g = ctx.createRadialGradient(W * 0.5, H * 0.5, 10, W * 0.5, H * 0.5, W * 0.48);
     g.addColorStop(0, 'rgba(15, 23, 42, 0.58)');
     g.addColorStop(1, 'rgba(15, 23, 42, 0)');
     ctx.fillStyle = g;
@@ -2096,14 +2105,14 @@ export class WorkshopScene {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.shadowColor = 'rgba(147, 197, 253, 0.92)';
-    ctx.shadowBlur = 18;
+    ctx.shadowBlur = 9;
     ctx.fillStyle = '#e2e8f0';
-    ctx.font = '900 34px "Oswald", Impact, sans-serif';
+    ctx.font = '900 17px "Oswald", Impact, sans-serif';
     ctx.fillText(line, W * 0.5, H * 0.46);
 
-    ctx.shadowBlur = 6;
+    ctx.shadowBlur = 3;
     ctx.fillStyle = 'rgba(234, 179, 8, 0.88)';
-    ctx.font = '700 20px "JetBrains Mono", monospace';
+    ctx.font = '700 10px "JetBrains Mono", monospace';
     ctx.fillText('19 · 97 // ПРЕСС-ЦЕХ КОРПУС Б', W * 0.5, H * 0.80);
 
     const tex = new THREE.CanvasTexture(c);
@@ -2124,9 +2133,7 @@ export class WorkshopScene {
 
   triggerWiringArcFlash(power = 1.0) {
     this.wiringArcFlash = Math.max(this.wiringArcFlash, Math.min(1.5, power));
-    if (this.wiringArcLight) {
-      this._spawnSparks(this.wiringArcLight.position.clone(), 16);
-    }
+    this._spawnSparks(new THREE.Vector3(0, 2.85, -3.2), 14);
   }
 
   triggerSteamHazardBurst(index) {
@@ -2180,10 +2187,8 @@ export class WorkshopScene {
     if (this.wallClockGroup) this.wallClockGroup.visible = true;
     if (this.floodWaterMesh) this.floodWaterMesh.visible = zoneId === 3;
     if (this.alarmLampMesh) this.alarmLampMesh.visible = zoneId === 3;
-    if (this.alarmRedLight) this.alarmRedLight.intensity = zoneId === 3 ? 3.5 : 0;
     if (this.wiringArcGroup) this.wiringArcGroup.visible = zoneId === 4;
     if (this.wallQuoteMesh) this.wallQuoteMesh.visible = zoneId === 4;
-    if (this.wiringArcLight && zoneId !== 4) this.wiringArcLight.intensity = 0;
 
     if (zoneId === 1) {
       // Уровень 1 «Разгрузочный шлюз» (3 бочки): холодный утренний свет из пыльных окон (#8aa4b8)
@@ -2302,7 +2307,7 @@ export class WorkshopScene {
       steamHazardIndex: this.steamHazardIndex,
       steamPipeVisible: Boolean(this.steamPipeGroup?.visible),
       floodWaterVisible: Boolean(this.floodWaterMesh?.visible),
-      alarmLightHex: this.alarmRedLight ? this.alarmRedLight.color.getHexString() : '',
+      alarmLightHex: this.alarmLampMat ? this.alarmLampMat.color.getHexString() : 'c92a2a',
       wallQuoteVisible: Boolean(this.wallQuoteMesh?.visible),
       wallQuoteText: this.wallQuoteText,
       numbersObscured: this.numbersObscured,

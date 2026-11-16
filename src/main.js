@@ -276,7 +276,7 @@ function getFactoryZoneSpecByZoneId(rawZoneId = 1) {
   if (z === 1) {
     return {
       zoneId: 1,
-      barrelCount: 3,
+      barrelCount: 4,
       airSec: 30.0,
       hasSteamHazard: false,
       numbersObscured: false,
@@ -949,19 +949,18 @@ async function startNewbieOnboardingRound() {
   const pickIdx = Math.floor(Math.random() * DEMO_PORTRAITS.length);
   const charMeta = Array.isArray(demoChars) && demoChars[pickIdx]
     ? demoChars[pickIdx]
-    : { name: 'РАБОЧИЙ ШЛЮЗА', quote: 'Слышишь стук? Бей ломом по крышке!' };
+    : { name: 'УЗНИК ЦЕХА', quote: 'Слышишь стук? Бей ломом по крышке!' };
 
-  const graded = await processPortraitToWebP(DEMO_PORTRAITS[pickIdx], 'flashlight');
-  const candidates = [0, 2];
-  const targetIndex = candidates[Math.floor(Math.random() * candidates.length)];
+  const rawPortrait = DEMO_PORTRAITS[pickIdx] || DEMO_PORTRAITS[0];
+  const targetIndex = 3;
 
-  await audio.setSenderVoiceUrl('');
+  audio.setSenderVoiceUrl('');
 
   state.round = {
-    modeType: 'demo',
+    modeType: 'viral',
     isDemo: true,
     zoneId: 1,
-    barrelCount: 3,
+    barrelCount: 4,
     workshopLevel: 1,
     isBlitz: false,
     blitzTargetsCleared: 0,
@@ -982,7 +981,7 @@ async function startNewbieOnboardingRound() {
     strikeBusy: false,
     survived: false,
     reactionLocked: false,
-    portraitDataUrl: graded.dataUrl,
+    portraitDataUrl: rawPortrait,
     voiceUrl: '',
     useBarrelFilter: true,
     message: charMeta.quote,
@@ -991,7 +990,7 @@ async function startNewbieOnboardingRound() {
   };
 
   const tagEl = document.getElementById('hud-mode-tag');
-  if (tagEl) tagEl.textContent = `${t('zone1Name')} // 3 БОЧКИ`;
+  if (tagEl) tagEl.textContent = 'НАЙДИ ЧЕЛОВЕКА В БОЧКЕ // 4 БОЧКИ · 3 ПОПЫТКИ';
   const titleEl = document.getElementById('hud-urgent-title');
   if (titleEl) titleEl.textContent = t('stage1TaskLine');
   document.getElementById('btn-hud-pack')?.setAttribute('hidden', '');
@@ -999,6 +998,15 @@ async function startNewbieOnboardingRound() {
   configureBottomAttemptsMode('squares');
 
   launchWorkshopGameplay(false);
+
+  processPortraitToWebP(rawPortrait, 'flashlight')
+    .then((graded) => {
+      if (graded?.dataUrl && state.round.isDemo) {
+        state.round.portraitDataUrl = graded.dataUrl;
+        scene?.setTargetPortrait?.(state.round.targetIndex, graded.dataUrl);
+      }
+    })
+    .catch(() => {});
 }
 
 async function startDemoRound() {
@@ -1149,18 +1157,14 @@ async function startDailyShiftRound() {
 }
 
 async function startViralFriendRound(pack) {
-  let portraitDataUrl = pack?.photoUrl || '';
-  if (!portraitDataUrl) {
-    const fallbackGraded = await processPortraitToWebP(null, pack?.frameStyle || 'flashlight');
-    portraitDataUrl = fallbackGraded.dataUrl;
-  }
+  let portraitDataUrl = pack?.photoUrl || DEMO_PORTRAITS[0];
 
   const voiceUrl = pack?.voiceUrl || '';
   await audio.setSenderVoiceUrl(voiceUrl);
 
-  const packZoneId = Math.max(1, Math.min(4, Number(pack?.zoneId || 2)));
+  const packZoneId = Math.max(1, Math.min(4, Number(pack?.zoneId || 1)));
   const zoneSpec = getFactoryZoneSpecByZoneId(packZoneId);
-  const viralBarrelCount = Math.max(6, zoneSpec.barrelCount);
+  const viralBarrelCount = Math.max(4, zoneSpec.barrelCount);
 
   const initialTarget =
     typeof pack?.targetIndex === 'number' && pack.targetIndex >= 0 && pack.targetIndex < viralBarrelCount
@@ -1202,6 +1206,17 @@ async function startViralFriendRound(pack) {
     senderLabel: pack?.senderName ? `${t('revealFromFriend')} · ${pack.senderName}` : t('revealFromFriend'),
     lastUrgentSec: 9,
   };
+
+  if (!pack?.photoUrl) {
+    processPortraitToWebP(null, pack?.frameStyle || 'flashlight')
+      .then((fallbackGraded) => {
+        if (fallbackGraded?.dataUrl) {
+          state.round.portraitDataUrl = fallbackGraded.dataUrl;
+          scene?.setTargetPortrait?.(state.round.targetIndex, fallbackGraded.dataUrl);
+        }
+      })
+      .catch(() => {});
+  }
 
   document.getElementById('hud-mode-tag').textContent = `${t('modeBTag')} // ${zoneSpec.zoneTitle}`;
   document.getElementById('hud-urgent-title').textContent = state.uiStage <= 2 ? t('stage1TaskLine') : t('modeBTitle');
@@ -1546,12 +1561,12 @@ function handleAirDepleted() {
 
   if (r.modeType === 'viral') {
     if (r.rescueStage === 0) {
-      popRemainingEmptyBarrelsDownTo(3);
+      popRemainingEmptyBarrelsDownTo(1);
       openRescueStep1();
       return;
     }
     if (r.rescueStage === 2) {
-      popRemainingEmptyBarrelsDownTo(2);
+      popRemainingEmptyBarrelsDownTo(1);
       openRescueStep2();
       return;
     }
@@ -1559,7 +1574,7 @@ function handleAirDepleted() {
       const closed = getUnstruckBarrelIndices();
       const winIdx = closed[0] ?? r.targetIndex;
       r.targetIndex = winIdx;
-      r.attemptsUsed = 5;
+      r.attemptsUsed = 4;
       finishRound(true, { diveBarrelIndex: winIdx, hitTarget: true });
       return;
     }
@@ -2132,12 +2147,13 @@ async function handleBarrelStrike(index, worldPoint) {
   }
 
   // -------------------------------------------------------------------------
-  // РЕЖИМ 2: 5-ХОДОВАЯ РЕЖИССИРОВАННАЯ ВОРОНКА ДРУГА (?b=jakaqgx)
+  // РЕЖИМ 2: 4 БОЧКИ · 3 ПОПЫТКИ МИМО -> ПРОСМОТР ТРЕЙЛЕРА -> 4-Й ПОБЕДНЫЙ УДАР!
   // -------------------------------------------------------------------------
   if (r.modeType === 'viral') {
     r.attemptsUsed += 1;
 
-    if (r.rescueStage >= 4 || r.attemptsUsed >= 5) {
+    // После просмотра трейлера (rescueStage >= 4 или 4-я попытка) игрок 100% угадывает оставшуюся 4-ю бочку!
+    if (r.rescueStage >= 4 || r.attemptsUsed >= 4) {
       r.targetIndex = index;
       r.attemptsLeft = 0;
       renderAttemptSquares(0, 3);
@@ -2150,6 +2166,7 @@ async function handleBarrelStrike(index, worldPoint) {
       return;
     }
 
+    // Первые 3 попытки (attemptsUsed = 1, 2, 3) угадать НЕВОЗМОЖНО — цель всегда переносится в закрытую бочку!
     const otherClosed = getUnstruckBarrelIndices().filter((i) => i !== index);
     if (otherClosed.length > 0 && index === r.targetIndex) {
       const nextTarget = otherClosed[Math.floor(Math.random() * otherClosed.length)];
@@ -2176,27 +2193,16 @@ async function handleBarrelStrike(index, worldPoint) {
     renderAttemptSquares(r.attemptsLeft, 3);
     state.watchChannel?.send('strike', { barrelIndex: index, attemptsLeft: r.attemptsLeft });
 
-    if (r.rescueStage === 0) {
-      if (r.attemptsLeft > 0) {
-        triggerMiniScreamer(r.attemptsUsed - 1);
-      } else {
-        r.running = false;
-        scene.setInteractive(false);
-        triggerMiniScreamer(2);
-        window.setTimeout(() => openRescueStep1(), 430);
-      }
-      return;
-    }
-
-    if (r.rescueStage === 2) {
+    if (r.attemptsLeft > 0) {
+      triggerMiniScreamer(r.attemptsUsed - 1);
+    } else {
+      // После 3 промахов осталась ровно 1 закрытая (4-я) бочка -> открываем Трейлер!
       r.running = false;
       scene.setInteractive(false);
-      triggerMiniScreamer(3);
-      window.setTimeout(() => {
-        openRescueStep2();
-      }, 430);
-      return;
+      triggerMiniScreamer(2);
+      window.setTimeout(() => openRescueStep1(), 380);
     }
+    return;
   }
 
   // -------------------------------------------------------------------------
@@ -2869,10 +2875,10 @@ function claimTrailerFifthLife() {
   closeTrailerModal();
   document.getElementById('modal-rescue')?.setAttribute('hidden', '');
 
-  const isFirstRescue = state.round.rescueStage <= 1;
-  state.round.rescueStage = isFirstRescue ? 2 : 4;
+  // После просмотра трейлера следующий (4-й) удар сразу победный!
+  state.round.rescueStage = 4;
   state.round.attemptsLeft = 1;
-  state.round.airLeft = isFirstRescue ? 18.0 : 22.0;
+  state.round.airLeft = 22.0;
   state.round.lastUrgentSec = 9;
   state.round.running = true;
 
@@ -3470,6 +3476,12 @@ function populateSpoilerFreeReportBox() {
   const { rank, reportText } = buildSpoilerFreeReport();
   if (badge) badge.textContent = rank.toUpperCase();
   out.value = reportText;
+
+  if (state.uiStage <= 2 && !state.round.isDailyShift) {
+    box.setAttribute('hidden', '');
+  } else {
+    box.removeAttribute('hidden');
+  }
 }
 
 function renderBlitzCooldownMicroGoal() {
