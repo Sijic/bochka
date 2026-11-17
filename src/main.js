@@ -65,6 +65,7 @@ import {
   getPlayerRecoveryCode,
   restoreProfileByRecoveryCode,
   recordTrafficSource,
+  recordPlayerMeta,
 } from './backend.js';
 import { WorkshopDuelController, createBarrelWatchChannel } from './duel.js';
 import { mountTestBogHUD } from './testbog.js';
@@ -583,8 +584,9 @@ async function bootstrap() {
   state.profile = await fetchPlayerProfile(state.tg?.user);
   if (state.tg?.trafficSource) {
     state.profile.trafficSource = state.tg.trafficSource;
-    recordTrafficSource(state.tg?.user, state.tg.trafficSource).catch(() => {});
+    await recordTrafficSource(state.tg?.user, state.tg.trafficSource).catch(() => {});
   }
+  recordPlayerMeta(state.tg?.user).catch(() => {});
   if (state.tg?.duelRoomParam) {
     await syncUiStage(state.tg?.user, 4);
     applyProgressiveDisclosureUI({ forceStage: 4 });

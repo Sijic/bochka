@@ -1314,6 +1314,24 @@ export function buildTrailerReferralLinks(tgUser = null) {
   };
 }
 
+export async function recordPlayerMeta(tgUser = null) {
+  if (!tgUser?.id) return { ok: false, skipped: true };
+  const db = getCloudDb();
+  if (!db) return { ok: false, skipped: true };
+  try {
+    await db.rpc('record_player_meta_rpc', {
+      p_uid: getViewerUid(tgUser),
+      p_avatar: tgUser.photoUrl || null,
+      p_lang: tgUser.lang || null,
+      p_username: tgUser.username || null,
+      p_name: tgUser.name || null,
+    });
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
+}
+
 export async function recordTrafficSource(tgUser = null, sourceTag = '') {
   const cleanSrc = String(sourceTag || '').trim().toLowerCase();
   if (!cleanSrc) return { ok: false, skipped: true };

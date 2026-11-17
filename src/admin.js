@@ -761,7 +761,7 @@ function setText(id, val) {
 /* ============================================================================
    ВКЛАДКА 5: ТОП-100 (блоки по 10), фильтр типа, карточка игрока, CSV
    ============================================================================ */
-const topState = { rows: [], type: 'all', block: 0 };
+const topState = { rows: [], type: 'all', block: 0, mode: 'all' };
 
 function trafficType(src) {
   const s = String(src || 'organic');
@@ -773,8 +773,12 @@ function trafficType(src) {
 
 const TYPE_LABEL = { blogger: '🎤 Блогер', test: '🧪 Тест', friends: '🤝 Френдс', organic: '🌱 Органика' };
 
+function genLabel(r) {
+  return r.chain_depth > 0 ? `${r.chain_depth}-е колено` : 'прямая ссылка';
+}
+
 async function loadTop100() {
-  const { data, error } = await adminSupabase.rpc('admin_get_top100');
+  const { data, error } = await adminSupabase.rpc('admin_get_top100', { p_mode: topState.mode });
   if (error || !data?.ok) {
     showAdmToast('Не удалось загрузить Топ-100');
     return;
@@ -792,6 +796,21 @@ function td(text, cls) {
   c.textContent = text == null || text === '' ? '—' : String(text);
   if (cls) c.className = cls;
   return c;
+}
+
+function avatarEl(url, size = 28) {
+  const holder = document.createElement('span');
+  holder.style.cssText = `display:inline-block;width:${size}px;height:${size}px;border-radius:50%;background:#222;overflow:hidden;vertical-align:middle;margin-right:6px;`;
+  if (url && /^https:\/\//.test(url)) {
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = '';
+    img.referrerPolicy = 'no-referrer';
+    img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+    img.addEventListener('error', () => img.remove());
+    holder.appendChild(img);
+  }
+  return holder;
 }
 
 function renderTop100() {
@@ -822,7 +841,7 @@ function renderTop100() {
   if (!slice.length) {
     const tr = document.createElement('tr');
     const c = td('Пока нет игроков в этом списке');
-    c.colSpan = 11;
+    c.colSpan = 13;
     tr.appendChild(c);
     tbody.replaceChildren(tr);
     return;
@@ -832,23 +851,107 @@ function renderTop100() {
       const tr = document.createElement('tr');
       tr.style.cursor = 'pointer';
       const who = r.display_name || r.tg_username || r.uid;
+      const nameCell = document.createElement('td');
+      nameCell.append(
+        avatarEl(r.avatar_url),
+        document.createTextNode(`${who}${r.tg_username ? ' @' + r.tg_username : ''}${r.tg_user_id ? ' · ' + r.tg_user_id : ''}`)
+      );
       tr.append(
         td(r.rank),
-        td(`${who}${r.tg_username ? ' @' + r.tg_username : ''}${r.tg_user_id ? ' · ' + r.tg_user_id : ''}`),
+        nameCell,
         td(`${TYPE_LABEL[r.type]} · ${r.traffic_source}`),
+        td(genLabel(r)),
         td(fmtInt(r.premiere_points)),
         td(r.current_level),
         td(r.lives),
-        td(r.friends_brought),
+        td(`${r.direct_cnt} / ${r.branch_total}`),
         td(r.packed_count),
         td(`${r.passes_sent} (принято ${r.passes_claimed})`),
         td(r.phone),
-        td(r.can_notify ? '✓' : '✗')
+        td(r.can_notify ? '✓' : '✗'),
+        td(r.eligible ? '🎟 да' : '⛔ нет')
       );
       tr.addEventListener('click', () => showTop100Detail(r));
       return tr;
     })
   );
+}
+
+function chainSection(r, box) {
+  const wrap = document.createElement('div');
+  wrap.style.marginTop = '16px';
+  const title = document.createElement('h3');
+  title.textContent = 'Цепочка приглашений';
+  wrap.appendChild(title);
+  const status = document.createElement('p');
+  status.className = 'mono-muted';
+  status.textContent = 'Загрузка цепочки…';
+  wrap.appendChild(status);
+
+  adminSupabase.rpc('admin_get_chain', { p_uid: r.uid }).then(({ data, error }) => {
+    if (error || !data?.ok) {
+      status.textContent = 'Не удалось загрузить цепочку';
+      return;
+    }
+    const parts = [];
+    const up = Array.isArray(data.upline) ? data.upline : [];
+    const path = document.createElement('p');
+    path.style.cssText = 'font-size:13px;';
+    path.textContent =
+      'Путь: ' +
+      up.map((u) => `${u.name}${u.source ? ' [' + u.source + ']' : ''}`).join('  →  ') +
+      (up.length <= 1 ? '  (пришёл по прямой ссылке — выше никого нет)' : '');
+    parts.push(path);
+
+    const gens = Array.isArray(data.per_gen) ? data.per_gen : [];
+    const total = gens.reduce((s, g) => s + g.players, 0);
+    const sum = document.createElement('p');
+    sum.style.cssText = 'font-size:13px;';
+    sum.textContent = `Лично привёл: ${(data.direct || []).length} · всего после него в ветке: ${total} · колен: ${gens.length}`;
+    parts.push(sum);
+
+    if (gens.length) {
+      const maxP = Math.max(...gens.map((g) => g.players), 1);
+      const bars = document.createElement('div');
+      gens.forEach((g, i) => {
+        const prev = i === 0 ? null : gens[i - 1].players;
+        const k = prev ? ` · K=${(g.players / prev).toFixed(2)}` : '';
+        const row = document.createElement('div');
+        row.style.cssText = 'margin:4px 0;font-size:12.5px;';
+        const lbl = document.createElement('div');
+        lbl.textContent = `${g.gen}-е колено${g.gen === 1 ? ' (лично)' : ''}: ${g.players} игр. · ⭐ ${fmtInt(g.points)} · закатали бочек: ${g.packed} (отправителей ${g.senders})${k}`;
+        const track = document.createElement('div');
+        track.className = 'funnel-track';
+        const fill = document.createElement('div');
+        fill.className = 'funnel-fill';
+        fill.style.width = `${Math.max(3, Math.round((g.players / maxP) * 100))}%`;
+        track.appendChild(fill);
+        row.append(lbl, track);
+        bars.appendChild(row);
+      });
+      parts.push(bars);
+    }
+
+    const kids = Array.isArray(data.direct) ? data.direct : [];
+    if (kids.length) {
+      const h = document.createElement('h4');
+      h.textContent = 'Личные приглашённые (кто сколько привёл дальше)';
+      h.style.marginTop = '10px';
+      parts.push(h);
+      const list = document.createElement('div');
+      kids.forEach((k) => {
+        const line = document.createElement('div');
+        line.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.08);font-size:13px;';
+        const t = document.createElement('span');
+        t.textContent = `${k.name}${k.username ? ' @' + k.username : ''} · ⭐ ${fmtInt(k.points)} · бочек ${k.packed} · ветка ${k.branch_size} · ${k.eligible ? '🎟 в розыгрыше' : '⛔ вне розыгрыша'}`;
+        line.append(avatarEl(k.avatar, 24), t);
+        list.appendChild(line);
+      });
+      parts.push(list);
+    }
+    status.replaceWith(...parts);
+  });
+  return wrap;
 }
 
 function showTop100Detail(r) {
@@ -859,14 +962,17 @@ function showTop100Detail(r) {
     ['Имя', r.display_name],
     ['Telegram', r.tg_username ? '@' + r.tg_username : ''],
     ['Telegram ID', r.tg_user_id],
-    ['Телефон (подтверждён)', r.phone],
+    ['Язык Telegram', r.tg_lang],
+    ['Телефон (подтверждён через бота)', r.phone],
     ['Тип / источник', `${TYPE_LABEL[r.type]} · ${r.traffic_source}`],
+    ['Колено', genLabel(r)],
+    ['Участвует в розыгрыше', r.eligible ? 'да' : 'нет'],
     ['Пришёл от (uid)', r.referred_by_uid],
     ['Очки ⭐ / шкала', `${fmtInt(r.premiere_points)} / ${Number(r.premiere_score || 0).toFixed(1)}`],
     ['Уровень / жизни', `${r.current_level} / ${r.lives}`],
-    ['Привёл друзей', r.friends_brought],
+    ['Привёл лично / в ветке', `${r.direct_cnt} / ${r.branch_total}`],
     ['Закатал бочек', r.packed_count],
-    ['Подарил билетов (по счётчику / по записям)', `${r.tickets_gifted} / ${r.passes_sent}, приняли: ${r.passes_claimed}`],
+    ['Подарил билетов (счётчик / записи)', `${r.tickets_gifted} / ${r.passes_sent}, приняли: ${r.passes_claimed}`],
     ['Дуэли сыграно / выиграно', `${r.duels_played} / ${r.duels_won}`],
     ['Кинопоиск подтверждён', r.kp_verified ? 'да' : 'нет'],
     ['Выиграл премьеру / код', r.premiere_won ? `да · ${r.premiere_code || ''}` : 'нет'],
@@ -877,13 +983,29 @@ function showTop100Detail(r) {
   const head = document.createElement('div');
   head.className = 'panel-head';
   const h2 = document.createElement('h2');
-  h2.textContent = `Карточка игрока #${r.rank}`;
+  h2.append(avatarEl(r.avatar_url, 40), document.createTextNode(`Карточка игрока #${r.rank}`));
+  const actions = document.createElement('div');
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'adm-btn adm-btn-secondary';
+  toggle.textContent = r.eligible ? '⛔ Исключить из розыгрыша' : '🎟 Вернуть в розыгрыш';
+  toggle.addEventListener('click', async () => {
+    const { error } = await adminSupabase.rpc('admin_set_prize_excluded', { p_uid: r.uid, p_excluded: r.eligible });
+    if (error) {
+      showAdmToast('Не удалось изменить допуск');
+      return;
+    }
+    showAdmToast('✓ Допуск изменён');
+    box.setAttribute('hidden', '');
+    loadTop100();
+  });
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'adm-btn adm-btn-ghost';
   close.textContent = '✕ Закрыть';
   close.addEventListener('click', () => box.setAttribute('hidden', ''));
-  head.append(h2, close);
+  actions.append(toggle, close);
+  head.append(h2, actions);
 
   const dl = document.createElement('div');
   dl.style.cssText = 'display:grid;grid-template-columns:minmax(180px,260px) 1fr;gap:6px 14px;font-size:13px;';
@@ -896,7 +1018,7 @@ function showTop100Detail(r) {
     dl.append(a, b);
   });
 
-  const parts = [head, dl];
+  const parts = [head, dl, chainSection(r, box)];
   if (Array.isArray(r.passes) && r.passes.length) {
     const t = document.createElement('h3');
     t.textContent = 'Последние подаренные билеты (кому / фото / статус)';
@@ -906,13 +1028,7 @@ function showTop100Detail(r) {
     r.passes.forEach((p) => {
       const card = document.createElement('div');
       card.style.cssText = 'display:flex;gap:8px;align-items:center;border:1px solid rgba(255,255,255,.14);padding:6px 8px;';
-      if (p.photo && /^https:\/\//.test(p.photo)) {
-        const img = document.createElement('img');
-        img.src = p.photo;
-        img.alt = 'фото получателя';
-        img.style.cssText = 'width:44px;height:44px;object-fit:cover;border-radius:50%;';
-        card.appendChild(img);
-      }
+      card.appendChild(avatarEl(p.photo, 44));
       const txt = document.createElement('span');
       txt.textContent = `${p.recipient_name || '—'} · ${p.status || ''}${p.receiver_username ? ' · @' + p.receiver_username : ''}${p.receiver_tg_id ? ' · ' + p.receiver_tg_id : ''}`;
       card.appendChild(txt);
@@ -938,20 +1054,22 @@ function exportTop100Csv() {
     return;
   }
   const cols = [
-    ['rank', 'Место'], ['type', 'Тип'], ['traffic_source', 'Источник'], ['display_name', 'Имя'], ['tg_username', 'Ник Telegram'],
-    ['tg_user_id', 'Telegram ID'], ['phone', 'Телефон'], ['premiere_points', 'Очки'], ['premiere_score', 'Шкала'],
-    ['current_level', 'Уровень'], ['lives', 'Жизни'], ['friends_brought', 'Привёл друзей'], ['packed_count', 'Закатал бочек'],
-    ['tickets_gifted', 'Билетов подарил (счётчик)'], ['passes_sent', 'Билетов подарил (записи)'], ['passes_claimed', 'Принято'],
-    ['duels_played', 'Дуэлей'], ['duels_won', 'Побед'], ['kp_verified', 'Кинопоиск'], ['premiere_won', 'Выиграл премьеру'],
-    ['premiere_code', 'VIP-код'], ['can_notify', 'Можно писать в TG'], ['referred_by_uid', 'Пригласил (uid)'],
-    ['created_at', 'Первый заход'], ['updated_at', 'Активность'],
+    ['rank', 'Место'], ['type', 'Тип'], ['traffic_source', 'Источник'], ['chain_depth', 'Колено (0=прямая ссылка)'],
+    ['eligible', 'Участвует в розыгрыше'], ['display_name', 'Имя'], ['tg_username', 'Ник Telegram'],
+    ['tg_user_id', 'Telegram ID'], ['avatar_url', 'Аватар (URL)'], ['tg_lang', 'Язык'], ['phone', 'Телефон'],
+    ['premiere_points', 'Очки'], ['premiere_score', 'Шкала'], ['current_level', 'Уровень'], ['lives', 'Жизни'],
+    ['direct_cnt', 'Привёл лично'], ['branch_total', 'Всего в ветке'], ['friends_brought', 'Друзей (счётчик игры)'],
+    ['packed_count', 'Закатал бочек'], ['tickets_gifted', 'Билетов подарил (счётчик)'], ['passes_sent', 'Билетов подарил (записи)'],
+    ['passes_claimed', 'Принято'], ['duels_played', 'Дуэлей'], ['duels_won', 'Побед'], ['kp_verified', 'Кинопоиск'],
+    ['premiere_won', 'Выиграл премьеру'], ['premiere_code', 'VIP-код'], ['can_notify', 'Можно писать в TG'],
+    ['referred_by_uid', 'Пригласил (uid)'], ['created_at', 'Первый заход'], ['updated_at', 'Активность'],
   ];
   const lines = [cols.map((c) => csvCell(c[1])).join(',')];
   rows.forEach((r) => lines.push(cols.map((c) => csvCell(r[c[0]])).join(',')));
   const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `bochka_top100_${topState.type}_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `bochka_top100_${topState.mode}_${topState.type}_${new Date().toISOString().slice(0, 10)}.csv`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -966,6 +1084,12 @@ function bindTop100Events() {
       document.querySelectorAll('[data-top-type]').forEach((b) => b.classList.toggle('is-active', b === btn));
       renderTop100();
     });
+  });
+  document.getElementById('btn-top-mode-eligible')?.addEventListener('click', (e) => {
+    topState.mode = topState.mode === 'eligible' ? 'all' : 'eligible';
+    topState.block = 0;
+    e.currentTarget.classList.toggle('is-active', topState.mode === 'eligible');
+    loadTop100();
   });
   document.getElementById('btn-top100-csv')?.addEventListener('click', exportTop100Csv);
 }
