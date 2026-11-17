@@ -110,6 +110,9 @@
         <button type="button" class="adm-tab" data-adm-tab="limits">
           4. Управление лимитами
         </button>
+        <button type="button" class="adm-tab" data-adm-tab="top100">
+          5. Топ-100 и выгрузка
+        </button>
       </nav>
 
       <!-- ================================================================
@@ -271,6 +274,41 @@
             </table>
           </div>
         </div>
+      </section>
+
+      <!-- ================================================================
+           ВКЛАДКА 5: ТОП-100 (блоки по 10), фильтр по типу источника, карточка игрока, CSV
+           ================================================================ -->
+      <section class="adm-pane" id="pane-top100" hidden>
+        <div class="adm-panel">
+          <div class="panel-head panel-head-wrap">
+            <div>
+              <h2>Топ-100 игроков · рейтинг, контакты, источник, подарки</h2>
+              <p class="panel-sub">Порядок как в игре: сначала кто привёл ≥2 друзей, затем очки ⭐, победы в дуэлях, шкала. Клик по строке — полная карточка игрока.</p>
+            </div>
+            <button type="button" class="adm-btn adm-btn-gold" id="btn-top100-csv">⬇ CSV (все 100 / текущий фильтр)</button>
+          </div>
+          <div class="filter-pills" id="top100-type-pills">
+            <button type="button" class="pill-btn is-active" data-top-type="all">Все</button>
+            <button type="button" class="pill-btn" data-top-type="blogger">🎤 Блогеры</button>
+            <button type="button" class="pill-btn" data-top-type="test">🧪 Тест</button>
+            <button type="button" class="pill-btn" data-top-type="friends">🤝 Френдс</button>
+            <button type="button" class="pill-btn" data-top-type="organic">🌱 Органика</button>
+          </div>
+          <div class="filter-pills" id="top100-block-pills" style="margin-top:8px;"></div>
+          <div class="adm-table-wrap">
+            <table class="adm-table">
+              <thead>
+                <tr>
+                  <th>#</th><th>Игрок</th><th>Тип / источник</th><th>⭐ Очки</th><th>Ур.</th><th>❤️</th>
+                  <th>Привёл</th><th>Бочек</th><th>Билетов подарил</th><th>Телефон</th><th>Пуш</th>
+                </tr>
+              </thead>
+              <tbody id="top100-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="adm-panel" id="top100-detail" hidden></div>
       </section>
 
       <!-- ================================================================
