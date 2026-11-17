@@ -943,7 +943,7 @@ function chainSection(r, box) {
         const line = document.createElement('div');
         line.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.08);font-size:13px;';
         const t = document.createElement('span');
-        t.textContent = `${k.name}${k.username ? ' @' + k.username : ''} · ⭐ ${fmtInt(k.points)} · бочек ${k.packed} · ветка ${k.branch_size} · ${k.eligible ? '🎟 в розыгрыше' : '⛔ вне розыгрыша'}`;
+        t.textContent = `${k.name}${k.username ? ' @' + k.username : ''} · ⭐ ${fmtInt(k.points)} · бочек ${k.packed} · привёл дальше ${Math.max(0, (k.branch_size || 1) - 1)} · ${k.eligible ? '🎟 в розыгрыше' : '⛔ вне розыгрыша'}`;
         line.append(avatarEl(k.avatar, 24), t);
         list.appendChild(line);
       });
