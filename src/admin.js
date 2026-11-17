@@ -284,7 +284,16 @@ function renderTrafficSourcesSummary(totalPlayers = 0) {
     ...rows.map((r) => {
       const pCount = Number(r.players || 0);
       const pct = Math.min(100, Math.round((pCount / maxTagPlayers) * 100));
-      const label = tagLabels[r.tag] || `🔗 Метка: ${r.tag}`;
+      const rawTag = String(r.tag || 'organic');
+      const label =
+        tagLabels[rawTag] ||
+        (rawTag === 'src_test' || rawTag.startsWith('src_test')
+          ? `🧪 Тестовые (${rawTag}) и их цепочка`
+          : rawTag.startsWith('src_friend')
+            ? `🤝 Друзья продюсеров (${rawTag})`
+            : rawTag.startsWith('src_')
+              ? `🎤 Блогер / канал: ${rawTag.slice(4)} (${rawTag})`
+              : `🔗 Метка: ${rawTag}`);
       const packed = Number(r.barrels_packed || 0);
       const invited = Number(r.friends_brought || 0);
 
