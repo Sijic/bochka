@@ -2431,19 +2431,17 @@ function triggerMiniScreamer(explicitVariant = null) {
     return;
   }
 
-  const screamerKey = state.round?.screamerType || state.pack?.screamerType || 'weld';
-  const screamerMap = {
-    weld: 0,
-    lunge: 1,
-    siren_cam: 2,
-    custom_scream: 3,
-  };
-  const v =
-    typeof explicitVariant === 'number'
+  // Бочка друга: срабатывает ИМЕННО тот скример, который отправитель выбрал при упаковке.
+  // Демо-раунды: ротация 4 скримеров как раньше.
+  const SCREAMER_KEYS = ['weld', 'lunge', 'siren_cam', 'custom_scream'];
+  const isFriendRound = Boolean(state.incomingPack) && !state.round?.isDemo;
+  const forcedKey = isFriendRound ? state.round?.screamerType || state.incomingPack?.screamerType || 'weld' : null;
+  const v = forcedKey && SCREAMER_KEYS.includes(forcedKey)
+    ? SCREAMER_KEYS.indexOf(forcedKey)
+    : typeof explicitVariant === 'number'
       ? Math.abs(explicitVariant) % 4
-      : typeof screamerMap[screamerKey] === 'number'
-        ? screamerMap[screamerKey]
-        : (state.screamerCursor++) % 4;
+      : (state.screamerCursor++) % 4;
+  const screamerKey = SCREAMER_KEYS[v];
 
   const meta = SCREAMER_META[v] || SCREAMER_META[0];
   const targetIdx = typeof state.round?.targetIndex === 'number' ? state.round.targetIndex : 0;
@@ -2492,6 +2490,7 @@ function triggerMiniScreamer(explicitVariant = null) {
   if (!el) return;
 
   el.setAttribute('data-variant', meta.key);
+  el.setAttribute('data-screamer', screamerKey);
   const customLabels = {
     weld: '⚡ СВАРКА И ПАДАЮЩАЯ БОЧКА!',
     lunge: '🔦 БРОСОК ИЗ ТЕМНОТЫ!',
