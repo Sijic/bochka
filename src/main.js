@@ -563,6 +563,8 @@ async function bootstrap() {
       hoverBarrel: (idx) => handleBarrelHover(idx, 200, 200, false),
       openPassScreen: (id) => openIncomingPassScreen(id),
       startPremiere: () => startPremiereRaceRound(),
+      showScreen: (n) => showScreen(n),
+      getDuel: () => duelCtrl,
       openDuel: (code) => openDuelTable(code),
       triggerScreamer: (v) => triggerMiniScreamer(v),
     };
