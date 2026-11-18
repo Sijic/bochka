@@ -3512,6 +3512,10 @@ async function handleSealBarrelClick() {
     state.profile.premiereScore = Math.max(Number(state.profile.premiereScore || 0), Number(created.premiereScore || 72));
     state.profile.temuSurgeClaimed = true;
     state.profile.packedCount = Math.max(1, Number(state.profile.packedCount || 0) + 1);
+    if (Number(state.profile.currentLevel || 1) < 2) {
+      state.profile.currentLevel = 2;
+      completeWorkshopLevel(state.tg?.user, 1, 0, 0).catch(() => {});
+    }
     await syncUiStage(state.tg?.user, 3).catch(() => {});
 
     // Нативное окно выбора чата Telegram (openTelegramLink)
@@ -3531,7 +3535,7 @@ async function handleSealBarrelClick() {
 }
 
 function showSentScreen() {
-  const spec = getWorkshopLevelSpec(Math.max(1, Number(state.profile?.currentLevel || 1)));
+  const spec = getWorkshopLevelSpec(Math.max(2, Number(state.profile?.currentLevel || 1)));
   const txt = document.getElementById('sent-text');
   const btnTxt = document.getElementById('btn-sent-play-text');
   if (txt) {
