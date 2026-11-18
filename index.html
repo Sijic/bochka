@@ -403,7 +403,7 @@
         <span class="premiere-pill" data-i18n="premiereBadge">В КИНО С 17 ДЕКАБРЯ</span>
       </div>
 
-      <h2 class="section-title pass-main-title" data-i18n="passScreenTitle">ИМЕННОЙ БИЛЕТ В КИНО НА «БОЧКУ»</h2>
+      <h2 class="section-title pass-main-title" data-i18n="passScreenTitle">ВИРТУАЛЬНЫЙ БИЛЕТ НА «БОЧКУ»</h2>
 
       <!-- Живые серверные часы с долями секунды против пересылки скриншотов -->
       <div class="pass-live-clock-bar">
@@ -421,6 +421,7 @@
           <div class="pass-scan-line" aria-hidden="true"></div>
         </div>
         <div class="pass-identity-meta">
+          <span class="mono-tag" id="pass-virtual-number">№ BOCHKA-1712</span>
           <span class="mono-label" data-i18n="passHolderLabel">ПОЛУЧАТЕЛЬ ПОДАРКА:</span>
           <strong class="pass-holder-name" id="pass-holder-name">—</strong>
           <span class="pass-sender-credit" id="pass-sender-line">Подарок из цеха «Бочки»</span>
@@ -437,49 +438,31 @@
         ⏳ Срок активации этого подарка (24 часа) истёк — бесплатный билет автоматически вернулся владельцу, чтобы не сгореть впустую!
       </div>
 
-      <!-- Экран для игрока, который УЖЕ есть в базе (total_strikes > 0): «Только для новичка» + Upsell 2-го билета рядом -->
+      <!-- Экран для игрока, который УЖЕ есть в базе (total_strikes > 0): «Только для новичка» + пригласить пару -->
       <div class="golden-winner-box pass-code-box" id="pass-existing-player-upsell" hidden>
         <span class="mono-tag accent-tag">ПРАВИЛО ЦЕХА // БЕСПЛАТНЫЙ БИЛЕТ ТОЛЬКО ДЛЯ НОВИЧКА</span>
         <h3 class="section-title rescue-title" style="margin:8px 0 6px;">
           🔥 ЭТОТ БОЕЦ УЖЕ В ЦЕХУ!
         </h3>
         <p class="golden-winner-contact" id="pass-existing-upsell-desc">
-          Выигранный билет работает только для новичка, которого ещё не было в базе (0 ударов). Но ты можешь купить второй билет на соседнее место для половинки или друга и пойти на премьеру «БОЧКИ» 17 декабря вдвоём!
+          Виртуальный подарочный билет работает только для новичка, которого ещё не было в базе (0 ударов). Зови друга или половинку в кино на премьеру «БОЧКИ» 17 декабря!
         </p>
         <div class="finale-cta-stack" style="margin-top:10px;">
-          <a
-            class="btn-primary btn-full"
-            id="btn-upsell-buy-kp"
-            href="https://www.kinopoisk.ru/film/11226275/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            🎟 КУПИТЬ 2-Й БИЛЕТ РЯДОМ (КИНОПОИСК / КАССА) ↗
-          </a>
-          <a
-            class="btn-secondary btn-full"
-            id="btn-upsell-buy-ticketon"
-            href="https://ticketon.kz/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            🎟 КУПИТЬ 2-Й БИЛЕТ РЯДОМ (FREEDOM TICKETON) ↗
-          </a>
-          <button type="button" class="btn-secondary btn-full" id="btn-upsell-invite-pair">
-            💑 ПОЗВАТЬ С СОБОЙ В КИНО НА 17 ДЕКАБРЯ (TELEGRAM)
+          <button type="button" class="btn-primary btn-full" id="btn-upsell-invite-pair">
+            💑 ПОЗВАТЬ С СОБОЙ В КИНО 17 ДЕКАБРЯ
           </button>
         </div>
       </div>
 
-      <!-- Форма подтверждения контакта Telegram + Город/кинотеатр -->
+      <!-- Форма подтверждения виртуального билета в 1 клик -->
       <div class="pass-claim-form" id="pass-claim-form" hidden>
         <p class="modal-hint pass-claim-desc">
-          Подтверди свой номер системной кнопкой Telegram (защита от мультиаккаунтов) и укажи удобный кинотеатр в своём городе. Другу сразу начислится <strong>×2 жизней</strong>, а продюсеры пришлют электронный билет в <strong>@bochka_film_bot</strong>!
+          Именной виртуальный билет на премьеру «БОЧКИ» 17 декабря. Нажми кнопку ниже — другу начислится <strong>×2 жизней</strong>, а твой виртуальный билет закрепится в <strong>@bochka_film_bot</strong>!
         </p>
 
         <div class="pass-contact-step">
-          <button type="button" class="btn-secondary btn-full" id="btn-verify-tg-contact">
-            📱 1. ПОДТВЕРДИТЬ НОМЕР ЧЕРЕЗ TELEGRAM (REQUEST CONTACT)
+          <button type="button" class="btn-secondary btn-full" id="btn-verify-tg-contact" hidden>
+            📱 1. ПОДТВЕРДИТЬ НОМЕР ЧЕРЕЗ TELEGRAM
           </button>
           <button type="button" class="btn-ghost btn-full pass-refresh-contact-btn" id="btn-refresh-tg-contact" hidden>
             ↻ Я ОТПРАВИЛ КОНТАКТ В БОТА — ПРОВЕРИТЬ СТАТУС
@@ -487,29 +470,18 @@
           <div class="kp-screen-feedback is-ok" id="pass-verified-phone-badge" hidden></div>
         </div>
 
-        <div class="pass-city-step">
-          <label class="mono-label" for="input-pass-city-cinema">2. ТВОЙ ГОРОД И ЖЕЛАЕМЫЙ КИНОТЕАТР:</label>
-          <input
-            type="text"
-            id="input-pass-city-cinema"
-            maxlength="110"
-            class="industrial-input"
-            placeholder="Например: Москва, КАРО Октябрь / Алматы, Chaplin Mega"
-          />
-        </div>
-
         <p class="rescue-error-box" id="pass-claim-error" hidden></p>
 
         <button type="button" class="btn-primary btn-full" id="btn-accept-gift-pass">
-          <span>🎟 ОТПРАВИТЬ ЗАЯВКУ ПРОДЮСЕРАМ (ДРУГУ ×2 ЖИЗНЕЙ)</span>
+          <span>🎟 ЗАБРАТЬ ВИРТУАЛЬНЫЙ БИЛЕТ (ДРУГУ ×2 ЖИЗНЕЙ)</span>
         </button>
       </div>
 
-      <!-- Статус принятой заявки / готовый электронный билет от продюсера -->
+      <!-- Статус принятого / активированного виртуального билета -->
       <div class="golden-winner-box pass-code-box" id="pass-ticket-code-box" hidden>
-        <span class="mono-tag accent-tag" id="pass-order-status-tag">ЗАЯВКА ПЕРЕДАНА ПРОДЮСЕРАМ // ОЖИДАЕТ ВЫПИСКИ</span>
+        <span class="mono-tag accent-tag" id="pass-order-status-tag">🎟 ВИРТУАЛЬНЫЙ БИЛЕТ АКТИВИРОВАН</span>
         <p class="golden-winner-contact" id="pass-ticket-contact">
-          Заявка передана продюсерам! Электронный билет придёт на твой подтверждённый номер и прямо в этот бот @bochka_film_bot.
+          Твой виртуальный билет закреплён за тобой и продублирован в @bochka_film_bot!
         </p>
 
         <div class="share-url-row pass-code-row" id="pass-booking-row" hidden>
@@ -521,13 +493,13 @@
           ⬇ ОТКРЫТЬ QR / ЭЛЕКТРОННЫЙ БИЛЕТ
         </a>
 
-        <button type="button" class="btn-secondary btn-full pass-bot-btn" id="btn-pass-verify-bot">
+        <button type="button" class="btn-secondary btn-full pass-bot-btn" id="btn-pass-verify-bot" hidden>
           <span>ОТКРЫТЬ ЧАТ С БОТОМ @BOCHKA_FILM_BOT ↗</span>
         </button>
       </div>
 
       <button type="button" class="btn-ghost btn-full pass-enter-game-btn" id="btn-pass-go-workshop" data-i18n="btnPassGoWorkshop">
-        ВОЙТИ В ЦЕХ «БОЧКИ»
+        ▶️ ИГРАТЬ В «БОЧКУ»
       </button>
     </div>
   </section>
@@ -728,7 +700,7 @@
       <!-- Форма оформления подарочной ссылки startapp=gift_<id> (Путь Б) -->
       <div class="gift-pass-form" id="gift-pass-form" hidden>
         <p class="gift-face-warn" data-i18n="giftFaceWarn">
-          🎟 Друг откроет спецссылку в Telegram, подтвердит свой номер (`request_contact`) и выберет кинотеатр в своём городе — тебе сразу начислится +4 ❤️ и +3500 ⭐ в ТОП-10, а продюсеры оформят ему электронный билет!
+          🎟 Отправь другу именной виртуальный билет в Telegram — тебе сразу начислится +4 ❤️ и +3500 ⭐ в ТОП-10!
         </p>
 
         <div class="gift-photo-row">
@@ -747,36 +719,36 @@
               maxlength="40"
               class="industrial-input input-compact"
               data-i18n-placeholder="giftFriendNamePlaceholder"
-              placeholder="Имя друга (для именной открытки билета)"
+              placeholder="Имя друга (необязательно)"
             />
           </div>
         </div>
 
         <p class="rescue-error-box" id="gift-form-error" hidden>
-          Укажи имя друга (минимум 2 буквы), чтобы выпустить именную подарочную ссылку!
+          Не удалось создать виртуальный билет — попробуй ещё раз!
         </p>
 
         <button type="button" class="btn-primary btn-full" id="btn-issue-gift-pass">
-          <span data-i18n="btnIssueGiftPass">СОЗДАТЬ ПОДАРОЧНУЮ ССЫЛКУ В TELEGRAM (+×2 ЖИЗНЕЙ)</span>
+          <span data-i18n="btnIssueGiftPass">🎟 ОТПРАВИТЬ ВИРТУАЛЬНЫЙ БИЛЕТ В TELEGRAM (+×2 ❤️)</span>
         </button>
       </div>
 
       <!-- Готовая короткая ссылка ?pass=ID для пересылки другу -->
       <div class="share-result-box" id="gift-pass-share-box" hidden>
         <p class="share-hint" data-i18n="giftPassReadyLabel">
-          ПРОПУСК ВЫПУЩЕН! Перешли ссылку другу — когда он активирует подарок, твои жизни удвоятся (×2):
+          ВИРТУАЛЬНЫЙ БИЛЕТ ВЫПУЩЕН! Перешли его другу — когда он откроет билет, твои жизни удвоятся (×2):
         </p>
-        <div class="share-url-row">
+        <div class="share-url-row" hidden>
           <input type="text" id="output-gift-pass-url" class="industrial-input" readonly />
           <button type="button" class="btn-ghost" id="btn-copy-gift-pass" data-i18n="btnCopyLink">КОПИРОВАТЬ</button>
         </div>
-        <div class="share-buttons-grid">
-          <button type="button" class="btn-primary" id="btn-share-gift-native" data-i18n="btnShareNative">ОТПРАВИТЬ ДРУГУ</button>
-          <button type="button" class="btn-secondary" id="btn-share-gift-tg" data-i18n="btnShareTelegram">В TELEGRAM</button>
+        <div class="finale-cta-stack" style="margin-top:8px;">
+          <button type="button" class="btn-primary btn-full" id="btn-share-gift-tg">🚀 ОТПРАВИТЬ ВИРТУАЛЬНЫЙ БИЛЕТ В TELEGRAM</button>
+          <button type="button" class="btn-secondary" id="btn-share-gift-native" data-i18n="btnShareNative" hidden>ОТПРАВИТЬ ДРУГУ</button>
+          <button type="button" class="btn-ghost btn-full gift-done-btn" id="btn-done-gift-pass">
+            ПРОДОЛЖИТЬ ГОНКУ ЗА ПРЕМЬЕРОЙ →
+          </button>
         </div>
-        <button type="button" class="btn-ghost btn-full gift-done-btn" id="btn-done-gift-pass">
-          ПРОДОЛЖИТЬ ГОНКУ ЗА ПРЕМЬЕРОЙ →
-        </button>
       </div>
     </div>
   </div>

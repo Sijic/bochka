@@ -2596,13 +2596,8 @@ async function handleGiftFriendPhotoChange(file) {
 }
 
 async function handleIssueGiftPassClick() {
-  const recipientName = (document.getElementById('input-gift-friend-name')?.value || '').trim();
+  const recipientName = (document.getElementById('input-gift-friend-name')?.value || '').trim() || 'Друг';
   const errEl = document.getElementById('gift-form-error');
-  if (recipientName.length < 2) {
-    errEl?.removeAttribute('hidden');
-    Haptics.error();
-    return;
-  }
 
   errEl?.setAttribute('hidden', '');
   const issueBtn = document.getElementById('btn-issue-gift-pass');
@@ -2632,6 +2627,10 @@ async function handleIssueGiftPassClick() {
     document.getElementById('fork-choices-stack')?.setAttribute('hidden', '');
     document.getElementById('gift-pass-form')?.setAttribute('hidden', '');
     document.getElementById('gift-pass-share-box')?.removeAttribute('hidden');
+    openTelegramShare(
+      created.shareUrl,
+      `🎟 Дарю тебе виртуальный билет в кино на триллер «БОЧКА» (17 декабря)! Забери свой билет по ссылке:`
+    );
     Haptics.success();
   } finally {
     if (issueBtn) issueBtn.disabled = false;
@@ -2703,6 +2702,7 @@ async function openIncomingPassScreen(passId) {
   state.activePassData = passData;
 
   const photoEl = document.getElementById('pass-holder-photo');
+  const numEl = document.getElementById('pass-virtual-number');
   const nameEl = document.getElementById('pass-holder-name');
   const senderEl = document.getElementById('pass-sender-line');
   const selfWarn = document.getElementById('pass-self-warning');
@@ -2715,6 +2715,7 @@ async function openIncomingPassScreen(passId) {
   const codeBox = document.getElementById('pass-ticket-code-box');
 
   if (photoEl) photoEl.src = passData.recipientPhotoUrl || DEMO_PORTRAITS[0];
+  if (numEl) numEl.textContent = `№ BOCHKA-${String(passData.id || '1712').toUpperCase()}`;
   if (nameEl) nameEl.textContent = passData.recipientName || 'ГОСТЬ ПРЕМЬЕРЫ';
   if (senderEl) {
     senderEl.textContent = passData.senderName
@@ -2795,17 +2796,17 @@ function renderPassOrderStatusBox(passData) {
   codeBox?.removeAttribute('hidden');
 
   const isSent = passData.orderStatus === 'sent' || Boolean(passData.bookingCode || passData.ticketFileUrl);
+  const ticketNum = `№ BOCHKA-${String(passData.id || '1712').toUpperCase()}`;
   if (statusTag) {
     statusTag.textContent = isSent
-      ? 'ЭЛЕКТРОННЫЙ БИЛЕТ ВЫПИСАН // ПРОВЕРЬ @BOCHKA_FILM_BOT'
-      : 'ЗАЯВКА ПЕРЕДАНА ПРОДЮСЕРАМ // ОЖИДАЕТ ВЫПИСКИ';
+      ? '🎟 ВИРТУАЛЬНЫЙ БИЛЕТ ВЫПИСАН // @BOCHKA_FILM_BOT'
+      : '🎟 ВИРТУАЛЬНЫЙ БИЛЕТ АКТИВИРОВАН // @BOCHKA_FILM_BOT';
   }
 
   if (contactEl) {
-    const cityNote = passData.cityCinema ? ` (${passData.cityCinema})` : '';
     contactEl.textContent = isSent
-      ? `Твой электронный билет${cityNote} оформлен продюсерами и продублирован в чат @bochka_film_bot!`
-      : `Заявка${cityNote} передана продюсерам! Другу уже начислено ×2 жизней, а электронный билет придёт на твой подтверждённый номер прямо в @bochka_film_bot.`;
+      ? `Виртуальный билет ${ticketNum} оформлен и продублирован в чат @bochka_film_bot!`
+      : `Виртуальный билет ${ticketNum} закреплён за твоим Telegram! Другу начислено ×2 жизней.`;
   }
 
   if (passData.bookingCode && bookingRow && codeIn) {
@@ -2845,13 +2846,13 @@ async function handleVerifyPassContactClick() {
       if (fresh?.verifiedPhone) state.verifiedContactPhone = fresh.verifiedPhone;
       if (phoneBadge) {
         const numTxt = state.verifiedContactPhone ? `: ${state.verifiedContactPhone}` : '';
-        phoneBadge.textContent = `✓ Контакт Telegram подтверждён${numTxt}! Теперь введи город и кинотеатр ниже.`;
+        phoneBadge.textContent = `✓ Контакт Telegram подтверждён${numTxt}! Жми кнопку ниже, чтобы забрать виртуальный билет.`;
         phoneBadge.removeAttribute('hidden');
       }
     }, 650);
     if (phoneBadge) {
       const numTxt = res.phone ? `: ${res.phone}` : '';
-      phoneBadge.textContent = `✓ Контакт Telegram подтверждён${numTxt}! Теперь введи город и кинотеатр ниже.`;
+      phoneBadge.textContent = `✓ Контакт Telegram подтверждён${numTxt}! Жми кнопку ниже, чтобы забрать виртуальный билет.`;
       phoneBadge.removeAttribute('hidden');
     }
     refreshBtn?.setAttribute('hidden', '');
@@ -2913,22 +2914,30 @@ function startLivePassClock(serverOffsetMs = 0) {
 async function handleAcceptIncomingPass() {
   if (!state.activePassData?.id) return;
   const errEl = document.getElementById('pass-claim-error');
-  const cityCinema = (document.getElementById('input-pass-city-cinema')?.value || '').trim();
+  const phoneBadge = document.getElementById('pass-verified-phone-badge');
+  const refreshBtn = document.getElementById('btn-refresh-tg-contact');
+  const cityCinema = (document.getElementById('input-pass-city-cinema')?.value || '').trim() || 'Виртуальный билет';
   errEl?.setAttribute('hidden', '');
-
-  if (cityCinema.length < 3) {
-    if (errEl) {
-      errEl.textContent = 'Укажи свой город и желаемый кинотеатр (минимум 3 символа)!';
-      errEl.removeAttribute('hidden');
-    }
-    Haptics.error();
-    return;
-  }
 
   const btn = document.getElementById('btn-accept-gift-pass');
   if (btn) btn.disabled = true;
 
   try {
+    if (!state.verifiedContactPhone && !state.activePassData?.hasVerifiedPhone) {
+      const cRes = await requestTelegramContact({ giftId: state.activePassData.id });
+      if (cRes?.phone) {
+        state.verifiedContactPhone = cRes.phone;
+      } else if (cRes?.reason === 'opened_bot_chat') {
+        refreshBtn?.removeAttribute('hidden');
+        if (phoneBadge) {
+          phoneBadge.textContent =
+            'В чате @bochka_film_bot нажми «📱 Подтвердить номер телефона», вернись и снова нажми «Забрать виртуальный билет»!';
+          phoneBadge.removeAttribute('hidden');
+        }
+        return;
+      }
+    }
+
     const res = await submitGiftTicketOrder({
       giftId: state.activePassData.id,
       tgUser: state.tg?.user,
@@ -2945,16 +2954,18 @@ async function handleAcceptIncomingPass() {
       } else if (errEl) {
         const messages = {
           telegram_required:
-            'Открой эту подарочную ссылку внутри Telegram (@bochka_film_bot), чтобы подтвердить аккаунт и получить электронный билет в бот!',
+            'Открой эту подарочную ссылку внутри Telegram (@bochka_film_bot), чтобы подтвердить аккаунт и забрать виртуальный билет!',
           contact_not_verified:
-            'Сначала подтверди свой номер телефона кнопкой «📱 1. Подтвердить номер через Telegram» выше!',
+            'Нажми «📱 Подтвердить номер телефона» в @bochka_film_bot и затем ещё раз нажми кнопку ниже!',
           phone_already_used:
             'На этот номер телефона уже выписывался подарочный билет в рамках акции (1 уникальный номер = 1 билет)!',
-          city_required: 'Укажи свой город и желаемый кинотеатр!',
         };
         errEl.textContent =
-          messages[res.reason] || 'Не удалось отправить заявку. Проверь интернет и открой ссылку в @bochka_film_bot.';
+          messages[res.reason] || 'Не удалось активировать виртуальный билет. Проверь интернет и открой ссылку в @bochka_film_bot.';
         errEl.removeAttribute('hidden');
+        if (res.reason === 'contact_not_verified') {
+          document.getElementById('btn-verify-tg-contact')?.removeAttribute('hidden');
+        }
       }
       Haptics.error();
       return;
@@ -5558,8 +5569,8 @@ function bindUIEvents() {
   document.getElementById('btn-share-gift-native')?.addEventListener('click', async () => {
     if (!state.giftPass.lastPassUrl) return;
     const res = await shareNativeOrFallback({
-      title: 'Подарочный билет в кино — БОЧКА (17 декабря)',
-      text: `🎟 Выбил в цеху «БОЧКИ» настоящий билет в кино на твоё имя (${state.giftPass.recipientName})! Подтверди номер в Telegram и выбери кинотеатр в своём городе:`,
+      title: 'Виртуальный билет в кино — БОЧКА (17 декабря)',
+      text: `🎟 Дарю тебе виртуальный билет в кино на триллер «БОЧКА» (17 декабря)! Забери свой билет по ссылке:`,
       url: state.giftPass.lastPassUrl,
     });
     if (res === 'copied') showToast(t('copiedToast'));
@@ -5568,7 +5579,7 @@ function bindUIEvents() {
     if (!state.giftPass.lastPassUrl) return;
     openTelegramShare(
       state.giftPass.lastPassUrl,
-      `🎟 Выбил в цеху «БОЧКИ» настоящий билет в кино на твоё имя (${state.giftPass.recipientName})! Подтверди номер и выбери кинотеатр по ссылке:`
+      `🎟 Дарю тебе виртуальный билет в кино на триллер «БОЧКА» (17 декабря)! Забери свой билет по ссылке:`
     );
   });
   document.getElementById('btn-done-gift-pass')?.addEventListener('click', () => closeGoldenTicketForkModal());
