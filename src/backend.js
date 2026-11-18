@@ -1738,6 +1738,34 @@ export async function claimSocialOrPromoBonus(tgUser = null, action = 'share_bar
   };
 }
 
+/**
+ * Уровень 3: аварийное восстановление +1 жизни за ОДНО целевое действие (kp | sub | like), раз в сутки на действие.
+ */
+export async function claimLifeRecovery(tgUser = null, kind = 'kp') {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  if (db) {
+    try {
+      const { data, error } = await db.rpc('claim_life_recovery_rpc', { p_uid: uid, p_kind: kind });
+      if (!error && data?.ok) {
+        const prof = getLocalPreviewProfile();
+        prof.lives = Number(data.lives ?? prof.lives);
+        saveLocalPreviewProfile(prof);
+        return { ok: true, granted: Boolean(data.granted), lives: Number(data.lives || 0), reason: data.reason || '' };
+      }
+    } catch { /* fallback below */ }
+    return { ok: false, granted: false, lives: 0, reason: 'rpc_error' };
+  }
+  const prof = getLocalPreviewProfile();
+  const key = `[life_${kind}]`;
+  if (prof.lives > 0) return { ok: true, granted: false, lives: prof.lives, reason: 'has_lives' };
+  if (String(prof.dailySocialMask || '').includes(key)) return { ok: true, granted: false, lives: prof.lives, reason: 'already_today' };
+  prof.dailySocialMask = `${prof.dailySocialMask || ''}${key}`;
+  prof.lives += 1;
+  saveLocalPreviewProfile(prof);
+  return { ok: true, granted: true, lives: prof.lives, reason: '' };
+}
+
 export async function fetchPremiereLeaderboard(tgUser = null) {
   const uid = getViewerUid(tgUser);
   const db = getCloudDb();

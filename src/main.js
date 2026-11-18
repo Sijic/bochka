@@ -60,6 +60,7 @@ import {
   fetchMyWorkshopFriends,
   completeWorkshopLevel,
   claimSocialOrPromoBonus,
+  claimLifeRecovery,
   fetchPremiereLeaderboard,
   fetchPublicRaffleTransparency,
   getPlayerRecoveryCode,
@@ -561,6 +562,8 @@ async function bootstrap() {
       restoreByCode: (code) => restoreProfileByRecoveryCode(code, state.tg?.user),
       hoverBarrel: (idx) => handleBarrelHover(idx, 200, 200, false),
       openPassScreen: (id) => openIncomingPassScreen(id),
+      startPremiere: () => startPremiereRaceRound(),
+      openDuel: (code) => openDuelTable(code),
       triggerScreamer: (v) => triggerMiniScreamer(v),
     };
   }
@@ -1339,12 +1342,8 @@ async function startPremiereRaceRound() {
   }
 
   if (state.profile.lives <= 0) {
-    if (state.profile.premiereScore >= 90) {
-      openNearMissModal(state.profile.premiereScore);
-    } else {
-      showToast(t('nightShiftCooldown'));
-      showScreen('pack');
-    }
+    showScreen('workshop');
+    openLivesRecoveryModal();
     return;
   }
 
@@ -2157,8 +2156,7 @@ async function handleBarrelStrike(index, worldPoint) {
     if (!r.running) return;
 
     if (!res.ok) {
-      if (state.profile.premiereScore >= 90) openNearMissModal(state.profile.premiereScore);
-      else finishPremiereRound(false, res);
+      openLivesRecoveryModal();
       return;
     }
 
@@ -2210,11 +2208,7 @@ async function handleBarrelStrike(index, worldPoint) {
     if (res.lives <= 0) {
       r.pausedForModal = true;
       window.setTimeout(() => {
-        if (res.nearMiss || res.premiereScore >= 90) {
-          openNearMissModal(res.premiereScore);
-        } else {
-          finishPremiereRound(false, res);
-        }
+        openLivesRecoveryModal();
       }, 480);
       return;
     }
@@ -2640,6 +2634,46 @@ async function handleIssueGiftPassClick() {
     Haptics.success();
   } finally {
     if (issueBtn) issueBtn.disabled = false;
+  }
+}
+
+function openLivesRecoveryModal() {
+  state.round.pausedForModal = true;
+  stopAirTimer();
+  const pr = document.getElementById('lives-recovery-progress');
+  if (pr) {
+    pr.textContent = `К розыгрышу билетов: ⭐ ${fmtPoints(state.profile?.premierePoints)} · шкала ${Number(state.profile?.premiereScore || 0).toFixed(1)} / 100. Выбери любое одно действие.`;
+  }
+  document.querySelectorAll('[data-life-action]').forEach((b) => { b.disabled = false; });
+  document.getElementById('modal-lives-recovery')?.removeAttribute('hidden');
+  Haptics.error();
+}
+
+function fmtPoints(n) {
+  return Math.max(0, Math.round(Number(n || 0))).toLocaleString('ru-RU');
+}
+
+async function handleLifeRecoveryAction(kind) {
+  const urls = {
+    kp: ENV.kinopoiskUrl,
+    sub: ENV.youtubeSubscribeUrl || ENV.youtubeWatchUrl,
+    like: ENV.youtubeWatchUrl,
+  };
+  document.querySelectorAll('[data-life-action]').forEach((b) => { b.disabled = true; });
+  openExternalLink(urls[kind] || ENV.youtubeWatchUrl);
+  await new Promise((resolve) => window.setTimeout(resolve, 3800));
+  const res = await claimLifeRecovery(state.tg?.user, kind);
+  if (res.granted) {
+    state.profile.lives = res.lives;
+    updatePremiereBarsUI();
+    document.getElementById('modal-lives-recovery')?.setAttribute('hidden', '');
+    showToast('❤️ +1 жизнь! Продолжаем гонку за билетом');
+    Haptics.success();
+    state.round.running = false;
+    startPremiereRaceRound();
+  } else {
+    document.querySelectorAll('[data-life-action]').forEach((b) => { b.disabled = false; });
+    showToast(res.reason === 'already_today' ? 'Это действие уже засчитано сегодня — выбери другое' : 'Не получилось начислить жизнь, попробуй ещё раз');
   }
 }
 
@@ -5459,6 +5493,15 @@ function bindUIEvents() {
       audio.startMuffledVoiceLoop();
     }
     refreshSoundButtonLabel();
+  });
+
+  document.querySelectorAll('[data-life-action]').forEach((btn) => {
+    btn.addEventListener('click', () => handleLifeRecoveryAction(btn.getAttribute('data-life-action') || 'kp'));
+  });
+  document.getElementById('btn-lives-recovery-close')?.addEventListener('click', () => {
+    document.getElementById('modal-lives-recovery')?.setAttribute('hidden', '');
+    state.round.running = false;
+    showScreen('modeA');
   });
 
   document.getElementById('btn-hud-mic-blow')?.addEventListener('click', () => {

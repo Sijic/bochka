@@ -4726,3 +4726,8 @@ body[data-blitz-unlocked="0"] .blitz-rule-note {
 
 /* v7.0: в раунде верхняя полоска игры одна — общий topbar скрыт, чтобы не дублировать HUD */
 body[data-screen="workshop"] #topbar { display: none !important; }
+
+/* v7.0: компактное окно восстановления жизни (Уровень 3) */
+.lives-recovery-card { max-width: 380px; display: flex; flex-direction: column; gap: 8px; text-align: center; padding: 14px !important; }
+.lives-recovery-title { margin: 0; font-family: var(--font-display); font-size: 20px; color: #fff; }
+.lives-recovery-progress { margin: 0 0 4px; font-size: 12px; line-height: 1.35; color: #fde68a; }

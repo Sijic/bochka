@@ -784,6 +784,18 @@
   <!-- ====================================================================
        МОДАЛКА ЛОВУШКИ ПОСЛЕДНЕГО ПРОЦЕНТА (NEAR-MISS >= 90 / 100 ПРИ 0 ЖИЗНЕЙ)
        ==================================================================== -->
+  <div class="modal-backdrop" id="modal-lives-recovery" hidden>
+    <div class="modal-card lives-recovery-card">
+      <span class="mono-tag danger-tag">ЖИЗНИ КОНЧИЛИСЬ</span>
+      <h3 class="lives-recovery-title">Верни +1 ❤️ за одно действие</h3>
+      <p class="lives-recovery-progress" id="lives-recovery-progress"></p>
+      <button type="button" class="btn-primary btn-full" data-life-action="kp">🎬 «Буду смотреть» на Кинопоиске</button>
+      <button type="button" class="btn-secondary btn-full" data-life-action="sub">🔔 Подписаться на канал «КиноЦех»</button>
+      <button type="button" class="btn-secondary btn-full" data-life-action="like">👍 Поставить лайк трейлеру</button>
+      <button type="button" class="btn-ghost btn-full" id="btn-lives-recovery-close">Позже</button>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="modal-near-miss" hidden>
     <div class="modal-card rescue-modal-card near-miss-card">
       <div class="tech-corner tl"></div>
