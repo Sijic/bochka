@@ -370,7 +370,8 @@ export function openTelegramShare(shareUrl, shareText) {
   const finalUrl = isTelegramMiniApp() ? toTelegramBotDeepLink(shareUrl) : shareUrl;
   const tgShare = `https://t.me/share/url?url=${encodeURIComponent(finalUrl)}&text=${encodeURIComponent(shareText)}`;
   const tg = getWebApp();
-  if (tg && typeof tg.openTelegramLink === 'function') {
+  // Только внутри настоящего Telegram: в обычном браузере openTelegramLink увёл бы всю страницу игры на t.me
+  if (tg && isTelegramMiniApp() && typeof tg.openTelegramLink === 'function') {
     tg.openTelegramLink(tgShare);
     return;
   }

@@ -61,6 +61,9 @@ export class WorkshopScene {
     this.flashIntensity = 0;
     this.sparks = [];
     this.rustPuffs = [];
+    this.steamPuffs = [];
+    this.onSteamBurst = null;
+    this.onEmptyBarrelHit = null;
     this.waterDrops = [];
     this.floorRipples = [];
     this.nextDripCountdown = 0.85;
@@ -264,7 +267,14 @@ export class WorkshopScene {
     const s = b.group.scale.y || 1;
     const rimWorld = b.group.position.clone().add(new THREE.Vector3(0, 1.36 * s, 0));
     this._spawnRustDust(rimWorld, 16);
+    // Промах по пустой бочке: резкий пшик белого пара из-под пробитой крышки + опрокидывающее покачивание + вмятина
+    this._spawnSteamPuff(rimWorld.clone().add(new THREE.Vector3(0, 0.05, 0.12)), 10);
+    b.wobble = 1;
+    b.wobbleDir = (b.group.position.x >= 0 ? -1 : 1);
+    b.dentTarget = 1.0;
+    this.shakeIntensity = Math.max(this.shakeIntensity || 0, 0.26);
     this._impulseChains(1.25);
+    try { this.onEmptyBarrelHit?.(index); } catch { /* ignore */ }
   }
 
   /**
@@ -923,6 +933,22 @@ export class WorkshopScene {
       this.rustPuffs.push({ mesh: m, vel: new THREE.Vector3(), life: 0, maxLife: 1 });
     }
 
+    // 3б. Пул клубов горячего БЕЛОГО пара (шипение из-под крышки бочки и пшик при промахе)
+    const steamGeo = new THREE.PlaneGeometry(0.34, 0.34);
+    for (let i = 0; i < 28; i++) {
+      const sMat = new THREE.MeshBasicMaterial({
+        map: rustTex,
+        color: 0xf4f7fb,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+      });
+      const m = new THREE.Mesh(steamGeo, sMat);
+      m.visible = false;
+      this.scene.add(m);
+      this.steamPuffs.push({ mesh: m, vel: new THREE.Vector3(), life: 0, maxLife: 1 });
+    }
+
     // 4. Капли воды с потолка + расходящиеся круги по лужам на мокром бетоне
     const dropGeo = new THREE.SphereGeometry(0.016, 5, 5);
     dropGeo.scale(0.65, 2.4, 0.65);
@@ -966,6 +992,23 @@ export class WorkshopScene {
         1.4 + Math.random() * 3.4,
         0.6 + (Math.random() - 0.3) * 4.2
       );
+      spawned++;
+      if (spawned >= amount) break;
+    }
+  }
+
+  _spawnSteamPuff(origin, amount = 6) {
+    let spawned = 0;
+    for (const p of this.steamPuffs) {
+      if (p.life > 0) continue;
+      p.maxLife = 0.8 + Math.random() * 0.5;
+      p.life = p.maxLife;
+      p.mesh.visible = true;
+      p.mesh.position.copy(origin).add(
+        new THREE.Vector3((Math.random() - 0.5) * 0.22, 0.02, (Math.random() - 0.5) * 0.22)
+      );
+      p.mesh.scale.setScalar(0.55 + Math.random() * 0.45);
+      p.vel.set((Math.random() - 0.5) * 0.9, 1.1 + Math.random() * 1.2, 0.35 + Math.random() * 0.7);
       spawned++;
       if (spawned >= amount) break;
     }
@@ -1036,6 +1079,14 @@ export class WorkshopScene {
         } else {
           coords.push([-1.14, -0.58], [0.0, -1.04], [1.14, -0.58]);
         }
+      } else if (n === 4) {
+        // Ур.1: 4 бочки ромбом (амфитеатр) — задняя бочка и её номер видны целиком
+        bScale = 0.98;
+        coords.push([0.0, -1.78], [-1.08, -0.62], [1.08, -0.62], [0.0, 0.5]);
+      } else if (n === 6) {
+        // Ур.2: 6 бочек зигзагом (2-2-2) со сдвигом по рядам, чтобы передние не перекрывали задние
+        bScale = 0.9;
+        coords.push([-0.42, -2.05], [0.42, -2.05], [-1.2, -0.85], [1.2, -0.85], [-0.42, 0.35], [0.42, 0.35]);
       } else if (n >= 11) {
         // 12 бочек (Пресс-цех) на мобильном: 3 шахматных ряда по 4 бочки
         bScale = 0.72;
@@ -1097,8 +1148,12 @@ export class WorkshopScene {
       this.camera.fov = 50;
       const crowdPull = n >= 11 ? 1.22 : n >= 9 ? 1.15 : n >= 7 ? 1.09 : 1.0;
       const distScale = Math.max(1, 0.52 / Math.max(0.36, aspect)) * crowdPull;
-      this.baseCamPos.set(0, 3.36 * distScale, 5.85 * distScale);
-      this.baseLookAt.set(0, n >= 7 ? 0.92 : 0.98, -0.62);
+      // Камера выше и под углом ~35° сверху вниз: задний ряд и номера видны полностью
+      const elev = (35 * Math.PI) / 180;
+      const fieldZ = n <= 4 ? -0.62 : -0.9;
+      const camR = (n === 6 ? 7.6 : 7.0) * distScale;
+      this.baseLookAt.set(0, 0.55, fieldZ);
+      this.baseCamPos.set(0, 0.55 + camR * Math.sin(elev), fieldZ + camR * Math.cos(elev));
     } else {
       if (n <= 6) {
         const maxAng = n === 2 ? 0.32 : n === 3 ? 0.62 : n === 4 ? 0.84 : n === 5 ? 1.02 : 1.16;
@@ -1159,10 +1214,10 @@ export class WorkshopScene {
       this.camera.fov = 42;
       const crowdAdjust = n >= 11 ? 1.18 : n >= 7 ? 1.12 : 1.0;
       const wideAdjust = (aspect < 1.35 ? 1.14 : 1.0) * crowdAdjust;
-      const camY = n >= 7 ? 2.62 * wideAdjust : 2.22 * wideAdjust;
-      const camZ = n >= 7 ? 6.24 * wideAdjust : 5.88 * wideAdjust;
-      this.baseCamPos.set(0, camY, camZ);
-      this.baseLookAt.set(0, n >= 7 ? 0.80 : 0.74, -0.62);
+      const elevD = (32 * Math.PI) / 180;
+      const camRd = (n >= 7 ? 7.6 : 7.1) * wideAdjust;
+      this.baseLookAt.set(0, 0.6, -0.55);
+      this.baseCamPos.set(0, 0.6 + camRd * Math.sin(elevD), -0.55 + camRd * Math.cos(elevD));
     }
 
     if (this.steamPipeGroup) {
@@ -1434,10 +1489,34 @@ export class WorkshopScene {
     // 2в. Эволюция заводской среды (4 цеха: пар из пробитой трубы, аварийная лампа + вода, коротящая проводка + надпись на стене)
     if (this.steamPipeGroup?.visible && this.steamHazardIndex >= 0) {
       this.steamJetCountdown -= dt;
-      if (this.steamJetCountdown <= 0) {
-        this.steamJetCountdown = 0.22 + Math.random() * 0.18;
-        const p = this.steamPipeGroup.position;
-        this._spawnRustDust(new THREE.Vector3(p.x, p.y - 0.08, p.z), 3);
+      const hb = this.barrels[this.steamHazardIndex];
+      if (this.steamJetCountdown <= 0 && hb) {
+        // Периодический выброс горячего белого пара из-под ржавой крышки + дрожание крышки
+        this.steamJetCountdown = 1.5 + Math.random() * 1.1;
+        hb.lidRattle = 0.55;
+        const s = hb.group.scale.y || 1;
+        const p = hb.group.position;
+        this._spawnSteamPuff(new THREE.Vector3(p.x + 0.12 * s, 1.3 * s, p.z + 0.32 * s), 7);
+        try { this.onSteamBurst?.(); } catch { /* ignore */ }
+      }
+    }
+    for (const b of this.barrels) {
+      if (b.wobble > 0) {
+        b.wobble = Math.max(0, b.wobble - dt * 1.3);
+        b.group.rotation.z = Math.sin((1 - b.wobble) * 22) * 0.16 * b.wobble * (b.wobbleDir || 1);
+        if (b.wobble === 0) b.group.rotation.z = 0;
+      }
+      if (b.lidRattle > 0 && !b.lidFlying) {
+        b.lidRattle = Math.max(0, b.lidRattle - dt);
+        const k = b.lidRattle / 0.55;
+        b.lidGroup.position.y = 1.355 + Math.sin(elapsed * 90) * 0.018 * k;
+        b.lidGroup.rotation.z = Math.sin(elapsed * 70) * 0.06 * k;
+        b.lidGroup.rotation.x = Math.cos(elapsed * 83) * 0.05 * k;
+        if (b.lidRattle === 0) {
+          b.lidGroup.position.y = 1.355;
+          b.lidGroup.rotation.z = 0;
+          b.lidGroup.rotation.x = 0;
+        }
       }
     }
 
@@ -1615,6 +1694,21 @@ export class WorkshopScene {
       p.vel.multiplyScalar(0.95);
       p.mesh.scale.addScalar(dt * 1.45);
       p.mesh.material.opacity = Math.sin(norm * Math.PI) * 0.42;
+      p.mesh.lookAt(this.camera.position);
+    }
+
+    for (const p of this.steamPuffs) {
+      if (p.life <= 0) continue;
+      p.life -= dt;
+      if (p.life <= 0) {
+        p.mesh.visible = false;
+        continue;
+      }
+      const norm = 1 - p.life / p.maxLife;
+      p.mesh.position.addScaledVector(p.vel, dt);
+      p.vel.multiplyScalar(0.96);
+      p.mesh.scale.addScalar(dt * 2.1);
+      p.mesh.material.opacity = Math.sin(norm * Math.PI) * 0.62;
       p.mesh.lookAt(this.camera.position);
     }
 
@@ -2016,32 +2110,9 @@ export class WorkshopScene {
 
   _buildFactoryZoneProps() {
     // 1. Уровень 2 (Сборочный конвейер): пробитая паровая труба над опасной бочкой (-4 сек воздуха при промахе)
+    // Уровень 2: вместо оранжевой «трубы-кегли» — только невидимая точка привязки; пар идёт из-под крышки бочки (см. _spawnSteamPuff)
     const pipeGroup = new THREE.Group();
     pipeGroup.name = 'steamPipeHazard';
-    const pipeMat = new THREE.MeshStandardMaterial({
-      color: 0x38322c,
-      metalness: 0.78,
-      roughness: 0.48,
-    });
-    const redValveMat = new THREE.MeshStandardMaterial({
-      color: 0xd9480f,
-      emissive: 0x7c2d12,
-      emissiveIntensity: 0.55,
-      metalness: 0.5,
-      roughness: 0.4,
-    });
-    const vPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 2.2, 12), pipeMat);
-    vPipe.position.y = 1.18;
-    pipeGroup.add(vPipe);
-
-    const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.11, 0.16, 12), redValveMat);
-    nozzle.position.y = 0.12;
-    pipeGroup.add(nozzle);
-
-    const valveWheel = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.022, 8, 16), redValveMat);
-    valveWheel.position.set(0, 0.36, 0.08);
-    pipeGroup.add(valveWheel);
-
     pipeGroup.visible = false;
     this.steamPipeGroup = pipeGroup;
     this.scene.add(pipeGroup);

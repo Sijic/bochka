@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0d0d'/%3E%3Crect x='8' y='4' width='16' height='24' rx='2' fill='none' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='11' x2='25' y2='11' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='21' x2='25' y2='21' stroke='%23eab308' stroke-width='2'/%3E%3C/svg%3E" />
   <title>БОЧКА — Заводской триллер | Вызволи друга за 3 удара ломом</title>
-  <meta name="bochka-build" content="v6.7-clean-ux-progression" />
+  <meta name="bochka-build" content="v7.0-clean-gameplay" />
   <meta name="description" content="Четыре цеха завода, заваренные 200-литровые бочки и 30 секунд кислорода. Запиши фото и голос друга на дно бочки, проверь его слух и забери допуск на закрытую Премьеру 17 декабря." />
 
   <!-- Open Graph / Telegram / WhatsApp Link Preview -->
@@ -229,7 +229,7 @@
           <span data-i18n="btnPackFriendMain">УПАКОВАТЬ ДРУГА В БОЧКУ</span>
         </button>
         <button type="button" class="btn-secondary" id="btn-start-demo">
-          <span id="btn-start-level-label">▶ УРОВЕНЬ 1 · 3 БОЧКИ (+⭐)</span>
+          <span id="btn-start-level-label">▶ УР. 1 · 4 БОЧКИ (+⭐)</span>
         </button>
       </div>
 
@@ -252,65 +252,41 @@
        ЭКРАН 3: ГЕЙМПЛЕЙ ЦЕХА (УРОВНИ 3..10 БОЧЕК + БЛИЦ, ВОЗДУХ, ШКАЛА 0/100)
        ==================================================================== -->
   <section class="screen screen-hud" id="screen-workshop" hidden>
-    <div class="hud-top-stack">
-      <!-- Баннер живого наблюдения (?startapp=watch_<barrelId>) -->
-      <div class="hud-watch-banner" id="hud-watch-banner" hidden>
-        <div class="hud-watch-meta">
-          <span class="live-pulse-dot"></span>
-          <strong id="hud-watch-status">👀 ПОДГЛЯДЫВАЕШЬ ЗА ДРУГОМ В ЦЕХУ...</strong>
+    <!-- v7.0: одна тонкая полупрозрачная верхняя полоска (до 48px): уровень · попытки · кислород -->
+    <div class="hud-slim" id="hud-slim">
+      <span class="hud-slim-level" id="hud-mode-tag">УР. 1 · 4 БОЧКИ</span>
+      <div class="hud-slim-center">
+        <div class="attempts-squares" id="attempts-squares" aria-label="Попытки">
+          <span class="attempt-sq is-live"></span>
+          <span class="attempt-sq is-live"></span>
+          <span class="attempt-sq is-live"></span>
         </div>
-        <div class="hud-watch-actions">
-          <button type="button" class="hud-mini-btn hud-mini-accent" id="btn-watch-rattle">⛓ ЦЕПИ</button>
-          <button type="button" class="hud-mini-btn" id="btn-watch-challenge">⚔️ В ДУЭЛЬ</button>
-          <button type="button" class="hud-mini-btn" id="btn-watch-exit">✕</button>
-        </div>
-      </div>
-
-      <!-- Главная шкала Суперигры «Допуск на закрытую Премьеру: 0 / 100» -->
-      <div class="hud-premiere-strip" id="hud-premiere-strip" hidden>
-        <div class="premiere-strip-head">
-          <span class="premiere-strip-title" data-i18n="premiereBarLabel">ДОПУСК НА ПРЕМЬЕРУ</span>
-          <div class="premiere-strip-stats">
-            <span class="premiere-score-pill"><strong id="hud-premiere-score">0.0</strong> / 100</span>
-            <span class="premiere-score-pill">⭐ <strong id="hud-premiere-points">0</strong></span>
-            <span class="premiere-lives-pill">❤️ <span data-i18n="premiereLivesLabel">ЖИЗНИ</span>: <strong id="hud-premiere-lives">3</strong></span>
-          </div>
-        </div>
-        <div class="premiere-progress-track">
-          <div class="premiere-progress-fill" id="hud-premiere-fill"></div>
+        <div class="premiere-lives-big" id="hud-premiere-lives-big" hidden>
+          <span>❤️ ×</span><strong id="hud-lives-big-num">3</strong>
         </div>
       </div>
+      <span class="hud-slim-o2"><strong id="air-seconds">30.0</strong> <small>СЕК O₂</small></span>
+      <div class="hud-slim-airbar"><div class="air-bar-fill" id="air-bar-fill"></div></div>
+    </div>
+    <h2 class="sr-only" id="hud-urgent-title"></h2>
 
-      <div class="hud-top">
-        <div class="hud-alert-box">
-          <div class="hud-tag-row">
-            <span class="mono-tag" id="hud-mode-tag">ЦЕХ, КОРПУС Б // СЕКТОР 04</span>
-            <button type="button" class="hud-points-chip" id="btn-hud-leaderboard">
-              🏆 <span id="hud-level-points-text">УР. 1 · ⭐ 0</span>
-            </button>
-          </div>
-          <h2 class="hud-urgent-title" id="hud-urgent-title">
-            КТО-ТО ЗАВАРИЛ ТЕБЯ В ЦЕХУ. НАЙДИ СВОЮ БОЧКУ ЗА 3 ПОПЫТКИ
-          </h2>
-        </div>
-
-        <div class="hud-air-module" id="hud-air-module">
-          <div class="air-row">
-            <span class="air-label" data-i18n="hudAir">КИСЛОРОД O₂</span>
-            <span class="air-value"><strong id="air-seconds">30.0</strong> <small data-i18n="hudSec">СЕК</small></span>
-          </div>
-          <div class="air-bar-track">
-            <div class="air-bar-fill" id="air-bar-fill"></div>
-          </div>
-          <small class="air-sub-hint" id="air-sub-hint">запас дыхания · промах −сек</small>
-        </div>
+    <!-- Баннер живого наблюдения (?startapp=watch_<barrelId>) -->
+    <div class="hud-watch-banner" id="hud-watch-banner" hidden>
+      <div class="hud-watch-meta">
+        <span class="live-pulse-dot"></span>
+        <strong id="hud-watch-status">👀 ПОДГЛЯДЫВАЕШЬ ЗА ДРУГОМ В ЦЕХУ...</strong>
+      </div>
+      <div class="hud-watch-actions">
+        <button type="button" class="hud-mini-btn hud-mini-accent" id="btn-watch-rattle">⛓ ЦЕПИ</button>
+        <button type="button" class="hud-mini-btn" id="btn-watch-challenge">⚔️ В ДУЭЛЬ</button>
+        <button type="button" class="hud-mini-btn" id="btn-watch-exit">✕</button>
       </div>
     </div>
 
     <!-- Всплывающие очки при попадании в Гонке за Премьерой (+45 / +0.4) -->
     <div class="floating-score-layer" id="floating-score-layer" aria-hidden="true"></div>
 
-    <!-- Интерактивный микрофонный продув на Уровне 4 (Пресс-цех): подуть в микрофон, чтобы сдуть пар с номеров и вернуть +4 сек воздуха -->
+    <!-- Интерактивный микрофонный продув на Уровне 4 (Пресс-цех) -->
     <div class="hud-mic-blow-box" id="hud-mic-blow-box" hidden>
       <button type="button" class="btn-secondary btn-compact hud-mic-blow-btn" id="btn-hud-mic-blow" data-i18n="micBlowBtn">
         💨 ПОДУТЬ В МИКРОФОН (СДУТЬ ПАР С НОМЕРОВ +4 СЕК O₂)
@@ -327,33 +303,10 @@
       </span>
     </div>
 
-    <div class="hud-bottom">
-      <div class="hud-attempts-panel" id="hud-attempts-panel">
-        <span class="hud-panel-label" id="hud-attempts-label" data-i18n="hudAttempts">ПОПЫТКИ</span>
-        <div class="attempts-squares" id="attempts-squares" aria-label="Попытки">
-          <span class="attempt-sq is-live"></span>
-          <span class="attempt-sq is-live"></span>
-          <span class="attempt-sq is-live"></span>
-        </div>
-        <div class="premiere-lives-big" id="hud-premiere-lives-big" hidden>
-          <span>❤️ ×</span><strong id="hud-lives-big-num">3</strong>
-        </div>
-      </div>
-
-      <div class="hud-controls-panel">
-        <p class="hud-hint-text" id="hud-hint-text" data-i18n="hudHintDesktop">
-          Наведи курсор — слушать металл · Клик — вскрыть бочку
-        </p>
-        <div class="hud-btn-row">
-          <button type="button" class="hud-mini-btn hud-mini-accent" id="btn-hud-pack" data-i18n="hudPackQuick">
-            ЗАКАТАТЬ ДРУГА
-          </button>
-          <button type="button" class="hud-mini-btn" id="btn-hud-sound">
-            ЗВУК: ВКЛ
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- Одна компактная подсказка внизу -->
+    <p class="hud-hint-line" id="hud-hint-text" data-i18n="hudHintMobile">
+      Удерживай палец — слушать стук · Короткий тап — удар ломом
+    </p>
   </section>
 
   <!-- Индустриальный импульс давления/пара при промахе (0.4 сек, без 2D-спрайтов духов/людей) -->
@@ -582,271 +535,92 @@
   <!-- ====================================================================
        ЭКРАН 4: КОНСТРУКТОР ПРАНКА «УПАКОВАТЬ В БОЧКУ» (ФОТО + ГОЛОС ДО 5 СЕК)
        ==================================================================== -->
-  <section class="screen screen-scroll" id="screen-pack" hidden>
-    <div class="panel-sheet">
+  <section class="screen" id="screen-pack" hidden>
+    <div class="panel-sheet pack-clean">
       <div class="sheet-header">
         <div>
-          <span class="mono-tag">ЦЕХ, КОРПУС Б // СВАРОЧНЫЙ ПОСТ</span>
-          <h2 class="section-title" data-i18n="packTitle">УПАКОВАТЬ В БОЧКУ</h2>
+          <span class="mono-tag">ЗАКАТАЙ ДРУГА В БОЧКУ</span>
+          <h2 class="section-title">ВЫБЕРИ ЕМУ СКРИМЕР</h2>
         </div>
-        <button type="button" class="icon-close" id="btn-close-pack" aria-label="Назад в цех">✕</button>
+        <button type="button" class="icon-close" id="btn-close-pack" aria-label="Назад">✕</button>
       </div>
 
-      <p class="sheet-sub" data-i18n="packSub">
-        Скрипт сожмёт портрет в холодный тон фонаря (512×512 WebP ≤ 60 КБ), запишет голос (≤ 40 КБ) и создаст короткую ссылку bochka.quest/?b=...
-      </p>
-
-      <!-- ШАГ 8.1: Соцграф «ТВОИ ЛЮДИ В ЦЕХУ» (анти-дублирование открыток -> прямой вызов на дуэль!) -->
-      <div class="pack-friends-box" id="pack-friends-box" hidden>
-        <div class="pack-friends-head">
-          <span class="mono-label">👥 ТВОИ ЛЮДИ УЖЕ В ЦЕХУ (НЕ ДУБЛИРУЙ БОЧКУ — ЗОВИ НА СЧЁТ ТРИ!)</span>
+      <div class="pack-top-row">
+        <div class="barrel-mouth-preview pack-mini-preview">
+          <img id="pack-preview-img" alt="Портрет на дне бочки" />
         </div>
-        <div class="pack-friends-strip" id="pack-friends-strip"></div>
-      </div>
-
-      <!-- 1. Переключатель смысла -->
-      <div class="mode-toggle" role="tablist">
-        <button type="button" class="toggle-tab is-active" id="tab-mode-friend" data-i18n="modeFriend">
-          Я прячу друга
-        </button>
-        <button type="button" class="toggle-tab" id="tab-mode-self" data-i18n="modeSelf">
-          Я прячу себя (намёк в кино)
-        </button>
-      </div>
-
-      <!-- 2. Круглая горловина-превью + загрузка фото / селфи / рамки -->
-      <div class="pack-visualizer">
-        <div class="barrel-mouth-col">
-          <div class="barrel-mouth-preview">
-            <img id="pack-preview-img" alt="Портрет на дне бочки" />
-          </div>
-          <span class="webp-size-tag" id="pack-size-tag">420×420 HD WEBP</span>
-        </div>
-
-        <div class="pack-photo-controls">
+        <div class="pack-photo-row">
           <label class="btn-secondary file-label">
-            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/></svg>
-            <span data-i18n="uploadPhoto">ЗАГРУЗИТЬ ФОТО</span>
+            <span data-i18n="uploadPhoto">📁 ФОТО</span>
             <input type="file" id="input-photo-file" accept="image/*" hidden />
           </label>
-
-          <button type="button" class="btn-secondary" id="btn-open-camera">
-            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-2h6l2 2h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="3.5"/></svg>
-            <span data-i18n="takeSelfie">СЕЛФИ С КАМЕРЫ</span>
-          </button>
-
-          <button type="button" class="btn-secondary" id="btn-pack-meme-template">
-            <span>🎲 ГОТОВЫЙ МЕМ-ШАБЛОН / АВАТАР В 1 КЛИК</span>
-          </button>
-
-          <button type="button" class="btn-ghost" id="btn-tg-avatar" hidden>
-            <span data-i18n="useTgAvatar">АВАТАРКА TELEGRAM</span>
-          </button>
-
-          <div class="frame-picker">
-            <span class="mono-label" data-i18n="frameLabel">КИНО-СТИЛЬ ВНУТРИ БОЧКИ</span>
-            <div class="frame-chips">
-              <button type="button" class="chip is-active" data-frame="flashlight" data-i18n="frame1">🔦 Яркий фонарь</button>
-              <button type="button" class="chip" data-frame="weld" data-i18n="frame2">⚡ Искры сварки</button>
-              <button type="button" class="chip" data-frame="rec" data-i18n="frame3">🔴 Камера REC</button>
-              <button type="button" class="chip" data-frame="stencil" data-i18n="frame4">⚠️ Штамп 17.12</button>
-            </div>
-          </div>
-
-          <div class="frame-picker" id="pack-zone-picker">
-            <span class="mono-label">ЛОКАЦИЯ ЗАВОДА (КУДА ЗАКАТАТЬ ДРУГА):</span>
-            <div class="frame-chips">
-              <button type="button" class="chip is-active" data-pack-zone="1">1 · Шлюз (3Б)</button>
-              <button type="button" class="chip" data-pack-zone="2">2 · Конвейер (6Б · Пар)</button>
-              <button type="button" class="chip" data-pack-zone="3">3 · Котельная (9Б · Вода)</button>
-              <button type="button" class="chip" data-pack-zone="4">4 · Пресс-цех (12Б · 19·97)</button>
-            </div>
-          </div>
-
-          <div class="frame-picker" id="pack-barrel-picker">
-            <span class="mono-label">НОМЕР БОЧКИ ПАРТИИ:</span>
-            <div class="frame-chips">
-              <button type="button" class="chip is-active" data-pack-barrel="-1">🎲 Авто</button>
-              <button type="button" class="chip" data-pack-barrel="0">№01</button>
-              <button type="button" class="chip" data-pack-barrel="1">№19</button>
-              <button type="button" class="chip" data-pack-barrel="2">№97</button>
-              <button type="button" class="chip" data-pack-barrel="3">№12</button>
-            </div>
-          </div>
-
-          <div class="frame-picker" id="pack-screamer-picker">
-            <span class="mono-label">ЛОВУШКА-СКРИМЕР ПРИ ПРОМАХЕ ДРУГА:</span>
-            <div class="frame-chips">
-              <button type="button" class="chip is-active" data-pack-screamer="weld">⚡ 1. Сварка и падающая бочка</button>
-              <button type="button" class="chip" data-pack-screamer="lunge">🐕 2. Бросок из темноты</button>
-              <button type="button" class="chip" data-pack-screamer="siren_cam">🚨 3. Сирена цеха + Кадр жертвы</button>
-              <button type="button" class="chip" data-pack-screamer="custom_scream">🎙 4. Свой 2-сек крик / видео</button>
-            </div>
-          </div>
+          <button type="button" class="btn-secondary" id="btn-open-camera"><span data-i18n="takeSelfie">📷 СЕЛФИ</span></button>
+          <button type="button" class="btn-secondary" id="btn-pack-meme-template"><span>🎲 ШАБЛОН</span></button>
+          <button type="button" class="btn-ghost" id="btn-tg-avatar" hidden><span data-i18n="useTgAvatar">АВАТАР TG</span></button>
         </div>
       </div>
+      <span class="sr-only" id="pack-size-tag">WEBP</span>
 
-      <!-- 3. ГОЛОСОВУХА С ЭФФЕКТОМ ЗАВАРЕННОЙ БОЧКИ (MediaRecorder <= 5 сек, <= 40 КБ) -->
-      <div class="voice-pack-box" id="voice-pack-box">
-        <div class="voice-head-row">
-          <span class="mono-label" data-i18n="voiceLabel">ГОЛОС ИЗ ЗАВАРЕННОЙ БОЧКИ (ДО 5 СЕК · ОПЦИОНАЛЬНО)</span>
-          <button type="button" class="chip" id="btn-voice-prompt-shuffle">🎲 Подсказать дерзкую фразу</button>
-        </div>
-        <p class="voice-hint-text" data-i18n="voiceHint">
-          Во время поиска твой голос глухо звучит сквозь сталь (400 Гц), а при вскрытии крышки включается с металлическим резонансом железной бочки.
-        </p>
+      <div class="screamer-cards" id="pack-screamer-picker">
+        <button type="button" class="screamer-card is-active" data-pack-screamer="weld">
+          <span class="sc-ico">⚡</span><b>Сварка</b><small>вспышка дуги и падающая бочка</small>
+        </button>
+        <button type="button" class="screamer-card" data-pack-screamer="lunge">
+          <span class="sc-ico">🔦</span><b>Бросок из темноты</b><small>резкий выпад в луче фонаря</small>
+        </button>
+        <button type="button" class="screamer-card" data-pack-screamer="siren_cam">
+          <span class="sc-ico">🚨</span><b>Сирена + Жертва</b><small>ревун цеха и кадр жертвы</small>
+        </button>
+        <button type="button" class="screamer-card" data-pack-screamer="custom_scream">
+          <span class="sc-ico">🎙</span><b>Свой крик</b><small>запиши 2-сек крик сам</small>
+        </button>
+      </div>
 
-        <!-- 3 быстрые голосовые фразы-суфлёры над микрофоном -->
-        <div class="voice-prompt-chips" id="voice-prompt-chips">
-          <button type="button" class="chip voice-prompt-chip is-active" data-voice-prompt="Серёга, выпусти, тут текила кончилась!">
-            🎙 «Серёга, выпусти, тут текила кончилась!»
-          </button>
-          <button type="button" class="chip voice-prompt-chip" data-voice-prompt="Не бей по девятнадцатой, там труба с паром!">
-            🎙 «Не бей по девятнадцатой, там труба с паром!»
-          </button>
-          <button type="button" class="chip voice-prompt-chip" data-voice-prompt="Я знаю, где лежат ключи от гелика!">
-            🎙 «Я знаю, где лежат ключи от гелика!»
-          </button>
-        </div>
-        <div class="voice-teleprompter-line" id="voice-teleprompter-line">
-          Суфлёр для записи: «Серёга, выпусти, тут текила кончилась!»
-        </div>
-
-        <label class="voice-filter-toggle">
-          <input type="checkbox" id="chk-voice-barrel-filter" checked />
-          <span>🛢 Акустический фильтр «Голос из железной бочки» (Web Audio BiquadFilter + эхо воды)</span>
-        </label>
-
+      <div class="voice-pack-box" id="voice-pack-box" hidden>
+        <div class="voice-teleprompter-line" id="voice-teleprompter-line">Крикни коротко: «Серёга, выпусти!»</div>
         <button type="button" class="btn-secondary btn-full voice-rec-btn" id="btn-record-voice">
           <span class="rec-dot" id="voice-rec-dot"></span>
-          <span id="btn-record-voice-text" data-i18n="btnRecordVoice">ЗАПИСАТЬ ГОЛОС (ДО 5 СЕК)</span>
+          <span id="btn-record-voice-text" data-i18n="btnRecordVoice">ЗАПИСАТЬ КРИК (ДО 5 СЕК)</span>
         </button>
-
         <div class="voice-rec-bar" id="voice-rec-bar" hidden>
-          <div class="voice-rec-meta">
-            <span data-i18n="voiceRecProgress">ИДЁТ ЗАПИСЬ В БОЧКУ:</span>
-            <strong id="voice-rec-timer">5.0s</strong>
-          </div>
-          <div class="voice-meter-track">
-            <div class="voice-meter-fill" id="voice-meter-fill"></div>
-          </div>
+          <div class="voice-rec-meta"><span data-i18n="voiceRecProgress">ИДЁТ ЗАПИСЬ:</span> <strong id="voice-rec-timer">5.0s</strong></div>
+          <div class="voice-meter-track"><div class="voice-meter-fill" id="voice-meter-fill"></div></div>
         </div>
-
         <div class="voice-ready-row" id="voice-ready-row" hidden>
-          <span class="voice-meta-tag" id="voice-meta-tag">ГОЛОС ЗАПИСАН · 3.2 СЕК · 18 КБ</span>
+          <span class="voice-meta-tag" id="voice-meta-tag">КРИК ЗАПИСАН</span>
           <div class="voice-ready-actions">
-            <button type="button" class="chip is-active" id="btn-play-voice-muffled" data-i18n="btnVoiceMuffled">🛢 В БОЧКЕ</button>
-            <button type="button" class="chip" id="btn-play-voice-clean" data-i18n="btnVoiceClean">▶ ЧИСТО</button>
-            <button type="button" class="chip chip-danger" id="btn-clear-voice" aria-label="Удалить голос">✕</button>
+            <button type="button" class="chip is-active" id="btn-play-voice-muffled">🛢 В БОЧКЕ</button>
+            <button type="button" class="chip" id="btn-play-voice-clean">▶ ЧИСТО</button>
+            <button type="button" class="chip chip-danger" id="btn-clear-voice" aria-label="Удалить">✕</button>
           </div>
         </div>
+        <input type="checkbox" id="chk-voice-barrel-filter" checked hidden />
       </div>
 
-      <!-- 4. Выбор готовой дерзкой фразы из 5 пресетов или свой текст до 45 символов -->
-      <div class="phrase-section">
-        <span class="mono-label" data-i18n="presetLabel">ВЫБЕРИ ФРАЗУ ИЛИ ВВЕДИ СВОЮ (ДО 45 СИМВ.)</span>
-        <div class="preset-list" id="preset-list"></div>
-
-        <div class="input-row">
-          <input
-            type="text"
-            id="input-custom-phrase"
-            maxlength="45"
-            class="industrial-input"
-            data-i18n-placeholder="customPhrasePlaceholder"
-            placeholder="Своя подпись на дне бочки..."
-          />
-          <span class="char-counter" id="phrase-counter">0/45</span>
-        </div>
-
-        <input
-          type="text"
-          id="input-sender-name"
-          maxlength="28"
-          class="industrial-input input-compact"
-          data-i18n-placeholder="senderNamePlaceholder"
-          placeholder="Твой позывной / имя (необязательно)"
-        />
+      <div class="input-row pack-phrase-row">
+        <input type="text" id="input-custom-phrase" maxlength="45" class="industrial-input"
+               data-i18n-placeholder="customPhrasePlaceholder" placeholder="Подпись на дне бочки (необязательно)" />
+        <span class="char-counter" id="phrase-counter">0/45</span>
       </div>
 
-      <!-- 5. Кнопка сварки и блок шеринга -->
-      <button type="button" class="btn-primary btn-full" id="btn-seal-barrel">
-        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg>
-        <span id="btn-seal-text" data-i18n="btnSealBarrel">ЗАВАРИТЬ КРЫШКУ И СОЗДАТЬ ССЫЛКУ</span>
+      <button type="button" class="btn-primary btn-full pack-send-btn" id="btn-seal-barrel">
+        <span id="btn-seal-text" data-i18n="btnSealBarrel">🚀 ОТПРАВИТЬ БОЧКУ ДРУГУ В TELEGRAM</span>
+        <small class="btn-sub-line">+1 ❤️ и откроется следующий уровень</small>
       </button>
-
-      <div class="share-result-box" id="share-result-box" hidden>
-        <div class="share-result-head">
-          <span class="mono-tag accent-tag" data-i18n="shareReadyTitle">БОЧКА ЗАВАРЕНА // КОРОТКАЯ ССЫЛКА ГОТОВА</span>
-          <p class="share-hint" data-i18n="shareReadyHint">
-            Отправь ссылку другу (+1 жизнь сразу в Гонке за Премьерой и ещё +2 жизни, когда друг вскроет бочку!).
-          </p>
-        </div>
-
-        <div class="share-url-row">
-          <input type="text" id="output-share-url" class="industrial-input" readonly />
-          <button type="button" class="btn-ghost" id="btn-copy-url" data-i18n="btnCopyLink">КОПИРОВАТЬ</button>
-        </div>
-
-        <div class="share-buttons-grid">
-          <button type="button" class="btn-primary" id="btn-share-native">
-            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13"/></svg>
-            <span data-i18n="btnShareNative">ОТПРАВИТЬ ДРУГУ (+1 ❤️)</span>
-          </button>
-          <button type="button" class="btn-secondary" id="btn-share-tg">
-            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m21 3-9 18-3-7-7-3 19-8Z"/></svg>
-            <span data-i18n="btnShareTelegram">В TELEGRAM (+1 ❤️)</span>
-          </button>
-        </div>
-
-        <div class="multi-social-row">
-          <button type="button" class="social-pill-btn social-wa" id="btn-pack-share-wa">WhatsApp (+⭐)</button>
-          <button type="button" class="social-pill-btn social-vk" id="btn-pack-share-vk">VK (+⭐)</button>
-          <button type="button" class="social-pill-btn social-ig" id="btn-pack-share-ig">Instagram 9:16 (+⭐)</button>
-        </div>
-
-        <div class="step4-trailer-card" id="pack-step4-trailer-box" hidden>
-          <span class="mono-tag accent-tag" data-i18n="step4TrailerTag">ШАГ 4 (ДОПОЛНИТЕЛЬНО) // ПОСЛЕ ФОТО-БОЧКИ</span>
-          <p class="share-hint" data-i18n="step4TrailerHint">
-            Фото-бочка улетела другу! Дополнительно отправь ему ссылку на новый трейлер «БОЧКИ» (+150 ⭐ и +1 ❤️ сразу, +250 ⭐ за досмотр).
-          </p>
-          <button type="button" class="btn-primary btn-full" id="btn-pack-step4-trailer">
-            <span data-i18n="btnStep4SendTrailer">🎬 ШАГ 4: ОТПРАВИТЬ ДРУГУ ТРЕЙЛЕР (+150 ⭐ +1 ❤️)</span>
-          </button>
-          <div class="step4-trailer-subrow">
-            <button type="button" class="social-pill-btn" id="btn-pack-step4-yt">▶ Ссылка YouTube (+⭐)</button>
-            <button type="button" class="social-pill-btn" id="btn-pack-open-share-hub">Ещё соцсети (WA / VK / IG)</button>
-          </div>
-        </div>
-
-        <button type="button" class="btn-secondary btn-full share-go-premiere-btn" id="btn-pack-go-premiere">
-          <span data-i18n="btnStartPremiereRace">🏆 ВОЙТИ В ЦЕХ: ГОНКА ЗА ПРЕМЬЕРОЙ</span>
-        </button>
-
-        <div class="secret-bonus-card" id="secret-bonus-card">
-          <div class="secret-bonus-info">
-            <span class="mono-tag accent-tag" data-i18n="secretUnlockTag">СЕКРЕТНЫЙ БОНУС ОТКРЫТ</span>
-            <strong data-i18n="secretUnlockTitle">ЭКСКЛЮЗИВНЫЙ КРУЖОК СО СЪЁМОК «БОЧКИ»</strong>
-          </div>
-          <button type="button" class="btn-secondary" id="btn-open-circle" data-i18n="btnWatchCircle">
-            СМОТРЕТЬ ВИДЕОКРУЖОК
-          </button>
-        </div>
-      </div>
     </div>
   </section>
 
   <!-- ====================================================================
        ЭКРАН 5: ФИНАЛ РАУНДА, ГОЛОС, ГОНКА ЗА ПРЕМЬЕРОЙ (0 / 100) И КОНВЕРСИЯ
        ==================================================================== -->
-  <section class="screen screen-scroll" id="screen-finale" hidden>
+  <section class="screen" id="screen-finale" hidden>
     <div class="panel-sheet finale-sheet">
       <div class="finale-top-bar">
         <span class="mono-tag" id="finale-subtag">ПОСЛАНИЕ НА ДНЕ БОЧКИ</span>
         <span class="premiere-pill" data-i18n="premiereBadge">В КИНО С 17 ДЕКАБРЯ</span>
       </div>
 
-      <!-- Победный блок при достижении 100.0 / 100 в Гонке за закрытой Премьерой -->
+      <!-- Победный блок только при выигрыше пригласительного на премьеру -->
       <div class="golden-winner-box" id="golden-winner-box" hidden>
         <span class="mono-tag accent-tag">КРАСНАЯ ДОРОЖКА // ЗАКРЫТАЯ ПРЕМЬЕРА 17 ДЕКАБРЯ</span>
         <h3 class="golden-winner-title" data-i18n="premiereWonGrandTitle">🏆 100 / 100! ТЫ ВЫБИЛ ПРИГЛАСИТЕЛЬНЫЙ НА ЗАКРЫТУЮ ПРЕМЬЕРУ!</h3>
@@ -858,268 +632,63 @@
       </div>
 
       <div class="finale-barrel-reveal">
-        <div class="barrel-mouth-large">
-          <img id="finale-portrait-img" alt="Лицо на дне бочки" />
-          <div class="flashlight-sweep" aria-hidden="true"></div>
+        <div class="barrel-mouth-large" id="finale-avatar-ring">
+          <img id="finale-portrait-img" alt="Аватарка" />
         </div>
-        <div class="finale-stamp" id="finale-stamp">ВЫЖИЛ С 5-Й ПОПЫТКИ</div>
+        <div class="finale-stamp" id="finale-stamp">СПАСЁН С 3-Й ПОПЫТКИ!</div>
       </div>
 
       <blockquote class="finale-message" id="finale-message">
-        «Вытащишь меня — идём на Бочку 17 декабря»
+        «На небе только и разговоров, что о бочке…»
       </blockquote>
 
-      <div class="finale-voice-row" id="finale-voice-row" hidden>
-        <button type="button" class="btn-secondary btn-compact" id="btn-finale-replay-voice" data-i18n="finaleReplayVoice">
-          🔊 ВКЛЮЧИТЬ ГОЛОС ИЗ БОЧКИ ЕЩЁ РАЗ
-        </button>
-      </div>
+      <p class="finale-next-step" id="finale-next-step"></p>
 
-      <p class="finale-notify-line" id="finale-notify-line" data-i18n="finaleNotified">
-        Отправителю ушёл сигнал о твоём результате (+2 жизни на его счёт!).
-      </p>
-
-      <!-- Авто-карточка «Жертва цеха №19» при срабатывании скримера «Сирена цеха + Кадр жертвы» (v6.5) -->
-      <div class="spoiler-report-box" id="finale-victim-card-box" hidden>
-        <div class="spoiler-report-head">
-          <span class="mono-tag danger-tag">🚨 ЖЕРТВА ЦЕХА №19 // ПОЙМАН НА СКРИМЕРЕ</span>
-          <span class="mono-label">КАДР РЕАКЦИИ ДЛЯ ПЕРЕСЫЛКИ В ЧАТ:</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:12px;margin:8px 0;">
-          <img id="victim-card-img" alt="Кадр жертвы цеха №19" style="width:92px;height:92px;object-fit:cover;border:1px solid #ef4444;" />
-          <div style="flex:1;">
-            <small id="victim-card-caption" style="display:block;margin-bottom:6px;color:#fca5a5;">
-              Скример сработал! Сними кадр своей реакции с фронталки или отправь карточку «Жертва цеха №19» в чат:
-            </small>
-            <div class="spoiler-report-actions">
-              <button type="button" class="btn-secondary btn-compact" id="btn-snap-victim-cam">📸 СНЯТЬ РЕАКЦИЮ С ФРОНТАЛКИ</button>
-              <button type="button" class="btn-primary btn-compact" id="btn-share-victim-card">📤 КАРТОЧКУ В ЧАТ</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Генератор спойлеробезопасного отчёта смены для вставки в чат в 1 клик (скрыт по умолчанию для Single-Screen UX v6.7) -->
-      <div class="spoiler-report-box" id="finale-spoiler-report-box" hidden>
-        <div class="spoiler-report-head">
-          <span class="mono-tag accent-tag" id="finale-rank-badge">РАНГ: СЛЕСАРЬ-СЛУХАЧ</span>
-          <span class="mono-label">СПОЙЛЕРОБЕЗОПАСНЫЙ ОТЧЁТ ДЛЯ ЧАТА:</span>
-        </div>
-        <textarea
-          id="output-spoiler-report"
-          class="industrial-input spoiler-report-textarea"
-          rows="4"
-          readonly
-        ></textarea>
-        <div class="spoiler-report-actions">
-          <button type="button" class="btn-primary btn-compact" id="btn-copy-spoiler-report">
-            📋 СКОПИРОВАТЬ ОТЧЁТ В 1 КЛИК
-          </button>
-          <button type="button" class="btn-secondary btn-compact" id="btn-share-spoiler-tg">
-            ✈️ ОТПРАВИТЬ В TELEGRAM
-          </button>
-        </div>
-      </div>
-
-      <!-- Обратная связь при нажатии «🍿 ПОЙДУ В КИНО 17 ДЕКАБРЯ!» (v6.7) -->
-      <div class="spoiler-report-box" id="finale-cinema-feedback-box" hidden style="padding:8px 10px;margin:4px 0 8px;border-color:#eab308;background:rgba(234,179,8,0.1);">
-        <p id="finale-cinema-feedback-text" style="margin:0 0 6px;font-size:12.5px;line-height:1.3;color:#fde68a;font-weight:600;text-align:center;">
-          Отлично! Раз идёшь — зови друзей в цех, на премьере будет жарко!
-        </p>
+      <div class="finale-cinema-feedback" id="finale-cinema-feedback-box" hidden>
+        <p id="finale-cinema-feedback-text">Отлично! Раз идёшь — зови друзей в цех, на премьере будет жарко!</p>
         <button type="button" class="btn-secondary btn-compact btn-full" id="btn-cinema-fast-invite">
-          📲 ПРИГЛАСИТЬ ДРУЗЕЙ В ЦЕХ В 1 КЛИК
+          📲 ПОЗВАТЬ ДРУЗЕЙ В 1 КЛИК
         </button>
       </div>
 
-      <!-- Быстрая реакция в 1 клик (скрыта, заменена единой кнопкой #btn-cinema-reply) -->
-      <div class="finale-stage2-react-box" id="finale-solo-stage2-reaction" hidden>
-        <button type="button" class="btn-secondary btn-full" id="btn-stage2-quick-react" data-i18n="stage2QuickReactSolo">
-          🍿 Пойду в кино 17 декабря!
-        </button>
-      </div>
-
-      <!-- ШАГ 8.2 (ТРИГГЕР Б): Реактивные кнопки ответа отправителю в 1 клик (скрыты для чистого 2-кнопочного UX v6.7) -->
-      <div class="finale-reactions-box" id="finale-friend-reactions" hidden>
-        <span class="mono-label">⚡ ОТПРАВИТЬ ЖИВОЙ ПУШ АВТОРУ БОЧКИ В TELEGRAM (1 КЛИК):</span>
-        <div class="finale-reactions-grid">
-          <button type="button" class="btn-primary btn-full js-finale-reaction" data-reaction="cinema">
-            🍿 Идём в кино 17 декабря!
-          </button>
-          <button type="button" class="btn-secondary btn-full js-finale-reaction" data-reaction="ask_ticket">
-            🎟 Подари мне билет в кино!
-          </button>
-          <button type="button" class="btn-secondary btn-full reaction-duel-btn js-finale-reaction" data-reaction="duel_3p">
-            ⚔️ Разыграем третьего втроём! («На счёт три!»)
-          </button>
-        </div>
-        <p class="reaction-sent-note" id="finale-reaction-status" hidden></p>
-      </div>
-
-      <!-- Главные кнопки конверсии и вирального цикла (СТРОГО 2 КНОПКИ БЕЗ СКРОЛЛА v6.7) -->
       <div class="finale-cta-stack">
+        <button type="button" class="btn-primary btn-full" id="btn-pack-revenge">
+          <span id="btn-pack-revenge-text">🛢 УРОВЕНЬ 2: ЗАКАТАТЬ ДРУГА (ОТПРАВИТЬ СКРИМЕР)</span>
+        </button>
         <button type="button" class="btn-secondary btn-full" id="btn-cinema-reply">
           <span id="btn-cinema-reply-text" data-i18n="btnGoCinema">🍿 ПОЙДУ В КИНО 17 ДЕКАБРЯ!</span>
         </button>
-
-        <button type="button" class="btn-primary btn-full btn-with-sub" id="btn-pack-revenge">
-          <span class="btn-main-line">
-            <span id="btn-pack-revenge-text" data-i18n="btnPackBack">🛢 ЗАКАТАТЬ ДРУГА И ОТПРАВИТЬ СКРИМЕР</span>
-          </span>
-          <small class="btn-sub-line" id="btn-pack-revenge-sub" data-i18n="btnPackBackHint">Уровень 2: выбери другу жёсткий скример — следом откроется игра на бесплатный билет!</small>
-        </button>
-
-        <!-- Компактная плашка Уровня 3 / Уровня 4 (появляется после отправки бочки другу) -->
-        <div id="finale-stage-progression-bar" hidden style="padding:7px 10px;border:1px solid rgba(234,179,8,0.45);background:rgba(234,179,8,0.08);text-align:center;">
-          <small id="finale-stage-progression-text" style="display:block;margin-bottom:5px;color:#fde68a;font-size:11.5px;line-height:1.25;">
-            🎟 Уровень 3 открыт: играй дальше — впереди розыгрыш бесплатных билетов на премьеру 17 декабря!
-          </small>
-          <button type="button" class="btn-secondary btn-compact btn-full" id="btn-finale-stage-next">
-            🎯 ИГРАТЬ НА БЕСПЛАТНЫЙ БИЛЕТ →
-          </button>
-        </div>
-
-        <div class="finale-dual-row" hidden>
-          <button type="button" class="btn-secondary" id="btn-finale-open-duel">
-            ⚔️ СТОЛ «НА СЧЁТ ТРИ!»
-          </button>
-          <button type="button" class="btn-secondary" id="btn-finale-share-hub">
-            📤 СОЦСЕТИ + ТРЕЙЛЕР (+⭐)
-          </button>
-        </div>
-
-        <div class="finale-dual-row" hidden>
-          <button type="button" class="btn-ghost" id="btn-download-stories">
-            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="1.5"/><path d="M12 8v6m0 0-2.5-2.5M12 14l2.5-2.5"/></svg>
-            <span data-i18n="btnDownloadStories">СКАЧАТЬ СТОРИС 9:16</span>
-          </button>
-          <button type="button" class="btn-ghost" id="btn-replay-round" data-i18n="btnPlayAgain">
-            СЛЕД. УРОВЕНЬ В ЦЕХУ
-          </button>
-        </div>
-
-        <div class="retention-card blitz-microgoal-card" id="blitz-cooldown-microgoal" hidden></div>
-      </div>
-
-      <!-- ==================================================================
-           ГЛАВНАЯ СУПЕРИГРА: ГОНКА ЗА ЗАКРЫТОЙ ПРЕМЬЕРОЙ (0 / 100) + ТОП-10 (скрыта для Single-Screen UX)
-           ================================================================== -->
-      <div class="golden-hunt-card" id="golden-hunt-card" hidden>
-        <div class="golden-hunt-head">
-          <span class="mono-tag accent-tag" data-i18n="premiereRaceTag">ГЛАВНАЯ СУПЕРИГРА // КРАСНАЯ ДОРОЖКА 17 ДЕКАБРЯ</span>
-          <h3 class="golden-hunt-title" data-i18n="premiereRaceTitle">ГОНКА ЗА ЗАКРЫТОЙ ПРЕМЬЕРОЙ СО СЪЁМОЧНОЙ ГРУППОЙ</h3>
-          <p class="golden-hunt-desc" data-i18n="premiereRaceDesc">
-            Набирай шкалу Премьеры и Рейтинговые очки (⭐): ТОП-10 лидеров рейтинга гарантированно идут на закрытый показ со съёмочной группой 17 декабря! По пути выпадают «Золотые бочки» с билетами для друзей.
-          </p>
-        </div>
-
-        <!-- Крупная шкала 0..100 + Очки ТОП-10 прямо на карточке Суперигры -->
-        <div class="premiere-card-meter">
-          <div class="premiere-strip-head">
-            <span class="premiere-strip-title" data-i18n="premiereBarLabel">ДОПУСК НА ПРЕМЬЕРУ</span>
-            <div class="premiere-strip-stats">
-              <span class="premiere-score-pill"><strong id="finale-premiere-score">0.0</strong> / 100</span>
-              <span class="premiere-score-pill">⭐ <strong id="finale-premiere-points">0</strong></span>
-              <span class="premiere-lives-pill">❤️ <span data-i18n="premiereLivesLabel">ЖИЗНИ</span>: <strong id="finale-premiere-lives">3</strong></span>
-            </div>
-          </div>
-          <div class="premiere-progress-track premiere-track-lg">
-            <div class="premiere-progress-fill" id="finale-premiere-fill"></div>
-          </div>
-        </div>
-
-        <button type="button" class="btn-secondary btn-full leaderboard-open-banner" id="btn-finale-leaderboard">
-          🏆 ОТКРЫТЬ РЕЙТИНГ ТОП-10 НА ПРЕМЬЕРУ (ПРОВЕРИТЬ СВОЁ МЕСТО) →
-        </button>
-
-        <!-- Неразыгранный «Чужой билет», если игрок закрыл окно вилки -->
-        <button type="button" class="btn-secondary btn-full pending-ticket-banner" id="btn-reopen-golden-fork" hidden>
-          🎟 У ТЕБЯ НЕРАЗЫГРАННЫЙ БИЛЕТ В КИНО! ВЫБРАТЬ: ×2 ЖИЗНЕЙ ИЛИ ПОДАРОК ДРУГУ →
-        </button>
-
-        <div class="life-economy-rules">
-          <div class="life-rule-item" data-i18n="lifeRuleShare">+1 ЖИЗНЬ СРАЗУ — отправь бочку новому другу (до 3 в сутки)</div>
-          <div class="life-rule-item" data-i18n="lifeRuleOpened">+2 ЖИЗНИ — как только друг откроет ссылку и пройдёт цех</div>
-        </div>
-
-        <div class="golden-checklist" id="golden-checklist">
-          <div class="golden-req-row" id="golden-req-row-pack">
-            <span class="req-status-dot" id="golden-dot-pack"></span>
-            <span class="req-label" data-i18n="goldenReq1">1. Закатать друга в бочку и отправить короткую ссылку (+1 жизнь сразу, +2 за открытие)</span>
-            <button type="button" class="quest-action-btn" id="btn-golden-go-pack" data-i18n="questOpen">ВЫПОЛНИТЬ</button>
-          </div>
-
-          <div class="golden-req-row" id="golden-req-row-kp">
-            <span class="req-status-dot" id="golden-dot-kp"></span>
-            <span class="req-label" data-i18n="goldenReq2">2. Загрузить скриншот Кинопоиска с активной оранжевой кнопкой «Буду смотреть» (+1 Крышка)</span>
-            <div class="golden-kp-actions">
-              <a class="quest-action-btn kp-link-btn" id="link-golden-kp-card" href="https://www.kinopoisk.ru/film/11226275/" target="_blank" rel="noopener noreferrer">КИНОПОИСК ↗</a>
-              <label class="quest-action-btn file-label" id="label-upload-kp-screen">
-                <span id="label-upload-kp-text" data-i18n="btnUploadKpScreen">ЗАГРУЗИТЬ СКРИНШОТ «БУДУ СМОТРЕТЬ»</span>
-                <input type="file" id="input-kp-screenshot" accept="image/*" hidden />
-              </label>
-            </div>
-          </div>
-
-          <p class="kp-screen-feedback" id="kp-screen-feedback" hidden></p>
-        </div>
-
-        <button type="button" class="btn-primary btn-full golden-enter-btn" id="btn-enter-night-shift" disabled>
-          <span data-i18n="btnStartPremiereRace">🏆 ВОЙТИ В ЦЕХ: ГОНКА ЗА ПРЕМЬЕРОЙ</span>
-        </button>
-        <p class="night-shift-cooldown-text" id="night-shift-cooldown-text" hidden></p>
-      </div>
-
-      <!-- Жетоны цеха («Крышки») -->
-      <div class="quest-box" id="finale-quest-box">
-        <div class="quest-head">
-          <div>
-            <h3 class="quest-title" data-i18n="questTitle">ЖЕТОНЫ ЦЕХА («КРЫШКИ»)</h3>
-            <p class="quest-sub" data-i18n="questSub">
-              Копи крышки без накруток — участвуй в розыгрыше парных билетов, закрытого предпоказа и чёрной 200-литровой бочки с мерчем.
-            </p>
-          </div>
-          <div class="quest-total-badge">
-            <span id="finale-caps-total">0</span>
-            <small>КРЫШЕК</small>
-          </div>
-        </div>
-
-        <div class="quest-items">
-          <div class="quest-row">
-            <div class="quest-row-text">
-              <strong>+1</strong>
-              <span data-i18n="questTrailer">Досмотреть встроенный трейлер (40+ сек)</span>
-            </div>
-            <button type="button" class="quest-action-btn" id="quest-btn-trailer" data-i18n="questOpen">ВЫПОЛНИТЬ</button>
-          </div>
-
-          <div class="quest-row">
-            <div class="quest-row-text">
-              <strong>+1</strong>
-              <span data-i18n="questKinopoisk">Нажать «Буду смотреть» на Кинопоиске</span>
-            </div>
-            <button type="button" class="quest-action-btn" id="quest-btn-kp" data-i18n="questOpen">ВЫПОЛНИТЬ</button>
-          </div>
-
-          <div class="quest-row">
-            <div class="quest-row-text">
-              <strong>+2</strong>
-              <span data-i18n="questFriends">За каждого друга, открывшего твою бочку</span>
-            </div>
-            <span class="quest-counter-pill" id="quest-friends-pill">0 × 2</span>
-          </div>
-
-          <div class="quest-row" id="quest-row-step4-trailer">
-            <div class="quest-row-text">
-              <strong>+1 ❤️</strong>
-              <span data-i18n="questStep4Trailer">Шаг 4 (после отправки фото): скинуть другу ссылку на трейлер (+150 ⭐)</span>
-            </div>
-            <button type="button" class="quest-action-btn" id="quest-btn-step4-trailer" data-i18n="questOpen">ВЫПОЛНИТЬ</button>
-          </div>
-        </div>
       </div>
     </div>
   </section>
+
+  <!-- v7.0: экран «Бочка улетела другу» (одна кнопка) -->
+  <section class="screen" id="screen-sent" hidden>
+    <div class="panel-sheet sent-sheet">
+      <div class="sent-ico" aria-hidden="true">🛢🚀</div>
+      <h2 class="section-title" id="sent-title">БОЧКА УЛЕТЕЛА ДРУГУ!</h2>
+      <p class="sent-text" id="sent-text">
+        Бочка со скримером улетела другу! Пока ждёшь, как он подорвётся — проходи следующий уровень и забирай бесплатный билет в кино!
+      </p>
+      <button type="button" class="btn-primary btn-full" id="btn-sent-play">
+        <span id="btn-sent-play-text">▶️ ИГРАТЬ УРОВЕНЬ 2</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- v7.0: полноэкранный скример при проигрыше (100vw x 100dvh, 1.8 сек) -->
+  <div class="fx-scream" id="fx-scream" data-variant="weld" hidden aria-hidden="true">
+    <div class="fx-scream-flash"></div>
+    <img class="fx-scream-face" id="fx-scream-face" alt="" />
+    <div class="fx-scream-text" id="fx-scream-text">ТЕБЯ ЗАКАТАЛИ В БОЧКУ!</div>
+  </div>
+
+  <!-- v7.0: победа — из бочки выпрыгивает аватарка спасённого -->
+  <div class="fx-reveal" id="fx-reveal" hidden aria-hidden="true">
+    <div class="fx-reveal-flash"></div>
+    <div class="fx-reveal-avatar"><img id="fx-reveal-img" alt="" /></div>
+    <div class="fx-reveal-text" id="fx-reveal-text">ДЫШУ! СПАСИБО, ЧТО НАШЁЛ МЕНЯ!</div>
+  </div>
 
   <!-- ====================================================================
        МОДАЛКА ВИЛКИ «ЗОЛОТАЯ БОЧКА: ЧУЖОЙ БИЛЕТ С ФЕЙС-КОНТРОЛЕМ»

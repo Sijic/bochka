@@ -126,7 +126,7 @@ export async function createBarrelPack({
 }) {
   const id = randomShortId(7);
   const cleanZone = Math.max(1, Math.min(4, Number(zoneId) || 1));
-  const zoneBarrels = cleanZone === 1 ? 3 : cleanZone === 2 ? 6 : cleanZone === 3 ? 9 : 12;
+  const zoneBarrels = cleanZone === 1 ? 4 : cleanZone === 2 ? 6 : cleanZone === 3 ? 9 : 12;
   const maxIdx = Math.min(6, zoneBarrels);
   const targetIndex =
     Number.isInteger(targetBarrelIndex) && targetBarrelIndex >= 0 && targetBarrelIndex < maxIdx

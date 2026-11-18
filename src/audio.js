@@ -1030,6 +1030,59 @@ class WorkshopAudio {
     }
   }
 
+  /**
+   * Промах по пустой бочке: громкий гулкий звон пустого железа + резкий пшик пара + вибрация телефона
+   */
+  playEmptyBarrelClang(index = 0) {
+    try { navigator.vibrate?.([70, 30, 110]); } catch { /* ignore */ }
+    if (!this.ctx || !this.enabled) return;
+    const dest = this.panners[index] || this.master;
+    const now = this.ctx.currentTime;
+
+    // Неоднородные обертоны пустой стальной бочки (долгий гул)
+    const partials = [[118, 0.55, 1.7], [187, 0.42, 1.45], [293, 0.34, 1.15], [441, 0.24, 0.85], [663, 0.16, 0.6]];
+    for (const [f, amp, dur] of partials) {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(f * (0.985 + Math.random() * 0.03), now);
+      o.frequency.exponentialRampToValueAtTime(f * 0.93, now + dur);
+      g.gain.setValueAtTime(amp, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + dur);
+      o.connect(g).connect(dest);
+      o.start(now);
+      o.stop(now + dur + 0.05);
+    }
+
+    // Глухой удар по корпусу
+    const thump = this.ctx.createOscillator();
+    const thumpG = this.ctx.createGain();
+    thump.type = 'sine';
+    thump.frequency.setValueAtTime(88, now);
+    thump.frequency.exponentialRampToValueAtTime(34, now + 0.18);
+    thumpG.gain.setValueAtTime(0.9, now);
+    thumpG.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+    thump.connect(thumpG).connect(dest);
+    thump.start(now);
+    thump.stop(now + 0.24);
+
+    // Резкий пшик пара / ржавой пыли из-под крышки
+    if (this.noiseBuffer) {
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.noiseBuffer;
+      const hp = this.ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.setValueAtTime(2600, now);
+      const ng = this.ctx.createGain();
+      ng.gain.setValueAtTime(0.0001, now);
+      ng.gain.exponentialRampToValueAtTime(0.5, now + 0.025);
+      ng.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+      src.connect(hp).connect(ng).connect(this.master);
+      src.start(now);
+      src.stop(now + 0.55);
+    }
+  }
+
   playLidBlowOff(survived = true) {
     if (survived) Haptics.success();
     else Haptics.error();
@@ -1055,6 +1108,105 @@ class WorkshopAudio {
     boom.stop(now + 1.4);
 
     this.playChainRattle(1.2);
+  }
+
+  /**
+   * Полноэкранный скример при проигрыше: глубокий грохот + визг металла + пик + вибрация [300, 80, 400]
+   */
+  playFullScreamer(variant = 'weld') {
+    try { navigator.vibrate?.([300, 80, 400]); } catch { /* ignore */ }
+    if (!this.ctx || !this.enabled) return;
+    const now = this.ctx.currentTime;
+
+    const boom = this.ctx.createOscillator();
+    const boomG = this.ctx.createGain();
+    boom.type = 'sawtooth';
+    boom.frequency.setValueAtTime(96, now);
+    boom.frequency.exponentialRampToValueAtTime(24, now + 1.5);
+    boomG.gain.setValueAtTime(1.0, now);
+    boomG.gain.exponentialRampToValueAtTime(0.001, now + 1.6);
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 420;
+    boom.connect(lp).connect(boomG).connect(this.master);
+    boom.start(now);
+    boom.stop(now + 1.65);
+
+    // Пиковый «крик» — резкий FM-визг
+    const scr = this.ctx.createOscillator();
+    const mod = this.ctx.createOscillator();
+    const modG = this.ctx.createGain();
+    const scrG = this.ctx.createGain();
+    scr.type = 'sawtooth';
+    scr.frequency.setValueAtTime(520, now);
+    scr.frequency.exponentialRampToValueAtTime(1320, now + 0.22);
+    scr.frequency.exponentialRampToValueAtTime(410, now + 1.2);
+    mod.frequency.value = 71;
+    modG.gain.value = 260;
+    scrG.gain.setValueAtTime(0.0001, now);
+    scrG.gain.exponentialRampToValueAtTime(0.55, now + 0.05);
+    scrG.gain.exponentialRampToValueAtTime(0.001, now + 1.3);
+    mod.connect(modG).connect(scr.frequency);
+    scr.connect(scrG).connect(this.master);
+    mod.start(now);
+    scr.start(now);
+    mod.stop(now + 1.35);
+    scr.stop(now + 1.35);
+
+    // Скрежет металла (шум через полосовой фильтр)
+    if (this.noiseBuffer) {
+      const n = this.ctx.createBufferSource();
+      n.buffer = this.noiseBuffer;
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.Q.value = 2.2;
+      bp.frequency.setValueAtTime(900, now);
+      bp.frequency.exponentialRampToValueAtTime(4200, now + 0.5);
+      const ng = this.ctx.createGain();
+      ng.gain.setValueAtTime(0.7, now);
+      ng.gain.exponentialRampToValueAtTime(0.001, now + 0.95);
+      n.connect(bp).connect(ng).connect(this.master);
+      n.start(now);
+      n.stop(now + 1.0);
+    }
+
+    if (variant === 'siren_cam') this.playFactorySirenKlaxon?.();
+    this.playChainRattle?.(1.4);
+  }
+
+  /**
+   * Победа: глубокий вдох спасённого (нарастающий шум) + вспышка света
+   */
+  playDeepBreath() {
+    try { navigator.vibrate?.([40, 30, 70]); } catch { /* ignore */ }
+    if (!this.ctx || !this.enabled) return;
+    const now = this.ctx.currentTime;
+    if (this.noiseBuffer) {
+      const n = this.ctx.createBufferSource();
+      n.buffer = this.noiseBuffer;
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.Q.value = 0.9;
+      bp.frequency.setValueAtTime(320, now);
+      bp.frequency.exponentialRampToValueAtTime(1500, now + 0.95);
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(0.5, now + 0.8);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 1.35);
+      n.connect(bp).connect(g).connect(this.master);
+      n.start(now);
+      n.stop(now + 1.4);
+    }
+    const ch = this.ctx.createOscillator();
+    const chG = this.ctx.createGain();
+    ch.type = 'sine';
+    ch.frequency.setValueAtTime(660, now + 0.78);
+    chG.gain.setValueAtTime(0.0001, now + 0.78);
+    chG.gain.exponentialRampToValueAtTime(0.28, now + 0.82);
+    chG.gain.exponentialRampToValueAtTime(0.001, now + 1.6);
+    ch.connect(chG).connect(this.master);
+    ch.start(now + 0.78);
+    ch.stop(now + 1.65);
   }
 
   playWeldSeal() {

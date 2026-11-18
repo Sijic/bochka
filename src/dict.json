@@ -30,7 +30,7 @@
     "hudSec": "СЕК",
     "hudAttempts": "ПОПЫТКИ",
     "hudHintDesktop": "Наведи курсор — слушать металл · Клик — вскрыть бочку",
-    "hudHintMobile": "Води/удерживай палец — слушать · Короткий тап — удар",
+    "hudHintMobile": "Удерживай палец — слушать стук · Короткий тап — удар ломом",
     "hudSoundOn": "ЗВУК: ВКЛ",
     "hudSoundOff": "ЗВУК: ВЫКЛ",
     "hudPackQuick": "ЗАКАТАТЬ ДРУГА",
@@ -85,7 +85,7 @@
       "Проверим интуицию? Жду в кино 17 декабря",
       "Спасёшь за 30 секунд — билеты пополам"
     ],
-    "btnSealBarrel": "ЗАВАРИТЬ КРЫШКУ И СОЗДАТЬ ССЫЛКУ",
+    "btnSealBarrel": "🚀 ОТПРАВИТЬ БОЧКУ ДРУГУ В TELEGRAM",
     "sealingProgress": "СВАРКА ШВА 200L...",
     "shareReadyTitle": "БОЧКА ЗАВАРЕНА // КОРОТКАЯ ССЫЛКА ГОТОВА",
     "shareReadyHint": "Отправь ссылку другу (+1 жизнь сразу в Гонке за Премьерой и ещё +2 жизни, когда друг вскроет бочку!).",
@@ -113,8 +113,8 @@
     "trailerRescueUnlocked": "ФИНАЛЬНЫЙ УДАР РАЗБЛОКИРОВАН! Возвращайся в цех и вскрывай 4-ю бочку.",
     "btnClaimTrailerLife": "⚡ ЗАБРАТЬ +1 УДАР И ВСКРЫТЬ 4-Ю БОЧКУ →",
     "btnOpenKpTrailer": "ОТКРЫТЬ ТРЕЙЛЕР НА КИНОПОИСКЕ ↗",
-    "finaleSurvivedTitle": "ЧЕЛОВЕК СПАСЁН С {n}-Й ПОПЫТКИ!",
-    "finaleFailedTitle": "ОСТАЛСЯ В ЦЕХУ // КРЫШКА СОРВАНА",
+    "finaleSurvivedTitle": "СПАСЁН С {n}-Й ПОПЫТКИ!",
+    "finaleFailedTitle": "ТЕБЯ ЗАКАТАЛИ В БОЧКУ!",
     "finaleReplayVoice": "🔊 ВКЛЮЧИТЬ ГОЛОС ИЗ БОЧКИ ЕЩЁ РАЗ",
     "finaleNotified": "Отправителю ушёл сигнал о твоём результате (+2 жизни на его счёт!).",
     "btnGoCinema": "🍿 ПОЙДУ В КИНО 17 ДЕКАБРЯ!",
@@ -284,7 +284,7 @@
     "hudSec": "СЕК",
     "hudAttempts": "МҮМКІНДІК",
     "hudHintDesktop": "Курсорды апар — тыңдау · Басу — бөшкені ашу",
-    "hudHintMobile": "Саусақты ұстап жүргіз — тыңдау · Қысқа тап — соққы",
+    "hudHintMobile": "Саусақты ұстап тұр — стукты тыңда · Қысқа тап — сүймен соққы",
     "hudSoundOn": "ДЫБЫС: ҚОС",
     "hudSoundOff": "ДЫБЫС: ӨШІК",
     "hudPackQuick": "ДОСТЫ ЖАБУ",
@@ -339,7 +339,7 @@
       "Түйсігіңді тексереміз бе? 17 желтоқсанда кинода",
       "30 секундта құтқарсаң — билет ортақ"
     ],
-    "btnSealBarrel": "ҚАҚПАҚТЫ ДӘНЕКЕРЛЕП, СІЛТЕМЕ ЖАСАУ",
+    "btnSealBarrel": "🚀 БӨШКЕНІ ДОСЫҢА TELEGRAM-ҒА ЖІБЕР",
     "sealingProgress": "200L ТІГІСІ ДӘНЕКЕРЛЕНУДЕ...",
     "shareReadyTitle": "БӨШКЕ ЖАБЫЛДЫ // ҚЫСҚА СІЛТЕМЕ ДАЙЫН",
     "shareReadyHint": "Сілтемені досқа жібер (+1 өмір бірден және досың бөшкені ашқанда тағы +2 өмір!).",
@@ -367,8 +367,8 @@
     "trailerRescueUnlocked": "ШЕШУШІ СОҚҚЫ АШЫЛДЫ! Трейлерді соңына дейін көре бер немесе цехқа орал.",
     "btnClaimTrailerLife": "⚡ +1 СОҚҚЫНЫ АЛЫП, БӨШКЕНІ АШУ →",
     "btnOpenKpTrailer": "ТРЕЙЛЕРДІ КИНОПОИСКТЕ АШУ ↗",
-    "finaleSurvivedTitle": "{n}-МҮМКІНДІКПЕН АМАН ҚАЛДЫ",
-    "finaleFailedTitle": "ЦЕХТА ҚАЛДЫ // ҚАҚПАҚ АШЫЛДЫ",
+    "finaleSurvivedTitle": "{n}-ШІ ӘРЕКЕТТЕН ҚҰТҚАРЫЛДЫ!",
+    "finaleFailedTitle": "СЕНІ БӨШКЕГЕ ЖАБЫП ТАСТАДЫ!",
     "finaleReplayVoice": "🔊 БӨШКЕДЕГІ ДАУЫСТЫ ҚАЙТА ҚОСУ",
     "finaleNotified": "Жіберушіге сенің нәтижең туралы белгі кетті (+2 өмір қосылды!).",
     "btnGoCinema": "17 ЖЕЛТОҚСАНДА КИНОҒА БАРАМЫЗ!",
@@ -489,7 +489,7 @@
     "demoChars": [
       {
         "name": "ШЛЮЗ ИНЖЕНЕРІ",
-        "quote": "Суық таңғы шлюз — 3 бөшке, таза темірді тыңда. 17 желтоқсанда кинода."
+        "quote": "Суық таңғы шлюз — 4 бөшке, таза темірді тыңда. 17 желтоқсанда кинода."
       },
       {
         "name": "КОНВЕЙЕР СЛЕСАРІ",
@@ -536,7 +536,7 @@
     "hudSec": "SEC",
     "hudAttempts": "ATTEMPTS",
     "hudHintDesktop": "Hover cursor — listen to steel · Click — strike barrel",
-    "hudHintMobile": "Slide/hold finger — listen · Quick tap — strike",
+    "hudHintMobile": "Hold your finger — listen to the knock · Quick tap — crowbar strike",
     "hudSoundOn": "SOUND: ON",
     "hudSoundOff": "SOUND: OFF",
     "hudPackQuick": "PACK A FRIEND",
@@ -591,7 +591,7 @@
       "Test your intuition — cinema date Dec 17?",
       "Save me in 30 seconds — we split tickets"
     ],
-    "btnSealBarrel": "WELD LID & GENERATE SHORT LINK",
+    "btnSealBarrel": "🚀 SEND THE BARREL TO A FRIEND IN TELEGRAM",
     "sealingProgress": "WELDING 200L SEAM...",
     "shareReadyTitle": "LID WELDED // SHORT LINK READY",
     "shareReadyHint": "Send this link to a friend (+1 Premiere Race life instantly & +2 more lives once they open it!).",
@@ -619,8 +619,8 @@
     "trailerRescueUnlocked": "FINAL STRIKE UNLOCKED! Keep watching or jump back to crack the drum.",
     "btnClaimTrailerLife": "⚡ CLAIM +1 STRIKE & CRACK BARREL →",
     "btnOpenKpTrailer": "OPEN TRAILER ON KINOPOISK ↗",
-    "finaleSurvivedTitle": "SURVIVED ON ATTEMPT #{n}",
-    "finaleFailedTitle": "LEFT IN THE WORKSHOP // LID BLOWN",
+    "finaleSurvivedTitle": "RESCUED ON ATTEMPT {n}!",
+    "finaleFailedTitle": "YOU GOT SEALED IN THE BARREL!",
     "finaleReplayVoice": "🔊 REPLAY VOICE FROM BARREL",
     "finaleNotified": "The sender received a ping with your result (+2 lives credited!).",
     "btnGoCinema": "LET'S GO TO CINEMA DEC 17!",
@@ -741,7 +741,7 @@
     "demoChars": [
       {
         "name": "AIRLOCK ENGINEER",
-        "quote": "Cold morning airlock — 3 drums, listen to raw steel. December 17."
+        "quote": "Cold morning airlock — 4 drums, listen to raw steel. December 17."
       },
       {
         "name": "CONVEYOR MECHANIC",

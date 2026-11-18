@@ -146,7 +146,7 @@ const state = {
     modeType: 'demo',
     isDemo: true,
     zoneId: 1,
-    barrelCount: 3,
+    barrelCount: 4,
     workshopLevel: 1,
     isBlitz: false,
     blitzTargetsCleared: 0,
@@ -282,7 +282,7 @@ function getFactoryZoneSpecByZoneId(rawZoneId = 1) {
   if (z === 1) {
     return {
       zoneId: 1,
-      barrelCount: 3,
+      barrelCount: 4,
       airSec: 30.0,
       hasSteamHazard: false,
       numbersObscured: false,
@@ -354,6 +354,20 @@ function getWorkshopLevelSpec(rawLevel = 1) {
   };
 }
 
+function hudLevelLabelText() {
+  const r = state.round || {};
+  const n = Number(r.barrelCount || 4);
+  if (r.modeType === 'premiere') return `ПРЕМЬЕРА · ${n} ${formatBarrelWord(n)}`;
+  if (r.isDailyShift) return `СМЕНА ДНЯ · ${n} ${formatBarrelWord(n)}`;
+  if (r.isBlitz) return `БЛИЦ · ${n} ${formatBarrelWord(n)}`;
+  return `УР. ${Number(r.workshopLevel || 1)} · ${n} ${formatBarrelWord(n)}`;
+}
+
+function refreshHudLevelLabel() {
+  const tag = document.getElementById('hud-mode-tag');
+  if (tag) tag.textContent = hudLevelLabelText();
+}
+
 function formatBarrelWord(n) {
   if (n >= 5) return 'БОЧЕК';
   if (n >= 2) return 'БОЧКИ';
@@ -403,12 +417,8 @@ function applyProgressiveDisclosureUI({ forceStage = null, skipPromoteFromSocial
   }
 
   const packRevengeBtn = document.getElementById('btn-pack-revenge');
-  const packRevengeText = document.getElementById('btn-pack-revenge-text');
   if (packRevengeBtn) {
     packRevengeBtn.classList.toggle('btn-temu-pulse', nextStage <= 2);
-  }
-  if (packRevengeText) {
-    packRevengeText.textContent = nextStage <= 2 ? t('stage2PackBonusBtn') : t('btnPackBack');
   }
 }
 
@@ -493,6 +503,9 @@ async function bootstrap() {
     onCameraMove: (camPos) => audio.updateListenerCamera(camPos),
     onCeilingDrip: (x, z) => audio.playSpatialCeilingDrip(x, z),
   });
+
+  scene.onEmptyBarrelHit = (idx) => audio.playEmptyBarrelClang?.(idx);
+  scene.onSteamBurst = () => audio.playSteamWarningHiss?.();
 
   duelCtrl = new WorkshopDuelController({
     scene,
@@ -831,6 +844,7 @@ function updateControlHintText() {
 
 function showScreen(name) {
   state.activeScreen = name;
+  document.body.setAttribute('data-screen', name);
   closeBurgerDrawer();
   if (!document.getElementById('modal-trailer')?.hasAttribute('hidden')) {
     closeTrailerModal();
@@ -846,6 +860,7 @@ function showScreen(name) {
     workshop: 'screen-workshop',
     pack: 'screen-pack',
     finale: 'screen-finale',
+    sent: 'screen-sent',
     pass: 'screen-pass',
     ocean: 'screen-ocean',
   };
@@ -1421,12 +1436,6 @@ function updatePremiereBarsUI() {
     if (el) el.textContent = String(points);
   }
 
-  const hudChip = document.getElementById('hud-level-points-text');
-  if (hudChip) {
-    hudChip.textContent = spec.isBlitz
-      ? `БЛИЦ УР.${spec.level} · ⭐ ${points}`
-      : `УР.${spec.level} (${spec.barrelCount}Б) · ⭐ ${points}`;
-  }
 
   const startLbl = document.getElementById('btn-start-level-label');
   if (startLbl) {
@@ -1494,6 +1503,7 @@ function triggerWorkshopMicBlow() {
 }
 
 function launchWorkshopGameplay(golden = false) {
+  refreshHudLevelLabel();
   stopAirTimer();
   state.easterCombo = { stage: 0, lastAt: 0, knocks: 0 };
   if (!state.round.startedAtMs) state.round.startedAtMs = performance.now();
@@ -1674,7 +1684,7 @@ function stopAirTimer() {
 function updateAirHUD(sec) {
   const valEl = document.getElementById('air-seconds');
   const fillEl = document.getElementById('air-bar-fill');
-  const modEl = document.getElementById('hud-air-module');
+  const modEl = document.getElementById('hud-slim');
   if (valEl) valEl.textContent = sec.toFixed(1);
   if (fillEl) fillEl.style.width = `${Math.max(0, Math.min(100, (sec / AIR_DURATION_SEC) * 100))}%`;
   if (modEl) modEl.classList.toggle('is-danger', sec < 10.0);
@@ -3116,6 +3126,66 @@ function claimTrailerFifthLife() {
 /* ============================================================================
    ФИНАЛ РАУНДА: СРЫВ КРЫШКИ, ЧИСТЫЙ ГОЛОС ДРУГА И ПИНГ В TELEGRAM
    ============================================================================ */
+function playFullScreenScreamer(durationMs = 1800) {
+  return new Promise((resolve) => {
+    const el = document.getElementById('fx-scream');
+    if (!el) {
+      resolve();
+      return;
+    }
+    const kind = state.round?.screamerType || 'weld';
+    const face = document.getElementById('fx-scream-face');
+    if (face) face.src = state.round?.portraitDataUrl || DEMO_PORTRAITS[0];
+    el.setAttribute('data-variant', kind);
+    el.classList.remove('is-live', 'is-out');
+    el.removeAttribute('hidden');
+    void el.offsetWidth;
+    el.classList.add('is-live');
+
+    audio.playFullScreamer?.(kind);
+    if (kind === 'custom_scream' && state.round?.voiceUrl) {
+      audio.playCleanSenderVoice(state.round.voiceUrl, { useBarrelFilter: true });
+    }
+    scene?.triggerScreamerShake(0.6);
+    try { navigator.vibrate?.([300, 80, 400]); } catch { /* ignore */ }
+
+    window.setTimeout(() => {
+      el.classList.add('is-out');
+      window.setTimeout(() => {
+        el.setAttribute('hidden', '');
+        el.classList.remove('is-live', 'is-out');
+        resolve();
+      }, 220);
+    }, Math.max(300, durationMs - 220));
+  });
+}
+
+function playRevealAvatar(durationMs = 1500) {
+  return new Promise((resolve) => {
+    const el = document.getElementById('fx-reveal');
+    if (!el) {
+      resolve();
+      return;
+    }
+    const img = document.getElementById('fx-reveal-img');
+    if (img) img.src = state.round?.portraitDataUrl || DEMO_PORTRAITS[0];
+    el.classList.remove('is-live', 'is-out');
+    el.removeAttribute('hidden');
+    void el.offsetWidth;
+    el.classList.add('is-live');
+    audio.playDeepBreath?.();
+    Haptics.success();
+    window.setTimeout(() => {
+      el.classList.add('is-out');
+      window.setTimeout(() => {
+        el.setAttribute('hidden', '');
+        el.classList.remove('is-live', 'is-out');
+        resolve();
+      }, 220);
+    }, Math.max(300, durationMs - 220));
+  });
+}
+
 async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null } = {}) {
   if (!state.round.running && state.round.rescueStage !== 4) return;
   state.round.running = false;
@@ -3210,9 +3280,12 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
   }
 
   window.setTimeout(async () => {
+    // Победа: из бочки выпрыгивает аватарка. Проигрыш: сначала полноэкранный скример, потом карточка результата.
+    if (survived) await playRevealAvatar(1500);
+    else await playFullScreenScreamer(1800);
     await populateFinaleScreen({ premiereResult: null });
     showScreen('finale');
-  }, 1250);
+  }, survived ? 750 : 600);
 }
 
 async function finishPremiereRound(won, winRes) {
@@ -3382,18 +3455,17 @@ async function handleSealBarrelClick() {
       await rebuildPackPortraitPreview();
     }
     const phrase = document.getElementById('input-custom-phrase')?.value || '';
-    const senderName = document.getElementById('input-sender-name')?.value || '';
-
-    const wasPreStage3 = state.uiStage < 3 && !state.profile.temuSurgeClaimed;
+    // Уровень бочки выбирается автоматически по прогрессу игрока
+    const autoZone = Math.max(1, Math.min(4, Number(state.profile?.currentLevel || 1)));
 
     const created = await createBarrelPack({
-      mode: state.pack.mode,
+      mode: 'friend',
       message: phrase,
-      frameStyle: state.pack.frameStyle,
+      frameStyle: 'flashlight',
       screamerType: state.pack.screamerType || 'weld',
-      zoneId: state.pack.zoneId || 1,
-      targetBarrelIndex: state.pack.targetBarrelIndex ?? -1,
-      senderName,
+      zoneId: autoZone,
+      targetBarrelIndex: -1,
+      senderName: state.tg?.user?.name || '',
       tgUser: state.tg.user,
       processedImage: state.pack.processed,
       recordedVoice: state.pack.voice,
@@ -3402,34 +3474,36 @@ async function handleSealBarrelClick() {
     state.pack.lastShareUrl = created.shareUrl;
     state.pack.lastWebUrl = created.webUrl;
     state.pack.shareLifeClaimedForUrl = '';
-
-    state.profile.premiereScore = Math.max(
-      Number(state.profile.premiereScore || 0),
-      Number(created.premiereScore || 72)
-    );
+    state.profile.premiereScore = Math.max(Number(state.profile.premiereScore || 0), Number(created.premiereScore || 72));
     state.profile.temuSurgeClaimed = true;
     state.profile.packedCount = Math.max(1, Number(state.profile.packedCount || 0) + 1);
+    await syncUiStage(state.tg?.user, 3).catch(() => {});
 
-    const outInput = document.getElementById('output-share-url');
-    if (outInput) outInput.value = created.shareUrl;
-
-    document.getElementById('share-result-box')?.removeAttribute('hidden');
-    revealStep4TrailerBonusBox(false);
-
-    if (created.surgeTriggered || wasPreStage3) {
-      await syncUiStage(state.tg?.user, 3);
-      openTemuUnlockModal(state.profile.premiereScore || 72.0);
-      applyProgressiveDisclosureUI({ forceStage: 3, skipPromoteFromSocial: true });
-    } else {
-      applyProgressiveDisclosureUI();
-    }
-
-    await refreshQuestUI();
+    // Нативное окно выбора чата Telegram (openTelegramLink)
+    openTelegramShare(
+      created.shareUrl,
+      `🛢 Кто-то заварил тебя в цеху «БОЧКИ»! Надень наушники — найди нужную крышку за 3 удара${phrase ? `: «${phrase}»` : ''}`
+    );
+    await grantShareLifeOnceForCurrentBarrel();
     Haptics.success();
+    applyProgressiveDisclosureUI({ skipPromoteFromSocial: true });
+    showSentScreen();
+    refreshQuestUI().catch(() => {});
   } finally {
     sealBtn.disabled = false;
     sealTxt.textContent = t('btnSealBarrel');
   }
+}
+
+function showSentScreen() {
+  const spec = getWorkshopLevelSpec(Math.max(1, Number(state.profile?.currentLevel || 1)));
+  const txt = document.getElementById('sent-text');
+  const btnTxt = document.getElementById('btn-sent-play-text');
+  if (txt) {
+    txt.textContent = `Бочка со скримером улетела другу! Пока ждёшь, как он подорвётся — проходи Уровень ${spec.level} (${spec.barrelCount} ${formatBarrelWord(spec.barrelCount).toLowerCase()}) и забирай бесплатный билет в кино!`;
+  }
+  if (btnTxt) btnTxt.textContent = `▶️ ИГРАТЬ УРОВЕНЬ ${spec.level}`;
+  showScreen('sent');
 }
 
 function revealStep4TrailerBonusBox(visible = true) {
@@ -3564,69 +3638,52 @@ async function captureSelfieFrame() {
    ============================================================================ */
 async function populateFinaleScreen({ premiereResult = null } = {}) {
   const r = state.round;
-  const subtag = document.getElementById('finale-subtag');
-  const portraitImg = document.getElementById('finale-portrait-img');
-  const stampEl = document.getElementById('finale-stamp');
-  const msgEl = document.getElementById('finale-message');
-  const voiceRow = document.getElementById('finale-voice-row');
-  const notifyEl = document.getElementById('finale-notify-line');
-  const victimCardBox = document.getElementById('finale-victim-card-box');
-  const victimCardImg = document.getElementById('victim-card-img');
-  const cinemaFeedbackBox = document.getElementById('finale-cinema-feedback-box');
-  const cinemaReplyBtn = document.getElementById('btn-cinema-reply');
-  const cinemaReplyText = document.getElementById('btn-cinema-reply-text');
-  const stageProgBar = document.getElementById('finale-stage-progression-bar');
-  const stageProgText = document.getElementById('finale-stage-progression-text');
-  const stageNextBtn = document.getElementById('btn-finale-stage-next');
+  const $ = (id) => document.getElementById(id);
+  const portraitImg = $('finale-portrait-img');
+  const stampEl = $('finale-stamp');
+  const msgEl = $('finale-message');
+  const nextEl = $('finale-next-step');
+  const subtag = $('finale-subtag');
+  const ring = $('finale-avatar-ring');
+  const cinemaBtn = $('btn-cinema-reply');
+  const cinemaText = $('btn-cinema-reply-text');
+  const packBtn = $('btn-pack-revenge');
+  const packText = $('btn-pack-revenge-text');
 
-  cinemaFeedbackBox?.setAttribute('hidden', '');
-  if (cinemaReplyBtn) cinemaReplyBtn.disabled = false;
-  if (cinemaReplyText) cinemaReplyText.textContent = t('btnGoCinema');
+  $('finale-cinema-feedback-box')?.setAttribute('hidden', '');
+  if (cinemaBtn) cinemaBtn.disabled = false;
+  if (cinemaText) cinemaText.textContent = t('btnGoCinema');
 
-  if (!premiereResult && !r.isDemo && !r.survived && r.screamerType === 'siren_cam') {
-    if (!r.victimCardDataUrl) {
-      r.victimCardDataUrl = createVictimCardDataUrl(r.portraitDataUrl || DEMO_PORTRAITS[0]);
-    }
-    if (victimCardImg) victimCardImg.src = r.victimCardDataUrl;
-    victimCardBox?.removeAttribute('hidden');
-  } else {
-    victimCardBox?.setAttribute('hidden', '');
-  }
+  const lost = premiereResult ? !premiereResult.won : !r.survived;
+  const q = getQuestState();
+  const hasSent = (state.profile?.packedCount || 0) >= 1 || (q.packedCount || 0) >= 1;
+  const spec = getWorkshopLevelSpec(Math.max(1, Number(state.profile?.currentLevel || 1)));
 
-  if (premiereResult) {
-    if (subtag) subtag.textContent = t('premiereRaceTag');
-    if (portraitImg) portraitImg.src = r.portraitDataUrl || createGoldenTicketPortraitDataUrl('');
-    if (stampEl) {
-      stampEl.classList.toggle('is-failed', !premiereResult.won);
+  if (subtag) subtag.textContent = premiereResult ? t('premiereRaceTag') : r.isDemo ? t('revealDemoFrom') : r.senderLabel || t('revealFromFriend');
+
+  // Аватарка: при победе — спасённый, при проигрыше — твоя в рамке «Жертва цеха»
+  let avatarSrc = r.portraitDataUrl || DEMO_PORTRAITS[0];
+  if (premiereResult) avatarSrc = r.portraitDataUrl || createGoldenTicketPortraitDataUrl('');
+  else if (lost) avatarSrc = state.tg?.user?.photoUrl || r.portraitDataUrl || DEMO_PORTRAITS[0];
+  if (portraitImg) portraitImg.src = avatarSrc;
+  ring?.classList.toggle('is-victim', Boolean(lost && !premiereResult));
+
+  if (stampEl) {
+    stampEl.classList.toggle('is-failed', lost);
+    if (premiereResult) {
       stampEl.textContent = premiereResult.won
         ? t('nightShiftWonTitle')
         : `${t('premiereBarLabel')}: ${Number(state.profile.premiereScore || 0).toFixed(1)} / 100`;
+    } else {
+      stampEl.textContent = lost ? t('finaleFailedTitle') : t('finaleSurvivedTitle', { n: Math.max(1, r.attemptsUsed || 1) });
     }
-    if (msgEl) {
-      msgEl.textContent = premiereResult.won
-        ? `ПРОМОКОД ЗАКРЫТОЙ ПРЕМЬЕРЫ: ${premiereResult.premiereCode}`
-        : t('nightShiftEmptyMsg');
-    }
-    voiceRow?.setAttribute('hidden', '');
-    if (notifyEl) notifyEl.style.display = 'none';
-  } else {
-    if (subtag) subtag.textContent = r.isDemo ? t('revealDemoFrom') : r.senderLabel || t('revealFromFriend');
-    if (portraitImg) portraitImg.src = r.portraitDataUrl || DEMO_PORTRAITS[0];
-    if (stampEl) {
-      stampEl.classList.toggle('is-failed', !r.survived);
-      stampEl.textContent = r.survived
-        ? t('finaleSurvivedTitle', { n: Math.max(1, r.attemptsUsed || 1) })
-        : t('finaleFailedTitle');
-    }
-    const quoteText = r.isDemo ? pickNextBarrelHeavenQuote() : (r.message || pickNextBarrelHeavenQuote());
-    if (msgEl) msgEl.textContent = `«${quoteText}»`;
-    if (voiceRow) {
-      if (r.voiceUrl) voiceRow.removeAttribute('hidden');
-      else voiceRow.setAttribute('hidden', '');
-    }
-    if (notifyEl) {
-      notifyEl.style.display = r.isDemo ? 'none' : 'block';
-      notifyEl.textContent = t('finaleNotified');
+  }
+
+  if (msgEl) {
+    if (premiereResult) {
+      msgEl.textContent = premiereResult.won ? `ПРОМОКОД ЗАКРЫТОЙ ПРЕМЬЕРЫ: ${premiereResult.premiereCode}` : t('nightShiftEmptyMsg');
+    } else {
+      msgEl.textContent = `«${r.isDemo ? pickNextBarrelHeavenQuote() : r.message || pickNextBarrelHeavenQuote()}»`;
     }
   }
 
@@ -3635,44 +3692,26 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
     applyProgressiveDisclosureUI({ forceStage: 2 });
   }
 
-  // СТРОГО 2 ГЛАВНЫЕ КНОПКИ НА ЭКРАНЕ СПАСЕНИЯ (v6.7: без лишних чипов лайков и скролла)
-  document.getElementById('finale-friend-reactions')?.setAttribute('hidden', '');
-  document.getElementById('finale-solo-stage2-reaction')?.setAttribute('hidden', '');
-  document.getElementById('finale-spoiler-report-box')?.setAttribute('hidden', '');
-  document.getElementById('golden-hunt-card')?.setAttribute('hidden', '');
-  cinemaReplyBtn?.removeAttribute('hidden');
-
-  if (stageProgBar && stageProgText && stageNextBtn) {
-    if (state.uiStage >= 4) {
-      stageProgText.textContent = '🏆 Уровень 4 открыт: приглашай друзей в общую игру «На счёт три!» и дари выигранные билеты!';
-      stageNextBtn.textContent = '⚔️ В ОБЩУЮ ИГРУ С ДРУЗЬЯМИ И ПРИЗАМИ →';
-      stageProgBar.removeAttribute('hidden');
-    } else if (state.uiStage === 3) {
-      stageProgText.textContent = '🎟 Уровень 3 открыт: играй дальше — впереди розыгрыш бесплатных билетов на премьеру 17 декабря!';
-      stageNextBtn.textContent = '🎯 ИГРАТЬ НА БЕСПЛАТНЫЙ БИЛЕТ →';
-      stageProgBar.removeAttribute('hidden');
-    } else {
-      stageProgBar.setAttribute('hidden', '');
-    }
+  // Строго две кнопки (после отправки бочки — одна главная)
+  if (premiereResult) {
+    state.finaleMode = 'premiere';
+    if (nextEl) nextEl.textContent = 'Копи очки и жизни — впереди розыгрыш билетов на премьеру 17 декабря.';
+    if (packText) packText.textContent = '🏆 ИГРАТЬ ДАЛЬШЕ: ГОНКА ЗА ПРЕМЬЕРОЙ';
+    cinemaBtn?.setAttribute('hidden', '');
+  } else if (hasSent) {
+    state.finaleMode = 'next';
+    if (nextEl) nextEl.textContent = 'Бочка уже у друга. Играй дальше — впереди бесплатный билет в кино.';
+    if (packText) packText.textContent = `🔥 ИГРАТЬ УРОВЕНЬ ${spec.level} (${spec.barrelCount} ${formatBarrelWord(spec.barrelCount)} · БОРЬБА ЗА БИЛЕТ)`;
+    cinemaBtn?.setAttribute('hidden', '');
+  } else {
+    state.finaleMode = 'pack';
+    if (nextEl) nextEl.textContent = 'Следующий шаг: закатай друга в бочку и отправь ему скример — откроется Уровень 2.';
+    if (packText) packText.textContent = '🛢 УРОВЕНЬ 2: ЗАКАТАТЬ ДРУГА (ОТПРАВИТЬ СКРИМЕР)';
+    cinemaBtn?.removeAttribute('hidden');
   }
-
-  const replayBtn = document.getElementById('btn-replay-round');
-  if (replayBtn) {
-    if (state.incomingPack && !r.isDemo) {
-      replayBtn.textContent = t('btnPlayAgain');
-    } else {
-      const nextSpec = getWorkshopLevelSpec(state.profile.currentLevel || 1);
-      replayBtn.textContent = nextSpec.isBlitz
-        ? `⚡ БЛИЦ УР.${nextSpec.level} (12 БОЧЕК)`
-        : `▶ УР.${nextSpec.level} · ${nextSpec.barrelCount} ${formatBarrelWord(nextSpec.barrelCount)}`;
-    }
-  }
-
-  populateSpoilerFreeReportBox();
+  packBtn?.classList.toggle('btn-temu-pulse', state.finaleMode === 'pack');
 
   await refreshQuestUI();
-  renderBlitzCooldownMicroGoal();
-  applyProgressiveDisclosureUI();
 }
 
 function buildSpoilerFreeReport() {
@@ -5730,17 +5769,17 @@ function bindUIEvents() {
   });
 
   document.querySelectorAll('[data-pack-screamer]').forEach((chip) => {
-    chip.addEventListener('click', () => {
+    chip.addEventListener('click', async () => {
       document.querySelectorAll('[data-pack-screamer]').forEach((c) => c.classList.remove('is-active'));
       chip.classList.add('is-active');
       const nextScreamer = chip.getAttribute('data-pack-screamer') || 'weld';
       state.pack.screamerType = nextScreamer;
       state.round.screamerType = nextScreamer;
-      if (nextScreamer === 'custom_scream') {
-        showToast('🎙 Запиши 2-секундный крик ниже — он ударит по ушам при промахе!');
-      } else if (nextScreamer === 'siren_cam') {
-        showToast('🚨 Сирена цеха №19 + Авто-карточка жертвы активированы!');
-      }
+      document.getElementById('voice-pack-box')?.toggleAttribute('hidden', nextScreamer !== 'custom_scream');
+      try { await audio.unlock(true); } catch { /* ignore */ }
+      if (nextScreamer === 'weld') audio.playMiniScreamer(0);
+      else if (nextScreamer === 'lunge') audio.playMiniScreamer(1);
+      else if (nextScreamer === 'siren_cam') audio.playFactorySirenKlaxon?.();
       Haptics.light();
     });
   });
@@ -5818,82 +5857,7 @@ function bindUIEvents() {
 
   document.getElementById('btn-seal-barrel')?.addEventListener('click', () => handleSealBarrelClick());
 
-  document.getElementById('btn-copy-url')?.addEventListener('click', async () => {
-    if (!state.pack.lastShareUrl) return;
-    await copyToClipboard(state.pack.lastShareUrl);
-    showToast(t('copiedToast'));
-    await grantShareLifeOnceForCurrentBarrel();
-    Haptics.light();
-  });
-
-  document.getElementById('btn-share-native')?.addEventListener('click', async () => {
-    if (!state.pack.lastShareUrl) return;
-    const msg = document.getElementById('input-custom-phrase')?.value || '';
-    const res = await shareNativeOrFallback({
-      title: 'БОЧКА — Найди себя за 3 попытки',
-      text: `🛢 Тебя заварили в цеху (воздуха на 30 сек): «${msg}»`,
-      url: state.pack.lastShareUrl,
-    });
-    if (res !== 'aborted') {
-      await grantShareLifeOnceForCurrentBarrel();
-    }
-    if (res === 'copied') showToast(t('copiedToast'));
-  });
-
-  document.getElementById('btn-share-tg')?.addEventListener('click', async () => {
-    if (!state.pack.lastShareUrl) return;
-    const msg = document.getElementById('input-custom-phrase')?.value || '';
-    openTelegramShare(
-      state.pack.lastShareUrl,
-      `🛢 Кто-то заварил тебя в цеху «БОЧКИ»! Надень наушники — 3 попытки и 30 сек воздуха: «${msg}»`
-    );
-    await grantShareLifeOnceForCurrentBarrel();
-  });
-
-  document.getElementById('btn-pack-go-premiere')?.addEventListener('click', async () => {
-    await audio.unlock(true);
-    refreshSoundButtonLabel();
-    startPremiereRaceRound();
-  });
-
-  // Секретный видеокружок со съёмок
-  document.getElementById('btn-open-circle')?.addEventListener('click', () => {
-    if (getQuestState().packedCount < 1) return;
-    audio.setModalAudioDuck(true);
-    const modal = document.getElementById('modal-circle');
-    const vid = document.getElementById('circle-video');
-    modal?.removeAttribute('hidden');
-    vid?.play().catch(() => {});
-  });
-  document.getElementById('btn-close-circle')?.addEventListener('click', () => {
-    const vid = document.getElementById('circle-video');
-    vid?.pause();
-    audio.setModalAudioDuck(false);
-    document.getElementById('modal-circle')?.setAttribute('hidden', '');
-  });
-
   // Экран 5: Финал раунда и Суперигра «Гонка за Премьерой»
-  document.getElementById('btn-finale-replay-voice')?.addEventListener('click', () => {
-    if (state.round.voiceUrl) {
-      audio.playCleanSenderVoice(state.round.voiceUrl, {
-        useBarrelFilter: state.round.useBarrelFilter !== false,
-      });
-    }
-  });
-
-  document.getElementById('btn-copy-spoiler-report')?.addEventListener('click', async () => {
-    const { reportText } = buildSpoilerFreeReport();
-    await copyToClipboard(reportText);
-    showToast('📋 Отчёт цеха скопирован — кидай в чат без спойлеров!');
-    Haptics.success();
-  });
-
-  document.getElementById('btn-share-spoiler-tg')?.addEventListener('click', () => {
-    const { reportText, challengeUrl } = buildSpoilerFreeReport();
-    openTelegramShare(challengeUrl, reportText);
-    Haptics.light();
-  });
-
   document.getElementById('btn-copy-ticket-code')?.addEventListener('click', async () => {
     const code = document.getElementById('output-ticket-code')?.value || '';
     if (!code) return;
@@ -5953,8 +5917,24 @@ function bindUIEvents() {
     }
   });
 
-  document.getElementById('btn-pack-revenge')?.addEventListener('click', () => {
-    showScreen('pack');
+  document.getElementById('btn-pack-revenge')?.addEventListener('click', async () => {
+    if (state.finaleMode === 'premiere') {
+      startPremiereRaceRound();
+    } else if (state.finaleMode === 'next') {
+      await audio.unlock(true);
+      if (state.incomingPack && !state.round.isDemo) {
+        startDemoRound();
+      } else {
+        startDemoRound();
+      }
+    } else {
+      showScreen('pack');
+    }
+  });
+
+  document.getElementById('btn-sent-play')?.addEventListener('click', async () => {
+    await audio.unlock(true);
+    startDemoRound();
   });
 
   document.getElementById('btn-download-stories')?.addEventListener('click', () => handleDownloadStories());
@@ -5995,7 +5975,6 @@ function bindUIEvents() {
   // =========================================================================
   document.getElementById('btn-mode-a-duel')?.addEventListener('click', () => openDuelTable());
   document.getElementById('btn-mode-a-share-hub')?.addEventListener('click', () => openShareHubModal('trailer'));
-  document.getElementById('btn-hud-leaderboard')?.addEventListener('click', () => openLeaderboardModal());
 
   // Панель живого наблюдения за другом (?startapp=watch_<barrelId>)
   document.getElementById('btn-watch-rattle')?.addEventListener('click', () => {
@@ -6024,44 +6003,6 @@ function bindUIEvents() {
   document.getElementById('btn-watch-exit')?.addEventListener('click', () => {
     closeActiveWatchChannel();
     showScreen('modeA');
-  });
-
-  // Мульти-шеринг на экране упаковки бочки + Шаг 4 (отправить ссылку на трейлер после фото-бочки)
-  document.getElementById('btn-pack-share-wa')?.addEventListener('click', () => triggerMultiSocialShare('wa', 'barrel'));
-  document.getElementById('btn-pack-share-vk')?.addEventListener('click', () => triggerMultiSocialShare('vk', 'barrel'));
-  document.getElementById('btn-pack-share-ig')?.addEventListener('click', () => triggerMultiSocialShare('ig', 'barrel'));
-  document.getElementById('btn-pack-open-share-hub')?.addEventListener('click', () => openShareHubModal('trailer'));
-  document.getElementById('btn-pack-step4-trailer')?.addEventListener('click', () => {
-    triggerMultiSocialShare(state.tg?.inTelegram ? 'tg' : 'native', 'trailer');
-  });
-  document.getElementById('btn-pack-step4-yt')?.addEventListener('click', async () => {
-    const ytText = '🎬 Новый официальный трейлер триллера «БОЧКА» (КиноЦех · в кино с 17 декабря):';
-    const res = await shareNativeOrFallback({
-      title: 'БОЧКА — Трейлер 2026',
-      text: ytText,
-      url: ENV.youtubeWatchUrl,
-    });
-    if (res === 'aborted') return;
-    if (res === 'copied') showToast('▶ Ссылка на YouTube-трейлер скопирована!');
-    markStep4TrailerShared();
-    const bonus = await claimSocialOrPromoBonus(state.tg?.user, 'share_trailer', 'yt_direct').catch(() => null);
-    if (bonus?.ok) {
-      state.profile.premierePoints = bonus.premierePoints;
-      state.profile.lives = bonus.lives;
-      updatePremiereBarsUI();
-    }
-  });
-  document.getElementById('quest-btn-step4-trailer')?.addEventListener('click', () => {
-    let photoSent = Number(getQuestState()?.packedCount || 0) >= 1;
-    try {
-      if (localStorage.getItem('bochka_photo_barrel_sent') === '1') photoSent = true;
-    } catch { /* ignore */ }
-    if (!photoSent) {
-      showScreen('pack');
-      showToast('Сначала закатай и отправь другу фото-бочку — следом откроется Шаг 4!');
-      return;
-    }
-    openShareHubModal('trailer');
   });
 
   // Триггер Б: 3 реактивные кнопки ответа другу на Финале

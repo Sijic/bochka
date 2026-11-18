@@ -4437,3 +4437,292 @@ body[data-blitz-unlocked="0"] .blitz-rule-note {
   padding: 9px 10px !important;
 }
 
+
+
+/* ==========================================================================
+   v7.0: ЧИСТЫЙ HUD — одна тонкая полупрозрачная полоска сверху, одна подсказка снизу
+   ========================================================================== */
+.hud-slim {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  height: 44px;
+  padding: max(0px, env(safe-area-inset-top)) 12px 0;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+  background: rgba(8, 9, 12, 0.55);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  pointer-events: none;
+}
+.hud-slim-level {
+  justify-self: start;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #f5efe2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.hud-slim-center {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-self: center;
+}
+.hud-slim-center .attempts-squares {
+  display: flex;
+  gap: 6px;
+}
+.hud-slim-o2 {
+  justify-self: end;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: #7dd3fc;
+  white-space: nowrap;
+}
+.hud-slim-o2 small {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #9fb4c4;
+}
+.hud-slim-airbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.hud-slim-airbar .air-bar-fill {
+  height: 100%;
+}
+.hud-hint-line {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  z-index: 25;
+  margin: 0;
+  padding: 0 14px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: rgba(245, 239, 226, 0.78);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+}
+#screen-workshop .hud-watch-banner {
+  position: fixed;
+  top: 48px;
+  left: 8px;
+  right: 8px;
+  z-index: 31;
+}
+.sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+
+/* ==========================================================================
+   v7.0: ЧИСТЫЙ ФИНАЛ, УПАКОВКА, ЭКРАН «УЛЕТЕЛА», ПОЛНОЭКРАННЫЕ СКРИМЕР И ПОБЕДА
+   ========================================================================== */
+#screen-finale .finale-sheet {
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+}
+#screen-finale .barrel-mouth-large {
+  margin: 0 auto;
+}
+#screen-finale .barrel-mouth-large.is-victim {
+  border-color: #7f1d1d;
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.5), 0 0 0 3px #ef4444, 0 0 26px rgba(239, 68, 68, 0.45);
+}
+#screen-finale .barrel-mouth-large.is-victim::after {
+  content: 'ЖЕРТВА ЦЕХА №19';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 6px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
+  color: #fff;
+  background: rgba(185, 28, 28, 0.88);
+  padding: 2px 0;
+}
+.finale-next-step {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  line-height: 1.3;
+  color: #fde68a;
+}
+.finale-cinema-feedback {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid #eab308;
+  background: rgba(234, 179, 8, 0.1);
+}
+.finale-cinema-feedback p {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  line-height: 1.3;
+  font-weight: 600;
+  color: #fde68a;
+}
+
+#screen-pack {
+  overflow-y: hidden !important;
+  align-items: center;
+  justify-content: center;
+  height: 100dvh;
+  padding: 6px 10px !important;
+}
+.pack-clean {
+  width: 100%;
+  max-width: 440px;
+  padding: 10px 12px !important;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: calc(100dvh - 12px);
+  overflow: hidden;
+}
+.pack-clean .sheet-header { margin: 0; }
+.pack-clean .section-title { font-size: 17px; margin: 2px 0 0; }
+.pack-top-row { display: flex; gap: 10px; align-items: center; }
+.pack-mini-preview { width: 84px; height: 84px; flex: 0 0 84px; }
+.pack-mini-preview img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.pack-photo-row { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.pack-photo-row .btn-secondary, .pack-photo-row .btn-ghost { min-height: 36px; padding: 6px 8px; font-size: 11.5px; }
+.screamer-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.screamer-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 9px 10px;
+  text-align: left;
+  color: #e5e0d5;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1.5px solid rgba(255, 255, 255, 0.16);
+  cursor: pointer;
+}
+.screamer-card .sc-ico { font-size: 22px; line-height: 1; }
+.screamer-card b { font-family: var(--font-display); font-size: 14px; letter-spacing: 0.03em; }
+.screamer-card small { font-size: 10.5px; line-height: 1.2; color: var(--text-muted); }
+.screamer-card.is-active { border-color: var(--accent); background: rgba(234, 179, 8, 0.14); box-shadow: 0 0 14px rgba(234, 179, 8, 0.25); }
+.pack-phrase-row { margin: 0; }
+.pack-send-btn { min-height: 52px; flex-direction: column; gap: 1px; }
+.pack-send-btn .btn-sub-line { font-size: 10.5px; opacity: 0.85; }
+
+#screen-sent { display: flex; align-items: center; justify-content: center; height: 100dvh; padding: 10px; }
+#screen-sent[hidden] { display: none; }
+.sent-sheet { max-width: 420px; width: 100%; text-align: center; display: flex; flex-direction: column; gap: 12px; }
+.sent-ico { font-size: 56px; line-height: 1; }
+.sent-text { margin: 0; font-size: 15px; line-height: 1.4; color: #f5efe2; }
+
+.fx-scream, .fx-reveal {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  z-index: 9500;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+}
+.fx-scream[hidden], .fx-reveal[hidden] { display: none; }
+.fx-scream { background: #000; --fx: #d6ecff; }
+.fx-scream[data-variant="siren_cam"] { --fx: #ff2a2a; }
+.fx-scream[data-variant="lunge"] { --fx: #fff2c2; }
+.fx-scream[data-variant="custom_scream"] { --fx: #ffd400; }
+.fx-scream-flash { position: absolute; inset: 0; background: var(--fx); opacity: 0; }
+.fx-scream.is-live .fx-scream-flash { animation: fxStrobe 0.16s steps(2, end) infinite; }
+.fx-scream-face {
+  position: absolute;
+  width: 78vmin;
+  height: 78vmin;
+  object-fit: cover;
+  border-radius: 50%;
+  filter: contrast(1.5) saturate(0.4) brightness(0.9);
+  transform: scale(0.25);
+  box-shadow: 0 0 0 10px var(--fx);
+}
+.fx-scream.is-live .fx-scream-face { animation: fxLunge 0.5s cubic-bezier(0.15, 1.6, 0.35, 1) forwards, fxShake 0.09s linear 0.5s infinite; }
+.fx-scream-text {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 12dvh;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: clamp(26px, 9vw, 54px);
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 0 22px #ff0000, 0 4px 0 #000;
+  letter-spacing: 0.04em;
+  animation: fxShake 0.08s linear infinite;
+}
+.fx-scream.is-out, .fx-reveal.is-out { opacity: 0; transition: opacity 0.22s ease; }
+@keyframes fxStrobe { 0% { opacity: 0.92; } 100% { opacity: 0; } }
+@keyframes fxLunge { 0% { transform: scale(0.25); } 100% { transform: scale(1.9); } }
+@keyframes fxShake {
+  0% { translate: 0 0; } 25% { translate: -14px 8px; } 50% { translate: 12px -10px; } 75% { translate: -9px -6px; } 100% { translate: 0 0; }
+}
+
+.fx-reveal { background: rgba(0, 0, 0, 0.78); flex-direction: column; gap: 18px; }
+.fx-reveal-flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
+.fx-reveal.is-live .fx-reveal-flash { animation: fxReveFlash 0.5s ease-out forwards; }
+.fx-reveal-avatar {
+  width: min(62vmin, 300px);
+  height: min(62vmin, 300px);
+  border-radius: 50%;
+  overflow: hidden;
+  border: 6px solid var(--accent);
+  box-shadow: 0 0 60px rgba(234, 179, 8, 0.6);
+  opacity: 0;
+  transform: translateY(45%) scale(0.3);
+}
+.fx-reveal-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fx-reveal.is-live .fx-reveal-avatar { animation: fxPop 0.7s cubic-bezier(0.2, 1.4, 0.4, 1) 0.1s forwards; }
+.fx-reveal-text {
+  position: relative;
+  padding: 0 18px;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: clamp(18px, 6vw, 28px);
+  color: #fde68a;
+  text-shadow: 0 2px 10px #000;
+  opacity: 0;
+}
+.fx-reveal.is-live .fx-reveal-text { animation: fxFadeIn 0.4s ease 0.55s forwards; }
+@keyframes fxReveFlash { 0% { opacity: 0.95; } 100% { opacity: 0; } }
+@keyframes fxPop { 0% { opacity: 0; transform: translateY(45%) scale(0.3); } 60% { opacity: 1; transform: translateY(-6%) scale(1.08); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes fxFadeIn { to { opacity: 1; } }
+.hud-slim.is-danger .hud-slim-o2 { color: #ef4444; }
+
+/* v7.0: в раунде верхняя полоска игры одна — общий topbar скрыт, чтобы не дублировать HUD */
+body[data-screen="workshop"] #topbar { display: none !important; }
