@@ -3527,8 +3527,6 @@ body[data-ui-stage="1"] #screen-gate .gate-subtitle,
 body[data-ui-stage="2"] #screen-gate .gate-subtitle,
 body[data-ui-stage="1"] #screen-gate .gate-teaser,
 body[data-ui-stage="2"] #screen-gate .gate-teaser,
-body[data-ui-stage="1"] #screen-gate #btn-enter-mute,
-body[data-ui-stage="2"] #screen-gate #btn-enter-mute,
 body[data-ui-stage="1"] #screen-gate .gate-footer,
 body[data-ui-stage="2"] #screen-gate .gate-footer {
   display: none !important;
