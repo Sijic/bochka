@@ -1008,8 +1008,8 @@ async function enterWorkshopGate(withSound) {
       applyProgressiveDisclosureUI({ forceStage: 4 });
       showScreen('modeA');
       const descEl = document.getElementById('repeat-duel-desc');
-      if (descEl && routing.senderName) {
-        descEl.textContent = `Ты и ${routing.senderName} уже проходили цех! За повторные одиночные ссылки жизни не начисляются — залетайте за синхронный стол «На счёт три!» на живой кон и зовите 3-го друга ради бонуса цеха!`;
+      if (descEl) {
+        descEl.textContent = `Этот друг (${routing.senderName || 'игрок'}) уже в деле! Ему теперь можно отправить только выигранный билет, а скример кинь новому другу — или рубитесь за столом Дуэлей!`;
       }
       document.getElementById('modal-repeat-duel')?.removeAttribute('hidden');
       return;
@@ -1332,7 +1332,7 @@ async function startViralFriendRound(pack) {
       .catch(() => {});
   }
 
-  document.getElementById('hud-mode-tag').textContent = `${t('modeBTag')} // ${zoneSpec.zoneTitle}`;
+  document.getElementById('hud-mode-tag').textContent = `${t('modeBTag')} // ${spec.zoneTitle}`;
   document.getElementById('hud-urgent-title').textContent = state.uiStage <= 2 ? t('stage1TaskLine') : t('modeBTitle');
   document.getElementById('btn-hud-pack')?.setAttribute('hidden', '');
   document.getElementById('hud-premiere-strip')?.setAttribute('hidden', '');
