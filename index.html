@@ -159,7 +159,7 @@
           <span data-i18n="btnEnterSound">ВОЙТИ В ЦЕХ СО ЗВУКОМ</span>
         </button>
         <button type="button" class="btn-ghost" id="btn-enter-mute" data-i18n="btnEnterMute">
-          БЕЗ ЗВУКА
+          БЕЗ ЗВУКА (ТИХИЙ РАДАР)
         </button>
       </div>
 
@@ -461,6 +461,9 @@
             ↻ Я ОТПРАВИЛ КОНТАКТ В БОТА — ПРОВЕРИТЬ СТАТУС
           </button>
           <div class="kp-screen-feedback is-ok" id="pass-verified-phone-badge" hidden></div>
+          <p class="pass-trust-note" id="pass-trust-note">
+            🔒 Номер нужен только для привязки билета № BOCHKA и защиты от ботов. Никакого спама · бронь 24 ч.
+          </p>
         </div>
 
         <p class="rescue-error-box" id="pass-claim-error" hidden></p>
@@ -504,8 +507,8 @@
     <div class="panel-sheet pack-clean">
       <div class="sheet-header">
         <div>
-          <span class="mono-tag">ТЫ НАШЁЛ ПУСТУЮ БОЧКУ!</span>
-          <h2 class="section-title">УПАКУЙ В НЕЁ ДРУГА</h2>
+          <span class="mono-tag">ФОТО УЖЕ ГОТОВО — ЖМИ ОТПРАВИТЬ ИЛИ ЗАМЕНИ</span>
+          <h2 class="section-title">УПАКУЙ В БОЧКУ ДРУГА</h2>
         </div>
         <button type="button" class="icon-close" id="btn-close-pack" aria-label="Назад">✕</button>
       </div>
@@ -544,7 +547,7 @@
           <span class="sc-ico">⚡</span><b>Ток и сирена</b><small>высоковольтный ревун</small>
         </button>
         <button type="button" class="screamer-card" data-pack-screamer="custom_scream">
-          <span class="sc-ico">🎙</span><b>Записать свой крик</b><small>голос до 3 сек в бочке</small>
+          <span class="sc-ico">🎙</span><b>Свой крик (3 сек) 🔥 ХИТ</b><small>×1.5 ответов друзей</small>
         </button>
       </div>
 
@@ -582,8 +585,8 @@
       </div>
 
       <button type="button" class="btn-primary btn-full pack-send-btn" id="btn-seal-barrel">
-        <span id="btn-seal-text" data-i18n="btnSealBarrel">🚀 ОТПРАВИТЬ ДРУГУ В TELEGRAM</span>
-        <small class="btn-sub-line">+3 ❤️ (9 ударов) и +200 ⭐ · откроется Уровень 3</small>
+        <span id="btn-seal-text" data-i18n="btnSealBarrel">🚀 ОТПРАВИТЬ ДРУГУ В 1 КЛИК</span>
+        <small class="btn-sub-line">+3 ❤️ (9 ударов) и +200 ⭐ · фото можно не менять</small>
       </button>
     </div>
   </section>
@@ -779,10 +782,10 @@
       <span class="mono-tag danger-tag">ЖИЗНИ КОНЧИЛИСЬ</span>
       <h3 class="lives-recovery-title" id="lives-recovery-title">Верни +3 ❤️ (9 ударов) и продолжай!</h3>
       <p class="lives-recovery-progress" id="lives-recovery-progress"></p>
-      <button type="button" class="btn-primary btn-full" id="btn-life-rec-kp" data-life-action="kp">🎬 «Буду смотреть» на Кинопоиске (+3 ❤️)</button>
-      <button type="button" class="btn-primary btn-full" id="btn-life-rec-friend" data-life-action="pack_friend" hidden>🛢 Отправить скример НОВОМУ другу (+3 ❤️)</button>
-      <button type="button" class="btn-secondary btn-full" data-life-action="sub">🔔 Подписаться на канал «КиноЦех»</button>
-      <button type="button" class="btn-secondary btn-full" data-life-action="like">👍 Поставить лайк трейлеру</button>
+      <button type="button" class="btn-primary btn-full" id="btn-life-rec-kp" data-life-action="kp">🎬 «Буду смотреть» на Кинопоиске (+3 ❤️ · 5 сек)</button>
+      <button type="button" class="btn-primary btn-full" id="btn-life-rec-friend" data-life-action="pack_friend" hidden>🛢 Отправить скример НОВОМУ другу (+3 ❤️ + 200 ⭐)</button>
+      <button type="button" class="btn-secondary btn-full" data-life-action="sub">🔔 Подписаться на канал «КиноЦех» (+1 ❤️ сразу)</button>
+      <button type="button" class="btn-secondary btn-full" data-life-action="like">👍 Поставить лайк трейлеру (+1 ❤️ сразу)</button>
       <button type="button" class="btn-ghost btn-full" id="btn-lives-recovery-close">Позже</button>
     </div>
   </div>
@@ -927,7 +930,7 @@
 
       <div class="trailer-rescue-box" id="trailer-rescue-box" hidden>
         <p class="trailer-rescue-status" id="trailer-rescue-status">
-          До разблокировки +1 удара: 40 сек (перемотка вперёд отключена)
+          До +3 ❤️ (9 ударов): 20 сек (перемотка вперёд отключена)
         </p>
         <div id="trailer-reaction-box" hidden>
           <button type="button" class="hud-mini-btn trailer-react-btn" data-react="premiere">🔥 Жду премьеру (+25⭐)</button>
@@ -935,12 +938,12 @@
           <button type="button" class="hud-mini-btn trailer-react-btn" data-react="cinema">🎬 Пойду в кино (+25⭐)</button>
         </div>
         <button type="button" class="btn-primary btn-full" id="btn-claim-trailer-life" disabled>
-          <span data-i18n="btnClaimTrailerLife">⚡ ЗАБРАТЬ +1 УДАР И ВСКРЫТЬ БОЧКУ →</span>
+          <span data-i18n="btnClaimTrailerLife">⚡ ЗАБРАТЬ +3 ❤️ (9 УДАРОВ) И ВСКРЫТЬ БОЧКУ →</span>
         </button>
       </div>
 
       <p class="modal-hint" id="trailer-token-hint" data-i18n="trailerWatchHint" hidden>
-        Смотри без перемотки — на 40-й секунде начисляется жетон «Крышка» (и спасённая жизнь в цеху).
+        Смотри без перемотки — через 20 секунд откроются +3 ❤️ (9 ударов) и жетон «Крышка».
       </p>
 
       <div class="trailer-social-likes-row" id="trailer-social-likes-row" hidden>

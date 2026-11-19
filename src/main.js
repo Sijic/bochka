@@ -79,7 +79,7 @@ import { mountTestBogHUD } from './testbog.js';
 
 const AIR_DURATION_SEC = 30.0;
 const KP_MIN_AWAY_SEC = 3.5;
-const TRAILER_UNLOCK_SEC = 40.0;
+const TRAILER_UNLOCK_SEC = 20.0;
 const STALE_YT_IDS = new Set(['EZFDcXeLTzQ', 'vAJpT_82uUo']);
 const OFFICIAL_YT_TRAILER_ID = (ENV.youtubeFallbackId && !STALE_YT_IDS.has(ENV.youtubeFallbackId))
   ? ENV.youtubeFallbackId
@@ -2082,6 +2082,7 @@ async function handleDownloadOceanPostcard() {
    ============================================================================ */
 let lastSteamWarnAt = 0;
 
+let lastSilentRadarHapticAt = 0;
 function handleBarrelHover(index, sx, sy, alreadyStruck) {
   const reticle = document.getElementById('barrel-reticle');
   const retId = document.getElementById('reticle-id');
@@ -2106,6 +2107,9 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
     }
   }
 
+  const isTarget = !alreadyStruck && index === state.round.targetIndex;
+  const silentRadarMode = !audio.enabled && !alreadyStruck && !isSteamHazard;
+
   if (reticle && retId) {
     reticle.removeAttribute('hidden');
     reticle.style.left = `${Math.max(78, Math.min(window.innerWidth - 78, sx))}px`;
@@ -2113,18 +2117,35 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
     const obscured = Boolean(scene?.numbersObscured && !state.round.micBlowUsed);
     const batchNum = obscured ? '?? [ПАР]' : (BARREL_BATCH_CODES[index] || `0${index + 1}`);
     const labelBase = `${t('reticleBatch')}${batchNum}`;
-    retId.textContent = alreadyStruck
-      ? `${labelBase} // ${t('reticleEmpty')}`
-      : isSteamHazard
-        ? `${labelBase} // ⚠️ ПАРОВАЯ ТРУБА (−4с O₂)`
-        : `${labelBase} // ${t('reticleListening')}`;
+
+    if (alreadyStruck) {
+      retId.textContent = `${labelBase} // ${t('reticleEmpty')}`;
+    } else if (isSteamHazard) {
+      retId.textContent = `${labelBase} // ⚠️ ПАРОВАЯ ТРУБА (−4с O₂)`;
+    } else if (silentRadarMode) {
+      const kind = state.round.targetKind || 'human';
+      const hitLabel = kind === 'empty'
+        ? '🕳 ПУСТОЕ ЭХО · РАДАР'
+        : kind === 'ticket'
+          ? '🎞 ГУЛ ПРОЕКТОРА · РАДАР'
+          : '🎯 СТУК ИЗНУТРИ · РАДАР';
+      retId.textContent = isTarget ? `${labelBase} // ${hitLabel}` : `${labelBase} // 🔇 ПОМЕХИ ЦЕХА`;
+      const now = performance.now();
+      if (now - lastSilentRadarHapticAt > 550) {
+        lastSilentRadarHapticAt = now;
+        if (isTarget) Haptics.medium();
+        else Haptics.light();
+      }
+    } else {
+      retId.textContent = `${labelBase} // ${t('reticleListening')}`;
+    }
 
     const showPulse =
-      !alreadyStruck &&
-      state.round.modeType !== 'premiere' &&
-      !state.round.isBlitz &&
-      Number(state.round.workshopLevel || 1) <= 2 &&
-      index === state.round.targetIndex;
+      isTarget &&
+      (silentRadarMode ||
+        (state.round.modeType !== 'premiere' &&
+          !state.round.isBlitz &&
+          Number(state.round.workshopLevel || 1) <= 2));
     reticle.classList.toggle('is-knocking', showPulse);
   }
 
@@ -2687,23 +2708,30 @@ function openLivesRecoveryModal({ forLevel = null } = {}) {
   const subBtn = document.querySelector('[data-life-action="sub"]');
   const likeBtn = document.querySelector('[data-life-action="like"]');
 
+  const curPts = Math.max(0, Math.round(Number(state.profile?.premierePoints || 0)));
+  const leftToDuels = Math.max(0, 1500 - curPts);
+
   if (lvl === 2) {
     if (titleEl) titleEl.textContent = 'Жизни кончились! Забери +3 ❤️ на Кинопоиске';
-    if (pr) pr.textContent = 'Нажми «Буду смотреть» на Кинопоиске, чтобы забрать +3 жизни (9 ударов) и продолжить поиск пустой бочки!';
+    if (pr) pr.textContent = 'Один клик «Буду смотреть» на Кинопоиске за 5 сек — и получишь +3 жизни (9 ударов), чтобы найти пустую бочку!';
     kpBtn?.removeAttribute('hidden');
     friendBtn?.setAttribute('hidden', '');
     subBtn?.setAttribute('hidden', '');
     likeBtn?.setAttribute('hidden', '');
   } else if (lvl >= 3 && state.round?.modeType !== 'premiere') {
-    if (titleEl) titleEl.textContent = 'Жизни кончились! +3 ❤️ за нового друга';
-    if (pr) pr.textContent = 'Отправь бочку со скримером НОВОМУ другу в Telegram — сразу начислим +3 жизни (9 ударов)!';
-    kpBtn?.setAttribute('hidden', '');
+    if (titleEl) titleEl.textContent = 'Жизни на нуле — забери +3 ❤️ за 10 секунд!';
+    if (pr) {
+      pr.textContent = leftToDuels > 0
+        ? `До Дуэлей за закрытую премьеру осталось всего ⭐ ${fmtPoints(leftToDuels)}! Отправь бочку новому другу (+3 ❤️ + 200 ⭐) или выбери быстрое действие ниже:`
+        : 'Выбери любой способ вернуть жизни и вернуться в цех:';
+    }
     friendBtn?.removeAttribute('hidden');
-    subBtn?.setAttribute('hidden', '');
-    likeBtn?.setAttribute('hidden', '');
+    kpBtn?.removeAttribute('hidden');
+    subBtn?.removeAttribute('hidden');
+    likeBtn?.removeAttribute('hidden');
   } else {
     if (titleEl) titleEl.textContent = 'Верни +3 ❤️ (9 ударов) за одно действие';
-    if (pr) pr.textContent = `Очки: ⭐ ${fmtPoints(state.profile?.premierePoints)} / 1 500. Выбери любое действие.`;
+    if (pr) pr.textContent = `Очки: ⭐ ${fmtPoints(curPts)} / 1 500. Выбери любое действие ниже:`;
     kpBtn?.removeAttribute('hidden');
     friendBtn?.setAttribute('hidden', '');
     subBtn?.removeAttribute('hidden');
@@ -3519,7 +3547,9 @@ function initVoiceRecorderInstance() {
 async function initPackConstructorDefaults() {
   renderPresetChips();
   renderVoicePromptChips();
-  await rebuildPackPortraitPreview(DEMO_PORTRAITS[1]);
+  // Убираем главный барьер Ур.2 (лень грузить фото): если есть аватар Telegram — пробуем сразу подставить его, с фоллбэком на демо-портрет
+  const preferredSrc = state.tg?.user?.photoUrl || DEMO_PORTRAITS[1];
+  await rebuildPackPortraitPreview(preferredSrc);
 }
 
 function renderVoicePromptChips() {
@@ -3595,7 +3625,12 @@ async function rebuildPackPortraitPreview(newSource = undefined) {
     if (previewImg) previewImg.src = processed.dataUrl;
     if (sizeTag) sizeTag.textContent = `${processed.width || 420}×${processed.height || 420} HD WEBP · ${processed.sizeKb} КБ`;
   } catch {
-    const fallback = await processPortraitToWebP(null, state.pack.frameStyle);
+    let fallback;
+    try {
+      fallback = await processPortraitToWebP(DEMO_PORTRAITS[1], state.pack.frameStyle);
+    } catch {
+      fallback = await processPortraitToWebP(null, state.pack.frameStyle);
+    }
     state.pack.processed = fallback;
     const previewImg = document.getElementById('pack-preview-img');
     if (previewImg) previewImg.src = fallback.dataUrl;

@@ -15,18 +15,26 @@ export class WorkshopScene {
     this.height = window.innerHeight;
     this.isPortrait = this.width / Math.max(1, this.height) < 0.88;
 
-    this.renderer = new THREE.WebGLRenderer({
-      canvas,
-      antialias: false,
-      powerPreference: 'high-performance',
-      alpha: false,
-    });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
+    const isMobileScreen = this.isPortrait || this.width <= 540;
+    try {
+      this.renderer = new THREE.WebGLRenderer({
+        canvas,
+        antialias: false,
+        powerPreference: isMobileScreen ? 'default' : 'high-performance',
+        alpha: false,
+        failIfMajorPerformanceCaveat: false,
+      });
+    } catch {
+      this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
+    }
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobileScreen ? 1.15 : 1.25));
     this.renderer.setSize(this.width, this.height);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.14;
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.shadowMap.enabled = !isMobileScreen;
+    if (!isMobileScreen) {
+      this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    }
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0b0907);

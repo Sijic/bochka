@@ -4772,6 +4772,19 @@ body[data-blitz-unlocked="0"] .blitz-rule-note {
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
+  border-color: rgba(234, 179, 8, 0.45);
+  background: rgba(234, 179, 8, 0.08);
+}
+.pass-trust-note {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(22, 163, 74, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.28);
+  color: #bbf7d0;
+  font-size: 11px;
+  line-height: 1.3;
+  text-align: center;
 }
 .screamer-card[data-pack-screamer="custom_scream"] small {
   margin-left: auto;
