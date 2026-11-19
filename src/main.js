@@ -4921,10 +4921,12 @@ function ensureYtPlayerMounted() {
         syncTrailerPlayButton();
         try {
           const ytMuted = Boolean(ev.target?.isMuted?.());
-          if (ytMuted !== state.trailer.muted) {
-            state.trailer.muted = ytMuted;
-            syncTrailerMuteButton();
+          if (!state.trailer.muted && ytMuted) {
+            // Жест тапа уже был — принудительно снимаем mute с YouTube-плеера!
+            ev.target.unMute?.();
+            ev.target.setVolume?.(100);
           }
+          syncTrailerMuteButton();
         } catch { /* ignore */ }
 
         if (ev.data === 1) {
@@ -5755,6 +5757,11 @@ function bindUIEvents() {
   document.getElementById('btn-ocean-tap-barrel')?.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     handleOceanBarrelTap();
+  });
+  document.getElementById('btn-ocean-tap-barrel')?.addEventListener('click', () => {
+    if (performance.now() - (state.oceanTapper.lastTapAt || 0) >= 80) {
+      handleOceanBarrelTap();
+    }
   });
   document.getElementById('btn-ocean-start-tap')?.addEventListener('pointerdown', (e) => {
     e.preventDefault();
