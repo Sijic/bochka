@@ -6,6 +6,7 @@ import {
   buildDuelShareLinks,
   startDuelAnte,
   settleDuelRound,
+  claimDuelPremiereBankReward,
 } from './backend.js';
 
 /**
@@ -14,7 +15,7 @@ import {
  * Все промежуточные клики, таймеры и «Погреметь цепями» идут строго через WebSocket в оперативной памяти (0 записей в БД).
  */
 export class WorkshopDuelController {
-  constructor({ scene, audio, getTgUser, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub }) {
+  constructor({ scene, audio, getTgUser, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDuelDefeatToTil }) {
     this.scene = scene;
     this.audio = audio;
     this.getTgUser = getTgUser;
@@ -23,6 +24,8 @@ export class WorkshopDuelController {
     this.onOpenInviteShare = onOpenInviteShare;
     this.onOpenGoldenFork = onOpenGoldenFork;
     this.onExitToHub = onExitToHub;
+    this.onDuelDefeatToTil = onDuelDefeatToTil;
+    this.soloMode = false;
 
     this.active = false;
     this.roomId = '';
@@ -377,6 +380,12 @@ export class WorkshopDuelController {
       slotsEl.innerHTML = cards.join('');
     }
 
+    const soloBtn = document.getElementById('btn-duel-play-solo');
+    if (soloBtn) {
+      if (this.phase === 'lobby') soloBtn.removeAttribute('hidden');
+      else soloBtn.setAttribute('hidden', '');
+    }
+
     if (startBtn) {
       if (this.phase !== 'lobby') {
         startBtn.setAttribute('hidden', '');
@@ -384,16 +393,36 @@ export class WorkshopDuelController {
         startBtn.removeAttribute('hidden');
         if (count < 2) {
           startBtn.disabled = true;
-          startBtn.textContent = '⏳ ОЖИДАНИЕ 2-ГО ИГРОКА В КОМНАТЕ...';
+          startBtn.textContent = '⏳ ЖДЁМ ДРУЗЕЙ (ИЛИ ЖМИ «ИГРАТЬ В ОДНОГО» ВЫШЕ)';
         } else if (!this.isHost()) {
           startBtn.disabled = true;
           startBtn.textContent = '⏳ ЖДЁМ СТАРТА ОТ ХОСТА...';
         } else {
           startBtn.disabled = false;
-          startBtn.textContent = `🔥 НА СЧЁТ ТРИ! СТАРТ (${count} ИГРОКА · СТАВКА 1 ❤️)`;
+          startBtn.textContent = `🔥 НА СЧЁТ ТРИ! СТАРТ (${count} ИГРОКА · БАНК ×3)`;
         }
       }
     }
+  }
+
+  /**
+   * v8.0: Мгновенный запуск дуэли «В одного (Соло)» за Банк Закрытой Премьеры (без ожидания друзей)
+   */
+  async startSoloDuel() {
+    if (!this.active) return;
+    this.soloMode = true;
+    const hasChallenger = this.players.some((p) => p.uid !== this.myUid);
+    if (!hasChallenger) {
+      this.players.push({
+        uid: 'bot_workshop_master',
+        name: 'Мастер Цеха',
+        avatar: '',
+        joinedAt: Date.now() + 10,
+        isBot: true,
+      });
+    }
+    this.renderLobbyUI();
+    await this.hostInitiateRound();
   }
 
   /**
@@ -889,6 +918,23 @@ export class WorkshopDuelController {
 
     if (iWon) {
       Haptics.success();
+      // v8.0: Банк Закрытой Премьеры — утроенные очки рейтинга + шанс мгновенного билета со стола!
+      const bankBonus = this.players.length >= 3 ? 900 : 600;
+      claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: bankBonus, solo: this.soloMode })
+        .then((bankRes) => {
+          if (bankRes?.ok) {
+            this.onProfileSync?.({
+              lives: bankRes.lives ?? settleRes.winnerLives,
+              premiereScore: settleRes.winnerScore,
+              premierePoints: bankRes.premierePoints ?? settleRes.winnerPoints,
+              hasPendingTicket: Boolean(bankRes.ticketDropped || settleRes.hasPendingTicket),
+            });
+            if (bankRes.ticketDropped && !settleRes.goldenTicketDropped) {
+              this.scheduleTimeout(() => this.onOpenGoldenFork?.(), 950);
+            }
+          }
+        })
+        .catch(() => {});
       this.onProfileSync?.({
         lives: settleRes.winnerLives,
         premiereScore: settleRes.winnerScore,
@@ -897,11 +943,23 @@ export class WorkshopDuelController {
       });
     } else {
       Haptics.error();
+      // v8.0: Проигравший НЕ вылетает в меню поражения — его перебрасывает в «Бочку с Тилем» (12с тапалка энергии)!
+      if (this.onDuelDefeatToTil) {
+        if (titleEl) titleEl.textContent = '💥 ТЕБЯ СНЕСЛО В ПОДВАЛ К БОЧКЕ ТИЛЯ!';
+        if (subEl) subEl.textContent = 'Заряди энергию 0% → 100% за 12 секунд тапами по Бочке Тиля и мгновенно вернись в дуэль!';
+        this.scheduleTimeout(() => {
+          if (!this.active) return;
+          box?.setAttribute('hidden', '');
+          this.onDuelDefeatToTil({ roomId: this.roomId, solo: this.soloMode });
+        }, 1250);
+        return;
+      }
     }
 
     if (titleEl) {
+      const bankBonus = this.players.length >= 3 ? 900 : 600;
       titleEl.textContent = iWon
-        ? `🏆 ТЫ ЗАБРАЛ ВЕСЬ БАНК: +${settleRes.potLives} ❤️ И +${settleRes.pointsBonus} ⭐!`
+        ? `🏆 БАНК ЗАКРЫТОЙ ПРЕМЬЕРЫ ТВОЙ: +${bankBonus} ⭐ (×3) И +${settleRes.potLives} ❤️!`
         : `💥 ПОБЕДИЛ ${winner.name.toUpperCase()} (ЗАБРАЛ БАНК ${settleRes.potLives} ❤️)`;
     }
 
@@ -931,6 +989,11 @@ export class WorkshopDuelController {
   }
 
   showNoLivesPrompt() {
+    if (this.onDuelDefeatToTil) {
+      this.onToast?.('⚡ Энергия на нуле — в подвал к Бочке Тиля на 12 сек!');
+      this.onDuelDefeatToTil({ roomId: this.roomId, solo: this.soloMode });
+      return;
+    }
     const box = document.getElementById('duel-result-box');
     const titleEl = document.getElementById('duel-result-title');
     const subEl = document.getElementById('duel-result-sub');

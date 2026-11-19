@@ -10,9 +10,20 @@ export const DEMO_PORTRAITS = [
 export function loadImageElement(src) {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
+    if (!String(src || '').startsWith('blob:') && !String(src || '').startsWith('data:')) {
+      img.crossOrigin = 'anonymous';
+    }
     img.onload = () => resolve(img);
-    img.onerror = (e) => reject(e);
+    img.onerror = (e) => {
+      if (img.crossOrigin) {
+        const retry = new Image();
+        retry.onload = () => resolve(retry);
+        retry.onerror = () => reject(e);
+        retry.src = src;
+      } else {
+        reject(e);
+      }
+    };
     img.src = src;
   });
 }
@@ -107,7 +118,7 @@ export async function processPortraitToWebP(source, frameStyle = 'flashlight') {
     sh = img.naturalHeight || img.height;
   }
 
-  const SIZE = 420;
+  const SIZE = 512;
   const canvas = document.createElement('canvas');
   canvas.width = SIZE;
   canvas.height = SIZE;
@@ -131,15 +142,15 @@ export async function processPortraitToWebP(source, frameStyle = 'flashlight') {
   applyVividCinemaGrade(ctx, SIZE);
   drawBarrelInteriorFX(ctx, SIZE, frameStyle);
 
-  // Баланс чёткости и лимита Supabase Storage: 420x420 HD WebP (строго <= 44 КБ)
-  let quality = 0.82;
-  let blob = await canvasToBlob(canvas, 'image/webp', quality);
-  while (blob && blob.size > 42 * 1024 && quality > 0.34) {
+  // v8.0: гарантированное авто-сжатие любого фото с телефона до 512x512 JPEG < 80 КБ
+  let quality = 0.86;
+  let blob = await canvasToBlob(canvas, 'image/jpeg', quality);
+  while (blob && blob.size > 76 * 1024 && quality > 0.34) {
     quality -= 0.08;
-    blob = await canvasToBlob(canvas, 'image/webp', quality);
+    blob = await canvasToBlob(canvas, 'image/jpeg', quality);
   }
-  if (!blob || blob.size > 46 * 1024) {
-    blob = await canvasToBlob(canvas, 'image/webp', 0.42);
+  if (!blob || blob.size > 79 * 1024) {
+    blob = await canvasToBlob(canvas, 'image/jpeg', 0.42);
   }
 
   const dataUrl = await blobToDataUrl(blob);
@@ -150,6 +161,8 @@ export async function processPortraitToWebP(source, frameStyle = 'flashlight') {
     sizeKb: Math.max(1, Math.round(blob.size / 1024)),
     width: SIZE,
     height: SIZE,
+    ext: 'jpg',
+    mime: 'image/jpeg',
   };
 }
 

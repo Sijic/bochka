@@ -61,6 +61,25 @@ function stripStaticImportMapAndCopyAssets() {
           fs.copyFileSync(src, aliasDst);
         }
       }
+      // Рекурсивно копируем public/sfx/* (обманки, скримеры, целевые звуки v8.0)
+      const sfxRoot = path.join(root, 'public', 'sfx');
+      const copyDirRec = (srcDir, relSub) => {
+        if (!fs.existsSync(srcDir)) return;
+        for (const ent of fs.readdirSync(srcDir, { withFileTypes: true })) {
+          const s = path.join(srcDir, ent.name);
+          const r = path.join(relSub, ent.name);
+          if (ent.isDirectory()) {
+            copyDirRec(s, r);
+          } else {
+            for (const dst of [path.join(root, outDir, 'public', 'sfx', r), path.join(root, outDir, 'sfx', r)]) {
+              fs.mkdirSync(path.dirname(dst), { recursive: true });
+              fs.copyFileSync(s, dst);
+            }
+          }
+        }
+      };
+      copyDirRec(sfxRoot, '');
+
       const dictSrc = path.join(root, 'src', 'dict.json');
       if (fs.existsSync(dictSrc)) {
         const dictDst = path.join(root, outDir, 'src', 'dict.json');

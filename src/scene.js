@@ -1270,8 +1270,9 @@ export class WorkshopScene {
         }
       }
 
-      if (this.interactive) {
+      if (this.interactive && (e.pointerType !== 'touch' || this.pointerDownInfo?.listening)) {
         this._raycastHover();
+        if (this.pointerDownInfo?.listening) this.listeningIndex = this.hoveredIndex;
       }
     });
 
@@ -1282,36 +1283,75 @@ export class WorkshopScene {
       this.pointerNDC.set(nx, ny);
 
       const hit = this._pickBarrel();
+      if (this._listenHoldTimer) {
+        clearTimeout(this._listenHoldTimer);
+        this._listenHoldTimer = null;
+      }
       this.pointerDownInfo = {
         x: e.clientX,
         y: e.clientY,
         time: performance.now(),
         dragged: false,
+        listening: false,
         barrelIndex: hit ? hit.index : -1,
         point: hit ? hit.point : null,
       };
 
-      if (hit) {
-        this._setHovered(hit.index, e.clientX, e.clientY);
+      // v8.0: удержание пальца > 220 мс -> живая прослушка бочки + 3D-вибрация; короткий тап -> удар ломом
+      if (hit && !this.barrels[hit.index]?.struck) {
+        const downX = e.clientX;
+        const downY = e.clientY;
+        const idx = hit.index;
+        this._listenHoldTimer = window.setTimeout(() => {
+          this._listenHoldTimer = null;
+          if (!this.pointerDownInfo || this.pointerDownInfo.barrelIndex !== idx) return;
+          this.pointerDownInfo.listening = true;
+          this.listeningIndex = idx;
+          this._setHovered(idx, downX, downY);
+        }, 220);
       }
     });
 
     this.canvas.addEventListener('pointerup', (e) => {
+      if (this._listenHoldTimer) {
+        clearTimeout(this._listenHoldTimer);
+        this._listenHoldTimer = null;
+      }
       if (!this.interactive || !this.pointerDownInfo) return;
       const info = this.pointerDownInfo;
       this.pointerDownInfo = null;
 
       const elapsed = performance.now() - info.time;
-      const isTouch = e.pointerType === 'touch';
-      const isListenHold = isTouch && (info.dragged || elapsed > 340);
+      const isListenHold = Boolean(info.listening) || info.dragged || elapsed >= 220;
 
-      if (!isListenHold && info.barrelIndex >= 0 && !info.dragged) {
+      if (isListenHold) {
+        this.listeningIndex = -1;
+        this._setHovered(-1);
+        return;
+      }
+
+      if (info.barrelIndex >= 0 && !info.dragged) {
         this.onStrikeBarrel(info.barrelIndex, info.point);
       }
     });
 
-    this.canvas.addEventListener('pointerleave', () => {
+    this.canvas.addEventListener('pointercancel', () => {
+      if (this._listenHoldTimer) {
+        clearTimeout(this._listenHoldTimer);
+        this._listenHoldTimer = null;
+      }
       this.pointerDownInfo = null;
+      this.listeningIndex = -1;
+      if (this.hoveredIndex !== -1) this._setHovered(-1);
+    });
+
+    this.canvas.addEventListener('pointerleave', () => {
+      if (this._listenHoldTimer) {
+        clearTimeout(this._listenHoldTimer);
+        this._listenHoldTimer = null;
+      }
+      this.pointerDownInfo = null;
+      this.listeningIndex = -1;
       if (this.hoveredIndex !== -1) this._setHovered(-1);
     });
 
@@ -1500,11 +1540,19 @@ export class WorkshopScene {
         try { this.onSteamBurst?.(); } catch { /* ignore */ }
       }
     }
-    for (const b of this.barrels) {
+    for (let idx = 0; idx < this.barrels.length; idx++) {
+      const b = this.barrels[idx];
       if (b.wobble > 0) {
         b.wobble = Math.max(0, b.wobble - dt * 1.3);
         b.group.rotation.z = Math.sin((1 - b.wobble) * 22) * 0.16 * b.wobble * (b.wobbleDir || 1);
         if (b.wobble === 0) b.group.rotation.z = 0;
+      } else if (this.listeningIndex === idx && !b.struck && b.group.visible) {
+        // Лёгкая живая 3D-вибрация бочки во время удержания пальца (прослушки)
+        b.group.rotation.z = Math.sin(elapsed * 42) * 0.018;
+        b.group.rotation.x = Math.cos(elapsed * 37) * 0.014;
+      } else if (b.group.rotation.x !== 0) {
+        b.group.rotation.x = 0;
+        b.group.rotation.z = 0;
       }
       if (b.lidRattle > 0 && !b.lidFlying) {
         b.lidRattle = Math.max(0, b.lidRattle - dt);
@@ -2305,7 +2353,7 @@ export class WorkshopScene {
 
     this.steamHazardIndex =
       zoneId === 2 && typeof opts.steamHazardIndex === 'number' ? opts.steamHazardIndex : -1;
-    this.numbersObscured = Boolean(zoneId === 4 && opts.numbersObscured !== false);
+    this.numbersObscured = false;
 
     if (opts.wallQuoteText) {
       this.setWallQuoteText(opts.wallQuoteText);

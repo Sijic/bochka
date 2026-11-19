@@ -4552,24 +4552,162 @@ body[data-blitz-unlocked="0"] .blitz-rule-note {
 }
 #screen-finale .barrel-mouth-large {
   margin: 0 auto;
+  overflow: visible;
+}
+#screen-finale .barrel-mouth-large img {
+  border-radius: 50%;
+  overflow: hidden;
+  display: block;
 }
 #screen-finale .barrel-mouth-large.is-victim {
   border-color: #7f1d1d;
   box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.5), 0 0 0 3px #ef4444, 0 0 26px rgba(239, 68, 68, 0.45);
+  margin-bottom: 16px;
 }
 #screen-finale .barrel-mouth-large.is-victim::after {
   content: 'ЖЕРТВА ЦЕХА №19';
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: -11px;
+  white-space: nowrap;
   text-align: center;
   font-family: var(--font-mono);
-  font-size: 8.5px;
-  letter-spacing: 0.08em;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
   color: #fff;
-  background: rgba(185, 28, 28, 0.88);
-  padding: 2px 0;
+  background: rgba(185, 28, 28, 0.96);
+  border: 1px solid #fca5a5;
+  border-radius: 999px;
+  padding: 3px 12px;
+  z-index: 5;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
+}
+
+/* v8.0 HUD: Жизни | Удары [1][2][3] + Задача раунда + Очки / 1500 */
+.hud-task-banner {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 52px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(94vw, 440px);
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(10, 14, 20, 0.78);
+  border: 1px solid rgba(250, 204, 21, 0.38);
+  color: #fef08a;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.02em;
+  z-index: 25;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+}
+.hud-lives-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: #fca5a5;
+  margin-right: 6px;
+}
+.hud-pts-pill {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #fde047;
+  margin-left: 6px;
+}
+
+/* v8.0: 5 карточек скримеров (4 готовых с кнопкой предпрослушки + свой крик) и 3 быстрые подписи */
+.screamer-card {
+  position: relative;
+}
+.sc-preview-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid rgba(250, 204, 21, 0.45);
+  background: rgba(15, 23, 42, 0.85);
+  color: #fde047;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 3;
+}
+.pack-quick-captions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 6px;
+}
+.pack-caption-chip {
+  flex: 1 1 auto;
+  font-size: 11px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  color: #e2e8f0;
+  cursor: pointer;
+}
+.pack-caption-chip.is-active {
+  border-color: #eab308;
+  background: rgba(234, 179, 8, 0.18);
+  color: #fef08a;
+}
+
+/* v8.0: 4 жёстких визуальных эффекта полноэкранного скримера */
+.fx-scream[data-variant='saw_scream'] .fx-scream-flash {
+  background: radial-gradient(circle, #ffffff 0%, #fef08a 38%, #dc2626 100%);
+}
+.fx-scream[data-variant='lid_blast'] .fx-scream-face {
+  border: 8px dashed #78350f;
+  box-shadow: 0 0 60px rgba(249, 115, 22, 0.95);
+}
+.fx-scream[data-variant='basement_shriek'] {
+  background: #000;
+}
+.fx-scream[data-variant='basement_shriek'] .fx-scream-flash {
+  background: rgba(220, 38, 38, 0.92);
+}
+.fx-scream[data-variant='tesla_siren'] .fx-scream-flash {
+  background: radial-gradient(circle, #e0f2fe 0%, #38bdf8 40%, #1d4ed8 100%);
+}
+
+/* v8.0: список друзей для выдачи билета на Уровне 3 */
+.ticket-friends-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 150px;
+  overflow-y: auto;
+  margin: 8px 0;
+}
+.ticket-friend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(250, 204, 21, 0.3);
+  color: #fff;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.ticket-friend-row:hover {
+  background: rgba(250, 204, 21, 0.16);
 }
 .finale-next-step {
   margin: 0 0 8px;

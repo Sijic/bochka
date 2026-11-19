@@ -67,6 +67,12 @@ import {
   restoreProfileByRecoveryCode,
   recordTrafficSource,
   recordPlayerMeta,
+  awardV8LevelProgress,
+  checkFriendDuplicateConnection,
+  fetchMyGameFriends,
+  sendDirectGiftTicketToFriend,
+  notifyReferrerTicketWon,
+  sendLevel1FriendReply,
 } from './backend.js';
 import { WorkshopDuelController, createBarrelWatchChannel } from './duel.js';
 import { mountTestBogHUD } from './testbog.js';
@@ -171,7 +177,7 @@ const state = {
     portraitDataUrl: '',
     voiceUrl: '',
     useBarrelFilter: true,
-    screamerType: 'weld',
+    screamerType: 'saw_scream',
     victimCardDataUrl: '',
     message: '',
     senderLabel: '',
@@ -235,7 +241,7 @@ const state = {
   pack: {
     mode: 'friend',
     frameStyle: 'flashlight',
-    screamerType: 'weld',
+    screamerType: 'saw_scream',
     zoneId: 1,
     targetBarrelIndex: -1,
     useBarrelFilter: true,
@@ -279,79 +285,89 @@ let voiceRecorder = null;
 let duelCtrl = null;
 
 function getFactoryZoneSpecByZoneId(rawZoneId = 1) {
-  const z = Math.max(1, Math.min(4, Math.round(Number(rawZoneId || 1))));
+  const z = Math.max(1, Math.min(5, Math.round(Number(rawZoneId || 1))));
   if (z === 1) {
     return {
       zoneId: 1,
       barrelCount: 4,
-      airSec: 30.0,
+      airSec: 32.0,
       hasSteamHazard: false,
       numbersObscured: false,
       canMicBlow: false,
-      zoneTitle: t('zone1Name') || 'УР.1 · РАЗГРУЗОЧНЫЙ ШЛЮЗ',
+      pointsReward: 150,
+      targetKind: 'human',
+      taskText: 'УР. 1 · Удерживай палец на бочке — слушай стук и найди друга!',
+      zoneTitle: t('zone1Name') || 'УР.1 · 4 БОЧКИ (ВХОД)',
     };
   }
   if (z === 2) {
     return {
       zoneId: 2,
       barrelCount: 6,
-      airSec: 28.0,
+      airSec: 32.0,
       hasSteamHazard: true,
       numbersObscured: false,
       canMicBlow: false,
-      zoneTitle: t('zone2Name') || 'УР.2 · СБОРОЧНЫЙ КОНВЕЙЕР',
+      pointsReward: 150,
+      targetKind: 'empty',
+      taskText: 'УР. 2 · Слушай бочки и найди ПУСТУЮ, чтобы закатать в неё друга!',
+      zoneTitle: t('zone2Name') || 'УР.2 · 6 БОЧЕК (ПУСТАЯ)',
     };
   }
   if (z === 3) {
     return {
       zoneId: 3,
-      barrelCount: 9,
-      airSec: 27.0,
+      barrelCount: 8,
+      airSec: 32.0,
       hasSteamHazard: false,
       numbersObscured: false,
       canMicBlow: false,
-      zoneTitle: t('zone3Name') || 'УР.3 · ЗАТОПЛЕННАЯ КОТЕЛЬНАЯ',
+      pointsReward: 300,
+      targetKind: 'ticket',
+      taskText: 'УР. 3 · Найди бочку с бесплатным билетом в кино (+300 ⭐)!',
+      zoneTitle: t('zone3Name') || 'УР.3 · 8 БОЧЕК (БИЛЕТ)',
+    };
+  }
+  if (z === 4) {
+    return {
+      zoneId: 4,
+      barrelCount: 10,
+      airSec: 30.0,
+      hasSteamHazard: false,
+      numbersObscured: false,
+      canMicBlow: false,
+      pointsReward: 350,
+      targetKind: 'ticket',
+      taskText: 'УР. 4 · 10 бочек (+350 ⭐) — до Дуэлей (1 500 ⭐) совсем чуть-чуть!',
+      zoneTitle: 'УР.4 · 10 БОЧЕК (К ДУЭЛЯМ)',
     };
   }
   return {
     zoneId: 4,
     barrelCount: 12,
-    airSec: 26.0,
+    airSec: 28.0,
     hasSteamHazard: false,
-    numbersObscured: true,
-    canMicBlow: true,
-    zoneTitle: t('zone4Name') || 'УР.4 · ПРЕСС-ЦЕХ (19·97)',
+    numbersObscured: false,
+    canMicBlow: false,
+    pointsReward: 400,
+    targetKind: 'ticket',
+    taskText: 'УР. 5 · 12 бочек (+400 ⭐) — финальный рывок к 1 500 ⭐ и Дуэлям!',
+    zoneTitle: 'УР.5 · 12 БОЧЕК (ПРЕСС-ЦЕХ)',
   };
 }
 
 function getWorkshopLevelSpec(rawLevel = 1) {
   const level = Math.max(1, Math.round(Number(rawLevel || 1)));
-  if (level === 1) {
-    const z = getFactoryZoneSpecByZoneId(1);
+  if (level <= 5) {
+    const z = getFactoryZoneSpecByZoneId(level);
     return { level, ...z, isBlitz: false };
   }
-  if (level === 2) {
-    const z = getFactoryZoneSpecByZoneId(2);
-    return { level, ...z, isBlitz: false };
-  }
-  if (level === 3) {
-    const z = getFactoryZoneSpecByZoneId(3);
-    return { level, ...z, isBlitz: false };
-  }
-  const z4 = getFactoryZoneSpecByZoneId(4);
-  if (level <= 7) {
-    return {
-      level,
-      ...z4,
-      isBlitz: false,
-      airSec: Math.max(24.0, 29.0 - level * 0.6),
-    };
-  }
+  const z5 = getFactoryZoneSpecByZoneId(5);
   return {
     level,
-    ...z4,
-    isBlitz: true,
-    airSec: 25.0,
+    ...z5,
+    isBlitz: level >= 8,
+    airSec: 26.0,
   };
 }
 
@@ -367,6 +383,15 @@ function hudLevelLabelText() {
 function refreshHudLevelLabel() {
   const tag = document.getElementById('hud-mode-tag');
   if (tag) tag.textContent = hudLevelLabelText();
+  const livesVal = document.getElementById('hud-lives-val');
+  if (livesVal) livesVal.textContent = String(Math.max(0, Number(state.profile?.lives ?? 1)));
+  const ptsVal = document.getElementById('hud-pts-val');
+  if (ptsVal) ptsVal.textContent = String(Math.max(0, Math.round(Number(state.profile?.premierePoints || 0))));
+  const taskEl = document.getElementById('hud-task-banner');
+  if (taskEl) {
+    const spec = getWorkshopLevelSpec(state.round?.workshopLevel || 1);
+    taskEl.textContent = state.round?.taskText || spec.taskText || 'Удерживай палец — слушать бочку · Тап — удар ломом';
+  }
 }
 
 function formatBarrelWord(n) {
@@ -515,11 +540,17 @@ async function bootstrap() {
     onProfileSync: (patch) => {
       state.profile = { ...state.profile, ...patch };
       updatePremiereBarsUI();
+      refreshHudLevelLabel();
     },
     onToast: (msg) => showToast(msg),
     onOpenInviteShare: () => shareCurrentDuelRoom(),
     onOpenGoldenFork: () => openGoldenTicketForkModal(),
     onExitToHub: () => showScreen('modeA'),
+    onDuelDefeatToTil: ({ roomId, solo } = {}) => {
+      state.oceanTapper.returnDuel = { roomId: roomId || '', solo: Boolean(solo) };
+      duelCtrl?.leaveRoom(false);
+      triggerOceanEasterEggScene();
+    },
   });
 
   audio.setBarrelLayout(scene.getBarrelWorldPositions(), 0);
@@ -1110,6 +1141,8 @@ async function startDemoRound() {
     zoneId: spec.zoneId,
     barrelCount: spec.barrelCount,
     workshopLevel: spec.level,
+    targetKind: spec.targetKind || 'human',
+    taskText: spec.taskText || '',
     isBlitz: spec.isBlitz,
     blitzTargetsCleared: 0,
     targetIndex,
@@ -1231,28 +1264,38 @@ async function startViralFriendRound(pack) {
   const voiceUrl = pack?.voiceUrl || '';
   await audio.setSenderVoiceUrl(voiceUrl);
 
-  const packZoneId = Math.max(1, Math.min(4, Number(pack?.zoneId || 1)));
-  const zoneSpec = getFactoryZoneSpecByZoneId(packZoneId);
-  const viralBarrelCount = Math.max(4, zoneSpec.barrelCount);
+  // v8.0: Жёсткая защита от повторной отправки обычной бочки тому же другу (social_connections)
+  if (pack?.senderUid) {
+    checkFriendDuplicateConnection(pack.senderUid, state.tg?.user, { senderTgId: pack?.senderTgId || '' })
+      .then((dup) => {
+        if (dup?.duplicate) {
+          showToast(dup.message || 'Этот друг уже в деле! Ему теперь можно отправить только выигранный билет, а скример кинь новому другу.');
+        }
+      })
+      .catch(() => {});
+  }
+
+  // Вход по ссылке друга: всегда Уровень 1 (4 бочки, 1 жизнь = 3 удара)
+  const viralBarrelCount = 4;
+  const spec = getWorkshopLevelSpec(1);
 
   const initialTarget =
     typeof pack?.targetIndex === 'number' && pack.targetIndex >= 0 && pack.targetIndex < viralBarrelCount
       ? pack.targetIndex
       : Math.floor(Math.random() * viralBarrelCount);
 
-  const steamHazardIndex =
-    packZoneId === 2 ? (initialTarget + 1) % viralBarrelCount : -1;
-
   state.round = {
     modeType: 'viral',
     isDemo: false,
-    zoneId: packZoneId,
+    zoneId: 1,
     barrelCount: viralBarrelCount,
-    workshopLevel: packZoneId,
+    workshopLevel: 1,
+    targetKind: 'human',
+    taskText: spec.taskText,
     isBlitz: false,
     blitzTargetsCleared: 0,
     targetIndex: initialTarget,
-    steamHazardIndex,
+    steamHazardIndex: -1,
     micBlowUsed: false,
     strikeLog: [],
     isDailyShift: false,
@@ -1271,7 +1314,7 @@ async function startViralFriendRound(pack) {
     portraitDataUrl,
     voiceUrl,
     useBarrelFilter: true,
-    screamerType: pack?.screamerType || 'weld',
+    screamerType: pack?.screamerType || 'saw_scream',
     victimCardDataUrl: '',
     message: pack?.message || t('presetsSelf')[0],
     senderLabel: pack?.senderName ? `${t('revealFromFriend')} · ${pack.senderName}` : t('revealFromFriend'),
@@ -1481,26 +1524,8 @@ function spawnFloatingScorePopup(delta, barrelIndex = -1, customLabel = '') {
 }
 
 function triggerWorkshopMicBlow() {
-  if (!state.round.running || state.round.micBlowUsed) return false;
-  state.round.micBlowUsed = true;
-  scene?.clearSteamFromBarrels?.();
-  audio.playAirBlowWhoosh?.();
-  audio.stopMicBlowDetector?.();
-
-  state.round.airLeft = Math.min(35.0, (state.round.airLeft || 20.0) + 4.0);
-  updateAirHUD(state.round.airLeft);
-
-  const blowBtn = document.getElementById('btn-hud-mic-blow');
-  const blowFill = document.getElementById('hud-mic-blow-fill');
-  if (blowBtn) {
-    blowBtn.disabled = true;
-    blowBtn.textContent = t('micBlowDone') || '✓ ПАР СДУТ (+4 СЕК O₂)';
-  }
-  if (blowFill) blowFill.style.width = '100%';
-
-  Haptics.success();
-  showToast('💨 Пар сдут с номеров бочек! +4 сек кислорода O₂');
-  return true;
+  // v8.0: механика «подуть в микрофон» полностью удалена
+  return false;
 }
 
 function launchWorkshopGameplay(golden = false) {
@@ -1513,9 +1538,11 @@ function launchWorkshopGameplay(golden = false) {
   renderAttemptSquares(state.round.attemptsLeft, state.round.isBlitz ? 5 : 3);
   updateAirHUD(state.round.airLeft);
 
-  const zoneId = state.round.zoneId || 1;
+  const spec = getWorkshopLevelSpec(state.round.workshopLevel || state.round.zoneId || 1);
+  const zoneId = state.round.zoneId || spec.zoneId || 1;
+  const targetKind = state.round.targetKind || spec.targetKind || 'human';
   scene.resetRound({
-    barrelCount: state.round.barrelCount || 3,
+    barrelCount: state.round.barrelCount || spec.barrelCount || 4,
     targetIndex: state.round.targetIndex,
     portraitUrl: state.round.portraitDataUrl,
     golden,
@@ -1523,46 +1550,18 @@ function launchWorkshopGameplay(golden = false) {
   scene.setWorkshopLevelDecor?.(state.round.workshopLevel || zoneId, state.round.modeType, {
     zoneId,
     steamHazardIndex: state.round.steamHazardIndex ?? -1,
-    numbersObscured: zoneId === 4 && !state.round.micBlowUsed,
+    numbersObscured: false,
     wallQuoteText: t('wallSeaQuote'),
   });
   audio.setFactoryZoneAcoustics?.(zoneId);
-  audio.setBarrelLayout(scene.getBarrelWorldPositions(), state.round.targetIndex);
+  audio.setBarrelLayout(scene.getBarrelWorldPositions(), state.round.targetIndex, { targetKind });
   scene.setInteractive(true);
   scene.setClockUrgency?.({
     airActive: state.uiStage > 2 || zoneId >= 2,
     airLeft: state.round.airLeft,
     isBlitz: Boolean(state.round.isBlitz),
   });
-
-  const micBox = document.getElementById('hud-mic-blow-box');
-  const micBtn = document.getElementById('btn-hud-mic-blow');
-  const micFill = document.getElementById('hud-mic-blow-fill');
   audio.stopMicBlowDetector?.();
-  if (zoneId === 4 && state.round.modeType !== 'premiere') {
-    micBox?.removeAttribute('hidden');
-    if (micBtn) {
-      micBtn.disabled = Boolean(state.round.micBlowUsed);
-      micBtn.textContent = state.round.micBlowUsed
-        ? (t('micBlowDone') || '✓ ПАР СДУТ (+4 СЕК O₂)')
-        : (t('micBlowBtn') || '💨 ДУНЬ В МИКРОФОН / СДУТЬ ПАР (+4с O₂)');
-    }
-    if (micFill) micFill.style.width = state.round.micBlowUsed ? '100%' : '0%';
-    if (!state.round.micBlowUsed) {
-      audio.startMicBlowDetector?.({
-        onLevel: (lvl) => {
-          if (micFill && !state.round.micBlowUsed) {
-            micFill.style.width = `${Math.round(lvl * 100)}%`;
-          }
-        },
-        onBlow: () => {
-          triggerWorkshopMicBlow();
-        },
-      });
-    }
-  } else {
-    micBox?.setAttribute('hidden', '');
-  }
 
   showScreen('workshop');
   startAirCountdownLoop();
@@ -1801,7 +1800,7 @@ async function triggerOceanEasterEggScene() {
   window.setTimeout(() => {
     showScreen('ocean');
     audio.startOceanEasterEggAudio();
-    startOceanTypewriter(t('oceanQuote'));
+    startOceanTypewriter('На небе только и разговоров, что о море…');
 
     if (mist) {
       mist.classList.remove('is-active');
@@ -1814,13 +1813,15 @@ function resetOceanTapperUI() {
   if (state.oceanTapper.timer) {
     clearInterval(state.oceanTapper.timer);
   }
+  const keepDuel = state.oceanTapper?.returnDuel || null;
   state.oceanTapper = {
     running: false,
     finished: false,
     taps: 0,
-    timeLeft: 10.0,
+    timeLeft: 12.0,
     timer: null,
     lastTapAt: 0,
+    returnDuel: keepDuel,
   };
 
   const barrelImg = document.getElementById('ocean-barrel-img');
@@ -1833,23 +1834,25 @@ function resetOceanTapperUI() {
   const pill = document.getElementById('ocean-bonus-pill');
 
   if (barrelImg) barrelImg.src = resolveSiteAsset('assets/keyed/ocean_barrel_closed.webp');
-  if (timerEl) timerEl.textContent = '10.0';
+  if (timerEl) timerEl.textContent = '12.0';
   if (countEl) countEl.textContent = '0';
   if (fillEl) fillEl.style.width = '0%';
   if (promptEl) {
     promptEl.removeAttribute('hidden');
-    promptEl.textContent = '👊 СТУЧИ НА ВРЕМЯ!';
+    promptEl.textContent = '⚡ ТАПАЙ ПО БОЧКЕ ТИЛЯ (12 СЕК → 100%)!';
   }
   if (startBtn) {
     startBtn.disabled = false;
-    startBtn.textContent = '👊 СТУЧАТЬ ПО БОЧКЕ (СТАРТ 10 СЕК)';
+    startBtn.textContent = '👊 ЗАРЯДИТЬ ЭНЕРГИЮ (СТАРТ 12 СЕК)';
   }
   if (giftBtn) {
     if (state.profile.hasPendingTicket) giftBtn.removeAttribute('hidden');
     else giftBtn.setAttribute('hidden', '');
   }
   if (pill) {
-    pill.textContent = state.profile.easterEggClaimed ? t('oceanBonusAlready') : t('oceanBonusBadge');
+    pill.textContent = keepDuel
+      ? '⚡ БОЧКА С ТИЛЕМ: заряди энергию 0% → 100% за 12 секунд и мгновенно вернись в дуэль!'
+      : state.profile.easterEggClaimed ? t('oceanBonusAlready') : t('oceanBonusBadge');
   }
 }
 
@@ -1860,7 +1863,7 @@ function startOceanTapperCountdown() {
   state.oceanTapper.running = true;
   state.oceanTapper.finished = false;
   state.oceanTapper.taps = 0;
-  state.oceanTapper.timeLeft = 10.0;
+  state.oceanTapper.timeLeft = 12.0;
   state.oceanTapper.lastTapAt = 0;
 
   const barrelImg = document.getElementById('ocean-barrel-img');
@@ -1871,11 +1874,11 @@ function startOceanTapperCountdown() {
   const startBtn = document.getElementById('btn-ocean-start-tap');
 
   if (barrelImg) barrelImg.src = resolveSiteAsset('assets/keyed/ocean_barrel_closed.webp');
-  if (timerEl) timerEl.textContent = '10.0';
+  if (timerEl) timerEl.textContent = '12.0';
   if (countEl) countEl.textContent = '0';
   if (fillEl) fillEl.style.width = '0%';
-  if (promptEl) promptEl.textContent = '👊 ЖМИ БЫСТРЕЕ! 40+ = БИЛЕТ!';
-  if (startBtn) startBtn.textContent = '👊 СТУЧИ! УДАРИТЬ ЕЩЁ РАЗ!';
+  if (promptEl) promptEl.textContent = '⚡ ЖМИ БЫСТРЕЕ! ЗАРЯДИ ЭНЕРГИЮ ДО 100%!';
+  if (startBtn) startBtn.textContent = '👊 СТУЧИ ПО БОЧКЕ ТИЛЯ!';
 
   let lastTs = performance.now();
   state.oceanTapper.timer = window.setInterval(() => {
@@ -1891,6 +1894,13 @@ function startOceanTapperCountdown() {
   }, 80);
 }
 
+const TIL_TAP_QUOTES = [
+  '«На небе только и разговоров, что о море…»',
+  '«На небе только и разговоров, что о бочке…»',
+  '«Ещё удар — и крышка сдастся!»',
+  '«Ты слышишь прибой за стальной стенкой?»',
+];
+
 function handleOceanBarrelTap() {
   const now = performance.now();
   if (now - state.oceanTapper.lastTapAt < 25) return;
@@ -1903,10 +1913,20 @@ function handleOceanBarrelTap() {
 
   state.oceanTapper.taps += 1;
   const taps = state.oceanTapper.taps;
+  const energyPct = Math.min(100, Math.round((taps / 24) * 100));
 
   audio.playStrike((taps % 3) + 1);
-  if (taps === 20 || taps === 40) Haptics.heavy();
+  if (energyPct >= 100 || taps === 12) Haptics.heavy();
   else Haptics.light();
+
+  const countEl = document.getElementById('ocean-tap-count');
+  const fillEl = document.getElementById('ocean-tap-fill');
+  const promptEl = document.getElementById('ocean-tap-prompt');
+  if (countEl) countEl.textContent = String(energyPct);
+  if (fillEl) fillEl.style.width = `${energyPct}%`;
+  if (promptEl && taps % 6 === 0) {
+    promptEl.textContent = TIL_TAP_QUOTES[(taps / 6) % TIL_TAP_QUOTES.length | 0];
+  }
 
   const targetBtn = document.getElementById('btn-ocean-tap-barrel');
   if (targetBtn) {
@@ -1915,21 +1935,8 @@ function handleOceanBarrelTap() {
     targetBtn.classList.add('is-knock-hit');
   }
 
-  const countEl = document.getElementById('ocean-tap-count');
-  const fillEl = document.getElementById('ocean-tap-fill');
-  const barrelImg = document.getElementById('ocean-barrel-img');
-  const promptEl = document.getElementById('ocean-tap-prompt');
-
-  if (countEl) countEl.textContent = String(taps);
-  if (fillEl) fillEl.style.width = `${Math.min(100, (taps / 40) * 100)}%`;
-
-  if (taps === 20 && barrelImg) {
-    barrelImg.src = resolveSiteAsset('assets/keyed/ocean_barrel_arm.webp');
-    audio.playLidBlowOff(true);
-  }
-  if (promptEl) {
-    if (taps >= 40) promptEl.textContent = '🎟 40+ УДАРОВ! БИЛЕТ ВЫБИТ!';
-    else if (taps >= 20) promptEl.textContent = '🖐 РУКА ПОКАЗАЛАСЬ! ЖМИ ДО 40!';
+  if (energyPct >= 100 && state.oceanTapper.returnDuel) {
+    finishOceanTapperGame();
   }
 }
 
@@ -1943,6 +1950,7 @@ async function finishOceanTapperGame() {
   state.oceanTapper.finished = true;
 
   const taps = state.oceanTapper.taps;
+  const energyPct = Math.min(100, Math.round((taps / 24) * 100));
   const startBtn = document.getElementById('btn-ocean-start-tap');
   const pill = document.getElementById('ocean-bonus-pill');
   const giftBtn = document.getElementById('btn-ocean-claim-gift');
@@ -1950,39 +1958,37 @@ async function finishOceanTapperGame() {
 
   if (startBtn) {
     startBtn.disabled = true;
-    startBtn.textContent = 'СВЕРКА УДАРОВ С СЕРВЕРОМ...';
+    startBtn.textContent = 'ЗАРЯДКА ЭНЕРГИИ...';
   }
 
-  const reward = await claimOceanTapperReward(state.tg?.user, Math.max(1, taps));
+  // Начисляем полный запас сил (+3 ❤️) и возвращаем в дуэль, если пришли с поражения
+  const reward = await claimOceanTapperReward(state.tg?.user, Math.max(1, taps)).catch(() => ({ livesAwarded: 3 }));
+  const v8Refill = await awardV8LevelProgress(state.tg?.user, { level: state.profile.currentLevel || 6, pointsDelta: 0, livesDelta: 3 }).catch(() => null);
   state.profile.easterEggClaimed = true;
-  if (typeof reward.lives === 'number') state.profile.lives = reward.lives;
-  if (reward.hasPendingTicket || reward.giftAwarded) state.profile.hasPendingTicket = true;
+  state.profile.lives = Math.max(3, Number(v8Refill?.lives ?? reward?.lives ?? state.profile.lives ?? 3));
+  if (reward?.hasPendingTicket || reward?.giftAwarded) state.profile.hasPendingTicket = true;
   updatePremiereBarsUI();
+  refreshHudLevelLabel();
 
   if (pill) {
-    if (reward.giftAwarded) {
-      pill.textContent = `🎉 РЕКОРД ${taps} УДАРОВ! +${reward.livesAwarded} ❤️ И ВЫБИТ ПОДАРОЧНЫЙ БИЛЕТ ДРУГУ!`;
-      Haptics.success();
-    } else if (reward.livesAwarded > 0) {
-      pill.textContent = `🌊 НАСТУЧАЛ ${taps} УДАРОВ: +${reward.livesAwarded} ❤️ ЖИЗНЕЙ НАЧИСЛЕНО! (40+ = билет другу)`;
-      Haptics.success();
-    } else {
-      pill.textContent = `🌊 РЕЗУЛЬТАТ: ${taps} УДАРОВ (выбей 40+ ударов за 10 сек, чтобы забрать билет для друга!)`;
-    }
+    pill.textContent = `⚡ ЭНЕРГИЯ ЗАРЯЖЕНА НА ${energyPct}%! +3 ❤️ (9 УДАРОВ) — ВОЗВРАЩАЕМСЯ В БОЙ!`;
+    Haptics.success();
   }
-
   if (promptEl) {
-    promptEl.textContent = taps >= 40 ? '🎟 БИЛЕТ ДРУГУ РАЗБЛОКИРОВАН!' : `ИТОГ: ${taps} УДАРОВ`;
+    promptEl.textContent = `⚡ ${energyPct}% ЗАРЯЖЕНО!`;
   }
-
-  if (giftBtn && (reward.giftAwarded || state.profile.hasPendingTicket)) {
+  if (giftBtn && (reward?.giftAwarded || state.profile.hasPendingTicket)) {
     giftBtn.removeAttribute('hidden');
   }
-
   if (startBtn) {
     startBtn.disabled = false;
-    startBtn.textContent = '↻ СТУЧАТЬ ЕЩЁ РАЗ НА РЕКОРД (10 СЕК)';
-    state.oceanTapper.finished = false;
+    startBtn.textContent = '⚡ ВЕРНУТЬСЯ В ДУЭЛЬ С ПОЛНОЙ ЭНЕРГИЕЙ';
+  }
+
+  if (state.oceanTapper.returnDuel) {
+    window.setTimeout(() => {
+      handleReturnFromOcean(false);
+    }, 900);
   }
 }
 
@@ -2020,6 +2026,16 @@ async function handleReturnFromOcean(openGiftModalAfter = false) {
   }
 
   audio.stopOceanEasterEggAudio();
+
+  if (state.oceanTapper.returnDuel) {
+    const rd = state.oceanTapper.returnDuel;
+    state.oceanTapper.returnDuel = null;
+    await openDuelTable(rd.roomId || '');
+    if (rd.solo) {
+      showToast('⚡ Энергия 100% — ты снова в Дуэли за Банк Премьеры!');
+    }
+    return;
+  }
 
   if (openGiftModalAfter && state.profile.hasPendingTicket) {
     await populateFinaleScreen();
@@ -2271,24 +2287,24 @@ async function handleBarrelStrike(index, worldPoint) {
     if (r.attemptsLeft > 0) {
       triggerMiniScreamer(r.attemptsUsed - 1);
     } else {
-      // После 3 промахов осталась ровно 1 закрытая (4-я) бочка -> открываем Трейлер!
+      // v8.0: На Уровне 1 после 3 промахов открываем окно трейлера (сразу со звуком -> +3 жизни)
       r.running = false;
       scene.setInteractive(false);
-      triggerMiniScreamer(2);
-      window.setTimeout(() => openRescueStep1(), 380);
+      openRescueTrailerDirectly();
     }
     return;
   }
 
   // -------------------------------------------------------------------------
-  // РЕЖИМ 3: ПРОГРЕССИЯ УРОВНЕЙ ЦЕХА (4 ЗОНЫ: 3, 6, 9, 12 БОЧЕК + БЛИЦ)
+  // РЕЖИМ 3: v8.0 ПРОГРЕССИЯ УРОВНЕЙ (Ур.2=6б, Ур.3=8б, Ур.4=10б, Ур.5=12б)
+  // Формула: 1 Жизнь = 3 удара ломом!
   // -------------------------------------------------------------------------
   scene.triggerStrikeFX(index, worldPoint);
   audio.playStrike(index);
   r.attemptsUsed += 1;
 
   if (index === r.targetIndex) {
-    r.strikeLog.push(`[Удар ${r.attemptsUsed}: Спас за ${elapsedSec} сек]`);
+    r.strikeLog.push(`[Удар ${r.attemptsUsed}: Цель за ${elapsedSec} сек]`);
     if (r.isBlitz) {
       r.blitzTargetsCleared += 1;
       r.airLeft = Math.min(30.0, r.airLeft + 3.5);
@@ -2297,7 +2313,6 @@ async function handleBarrelStrike(index, worldPoint) {
       spawnFloatingScorePopup(0, index, `КОМБО ×${r.blitzTargetsCleared} · +3.5с!`);
       Haptics.success();
 
-      // Мгновенно перезаряжаем 12 бочек Пресс-цеха для следующей волны Блица!
       const nextPool = [];
       for (let i = 0; i < 12; i++) {
         if (BARREL_BATCH_CODES[i] !== '19') nextPool.push(i);
@@ -2312,10 +2327,10 @@ async function handleBarrelStrike(index, worldPoint) {
       scene.setWorkshopLevelDecor?.(r.workshopLevel || 8, r.modeType, {
         zoneId: 4,
         steamHazardIndex: -1,
-        numbersObscured: !r.micBlowUsed,
+        numbersObscured: false,
         wallQuoteText: t('wallSeaQuote'),
       });
-      audio.setBarrelLayout(scene.getBarrelWorldPositions(), r.targetIndex);
+      audio.setBarrelLayout(scene.getBarrelWorldPositions(), r.targetIndex, { targetKind: 'ticket' });
       return;
     }
 
@@ -2341,11 +2356,35 @@ async function handleBarrelStrike(index, worldPoint) {
   if (r.attemptsLeft > 0) {
     triggerMiniScreamer();
   } else {
-    triggerMiniScreamer();
-    finishRound(r.isBlitz && r.blitzTargetsCleared > 0, {
-      diveBarrelIndex: index,
-      hitTarget: false,
-    });
+    // 1 Жизнь = 3 удара ломом: списываем 1 жизнь; если жизни ещё есть -> мгновенно даём ещё 3 удара!
+    const nextLives = Math.max(0, Number(state.profile?.lives ?? 1) - 1);
+    state.profile.lives = nextLives;
+    awardV8LevelProgress(state.tg?.user, { level: r.workshopLevel || 1, pointsDelta: 0, livesDelta: -1 }).catch(() => {});
+    refreshHudLevelLabel();
+    updatePremiereBarsUI();
+
+    if (nextLives > 0 && getUnstruckBarrelIndices().length > 0) {
+      r.attemptsLeft = 3;
+      r.airLeft = Math.max(18.0, r.airLeft);
+      renderAttemptSquares(3, 3);
+      triggerMiniScreamer();
+      showToast(`❤️ −1 жизнь (осталось ${nextLives}) · Ещё 3 удара ломом!`);
+    } else if ((r.workshopLevel || 1) >= 2 && !r.isBlitz) {
+      // Жизни кончились на Ур.2 -> Кинопоиск (+3 ❤️); на Ур.3-5 -> скример новому другу (+3 ❤️)
+      r.running = false;
+      r.pausedForModal = true;
+      stopAirTimer();
+      audio.stopListening();
+      scene.setInteractive(false);
+      triggerMiniScreamer();
+      window.setTimeout(() => openLivesRecoveryModal({ forLevel: r.workshopLevel || 2 }), 360);
+    } else {
+      triggerMiniScreamer();
+      finishRound(r.isBlitz && r.blitzTargetsCleared > 0, {
+        diveBarrelIndex: index,
+        hitTarget: false,
+      });
+    }
   }
 }
 
@@ -2637,12 +2676,38 @@ async function handleIssueGiftPassClick() {
   }
 }
 
-function openLivesRecoveryModal() {
+function openLivesRecoveryModal({ forLevel = null } = {}) {
   state.round.pausedForModal = true;
   stopAirTimer();
+  const lvl = Number(forLevel || state.round?.workshopLevel || state.profile?.currentLevel || 2);
+  const titleEl = document.getElementById('lives-recovery-title');
   const pr = document.getElementById('lives-recovery-progress');
-  if (pr) {
-    pr.textContent = `К розыгрышу билетов: ⭐ ${fmtPoints(state.profile?.premierePoints)} · шкала ${Number(state.profile?.premiereScore || 0).toFixed(1)} / 100. Выбери любое одно действие.`;
+  const kpBtn = document.getElementById('btn-life-rec-kp');
+  const friendBtn = document.getElementById('btn-life-rec-friend');
+  const subBtn = document.querySelector('[data-life-action="sub"]');
+  const likeBtn = document.querySelector('[data-life-action="like"]');
+
+  if (lvl === 2) {
+    if (titleEl) titleEl.textContent = 'Жизни кончились! Забери +3 ❤️ на Кинопоиске';
+    if (pr) pr.textContent = 'Нажми «Буду смотреть» на Кинопоиске, чтобы забрать +3 жизни (9 ударов) и продолжить поиск пустой бочки!';
+    kpBtn?.removeAttribute('hidden');
+    friendBtn?.setAttribute('hidden', '');
+    subBtn?.setAttribute('hidden', '');
+    likeBtn?.setAttribute('hidden', '');
+  } else if (lvl >= 3 && state.round?.modeType !== 'premiere') {
+    if (titleEl) titleEl.textContent = 'Жизни кончились! +3 ❤️ за нового друга';
+    if (pr) pr.textContent = 'Отправь бочку со скримером НОВОМУ другу в Telegram — сразу начислим +3 жизни (9 ударов)!';
+    kpBtn?.setAttribute('hidden', '');
+    friendBtn?.removeAttribute('hidden');
+    subBtn?.setAttribute('hidden', '');
+    likeBtn?.setAttribute('hidden', '');
+  } else {
+    if (titleEl) titleEl.textContent = 'Верни +3 ❤️ (9 ударов) за одно действие';
+    if (pr) pr.textContent = `Очки: ⭐ ${fmtPoints(state.profile?.premierePoints)} / 1 500. Выбери любое действие.`;
+    kpBtn?.removeAttribute('hidden');
+    friendBtn?.setAttribute('hidden', '');
+    subBtn?.removeAttribute('hidden');
+    likeBtn?.removeAttribute('hidden');
   }
   document.querySelectorAll('[data-life-action]').forEach((b) => { b.disabled = false; });
   document.getElementById('modal-lives-recovery')?.removeAttribute('hidden');
@@ -2654,6 +2719,12 @@ function fmtPoints(n) {
 }
 
 async function handleLifeRecoveryAction(kind) {
+  if (kind === 'pack_friend') {
+    document.getElementById('modal-lives-recovery')?.setAttribute('hidden', '');
+    state.pack.forLifeRefill = true;
+    showScreen('pack');
+    return;
+  }
   const urls = {
     kp: ENV.kinopoiskUrl,
     sub: ENV.youtubeSubscribeUrl || ENV.youtubeWatchUrl,
@@ -2661,19 +2732,33 @@ async function handleLifeRecoveryAction(kind) {
   };
   document.querySelectorAll('[data-life-action]').forEach((b) => { b.disabled = true; });
   openExternalLink(urls[kind] || ENV.youtubeWatchUrl);
-  await new Promise((resolve) => window.setTimeout(resolve, 3800));
-  const res = await claimLifeRecovery(state.tg?.user, kind);
-  if (res.granted) {
-    state.profile.lives = res.lives;
-    updatePremiereBarsUI();
-    document.getElementById('modal-lives-recovery')?.setAttribute('hidden', '');
-    showToast('❤️ +1 жизнь! Продолжаем гонку за билетом');
-    Haptics.success();
+  await new Promise((resolve) => window.setTimeout(resolve, 2600));
+  const res = await claimLifeRecovery(state.tg?.user, kind).catch(() => ({ granted: false }));
+  const v8 = await awardV8LevelProgress(state.tg?.user, {
+    level: state.round?.workshopLevel || state.profile?.currentLevel || 2,
+    pointsDelta: 0,
+    livesDelta: 3,
+  }).catch(() => null);
+
+  state.profile.lives = Math.max(3, Number(v8?.lives ?? res?.lives ?? 3));
+  updatePremiereBarsUI();
+  refreshHudLevelLabel();
+  document.getElementById('modal-lives-recovery')?.setAttribute('hidden', '');
+  showToast('❤️ +3 жизни (9 ударов)! Продолжаем!');
+  Haptics.success();
+
+  if (state.round?.modeType === 'premiere') {
     state.round.running = false;
     startPremiereRaceRound();
   } else {
-    document.querySelectorAll('[data-life-action]').forEach((b) => { b.disabled = false; });
-    showToast(res.reason === 'already_today' ? 'Это действие уже засчитано сегодня — выбери другое' : 'Не получилось начислить жизнь, попробуй ещё раз');
+    state.round.pausedForModal = false;
+    state.round.attemptsLeft = 3;
+    state.round.airLeft = Math.max(22.0, state.round.airLeft || 25.0);
+    state.round.running = true;
+    renderAttemptSquares(3, 3);
+    updateAirHUD(state.round.airLeft);
+    scene.setInteractive(true);
+    startAirCountdownLoop();
   }
 }
 
@@ -3152,20 +3237,24 @@ function claimTrailerFifthLife() {
   closeTrailerModal();
   document.getElementById('modal-rescue')?.setAttribute('hidden', '');
 
-  // После просмотра трейлера следующий (4-й) удар сразу победный!
+  // v8.0: После просмотра трейлера начисляется +3 жизни (9 ударов) и 4-я бочка готова к вскрытию!
+  state.profile.lives = Math.max(3, Number(state.profile.lives || 0) + 3);
+  awardV8LevelProgress(state.tg?.user, { level: 1, pointsDelta: 0, livesDelta: 3 }).catch(() => {});
   state.round.rescueStage = 4;
-  state.round.attemptsLeft = 1;
-  state.round.airLeft = 22.0;
+  state.round.attemptsLeft = 3;
+  state.round.airLeft = 25.0;
   state.round.lastUrgentSec = 9;
   state.round.running = true;
 
-  renderAttemptSquares(1);
+  renderAttemptSquares(3, 3);
+  refreshHudLevelLabel();
   updateAirHUD(state.round.airLeft);
   scene.setInteractive(true);
   if (state.round.voiceUrl) {
     audio.startMuffledVoiceLoop();
   }
   startAirCountdownLoop();
+  showToast('❤️ +3 жизни (9 ударов ломом)! Добивай 4-ю бочку!');
   Haptics.success();
 }
 
@@ -3179,9 +3268,18 @@ function playFullScreenScreamer(durationMs = 1800) {
       resolve();
       return;
     }
-    const kind = state.round?.screamerType || 'weld';
+    const kind = state.round?.screamerType || 'saw_scream';
     const face = document.getElementById('fx-scream-face');
+    const txt = document.getElementById('fx-scream-text');
+    const screamTitles = {
+      saw_scream: '🪚 ВИЗГ ЦИРКУЛЯРКИ!',
+      lid_blast: '💥 КРЫШКУ СОРВАЛО В ЛИЦО!',
+      basement_shriek: '😱 КРИК ИЗ ПОДВАЛА!',
+      tesla_siren: '⚡ РАЗРЯД ТОКА И СИРЕНА!',
+      custom_scream: '🎙 КРИК ИЗ БОЧКИ!',
+    };
     if (face) face.src = state.round?.portraitDataUrl || DEMO_PORTRAITS[0];
+    if (txt) txt.textContent = screamTitles[kind] || 'ТЕБЯ ЗАКАТАЛИ В БОЧКУ!';
     el.setAttribute('data-variant', kind);
     el.classList.remove('is-live', 'is-out');
     el.removeAttribute('hidden');
@@ -3269,36 +3367,36 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
     }, 360);
   }
 
-  if (state.round.isDemo && survived) {
-    const wasBlitz = Boolean(state.round.isBlitz);
-    const completedLvl = state.round.workshopLevel;
-    const blitzBonus = wasBlitz ? state.round.blitzTargetsCleared * 95 : 0;
-    completeWorkshopLevel(state.tg?.user, completedLvl, state.round.airLeft, blitzBonus)
-      .then((lvlRes) => {
-        if (lvlRes?.ok) {
-          state.profile.currentLevel = lvlRes.currentLevel;
-          state.profile.premierePoints = lvlRes.premierePoints;
-          state.profile.hasPlayedSolo = true;
-          state.lastBlitzDailyPoints = Number(lvlRes.dailyBlitzPoints ?? state.lastBlitzDailyPoints ?? 0);
-          state.lastBlitzDailyCap = Number(lvlRes.dailyBlitzCap || 2000);
-          if (lvlRes.cooldownBlocked) {
-            const rem = Math.max(1, Number(lvlRes.cooldownRemainingSec || 12));
-            state.blitzCooldownUntil = Date.now() + rem * 1000;
-            showToast(`⏳ Блиц остывает (${rem}с) — забери +150 ⭐ в ShareHub!`);
-          } else {
-            if (wasBlitz) state.blitzCooldownUntil = Date.now() + 12000;
-            const capped = wasBlitz && state.lastBlitzDailyPoints >= state.lastBlitzDailyCap && Number(lvlRes.earnedPoints || 0) === 0;
-            showToast(
-              capped
-                ? `🛑 Дневной лимит Блица ${state.lastBlitzDailyCap} ⭐ достигнут — забери очки в ShareHub!`
-                : `🏆 Уровень ${completedLvl} пройден! +${lvlRes.earnedPoints} ⭐ в ТОП-10`
-            );
-          }
+  const completedLvl = Math.max(1, Number(state.round.workshopLevel || 1));
+  const v8PointsTable = { 1: 150, 2: 150, 3: 300, 4: 350, 5: 400 };
+  if (survived) {
+    const ptsDelta = v8PointsTable[completedLvl] || 300;
+    const nextLvl = Math.max(Number(state.profile.currentLevel || 1), completedLvl + 1);
+    state.profile.currentLevel = nextLvl;
+    state.profile.premierePoints = Math.max(0, Number(state.profile.premierePoints || 0) + ptsDelta);
+    state.round.lastPointsAwarded = ptsDelta;
+
+    awardV8LevelProgress(state.tg?.user, {
+      level: nextLvl,
+      pointsDelta: ptsDelta,
+      livesDelta: 0,
+    })
+      .then((res) => {
+        if (res?.ok) {
+          state.profile.currentLevel = Math.max(state.profile.currentLevel, res.currentLevel);
+          state.profile.premierePoints = Math.max(state.profile.premierePoints, res.premierePoints);
+          if (typeof res.lives === 'number') state.profile.lives = res.lives;
           updatePremiereBarsUI();
-          renderBlitzCooldownMicroGoal();
+          refreshHudLevelLabel();
+          // Уровень 3 (билет найден): перекрёстный пуш рефереру!
+          if (completedLvl === 3 && res.referrerTgId) {
+            notifyReferrerTicketWon({ tgUser: state.tg?.user, referrerTgId: res.referrerTgId }).catch(() => {});
+          }
         }
       })
       .catch(() => {});
+    updatePremiereBarsUI();
+    refreshHudLevelLabel();
   }
 
   if (!state.round.isDemo && state.incomingPack) {
@@ -3310,28 +3408,49 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
       Math.min(30, Math.round(AIR_DURATION_SEC - Number(state.round.airLeft || 0)))
     );
     const screamerNames = {
-      weld: 'Сварка и падающая бочка',
-      lunge: 'Бросок из темноты',
-      siren_cam: 'Сирена цеха + Кадр жертвы',
-      custom_scream: 'Свой 2-сек крик из бочки',
+      saw_scream: 'Визг циркулярки и крик',
+      lid_blast: 'Взрыв крышки в лицо',
+      basement_shriek: 'Крик из подвала',
+      tesla_siren: 'Разряд тока и сирена',
+      custom_scream: 'Свой крик из бочки',
+      weld: 'Визг циркулярки и крик',
+      lunge: 'Взрыв крышки в лицо',
+      siren_cam: 'Ток и сирена',
     };
     recordBarrelResult(state.incomingPack, {
       survived,
-      attemptsUsed: state.round.attemptsUsed || 5,
+      attemptsUsed: state.round.attemptsUsed || 4,
       timeLeft: state.round.airLeft,
       elapsedSec,
-      screamerLabel: screamerNames[state.round.screamerType] || 'Сварка и падающая бочка',
+      screamerLabel: screamerNames[state.round.screamerType] || 'Визг циркулярки и крик',
       viewerTgUser: state.tg.user,
     }).catch(() => {});
   }
 
   window.setTimeout(async () => {
-    // Победа: из бочки выпрыгивает аватарка. Проигрыш: сначала полноэкранный скример, потом карточка результата.
-    if (survived) await playRevealAvatar(1500);
+    // v8.0 Ур.1 (бочка друга): при открытии 4-й целевой бочки на весь экран бьёт СКРИМЕР друга + выскакивает ФОТО!
+    const isL1FriendReveal = survived && completedLvl === 1 && (!state.round.isDemo || Boolean(state.incomingPack));
+    if (isL1FriendReveal) {
+      await playFullScreenScreamer(1800);
+      await populateFinaleScreen({ premiereResult: null });
+      showScreen('finale');
+      return;
+    }
+
+    // v8.0 Ур.2 (найдена пустая бочка): сразу на экран упаковки друга!
+    if (survived && completedLvl === 2) {
+      await playRevealAvatar(1100);
+      showToast('🛢 Пустая бочка найдена (+150 ⭐)! Упакуй в неё друга!');
+      state.pack.forLifeRefill = false;
+      showScreen('pack');
+      return;
+    }
+
+    if (survived) await playRevealAvatar(1300);
     else await playFullScreenScreamer(1800);
     await populateFinaleScreen({ premiereResult: null });
     showScreen('finale');
-  }, survived ? 750 : 600);
+  }, survived ? 650 : 550);
 }
 
 async function finishPremiereRound(won, winRes) {
@@ -3508,8 +3627,8 @@ async function handleSealBarrelClick() {
       mode: 'friend',
       message: phrase,
       frameStyle: 'flashlight',
-      screamerType: state.pack.screamerType || 'weld',
-      zoneId: autoZone,
+      screamerType: state.pack.screamerType || 'saw_scream',
+      zoneId: 1,
       targetBarrelIndex: -1,
       senderName: state.tg?.user?.name || '',
       tgUser: state.tg.user,
@@ -3523,21 +3642,33 @@ async function handleSealBarrelClick() {
     state.profile.premiereScore = Math.max(Number(state.profile.premiereScore || 0), Number(created.premiereScore || 72));
     state.profile.temuSurgeClaimed = true;
     state.profile.packedCount = Math.max(1, Number(state.profile.packedCount || 0) + 1);
-    if (Number(state.profile.currentLevel || 1) < 2) {
-      state.profile.currentLevel = 2;
-      completeWorkshopLevel(state.tg?.user, 1, 0, 0).catch(() => {});
-    }
+
+    // v8.0: +3 жизни (9 ударов) и +200 очков за отправку бочки НОВОМУ другу!
+    const wasLifeRefill = Boolean(state.pack.forLifeRefill);
+    state.pack.forLifeRefill = false;
+    const targetNextLevel = wasLifeRefill
+      ? Math.max(3, Number(state.round?.workshopLevel || state.profile.currentLevel || 3))
+      : Math.max(3, Number(state.profile.currentLevel || 2));
+    state.profile.currentLevel = targetNextLevel;
+    const ptsBonus = wasLifeRefill ? 0 : 200;
+    state.profile.premierePoints = Math.max(0, Number(state.profile.premierePoints || 0) + ptsBonus);
+    state.profile.lives = Math.max(3, Number(state.profile.lives || 0) + 3);
+    awardV8LevelProgress(state.tg?.user, {
+      level: targetNextLevel,
+      pointsDelta: ptsBonus,
+      livesDelta: 3,
+    }).catch(() => {});
     await syncUiStage(state.tg?.user, 3).catch(() => {});
 
-    // Нативное окно выбора чата Telegram (openTelegramLink)
     openTelegramShare(
       created.shareUrl,
       `🛢 Кто-то заварил тебя в цеху «БОЧКИ»! Надень наушники — найди нужную крышку за 3 удара${phrase ? `: «${phrase}»` : ''}`
     );
-    await grantShareLifeOnceForCurrentBarrel();
+    updatePremiereBarsUI();
+    refreshHudLevelLabel();
     Haptics.success();
     applyProgressiveDisclosureUI({ skipPromoteFromSocial: true });
-    showSentScreen();
+    showSentScreen({ wasLifeRefill });
     refreshQuestUI().catch(() => {});
   } finally {
     sealBtn.disabled = false;
@@ -3545,14 +3676,18 @@ async function handleSealBarrelClick() {
   }
 }
 
-function showSentScreen() {
-  const spec = getWorkshopLevelSpec(Math.max(2, Number(state.profile?.currentLevel || 1)));
+function showSentScreen({ wasLifeRefill = false } = {}) {
+  const spec = getWorkshopLevelSpec(Math.max(3, Number(state.profile?.currentLevel || 3)));
+  const titleEl = document.getElementById('sent-title');
   const txt = document.getElementById('sent-text');
   const btnTxt = document.getElementById('btn-sent-play-text');
+  if (titleEl) titleEl.textContent = 'КРАСАВА! БОЧКА УЛЕТЕЛА ДРУГУ!';
   if (txt) {
-    txt.textContent = `Бочка со скримером улетела другу! Пока ждёшь, как он подорвётся — проходи Уровень ${spec.level} (${spec.barrelCount} ${formatBarrelWord(spec.barrelCount).toLowerCase()}) и забирай бесплатный билет в кино!`;
+    txt.textContent = wasLifeRefill
+      ? `Бочка со скримером улетела новому другу! Тебе начислено +3 жизни (9 ударов) — возвращайся на Уровень ${spec.level} (${spec.barrelCount} ${formatBarrelWord(spec.barrelCount).toLowerCase()})!`
+      : `Красава! Тебе начислено +3 жизни (9 ударов) и +200 очков! Продолжай играть — впереди Уровень ${spec.level} (${spec.barrelCount} ${formatBarrelWord(spec.barrelCount).toLowerCase()}) с бесплатным билетом в кино!`;
   }
-  if (btnTxt) btnTxt.textContent = `▶️ ИГРАТЬ УРОВЕНЬ ${spec.level}`;
+  if (btnTxt) btnTxt.textContent = `▶️ ИГРАТЬ УРОВЕНЬ ${spec.level} (${spec.barrelCount} ${formatBarrelWord(spec.barrelCount)})`;
   showScreen('sent');
 }
 
@@ -3701,17 +3836,19 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
   const packText = $('btn-pack-revenge-text');
 
   $('finale-cinema-feedback-box')?.setAttribute('hidden', '');
+  $('finale-ticket-win-box')?.setAttribute('hidden', '');
   if (cinemaBtn) cinemaBtn.disabled = false;
   if (cinemaText) cinemaText.textContent = t('btnGoCinema');
 
   const lost = premiereResult ? !premiereResult.won : !r.survived;
-  const q = getQuestState();
-  const hasSent = (state.profile?.packedCount || 0) >= 1 || (q.packedCount || 0) >= 1;
-  const spec = getWorkshopLevelSpec(Math.max(1, Number(state.profile?.currentLevel || 1)));
+  const completedLvl = Math.max(1, Number(r.workshopLevel || 1));
+  const totalPts = Math.max(0, Math.round(Number(state.profile?.premierePoints || 0)));
+  const nextLvl = Math.max(2, Number(state.profile?.currentLevel || completedLvl + 1));
+  const spec = getWorkshopLevelSpec(nextLvl);
 
-  if (subtag) subtag.textContent = premiereResult ? t('premiereRaceTag') : r.isDemo ? t('revealDemoFrom') : r.senderLabel || t('revealFromFriend');
+  if (subtag) subtag.textContent = premiereResult ? t('premiereRaceTag') : r.isDemo ? `УРОВЕНЬ ${completedLvl} · ⭐ ${totalPts} / 1 500` : r.senderLabel || t('revealFromFriend');
 
-  // Аватарка: при победе — спасённый, при проигрыше — твоя в рамке «Жертва цеха»
+  // Аватарка: при победе — фото из бочки, при проигрыше — твоя в рамке «Жертва цеха»
   let avatarSrc = r.portraitDataUrl || DEMO_PORTRAITS[0];
   if (premiereResult) avatarSrc = r.portraitDataUrl || createGoldenTicketPortraitDataUrl('');
   else if (lost) avatarSrc = state.tg?.user?.photoUrl || r.portraitDataUrl || DEMO_PORTRAITS[0];
@@ -3724,14 +3861,20 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
       stampEl.textContent = premiereResult.won
         ? t('nightShiftWonTitle')
         : `${t('premiereBarLabel')}: ${Number(state.profile.premiereScore || 0).toFixed(1)} / 100`;
+    } else if (!lost && completedLvl === 3) {
+      stampEl.textContent = '🎟 БИЛЕТ В КИНО НАЙДЕН! (+300 ⭐)';
+    } else if (!lost && totalPts >= 1500) {
+      stampEl.textContent = `⚔️ ДУЭЛИ ОТКРЫТЫ! (${totalPts} ⭐)`;
     } else {
-      stampEl.textContent = lost ? t('finaleFailedTitle') : t('finaleSurvivedTitle', { n: Math.max(1, r.attemptsUsed || 1) });
+      stampEl.textContent = lost ? t('finaleFailedTitle') : `${t('finaleSurvivedTitle', { n: Math.max(1, r.attemptsUsed || 1) })} (+${r.lastPointsAwarded || 150} ⭐)`;
     }
   }
 
   if (msgEl) {
     if (premiereResult) {
       msgEl.textContent = premiereResult.won ? `ПРОМОКОД ЗАКРЫТОЙ ПРЕМЬЕРЫ: ${premiereResult.premiereCode}` : t('nightShiftEmptyMsg');
+    } else if (!lost && completedLvl === 1) {
+      msgEl.textContent = '«Идём со мной в кино 17 декабря?»';
     } else {
       msgEl.textContent = `«${r.isDemo ? pickNextBarrelHeavenQuote() : r.message || pickNextBarrelHeavenQuote()}»`;
     }
@@ -3742,26 +3885,92 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
     applyProgressiveDisclosureUI({ forceStage: 2 });
   }
 
-  // Строго две кнопки (после отправки бочки — одна главная)
+  // v8.0 Маршрутизация кнопок строго по воронке Ур.1 -> Ур.2 -> Ур.3 -> Ур.4 -> Ур.5 -> Дуэли (1500 ⭐)
   if (premiereResult) {
     state.finaleMode = 'premiere';
-    if (nextEl) nextEl.textContent = 'Копи очки и жизни — впереди розыгрыш билетов на премьеру 17 декабря.';
-    if (packText) packText.textContent = '🏆 ИГРАТЬ ДАЛЬШЕ: ГОНКА ЗА ПРЕМЬЕРОЙ';
+    if (nextEl) nextEl.textContent = 'Копи очки и жизни — впереди розыгрыш билетов на закрытую премьеру 17 декабря.';
+    if (packText) packText.textContent = '⚔️ ОТКРЫТЬ ДУЭЛИ ЗА ПРЕМЬЕРУ';
     cinemaBtn?.setAttribute('hidden', '');
-  } else if (hasSent) {
+  } else if (!lost && completedLvl === 1) {
+    // Уровень 1: 2 кнопки ответа другу -> пуш в TG -> сразу Раунд 2 (6 бочек)
+    state.finaleMode = 'l1_reply_yes';
+    if (nextEl) nextEl.textContent = 'Выбери ответ другу — сообщение улетит ему в Telegram, и сразу начнётся Уровень 2 (6 бочек)!';
+    if (packText) packText.textContent = '🍿 ДА, ИДЁМ!';
+    if (cinemaText) cinemaText.textContent = '🎟 ЖДУ ОТ ТЕБЯ БИЛЕТ!';
+    cinemaBtn?.removeAttribute('hidden');
+  } else if (!lost && totalPts >= 1500) {
+    // Набрано >= 1500 очков -> торжественно открываем Дуэли!
+    state.finaleMode = 'duels_unlocked';
+    if (nextEl) nextEl.textContent = `У тебя ${totalPts} ⭐ (порог 1 500 пройден)! Врывайся в Дуэли за Банк Закрытой Премьеры 17 декабря!`;
+    if (packText) packText.textContent = '⚔️ УРОВЕНЬ 6: В ДУЭЛИ ЗА ЗАКРЫТЫЙ ПОКАЗ!';
+    cinemaBtn?.setAttribute('hidden', '');
+  } else if (!lost && completedLvl === 3) {
+    // Уровень 3: найден билет другу + список друзей из social_connections + добор до 1500
     state.finaleMode = 'next';
-    if (nextEl) nextEl.textContent = 'Бочка уже у друга. Играй дальше — впереди бесплатный билет в кино.';
-    if (packText) packText.textContent = `🔥 ИГРАТЬ УРОВЕНЬ ${spec.level} (${spec.barrelCount} ${formatBarrelWord(spec.barrelCount)} · БОРЬБА ЗА БИЛЕТ)`;
+    if (nextEl) nextEl.textContent = `До Суперигры и Дуэлей осталось чуть-чуть (${totalPts} / 1 500 ⭐)! Дальше Уровень 4 (10 бочек · +350 ⭐).`;
+    if (packText) packText.textContent = '🔥 ИГРАТЬ УРОВЕНЬ 4 (10 БОЧЕК · +350 ⭐)';
+    cinemaBtn?.setAttribute('hidden', '');
+    await populateLevel3TicketFriendsBox();
+  } else if (!lost) {
+    state.finaleMode = 'next';
+    const rem = Math.max(0, 1500 - totalPts);
+    if (nextEl) nextEl.textContent = `До Суперигры и Дуэлей осталось ${rem} ⭐ (${totalPts} / 1 500 ⭐) — проходка на закрытую премьеру 17 декабря!`;
+    if (packText) packText.textContent = `🔥 ИГРАТЬ УРОВЕНЬ ${spec.level} (${spec.barrelCount} ${formatBarrelWord(spec.barrelCount)} · +${spec.pointsReward || 350} ⭐)`;
     cinemaBtn?.setAttribute('hidden', '');
   } else {
-    state.finaleMode = 'pack';
-    if (nextEl) nextEl.textContent = 'Следующий шаг: закатай друга в бочку и отправь ему скример — откроется Уровень 2.';
-    if (packText) packText.textContent = '🛢 УРОВЕНЬ 2: ЗАКАТАТЬ ДРУГА (ОТПРАВИТЬ СКРИМЕР)';
-    cinemaBtn?.removeAttribute('hidden');
+    state.finaleMode = 'retry';
+    if (nextEl) nextEl.textContent = 'Попробуй ещё раз — слушай бочки удержанием пальца, чтобы не попасть на обманку!';
+    if (packText) packText.textContent = `🔄 ПРОДОЛЖИТЬ УРОВЕНЬ ${completedLvl}`;
+    cinemaBtn?.setAttribute('hidden', '');
   }
-  packBtn?.classList.toggle('btn-temu-pulse', state.finaleMode === 'pack');
+  packBtn?.classList.toggle('btn-temu-pulse', state.finaleMode === 'duels_unlocked' || state.finaleMode === 'l1_reply_yes');
 
   await refreshQuestUI();
+}
+
+async function populateLevel3TicketFriendsBox() {
+  const box = document.getElementById('finale-ticket-win-box');
+  const listEl = document.getElementById('ticket-friends-list');
+  if (!box || !listEl) return;
+  box.removeAttribute('hidden');
+  listEl.innerHTML = '<div class="mono-tag">Загружаем друзей, которым ты уже отправлял игру…</div>';
+
+  const friends = await fetchMyGameFriends(state.tg?.user).catch(() => []);
+  if (!friends.length) {
+    listEl.innerHTML = '<div class="mono-tag" style="opacity:.75;">Пока никто из друзей не открыл твою бочку — отправь билет новому другу кнопкой ниже!</div>';
+    return;
+  }
+
+  listEl.innerHTML = '';
+  friends.slice(0, 6).forEach((fr) => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'ticket-friend-row';
+    const label = document.createElement('span');
+    label.textContent = `👤 ${fr.receiver_name || 'Друг'}${fr.receiver_username ? ' @' + fr.receiver_username : ''}`;
+    const cta = document.createElement('strong');
+    cta.textContent = '🎟 ОТПРАВИТЬ В ЛС';
+    row.append(label, cta);
+    row.addEventListener('click', async () => {
+      row.disabled = true;
+      cta.textContent = 'ОТПРАВКА…';
+      const pass = await createGiftTicketPass({
+        tgUser: state.tg?.user,
+        senderName: state.tg?.user?.name || 'Друг',
+        recipientName: fr.receiver_name || 'Друг',
+      });
+      if (pass?.ok) {
+        await sendDirectGiftTicketToFriend({ tgUser: state.tg?.user, friend: fr, giftId: pass.giftId });
+        cta.textContent = '✓ ОТПРАВЛЕНО!';
+        showToast(`🎟 Виртуальный билет улетел ${fr.receiver_name || 'другу'} в @bochka_film_bot!`);
+        Haptics.success();
+      } else {
+        row.disabled = false;
+        cta.textContent = '🎟 ОТПРАВИТЬ В ЛС';
+      }
+    });
+    listEl.appendChild(row);
+  });
 }
 
 function buildSpoilerFreeReport() {
@@ -4599,11 +4808,27 @@ function scheduleYtAutoplayRetry(player) {
     try {
       const pState = typeof player?.getPlayerState === 'function' ? player.getPlayerState() : -1;
       if (pState !== 1 && pState !== 3) {
-        setTrailerMuted(true);
-        player.playVideo?.();
+        // v8.0: жест тапа уже был -> запускаем со звуком (если YT заблокирован — локальный MP4 со звуком!)
+        const vid = document.getElementById('trailer-video');
+        if (vid && ENV.trailerMp4) {
+          state.trailer.usingYtFallback = false;
+          vid.src = ENV.trailerMp4;
+          vid.muted = false;
+          vid.volume = 1.0;
+          vid.removeAttribute('hidden');
+          document.getElementById('trailer-yt-frame')?.setAttribute('hidden', '');
+          vid.play?.().catch(() => {
+            player.unMute?.();
+            player.playVideo?.();
+          });
+        } else {
+          player.unMute?.();
+          player.setVolume?.(100);
+          player.playVideo?.();
+        }
       }
     } catch { /* ignore */ }
-  }, 600);
+  }, 850);
 }
 
 function startYtPlaybackNow(player, { forRescue = false } = {}) {
@@ -5520,10 +5745,6 @@ function bindUIEvents() {
     showScreen('modeA');
   });
 
-  document.getElementById('btn-hud-mic-blow')?.addEventListener('click', () => {
-    triggerWorkshopMicBlow();
-  });
-
   document.getElementById('btn-hud-pack')?.addEventListener('click', () => {
     stopAirTimer();
     state.round.running = false;
@@ -5827,20 +6048,63 @@ function bindUIEvents() {
     });
   });
 
+  document.querySelectorAll('[data-preview-screamer]').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const key = btn.getAttribute('data-preview-screamer') || 'saw_scream';
+      await audio.playScreamerPreview(key);
+      Haptics.heavy();
+    });
+  });
+
   document.querySelectorAll('[data-pack-screamer]').forEach((chip) => {
     chip.addEventListener('click', async () => {
       document.querySelectorAll('[data-pack-screamer]').forEach((c) => c.classList.remove('is-active'));
       chip.classList.add('is-active');
-      const nextScreamer = chip.getAttribute('data-pack-screamer') || 'weld';
+      const nextScreamer = chip.getAttribute('data-pack-screamer') || 'saw_scream';
       state.pack.screamerType = nextScreamer;
       state.round.screamerType = nextScreamer;
       document.getElementById('voice-pack-box')?.toggleAttribute('hidden', nextScreamer !== 'custom_scream');
-      try { await audio.unlock(true); } catch { /* ignore */ }
-      if (nextScreamer === 'weld') audio.playMiniScreamer(0);
-      else if (nextScreamer === 'lunge') audio.playMiniScreamer(1);
-      else if (nextScreamer === 'siren_cam') audio.playFactorySirenKlaxon?.();
+      if (nextScreamer !== 'custom_scream') {
+        await audio.playScreamerPreview(nextScreamer);
+      }
       Haptics.light();
     });
+  });
+
+  document.querySelectorAll('[data-caption]').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('[data-caption]').forEach((c) => c.classList.remove('is-active'));
+      chip.classList.add('is-active');
+      const text = chip.getAttribute('data-caption') || '';
+      const inp = document.getElementById('input-custom-phrase');
+      const cnt = document.getElementById('phrase-counter');
+      if (inp) inp.value = text.slice(0, 45);
+      if (cnt) cnt.textContent = `${(inp?.value || '').length}/45`;
+      state.pack.customEdited = true;
+      Haptics.light();
+    });
+  });
+
+  document.getElementById('btn-ticket-send-new')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-ticket-send-new');
+    if (btn) btn.disabled = true;
+    try {
+      const pass = await createGiftTicketPass({
+        tgUser: state.tg?.user,
+        senderName: state.tg?.user?.name || 'Друг',
+        recipientName: 'Друг',
+      });
+      const url = pass?.shareUrl || `https://t.me/bochka_film_bot?startapp=ref_${encodeURIComponent(getViewerUid(state.tg?.user))}`;
+      openTelegramShare(
+        url,
+        '🎟 Выиграл для тебя бесплатный виртуальный билет в кино на «БОЧКУ» (17 декабря) + бочка со скримером внутри! Забирай:'
+      );
+      showToast('🚀 Ссылка с билетом, игрой и скримером открыта в Telegram!');
+      Haptics.success();
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   });
 
   document.getElementById('btn-upsell-invite-pair')?.addEventListener('click', () => {
@@ -5942,6 +6206,16 @@ function bindUIEvents() {
   });
 
   document.getElementById('btn-cinema-reply')?.addEventListener('click', async () => {
+    if (state.finaleMode === 'l1_reply_yes') {
+      // Уровень 1 Кнопка 2: «Жду от тебя билет!» -> пуш другу -> сразу запуск Раунда 2 (6 бочек)
+      await sendLevel1FriendReply({ pack: state.incomingPack, replyType: 'wait_ticket', viewerTgUser: state.tg?.user });
+      showToast('🎟 Другу ушло сообщение: «Жду от тебя билет!» · Погнали на Уровень 2!');
+      Haptics.success();
+      state.profile.currentLevel = Math.max(2, Number(state.profile.currentLevel || 1));
+      await audio.unlock(true);
+      startDemoRound();
+      return;
+    }
     await sendCinemaInviteReply(state.incomingPack, state.tg?.user);
     const feedbackBox = document.getElementById('finale-cinema-feedback-box');
     const feedbackText = document.getElementById('finale-cinema-feedback-text');
@@ -5977,18 +6251,26 @@ function bindUIEvents() {
   });
 
   document.getElementById('btn-pack-revenge')?.addEventListener('click', async () => {
-    if (state.finaleMode === 'premiere') {
-      startPremiereRaceRound();
-    } else if (state.finaleMode === 'next') {
+    if (state.finaleMode === 'l1_reply_yes') {
+      // Уровень 1 Кнопка 1: «Да, идём!» -> пуш другу -> сразу запуск Раунда 2 (6 бочек)
+      await sendLevel1FriendReply({ pack: state.incomingPack, replyType: 'cinema_accept', viewerTgUser: state.tg?.user });
+      showToast('🍿 Другу ушло сообщение: «Согласен идти в кино 17 декабря!» · Уровень 2!');
+      Haptics.success();
+      state.profile.currentLevel = Math.max(2, Number(state.profile.currentLevel || 1));
       await audio.unlock(true);
-      if (state.incomingPack && !state.round.isDemo) {
-        startDemoRound();
-      } else {
-        startDemoRound();
-      }
-    } else {
-      showScreen('pack');
+      startDemoRound();
+      return;
     }
+    if (state.finaleMode === 'duels_unlocked' || state.finaleMode === 'premiere') {
+      await openDuelTable();
+      return;
+    }
+    if (state.finaleMode === 'next' || state.finaleMode === 'retry') {
+      await audio.unlock(true);
+      startDemoRound();
+      return;
+    }
+    showScreen('pack');
   });
 
   document.getElementById('btn-sent-play')?.addEventListener('click', async () => {
@@ -6090,9 +6372,10 @@ function bindUIEvents() {
     openShareHubModal('trailer');
   });
 
-  // Синхронный стол 2–3 игроков «НА СЧЁТ ТРИ!»
+  // Синхронный стол 2–3 игроков «НА СЧЁТ ТРИ!» + режим «В одного (Соло)»
   document.getElementById('btn-duel-close')?.addEventListener('click', () => duelCtrl?.leaveRoom(true));
   document.getElementById('btn-duel-add-bot')?.addEventListener('click', () => duelCtrl?.addSandboxBot());
+  document.getElementById('btn-duel-play-solo')?.addEventListener('click', () => duelCtrl?.startSoloDuel());
   document.getElementById('btn-duel-invite-third')?.addEventListener('click', () => shareCurrentDuelRoom());
   document.getElementById('btn-duel-start-go')?.addEventListener('click', () => {
     duelCtrl?.hostInitiateRound({ isFreeRerack: false });

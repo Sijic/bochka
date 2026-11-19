@@ -1,4 +1,4 @@
-const MAX_VOICE_MS = 5000;
+const MAX_VOICE_MS = 3000;
 const IDB_NAME = 'bochka_v2_media_idb';
 const IDB_STORE = 'media';
 

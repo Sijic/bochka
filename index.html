@@ -252,22 +252,25 @@
        ЭКРАН 3: ГЕЙМПЛЕЙ ЦЕХА (УРОВНИ 3..10 БОЧЕК + БЛИЦ, ВОЗДУХ, ШКАЛА 0/100)
        ==================================================================== -->
   <section class="screen screen-hud" id="screen-workshop" hidden>
-    <!-- v7.0: одна тонкая полупрозрачная верхняя полоска (до 48px): уровень · попытки · кислород -->
+    <!-- v8.0: тонкая верхняя полоска: Уровень | Жизни: X | Удары: [1][2][3] | ⭐/1500 | O₂ -->
     <div class="hud-slim" id="hud-slim">
       <span class="hud-slim-level" id="hud-mode-tag">УР. 1 · 4 БОЧКИ</span>
       <div class="hud-slim-center">
-        <div class="attempts-squares" id="attempts-squares" aria-label="Попытки">
+        <span class="hud-lives-pill" id="hud-lives-pill" title="1 жизнь = 3 удара ломом">❤️ <strong id="hud-lives-val">1</strong></span>
+        <div class="attempts-squares" id="attempts-squares" aria-label="Удары">
           <span class="attempt-sq is-live"></span>
           <span class="attempt-sq is-live"></span>
           <span class="attempt-sq is-live"></span>
         </div>
+        <span class="hud-pts-pill" id="hud-pts-pill">⭐ <strong id="hud-pts-val">0</strong>/1500</span>
         <div class="premiere-lives-big" id="hud-premiere-lives-big" hidden>
           <span>❤️ ×</span><strong id="hud-lives-big-num">3</strong>
         </div>
       </div>
-      <span class="hud-slim-o2"><strong id="air-seconds">30.0</strong> <small>СЕК O₂</small></span>
+      <span class="hud-slim-o2"><strong id="air-seconds">30.0</strong> <small>O₂</small></span>
       <div class="hud-slim-airbar"><div class="air-bar-fill" id="air-bar-fill"></div></div>
     </div>
+    <div class="hud-task-banner" id="hud-task-banner">Слушай бочки (удерживай палец) и найди живого друга!</div>
     <h2 class="sr-only" id="hud-urgent-title"></h2>
 
     <!-- Баннер живого наблюдения (?startapp=watch_<barrelId>) -->
@@ -283,18 +286,8 @@
       </div>
     </div>
 
-    <!-- Всплывающие очки при попадании в Гонке за Премьерой (+45 / +0.4) -->
+    <!-- Всплывающие очки при попадании -->
     <div class="floating-score-layer" id="floating-score-layer" aria-hidden="true"></div>
-
-    <!-- Интерактивный микрофонный продув на Уровне 4 (Пресс-цех) -->
-    <div class="hud-mic-blow-box" id="hud-mic-blow-box" hidden>
-      <button type="button" class="btn-secondary btn-compact hud-mic-blow-btn" id="btn-hud-mic-blow" data-i18n="micBlowBtn">
-        💨 ПОДУТЬ В МИКРОФОН (СДУТЬ ПАР С НОМЕРОВ +4 СЕК O₂)
-      </button>
-      <div class="mic-blow-meter-track">
-        <div class="mic-blow-meter-fill" id="hud-mic-blow-fill"></div>
-      </div>
-    </div>
 
     <div class="barrel-reticle" id="barrel-reticle" hidden>
       <span class="reticle-id" id="reticle-id">ПАРТИЯ №01</span>
@@ -305,7 +298,7 @@
 
     <!-- Одна компактная подсказка внизу -->
     <p class="hud-hint-line" id="hud-hint-text" data-i18n="hudHintMobile">
-      Удерживай палец — слушать стук · Короткий тап — удар ломом
+      Удерживай палец — слушать звук внутри · Короткий тап — удар ломом
     </p>
   </section>
 
@@ -353,12 +346,12 @@
           <span id="ocean-typewriter"></span><span class="typewriter-caret" id="ocean-caret">|</span>
         </p>
 
-        <!-- Интерактивная мини-игра: настучать максимум ударов за 10 секунд ради жизней и билета для друга -->
+        <!-- Интерактивная мини-игра: Бочка с Тилем (12 сек быстрых тапов — зарядка энергии 0% -> 100%) -->
         <div class="ocean-tapper-hud" id="ocean-tapper-hud">
           <div class="ocean-tapper-stats">
-            <span>⏱ ВРЕМЯ: <strong id="ocean-tap-timer">10.0</strong> СЕК</span>
-            <span>👊 УДАРОВ: <strong id="ocean-tap-count">0</strong></span>
-            <span class="ocean-tier-hint">20+ → +4 ❤️ · 40+ → 🎟 БИЛЕТ ДРУГУ!</span>
+            <span>⏱ ВРЕМЯ: <strong id="ocean-tap-timer">12.0</strong> СЕК</span>
+            <span>⚡ ЭНЕРГИЯ: <strong id="ocean-tap-count">0</strong>%</span>
+            <span class="ocean-tier-hint">ТАПАЙ ПО БОЧКЕ ТИЛЯ → 100% И НАЗАД В БОЙ!</span>
           </div>
           <div class="ocean-tapper-bar-track">
             <div class="ocean-tapper-bar-fill" id="ocean-tap-fill"></div>
@@ -511,8 +504,8 @@
     <div class="panel-sheet pack-clean">
       <div class="sheet-header">
         <div>
-          <span class="mono-tag">ЗАКАТАЙ ДРУГА В БОЧКУ</span>
-          <h2 class="section-title">ВЫБЕРИ ЕМУ СКРИМЕР</h2>
+          <span class="mono-tag">ТЫ НАШЁЛ ПУСТУЮ БОЧКУ!</span>
+          <h2 class="section-title">УПАКУЙ В НЕЁ ДРУГА</h2>
         </div>
         <button type="button" class="icon-close" id="btn-close-pack" aria-label="Назад">✕</button>
       </div>
@@ -531,31 +524,38 @@
           <button type="button" class="btn-ghost" id="btn-tg-avatar" hidden><span data-i18n="useTgAvatar">АВАТАР TG</span></button>
         </div>
       </div>
-      <span class="sr-only" id="pack-size-tag">WEBP</span>
+      <span class="sr-only" id="pack-size-tag">JPEG</span>
 
       <div class="screamer-cards" id="pack-screamer-picker">
-        <button type="button" class="screamer-card is-active" data-pack-screamer="weld">
-          <span class="sc-ico">⚡</span><b>Сварка</b><small>вспышка дуги и падающая бочка</small>
+        <button type="button" class="screamer-card is-active" data-pack-screamer="saw_scream">
+          <span class="sc-preview-btn" data-preview-screamer="saw_scream" title="Прослушать">🔊</span>
+          <span class="sc-ico">🪚</span><b>Визг циркулярки</b><small>режущий визг и крик</small>
         </button>
-        <button type="button" class="screamer-card" data-pack-screamer="lunge">
-          <span class="sc-ico">🔦</span><b>Бросок из темноты</b><small>резкий выпад в луче фонаря</small>
+        <button type="button" class="screamer-card" data-pack-screamer="lid_blast">
+          <span class="sc-preview-btn" data-preview-screamer="lid_blast" title="Прослушать">🔊</span>
+          <span class="sc-ico">💥</span><b>Взрыв крышки</b><small>хлопок и крышка в лицо</small>
         </button>
-        <button type="button" class="screamer-card" data-pack-screamer="siren_cam">
-          <span class="sc-ico">🚨</span><b>Сирена + Жертва</b><small>ревун цеха и кадр жертвы</small>
+        <button type="button" class="screamer-card" data-pack-screamer="basement_shriek">
+          <span class="sc-preview-btn" data-preview-screamer="basement_shriek" title="Прослушать">🔊</span>
+          <span class="sc-ico">😱</span><b>Крик из подвала</b><small>красный стробоскоп</small>
+        </button>
+        <button type="button" class="screamer-card" data-pack-screamer="tesla_siren">
+          <span class="sc-preview-btn" data-preview-screamer="tesla_siren" title="Прослушать">🔊</span>
+          <span class="sc-ico">⚡</span><b>Ток и сирена</b><small>высоковольтный ревун</small>
         </button>
         <button type="button" class="screamer-card" data-pack-screamer="custom_scream">
-          <span class="sc-ico">🎙</span><b>Свой крик</b><small>запиши 2-сек крик сам</small>
+          <span class="sc-ico">🎙</span><b>Записать свой крик</b><small>голос до 3 сек в бочке</small>
         </button>
       </div>
 
       <div class="voice-pack-box" id="voice-pack-box" hidden>
-        <div class="voice-teleprompter-line" id="voice-teleprompter-line">Крикни коротко: «Серёга, выпусти!»</div>
+        <div class="voice-teleprompter-line" id="voice-teleprompter-line">Крикни коротко (до 3 сек): «Выпусти меня!»</div>
         <button type="button" class="btn-secondary btn-full voice-rec-btn" id="btn-record-voice">
           <span class="rec-dot" id="voice-rec-dot"></span>
-          <span id="btn-record-voice-text" data-i18n="btnRecordVoice">ЗАПИСАТЬ КРИК (ДО 5 СЕК)</span>
+          <span id="btn-record-voice-text" data-i18n="btnRecordVoice">🎙 ЗАПИСАТЬ СВОЙ КРИК (ДО 3 СЕК)</span>
         </button>
         <div class="voice-rec-bar" id="voice-rec-bar" hidden>
-          <div class="voice-rec-meta"><span data-i18n="voiceRecProgress">ИДЁТ ЗАПИСЬ:</span> <strong id="voice-rec-timer">5.0s</strong></div>
+          <div class="voice-rec-meta"><span data-i18n="voiceRecProgress">ИДЁТ ЗАПИСЬ:</span> <strong id="voice-rec-timer">3.0s</strong></div>
           <div class="voice-meter-track"><div class="voice-meter-fill" id="voice-meter-fill"></div></div>
         </div>
         <div class="voice-ready-row" id="voice-ready-row" hidden>
@@ -569,15 +569,21 @@
         <input type="checkbox" id="chk-voice-barrel-filter" checked hidden />
       </div>
 
+      <div class="pack-quick-captions" id="pack-quick-captions">
+        <button type="button" class="pack-caption-chip is-active" data-caption="Ты следующий! Выбирайся!">Ты следующий!</button>
+        <button type="button" class="pack-caption-chip" data-caption="Идём на «Бочку» 17 декабря?">Идём 17 декабря?</button>
+        <button type="button" class="pack-caption-chip" data-caption="Проверь свои нервы в цеху!">Проверь нервы!</button>
+      </div>
+
       <div class="input-row pack-phrase-row">
         <input type="text" id="input-custom-phrase" maxlength="45" class="industrial-input"
-               data-i18n-placeholder="customPhrasePlaceholder" placeholder="Подпись на дне бочки (необязательно)" />
-        <span class="char-counter" id="phrase-counter">0/45</span>
+               data-i18n-placeholder="customPhrasePlaceholder" placeholder="Своя подпись на дне бочки" value="Ты следующий! Выбирайся!" />
+        <span class="char-counter" id="phrase-counter">24/45</span>
       </div>
 
       <button type="button" class="btn-primary btn-full pack-send-btn" id="btn-seal-barrel">
-        <span id="btn-seal-text" data-i18n="btnSealBarrel">🚀 ОТПРАВИТЬ БОЧКУ ДРУГУ В TELEGRAM</span>
-        <small class="btn-sub-line">+1 ❤️ и откроется следующий уровень</small>
+        <span id="btn-seal-text" data-i18n="btnSealBarrel">🚀 ОТПРАВИТЬ ДРУГУ В TELEGRAM</span>
+        <small class="btn-sub-line">+3 ❤️ (9 ударов) и +200 ⭐ · откроется Уровень 3</small>
       </button>
     </div>
   </section>
@@ -615,6 +621,18 @@
       </blockquote>
 
       <p class="finale-next-step" id="finale-next-step"></p>
+
+      <!-- v8.0: Экран Уровня 3 — найден бесплатный билет другу (выбор из списка друзей или новому другу) -->
+      <div class="golden-winner-box" id="finale-ticket-win-box" hidden>
+        <span class="mono-tag accent-tag">🎟 БЕСПЛАТНЫЙ БИЛЕТ В КИНО ДЛЯ ДРУГА</span>
+        <p class="golden-winner-contact" style="margin:4px 0 6px;">
+          Ты нашёл бесплатный билет в кино! По закону цеха этот билет — только для твоего друга. Кому отправим?
+        </p>
+        <div class="ticket-friends-list" id="ticket-friends-list"></div>
+        <button type="button" class="btn-primary btn-full" id="btn-ticket-send-new">
+          🚀 ОТПРАВИТЬ НОВОМУ ДРУГУ (БИЛЕТ + ИГРА + СКРИМЕР)
+        </button>
+      </div>
 
       <div class="finale-cinema-feedback" id="finale-cinema-feedback-box" hidden>
         <p id="finale-cinema-feedback-text">Отлично! Раз идёшь — зови друзей в цех, на премьере будет жарко!</p>
@@ -759,9 +777,10 @@
   <div class="modal-backdrop" id="modal-lives-recovery" hidden>
     <div class="modal-card lives-recovery-card">
       <span class="mono-tag danger-tag">ЖИЗНИ КОНЧИЛИСЬ</span>
-      <h3 class="lives-recovery-title">Верни +1 ❤️ за одно действие</h3>
+      <h3 class="lives-recovery-title" id="lives-recovery-title">Верни +3 ❤️ (9 ударов) и продолжай!</h3>
       <p class="lives-recovery-progress" id="lives-recovery-progress"></p>
-      <button type="button" class="btn-primary btn-full" data-life-action="kp">🎬 «Буду смотреть» на Кинопоиске</button>
+      <button type="button" class="btn-primary btn-full" id="btn-life-rec-kp" data-life-action="kp">🎬 «Буду смотреть» на Кинопоиске (+3 ❤️)</button>
+      <button type="button" class="btn-primary btn-full" id="btn-life-rec-friend" data-life-action="pack_friend" hidden>🛢 Отправить скример НОВОМУ другу (+3 ❤️)</button>
       <button type="button" class="btn-secondary btn-full" data-life-action="sub">🔔 Подписаться на канал «КиноЦех»</button>
       <button type="button" class="btn-secondary btn-full" data-life-action="like">👍 Поставить лайк трейлеру</button>
       <button type="button" class="btn-ghost btn-full" id="btn-lives-recovery-close">Позже</button>
@@ -857,19 +876,19 @@
         </button>
       </div>
 
-      <!-- ШАГ 1: 4-я победная попытка за просмотр официального трейлера -->
+      <!-- ШАГ 1: Просмотр официального трейлера со звуком -> +3 жизни (9 ударов) -->
       <div id="rescue-step-2">
-        <span class="mono-tag accent-tag" data-i18n="rescueStep2Tag">3 ПОПЫТКИ МИМО // ОСТАЛАСЬ 4-Я БОЧКА</span>
+        <span class="mono-tag accent-tag" data-i18n="rescueStep2Tag">3 УДАРА МИМО // +3 ЖИЗНИ ЗА ТРЕЙЛЕР</span>
         <h3 class="section-title rescue-title" data-i18n="rescueStep2Title">
-          ОСТАЛАСЬ ПОСЛЕДНЯЯ 4-Я БОЧКА — ВНУТРИ СТУЧИТ ЧЕЛОВЕК!
+          ПОСМОТРИ ТРЕЙЛЕР И ПОЛУЧИ +3 ЖИЗНИ (ПО 3 УДАРА В КАЖДОЙ)
         </h3>
         <p class="modal-hint" data-i18n="rescueStep2Desc">
-          Три крышки сорваны впустую! Посмотри официальный трейлер фильма «Бочка», чтобы получить финальный удар ломом и открыть оставшуюся 4-ю бочку!
+          Посмотри трейлер фильма «Бочка» со звуком — сразу начислим +3 жизни (9 ударов ломом), чтобы добить 4-ю бочку и забрать +150 очков!
         </p>
 
         <button type="button" class="btn-primary btn-full" id="btn-rescue-watch-trailer">
           <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>
-          <span data-i18n="btnRescueWatchTrailer">+1 ПОПЫТКА: ПОСМОТРЕТЬ ТРЕЙЛЕР И СПАСТИ ЧЕЛОВЕКА</span>
+          <span data-i18n="btnRescueWatchTrailer">▶ СМОТРЕТЬ ТРЕЙЛЕР СО ЗВУКОМ (+3 ЖИЗНИ)</span>
         </button>
       </div>
     </div>
@@ -1047,17 +1066,20 @@
       </div>
 
       <div class="duel-pot-banner" id="duel-pot-banner">
-        ⚔️ БАНК ДУЭЛИ: 2 ❤️ (ставки по 1 ❤️ · Победитель забирает всё + 200 ⭐ в ТОП-10)
+        🏆 БАНК ЗАКРЫТОЙ ПРЕМЬЕРЫ: ×3 ОЧКИ РЕЙТИНГА (17 ДЕКАБРЯ) + ШАНС БИЛЕТА СО СТОЛА
       </div>
 
       <div class="duel-slots-row" id="duel-slots-row"></div>
 
       <div class="duel-lobby-actions">
+        <button type="button" class="btn-primary btn-full" id="btn-duel-play-solo">
+          ⚡ ИГРАТЬ В ОДНОГО (СОЛО · БАНК ПРЕМЬЕРЫ ×3)
+        </button>
         <button type="button" class="btn-secondary btn-full" id="btn-duel-invite-third">
-          ➕ ПОЗВАТЬ 3-ГО КЕНТА (ЦЕХ ДОБАВИТ +450 ⭐ И ЗОЛОТУЮ БОЧКУ!)
+          ➕ ПОЗВАТЬ ДРУЗЕЙ В КОМНАТУ (ДО 3 ИГРОКОВ)
         </button>
         <button type="button" class="btn-primary btn-full" id="btn-duel-start-go">
-          🔥 НА СЧЁТ ТРИ! СТАРТ (СТАВКА 1 ❤️)
+          🔥 НА СЧЁТ ТРИ! СТАРТ С ДРУЗЬЯМИ
         </button>
       </div>
     </div>

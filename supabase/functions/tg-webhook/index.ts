@@ -359,7 +359,7 @@ Deno.serve(async (req: Request) => {
         chat_id: body.senderTgId,
         parse_mode: "HTML",
         text:
-          `🍿 <b>Твой друг ${opener} прошёл игру и подтвердил, что идёт в кино 17 декабря!</b>\n` +
+          `🍿 <b>Твой друг ${opener} открыл твою бочку и согласен идти с тобой в кино 17 декабря!</b>\n` +
           `Зови остальных в цех и занимайте соседние места на премьеру «БОЧКИ»!`,
         reply_markup: {
           inline_keyboard: [
@@ -371,7 +371,7 @@ Deno.serve(async (req: Request) => {
       return jsonResp({ ok: true });
     }
 
-    if (action === "reaction_ask_ticket" && body.senderTgId) {
+    if ((action === "reaction_ask_ticket" || action === "wait_ticket") && body.senderTgId) {
       const { data: sUser } = await adminDb
         .from("users")
         .select("tg_user_id")
@@ -385,12 +385,54 @@ Deno.serve(async (req: Request) => {
         chat_id: body.senderTgId,
         parse_mode: "HTML",
         text:
-          `🎟 <b>ДРУГ ПРОСИТ ЛИШНИЙ БИЛЕТ!</b>\n` +
-          `<b>${opener}</b> вытащил тебя из бочки и просит подогнать ему выигранный билет в кино!\n` +
-          `<i>За передачу билета другу ты получаешь +4 ❤️ жизней и +3500 ⭐ очков в ТОП-10 Премьеры!</i>`,
+          `🎟 <b>Твой друг ${opener} открыл бочку и ждёт от тебя билет!</b>\n` +
+          `Играй дальше, чтобы выиграть бесплатный билет для него!`,
         reply_markup: {
           inline_keyboard: [
             [{ text: "🎁 Подарить / Выбить билет другу", url: `${MINI_APP_LINK}?startapp=giftfork` }],
+          ],
+        },
+      });
+      return jsonResp({ ok: true });
+    }
+
+    if (action === "send_friend_ticket_dm" && body.recipientTgId && body.giftId) {
+      const sender = escapeHtml(body.senderName || "Твой друг");
+      const giftId = String(body.giftId);
+      await tgApi("sendMessage", {
+        chat_id: body.recipientTgId,
+        parse_mode: "HTML",
+        text:
+          `🎟 <b>${sender} выиграл в «БОЧКЕ» бесплатный виртуальный билет в кино и отправил его ТЕБЕ!</b>\n` +
+          `Нажми кнопку ниже, чтобы забрать билет на премьеру 17 декабря:`,
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🎟 ЗАБРАТЬ ВИРТУАЛЬНЫЙ БИЛЕТ", url: `${MINI_APP_LINK}?startapp=gift_${encodeURIComponent(giftId)}` }],
+          ],
+        },
+      });
+      return jsonResp({ ok: true });
+    }
+
+    if (action === "notify_referrer_ticket_won" && body.referrerTgId) {
+      const { data: rUser } = await adminDb
+        .from("users")
+        .select("tg_user_id")
+        .eq("tg_user_id", String(body.referrerTgId))
+        .limit(1)
+        .maybeSingle();
+      if (!rUser) return jsonResp({ ok: true, skipped: true });
+
+      const winner = escapeHtml(body.winnerName || "Твой друг");
+      await tgApi("sendMessage", {
+        chat_id: body.referrerTgId,
+        parse_mode: "HTML",
+        text:
+          `🎟 <b>Твой друг ${winner} только что выиграл билет в кино в БОЧКЕ!</b>\n` +
+          `Заходи в цех — там ещё остались билеты!`,
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🛢 ЗАЙТИ В ЦЕХ ЗА БИЛЕТОМ", url: MINI_APP_LINK }],
           ],
         },
       });
@@ -468,12 +510,40 @@ Deno.serve(async (req: Request) => {
           chat_id: senderTgId,
           parse_mode: "HTML",
           text:
-            `🎟 <b>Друг активировал твой подарочный билет!</b>\n` +
-            `Тебе начислено <b>+4 ❤️ жизней и +3500 ⭐ очков</b> в ТОП-10 Премьеры — жми в цех!`,
+            `🎟 <b>Друг активировал твой виртуальный билет!</b>\n` +
+            `Тебе начислено <b>+3 ❤️ жизней и +300 ⭐ очков</b> в ТОП-10 Премьеры — жми в цех!`,
           reply_markup: {
             inline_keyboard: [[{ text: "🔥 ШТУРМОВАТЬ ПРЕМЬЕРУ", url: MINI_APP_LINK }]],
           },
         });
+
+        // Перекрёстное уведомление рефереру отправителя
+        const { data: sRow } = await adminDb
+          .from("users")
+          .select("display_name, referred_by_uid")
+          .eq("tg_user_id", String(senderTgId))
+          .limit(1)
+          .maybeSingle();
+        if (sRow?.referred_by_uid) {
+          const { data: refRow } = await adminDb
+            .from("users")
+            .select("tg_user_id")
+            .eq("uid", sRow.referred_by_uid)
+            .limit(1)
+            .maybeSingle();
+          if (refRow?.tg_user_id && String(refRow.tg_user_id) !== String(senderTgId)) {
+            await tgApi("sendMessage", {
+              chat_id: refRow.tg_user_id,
+              parse_mode: "HTML",
+              text:
+                `🎟 <b>Твой друг ${escapeHtml(sRow.display_name || "Игрок")} только что выиграл билет в кино в БОЧКЕ!</b>\n` +
+                `Заходи в цех — там ещё остались билеты!`,
+              reply_markup: {
+                inline_keyboard: [[{ text: "🛢 ЗАЙТИ В ЦЕХ ЗА БИЛЕТОМ", url: MINI_APP_LINK }]],
+              },
+            });
+          }
+        }
       }
 
       if (receiverTgId) {
@@ -481,10 +551,9 @@ Deno.serve(async (req: Request) => {
           chat_id: receiverTgId,
           parse_mode: "HTML",
           text:
-            `✅ <b>Заявка передана продюсерам триллера «Бочка»!</b>\n\n` +
-            `📍 Город / кинотеатр: <b>${escapeHtml(cityCinema)}</b>\n` +
+            `🎟 <b>Твой виртуальный билет на триллер «Бочка» (17 декабря) активирован!</b>\n\n` +
             `📱 Подтверждённый номер: <code>${escapeHtml(normalizePhone(phone))}</code>\n\n` +
-            `Электронный билет придёт на твой номер и прямо в этот бот @bochka_film_bot к старту проката 17 декабря.`,
+            `Билет закреплён за твоим Telegram в @bochka_film_bot.`,
         });
       }
 

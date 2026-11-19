@@ -150,11 +150,12 @@ export async function createBarrelPack({
   if (db) {
     try {
       if (processedImage?.blob) {
-        const photoPath = `portraits/${id}.webp`;
+        const imgExt = processedImage.ext || (processedImage.blob.type === 'image/jpeg' ? 'jpg' : 'webp');
+        const photoPath = `portraits/${id}.${imgExt}`;
         const { error: upErr } = await db.storage
           .from(ENV.supabaseBucket)
           .upload(photoPath, processedImage.blob, {
-            contentType: processedImage.blob.type || 'image/webp',
+            contentType: processedImage.mime || processedImage.blob.type || 'image/jpeg',
             cacheControl: '31536000',
             upsert: false,
           });
@@ -1921,6 +1922,165 @@ function safeReadJson(k, fallback = null) {
   } catch {
     return fallback;
   }
+}
+
+export async function awardV8LevelProgress(tgUser = null, { level = 1, pointsDelta = 0, livesDelta = 0 } = {}) {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  const prof = getLocalPreviewProfile();
+  prof.premierePoints = Math.max(0, Number(prof.premierePoints || 0) + Number(pointsDelta || 0));
+  prof.lives = Math.max(0, Math.min(30, Number(prof.lives ?? 1) + Number(livesDelta || 0)));
+  prof.currentLevel = Math.max(Number(prof.currentLevel || 1), Number(level || 1));
+
+  if (db) {
+    try {
+      const { data, error } = await db.rpc('record_v8_level_reward_rpc', {
+        p_uid: uid,
+        p_level: Math.max(1, Math.round(level)),
+        p_points_delta: Math.max(0, Math.round(pointsDelta)),
+        p_lives_delta: Math.round(livesDelta),
+      });
+      if (!error && data?.ok) {
+        prof.currentLevel = Number(data.current_level || prof.currentLevel);
+        prof.premierePoints = Number(data.premiere_points ?? prof.premierePoints);
+        prof.lives = Number(data.lives ?? prof.lives);
+        saveLocalPreviewProfile(prof);
+        return {
+          ok: true,
+          currentLevel: prof.currentLevel,
+          premierePoints: prof.premierePoints,
+          lives: prof.lives,
+          referrerUid: data.referrer_uid || '',
+          referrerTgId: data.referrer_tg_id || '',
+        };
+      }
+    } catch { /* local fallback below */ }
+  }
+
+  saveLocalPreviewProfile(prof);
+  return {
+    ok: true,
+    currentLevel: prof.currentLevel,
+    premierePoints: prof.premierePoints,
+    lives: prof.lives,
+    referrerUid: '',
+    referrerTgId: '',
+  };
+}
+
+export async function checkFriendDuplicateConnection(senderUid, receiverTgUser = null, { senderTgId = '' } = {}) {
+  const receiverUid = getViewerUid(receiverTgUser);
+  const db = getCloudDb();
+  if (db && senderUid && receiverUid && senderUid !== receiverUid) {
+    try {
+      const { data, error } = await db.rpc('check_and_record_friend_barrel_rpc', {
+        p_sender_uid: String(senderUid),
+        p_receiver_uid: String(receiverUid),
+        p_sender_tg_id: senderTgId ? String(senderTgId) : null,
+        p_receiver_tg_id: receiverTgUser?.id ? String(receiverTgUser.id) : null,
+        p_receiver_name: receiverTgUser?.name || '',
+      });
+      if (!error && data) {
+        return {
+          ok: Boolean(data.ok),
+          duplicate: Boolean(data.duplicate),
+          message: data.message || '',
+        };
+      }
+    } catch { /* fallback below */ }
+  }
+
+  const key = 'bochka_v8_friend_pairs';
+  const pairs = safeReadJson(key, {}) || {};
+  const pairId = `${senderUid}::${receiverUid}`;
+  if (senderUid && receiverUid && senderUid !== receiverUid && pairs[pairId]) {
+    return {
+      ok: false,
+      duplicate: true,
+      message: 'Этот друг уже в деле! Ему теперь можно отправить только выигранный билет, а скример кинь новому другу.',
+    };
+  }
+  if (senderUid && receiverUid && senderUid !== receiverUid) {
+    pairs[pairId] = Date.now();
+    safeWriteJson(key, pairs);
+  }
+  return { ok: true, duplicate: false, message: '' };
+}
+
+export async function fetchMyGameFriends(tgUser = null) {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  if (db) {
+    try {
+      const { data, error } = await db.rpc('list_my_game_friends_rpc', { p_sender_uid: uid });
+      if (!error && data?.ok && Array.isArray(data.friends)) {
+        return data.friends;
+      }
+    } catch { /* fallback below */ }
+  }
+  return safeReadJson('bochka_v8_local_friends', []) || [];
+}
+
+export async function sendDirectGiftTicketToFriend({ tgUser, friend, giftId }) {
+  return sendTelegramPing({
+    clientAction: 'send_friend_ticket_dm',
+    recipientTgId: friend?.receiver_tg_id || '',
+    senderName: tgUser?.name || 'Твой друг',
+    giftId,
+  });
+}
+
+export async function notifyReferrerTicketWon({ tgUser, referrerTgId }) {
+  if (!referrerTgId) return false;
+  return sendTelegramPing({
+    clientAction: 'notify_referrer_ticket_won',
+    referrerTgId: String(referrerTgId),
+    winnerName: tgUser?.name || 'Твой друг',
+  });
+}
+
+export async function sendLevel1FriendReply({ pack, replyType, viewerTgUser }) {
+  const action = replyType === 'wait_ticket' ? 'wait_ticket' : 'cinema_accept';
+  const senderTgId = pack?.senderTgId || '';
+  if (!senderTgId) return false;
+  return sendTelegramPing({
+    clientAction: action,
+    senderTgId: String(senderTgId),
+    openerName: viewerTgUser?.name || 'Твой друг',
+    barrelId: pack?.id || '',
+  });
+}
+
+export async function claimDuelPremiereBankReward(tgUser = null, { pointsBonus = 450, solo = false } = {}) {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  const prof = getLocalPreviewProfile();
+  prof.premierePoints = Math.max(0, Number(prof.premierePoints || 0) + Number(pointsBonus || 450));
+  prof.duelsWon = Number(prof.duelsWon || 0) + 1;
+
+  if (db) {
+    try {
+      const { data, error } = await db.rpc('award_duel_premiere_bank_rpc', {
+        p_uid: uid,
+        p_points_bonus: Math.max(0, Math.round(pointsBonus || 450)),
+        p_solo: Boolean(solo),
+      });
+      if (!error && data?.ok) {
+        prof.premierePoints = Number(data.premiere_points ?? prof.premierePoints);
+        prof.lives = Number(data.lives ?? prof.lives);
+        prof.duelsWon = Number(data.duels_won ?? prof.duelsWon);
+        saveLocalPreviewProfile(prof);
+        return {
+          ok: true,
+          premierePoints: prof.premierePoints,
+          lives: prof.lives,
+          ticketDropped: Boolean(data.ticket_dropped),
+        };
+      }
+    } catch { /* fallback below */ }
+  }
+  saveLocalPreviewProfile(prof);
+  return { ok: true, premierePoints: prof.premierePoints, lives: prof.lives, ticketDropped: false };
 }
 
 function safeWriteJson(k, obj) {

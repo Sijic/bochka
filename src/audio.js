@@ -12,12 +12,57 @@ const SFX_PATHS = {
   scream1: './assets/sfx/scream_1.mp3',
   scream2: './assets/sfx/scream_2.mp3',
   hum: './assets/sfx/factory_hum.mp3',
+  // v8.0: 3 целевых звука прослушки (L1 человек, L2 пустая бочка, L3+ билет)
+  target_human: './public/sfx/targets/human_knock.mp3',
+  target_empty: './public/sfx/targets/empty_echo.mp3',
+  target_ticket: './public/sfx/targets/ticket_projector.mp3',
+  // v8.0: 10 киношных звуков-обманок внутри бочек (mono <= 12 KB)
+  decoy_dog_chain: './public/sfx/decoys/dog_chain.mp3',
+  decoy_nail_scrape: './public/sfx/decoys/nail_scrape.mp3',
+  decoy_radio_static: './public/sfx/decoys/radio_static.mp3',
+  decoy_oil_bubbles: './public/sfx/decoys/oil_bubbles.mp3',
+  decoy_alarm_clock: './public/sfx/decoys/alarm_clock.mp3',
+  decoy_snore_whistle: './public/sfx/decoys/snore_whistle.mp3',
+  decoy_rubber_chicken: './public/sfx/decoys/rubber_chicken.mp3',
+  decoy_can_drink: './public/sfx/decoys/can_drink.mp3',
+  decoy_cassette_bass: './public/sfx/decoys/cassette_bass.mp3',
+  decoy_lighter_sigh: './public/sfx/decoys/lighter_sigh.mp3',
+  // v8.0: 4 пробивных скримера (-0.3 dBFS, атака <= 50 мс)
+  scream_saw_scream: './public/sfx/screamers/saw_scream.mp3',
+  scream_lid_blast: './public/sfx/screamers/lid_blast.mp3',
+  scream_basement_shriek: './public/sfx/screamers/basement_shriek.mp3',
+  scream_tesla_siren: './public/sfx/screamers/tesla_siren.mp3',
+};
+
+export const DECOY_SOUND_KEYS = [
+  'decoy_dog_chain',
+  'decoy_nail_scrape',
+  'decoy_radio_static',
+  'decoy_oil_bubbles',
+  'decoy_alarm_clock',
+  'decoy_snore_whistle',
+  'decoy_rubber_chicken',
+  'decoy_can_drink',
+  'decoy_cassette_bass',
+  'decoy_lighter_sigh',
+];
+
+const SCREAMER_KEY_ALIAS = {
+  saw_scream: 'saw_scream',
+  weld: 'saw_scream',
+  lid_blast: 'lid_blast',
+  lunge: 'lid_blast',
+  basement_shriek: 'basement_shriek',
+  custom_scream: 'basement_shriek',
+  tesla_siren: 'tesla_siren',
+  siren_cam: 'tesla_siren',
 };
 
 class WorkshopAudio {
   constructor() {
     this.ctx = null;
     this.master = null;
+    this.screamerBus = null;
     this.enabled = false;
     this.modalDucked = false;
     this.buffers = new Map();
@@ -26,11 +71,12 @@ class WorkshopAudio {
     this.barrelPositions = [];
     this.panners = [];
     this.targetIndex = 0;
+    this.targetKind = 'human'; // 'human' | 'empty' | 'ticket'
+    this.barrelDecoys = [];
     this.activeBarrel = -1;
+    this.activeListenSource = null;
     this.activeZoneId = 1;
     this.barrelVoiceFilterEnabled = true;
-    this.micBlowStream = null;
-    this.micBlowRaf = 0;
 
     this.listenTimer = null;
     this.breathTimer = null;
@@ -57,8 +103,21 @@ class WorkshopAudio {
     if (!this.ctx) {
       this.ctx = new AudioCtx();
       this.master = this.ctx.createGain();
-      this.master.gain.value = (this.enabled && !this.modalDucked) ? 0.92 : 0.0;
+      this.master.gain.value = (this.enabled && !this.modalDucked) ? 0.96 : 0.0;
       this.master.connect(this.ctx.destination);
+
+      // Пиковый компрессор-лимитер на 0 dBFS для максимально громких скримеров на телефоне
+      const comp = this.ctx.createDynamicsCompressor();
+      comp.threshold.value = -5;
+      comp.knee.value = 3;
+      comp.ratio.value = 18;
+      comp.attack.value = 0.001;
+      comp.release.value = 0.12;
+      const boost = this.ctx.createGain();
+      boost.gain.value = 1.45;
+      boost.connect(comp).connect(this.master);
+      this.screamerBus = boost;
+
       this.noiseBuffer = this._createNoiseBuffer(2.5);
       this._setupListener(0, 1.55, 4.6);
       this._rebuildPanners();
@@ -129,10 +188,27 @@ class WorkshopAudio {
     this.master.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.04);
   }
 
-  setBarrelLayout(positions, targetIdx = 0) {
+  setBarrelLayout(positions, targetIdx = 0, { targetKind = 'human' } = {}) {
     this.barrelPositions = positions.slice();
     this.targetIndex = targetIdx;
+    this.targetKind = targetKind || 'human';
+    // Перемешиваем 10 обманок для каждого нового раунда так, чтобы каждая бочка звучала по-своему
+    const pool = DECOY_SOUND_KEYS.slice();
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    this.barrelDecoys = positions.map((_, i) => pool[i % pool.length]);
     this._rebuildPanners();
+  }
+
+  getBarrelSoundKey(index) {
+    if (index === this.targetIndex) {
+      if (this.targetKind === 'empty') return 'target_empty';
+      if (this.targetKind === 'ticket') return 'target_ticket';
+      return 'target_human';
+    }
+    return this.barrelDecoys[index] || DECOY_SOUND_KEYS[Math.abs(index) % DECOY_SOUND_KEYS.length];
   }
 
   setTargetIndex(targetIdx) {
@@ -471,30 +547,94 @@ class WorkshopAudio {
     if (index === this.activeBarrel) return;
     this.stopListening();
     this.activeBarrel = index;
-    if (index < 0 || index >= 6) return;
+    const maxCount = Math.max(12, this.barrelPositions.length || 12);
+    if (index < 0 || index >= maxCount) return;
 
     if (this.muffledChainGain && this.ctx) {
       this.muffledChainGain.gain.setTargetAtTime(0.58, this.ctx.currentTime, 0.08);
     }
 
-    const isTarget = index === this.targetIndex;
-    if (isTarget) {
-      this._triggerTargetCycle(index);
-      this.listenTimer = window.setInterval(() => {
-        if (this.activeBarrel !== index) return;
-        this._triggerTargetCycle(index);
-      }, 1050);
-    } else {
-      this._triggerEmptyCycle(index);
-      this.listenTimer = window.setInterval(() => {
-        if (this.activeBarrel !== index) return;
-        this._triggerEmptyCycle(index);
-      }, 1350);
+    const playOnce = () => {
+      if (this.activeBarrel !== index) return;
+      Haptics.light();
+      if (!this.ctx || !this.enabled) return;
+      const dest = this.panners[index] || this.master;
+      const key = this.getBarrelSoundKey(index);
+      const played = this._playInsideBarrelSample(key, dest, index === this.targetIndex ? 1.05 : 0.92);
+      if (!played) {
+        if (index === this.targetIndex) this._triggerTargetCycle(index);
+        else this._triggerEmptyCycle(index);
+      }
+    };
+
+    playOnce();
+    this.listenTimer = window.setInterval(playOnce, 1850);
+  }
+
+  _playInsideBarrelSample(key, dest, gainVal = 0.95) {
+    if (!this.ctx || !this.enabled) return false;
+    const buf = this.buffers.get(key);
+    if (!buf) {
+      // Догружаем сэмпл на лету, если ещё не успел декодироваться
+      const url = SFX_PATHS[key];
+      if (url && !this._loadingKeys?.has(key)) {
+        if (!this._loadingKeys) this._loadingKeys = new Set();
+        this._loadingKeys.add(key);
+        fetch(url)
+          .then((r) => (r.ok ? r.arrayBuffer() : null))
+          .then((ab) => (ab && this.ctx ? this.ctx.decodeAudioData(ab.slice(0)) : null))
+          .then((decoded) => {
+            if (decoded) this.buffers.set(key, decoded);
+          })
+          .catch(() => {});
+      }
+      return false;
     }
+
+    if (this.activeListenSource) {
+      try { this.activeListenSource.stop(); } catch { /* ignore */ }
+      this.activeListenSource = null;
+    }
+
+    const now = this.ctx.currentTime;
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+
+    // Фильтр железного резонанса 200-литровой бочки (BiquadFilterNode)
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'peaking';
+    bp.frequency.value = 340;
+    bp.Q.value = 2.4;
+    bp.gain.value = 5.5;
+
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 2400;
+    lp.Q.value = 1.2;
+
+    const hp = this.ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 75;
+
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.01, now);
+    g.gain.linearRampToValueAtTime(gainVal, now + 0.04);
+
+    src.connect(hp).connect(bp).connect(lp).connect(g).connect(dest);
+    src.start(now);
+    this.activeListenSource = src;
+    src.onended = () => {
+      if (this.activeListenSource === src) this.activeListenSource = null;
+    };
+    return true;
   }
 
   stopListening() {
     this.activeBarrel = -1;
+    if (this.activeListenSource) {
+      try { this.activeListenSource.stop(); } catch { /* ignore */ }
+      this.activeListenSource = null;
+    }
     if (this.muffledChainGain && this.ctx) {
       this.muffledChainGain.gain.setTargetAtTime(0.32, this.ctx.currentTime, 0.12);
     }
@@ -1111,67 +1251,73 @@ class WorkshopAudio {
   }
 
   /**
-   * Полноэкранный скример при проигрыше: глубокий грохот + визг металла + пик + вибрация [300, 80, 400]
+   * Мощный полноэкранный скример v8.0 на 0 dBFS:
+   * реальный нормализованный сэмпл (-0.3 dBFS) + пиковый компрессор + суб-удар + максимальная вибрация
    */
-  playFullScreamer(variant = 'weld') {
-    try { navigator.vibrate?.([300, 80, 400]); } catch { /* ignore */ }
+  playFullScreamer(variant = 'saw_scream', { preview = false } = {}) {
+    try {
+      navigator.vibrate?.(preview ? [140, 40, 180] : [350, 50, 450, 50, 500]);
+    } catch { /* ignore */ }
     if (!this.ctx || !this.enabled) return;
     const now = this.ctx.currentTime;
+    const normKey = SCREAMER_KEY_ALIAS[variant] || 'saw_scream';
+    const bus = this.screamerBus || this.master;
+
+    const sampleKey = `scream_${normKey}`;
+    const sampleBuf = this.buffers.get(sampleKey) || this.buffers.get('scream1');
+    if (sampleBuf) {
+      const src = this.ctx.createBufferSource();
+      src.buffer = sampleBuf;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(preview ? 0.88 : 1.38, now);
+      src.connect(g).connect(bus);
+      src.start(now);
+      if (preview) src.stop(now + 1.15);
+    }
 
     const boom = this.ctx.createOscillator();
     const boomG = this.ctx.createGain();
     boom.type = 'sawtooth';
-    boom.frequency.setValueAtTime(96, now);
-    boom.frequency.exponentialRampToValueAtTime(24, now + 1.5);
-    boomG.gain.setValueAtTime(1.0, now);
-    boomG.gain.exponentialRampToValueAtTime(0.001, now + 1.6);
+    boom.frequency.setValueAtTime(normKey === 'lid_blast' ? 165 : 112, now);
+    boom.frequency.exponentialRampToValueAtTime(26, now + (preview ? 0.7 : 1.5));
+    boomG.gain.setValueAtTime(preview ? 0.65 : 1.0, now);
+    boomG.gain.exponentialRampToValueAtTime(0.001, now + (preview ? 0.75 : 1.6));
     const lp = this.ctx.createBiquadFilter();
     lp.type = 'lowpass';
-    lp.frequency.value = 420;
-    boom.connect(lp).connect(boomG).connect(this.master);
+    lp.frequency.value = 520;
+    boom.connect(lp).connect(boomG).connect(bus);
     boom.start(now);
-    boom.stop(now + 1.65);
+    boom.stop(now + (preview ? 0.8 : 1.65));
 
-    // Пиковый «крик» — резкий FM-визг
-    const scr = this.ctx.createOscillator();
-    const mod = this.ctx.createOscillator();
-    const modG = this.ctx.createGain();
-    const scrG = this.ctx.createGain();
-    scr.type = 'sawtooth';
-    scr.frequency.setValueAtTime(520, now);
-    scr.frequency.exponentialRampToValueAtTime(1320, now + 0.22);
-    scr.frequency.exponentialRampToValueAtTime(410, now + 1.2);
-    mod.frequency.value = 71;
-    modG.gain.value = 260;
-    scrG.gain.setValueAtTime(0.0001, now);
-    scrG.gain.exponentialRampToValueAtTime(0.55, now + 0.05);
-    scrG.gain.exponentialRampToValueAtTime(0.001, now + 1.3);
-    mod.connect(modG).connect(scr.frequency);
-    scr.connect(scrG).connect(this.master);
-    mod.start(now);
-    scr.start(now);
-    mod.stop(now + 1.35);
-    scr.stop(now + 1.35);
-
-    // Скрежет металла (шум через полосовой фильтр)
-    if (this.noiseBuffer) {
-      const n = this.ctx.createBufferSource();
-      n.buffer = this.noiseBuffer;
-      const bp = this.ctx.createBiquadFilter();
-      bp.type = 'bandpass';
-      bp.Q.value = 2.2;
-      bp.frequency.setValueAtTime(900, now);
-      bp.frequency.exponentialRampToValueAtTime(4200, now + 0.5);
-      const ng = this.ctx.createGain();
-      ng.gain.setValueAtTime(0.7, now);
-      ng.gain.exponentialRampToValueAtTime(0.001, now + 0.95);
-      n.connect(bp).connect(ng).connect(this.master);
-      n.start(now);
-      n.stop(now + 1.0);
+    if (!sampleBuf) {
+      const scr = this.ctx.createOscillator();
+      const mod = this.ctx.createOscillator();
+      const modG = this.ctx.createGain();
+      const scrG = this.ctx.createGain();
+      scr.type = 'sawtooth';
+      scr.frequency.setValueAtTime(normKey === 'tesla_siren' ? 880 : 540, now);
+      scr.frequency.exponentialRampToValueAtTime(1620, now + 0.16);
+      scr.frequency.exponentialRampToValueAtTime(420, now + 1.2);
+      mod.frequency.value = 78;
+      modG.gain.value = 340;
+      scrG.gain.setValueAtTime(0.001, now);
+      scrG.gain.exponentialRampToValueAtTime(0.85, now + 0.025);
+      scrG.gain.exponentialRampToValueAtTime(0.001, now + 1.3);
+      mod.connect(modG).connect(scr.frequency);
+      scr.connect(scrG).connect(bus);
+      mod.start(now);
+      scr.start(now);
+      mod.stop(now + 1.35);
+      scr.stop(now + 1.35);
     }
 
-    if (variant === 'siren_cam') this.playFactorySirenKlaxon?.();
-    this.playChainRattle?.(1.4);
+    if (normKey === 'tesla_siren') this.playFactorySirenKlaxon?.();
+    if (!preview) this.playChainRattle?.(1.4);
+  }
+
+  async playScreamerPreview(variant = 'saw_scream') {
+    await this.unlock(true);
+    this.playFullScreamer(variant, { preview: true });
   }
 
   /**
@@ -1455,64 +1601,13 @@ class WorkshopAudio {
     nSrc.stop(now + 0.44);
   }
 
-  async startMicBlowDetector({ onBlow, onLevel } = {}) {
-    this.stopMicBlowDetector();
-    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      return false;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-      });
-      this.micBlowStream = stream;
-      await this.unlock(true);
-      if (!this.ctx) return false;
-      const src = this.ctx.createMediaStreamSource(stream);
-      const analyser = this.ctx.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.5;
-      src.connect(analyser);
-      const data = new Uint8Array(analyser.frequencyBinCount);
-      let sustainedFrames = 0;
-
-      const tick = () => {
-        if (!this.micBlowStream) return;
-        analyser.getByteFrequencyData(data);
-        let sum = 0;
-        for (let i = 1; i <= 18; i++) sum += data[i];
-        const avg = sum / 18;
-        const norm = Math.min(1, avg / 115);
-        onLevel?.(norm);
-        if (norm >= 0.52) {
-          sustainedFrames += 1;
-          if (sustainedFrames >= 10) {
-            this.stopMicBlowDetector();
-            onBlow?.();
-            return;
-          }
-        } else {
-          sustainedFrames = Math.max(0, sustainedFrames - 1);
-        }
-        this.micBlowRaf = window.requestAnimationFrame(tick);
-      };
-      this.micBlowRaf = window.requestAnimationFrame(tick);
-      return true;
-    } catch {
-      return false;
-    }
+  // v8.0: микрофон в цеху полностью отключён (запрос ТОЛЬКО на кнопке записи крика в окне упаковки)
+  async startMicBlowDetector() {
+    return false;
   }
 
   stopMicBlowDetector() {
-    if (this.micBlowRaf) {
-      window.cancelAnimationFrame(this.micBlowRaf);
-      this.micBlowRaf = 0;
-    }
-    if (this.micBlowStream) {
-      try {
-        this.micBlowStream.getTracks().forEach((tr) => tr.stop());
-      } catch { /* ignore */ }
-      this.micBlowStream = null;
-    }
+    /* noop */
   }
 }
 
