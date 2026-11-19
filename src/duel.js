@@ -409,20 +409,28 @@ export class WorkshopDuelController {
    * v8.0: Мгновенный запуск дуэли «В одного (Соло)» за Банк Закрытой Премьеры (без ожидания друзей)
    */
   async startSoloDuel() {
-    if (!this.active) return;
-    this.soloMode = true;
-    const hasChallenger = this.players.some((p) => p.uid !== this.myUid);
-    if (!hasChallenger) {
-      this.players.push({
-        uid: 'bot_workshop_master',
-        name: 'Мастер Цеха',
-        avatar: '',
-        joinedAt: Date.now() + 10,
-        isBot: true,
-      });
+    if (!this.active || this._soloStarting || this.phase !== 'lobby') return;
+    this._soloStarting = true;
+    const soloBtn = document.getElementById('btn-duel-play-solo');
+    if (soloBtn) soloBtn.disabled = true;
+    try {
+      this.soloMode = true;
+      const hasChallenger = this.players.some((p) => p.uid !== this.myUid);
+      if (!hasChallenger) {
+        this.players.push({
+          uid: 'bot_workshop_master',
+          name: 'Мастер Цеха',
+          avatar: '',
+          joinedAt: Date.now() + 10,
+          isBot: true,
+        });
+      }
+      this.renderLobbyUI();
+      await this.hostInitiateRound();
+    } finally {
+      this._soloStarting = false;
+      if (soloBtn) soloBtn.disabled = false;
     }
-    this.renderLobbyUI();
-    await this.hostInitiateRound();
   }
 
   /**
