@@ -1671,6 +1671,13 @@ async function triggerHubBarrelChoice(index, worldPoint = null) {
    ВХОДНОЙ ШЛЮЗ -> МАРШРУТИЗАТОР (ПРОПУСК / ДУЭЛЬ / ПОДГЛЯДЫВАНИЕ / БОЧКА / ХАБ)
    ============================================================================ */
 async function enterWorkshopGate(withSound) {
+  if (state.entered) {
+    if (withSound) {
+      await audio.unlock(true);
+      refreshSoundButtonLabel();
+    }
+    return;
+  }
   state.entered = true;
   await audio.unlock(withSound);
   refreshSoundButtonLabel();
