@@ -166,6 +166,8 @@ export function initTelegram() {
   const u = tg.initDataUnsafe?.user || null;
   const rawStart = tg.initDataUnsafe?.start_param || rawUrlStart;
   const parsed = parseStartTokens(rawStart);
+  const parsedUrlFallback = rawUrlStart && rawUrlStart !== rawStart ? parseStartTokens(rawUrlStart) : null;
+  const effectiveBarrelParam = parsed.barrelParam || parsedUrlFallback?.barrelParam || '';
   const inTg = Boolean((tg.initData && tg.initData.length > 0) || tg.initDataUnsafe?.start_param || u);
   const trafficSource = resolveTrafficSource(parsed.trafficSource, urlExtras);
 
@@ -181,8 +183,8 @@ export function initTelegram() {
         }
       : null,
     rawStartParam: rawStart || '',
-    startParam: parsed.barrelParam,
-    autoOpenPack: Boolean(parsed.autoOpenPack || (inTg && parsed.barrelParam)),
+    startParam: effectiveBarrelParam,
+    autoOpenPack: Boolean(parsed.autoOpenPack || (inTg && effectiveBarrelParam)),
     passParam: urlGift || parsed.passParam,
     duelRoomParam: urlExtras.duel || parsed.duelRoomParam,
     watchBarrelParam: urlExtras.watch || parsed.watchBarrelParam,
