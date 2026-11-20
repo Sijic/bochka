@@ -136,8 +136,8 @@ function renderAnalyticsPane() {
   const won = Number(s.tickets_won ?? s.premiere_winners_count ?? s.premiere_winners ?? 0);
   const burned = Number(s.tickets_burned ?? 0);
   const dailyIssued = Number(s.daily_tickets_issued ?? 0);
-  const maxDaily = Number(s.max_daily_tickets ?? 5);
-  const maxTotal = Number(s.max_total_tickets ?? 150);
+  const maxDaily = Number(s.max_daily_tickets ?? 8);
+  const maxTotal = Number(s.max_total_tickets ?? 100);
 
   const kFactor = players > 0 ? (opened / players).toFixed(2) : '0.00';
 
@@ -359,6 +359,9 @@ function renderOrdersPane() {
       const sendUser = o.sender_username ? `@${o.sender_username}` : o.sender_name || o.sender_uid || '—';
 
       const links = [];
+      if (isSafeHttpsUrl(o.pair_receipt_url)) {
+        links.push(`<a href="${escapeAttr(o.pair_receipt_url)}" target="_blank" rel="noopener noreferrer" style="color:#fbbf24;font-weight:700;">🧾 Скриншот 1-го купленного билета (1+1) ↗</a>`);
+      }
       if (isSafeHttpsUrl(o.kp_screenshot_url)) {
         links.push(`<a href="${escapeAttr(o.kp_screenshot_url)}" target="_blank" rel="noopener noreferrer">Скриншот Кинопоиска ↗</a>`);
       }
@@ -366,10 +369,16 @@ function renderOrdersPane() {
         links.push(`<a href="${escapeAttr(o.recipient_photo_url)}" target="_blank" rel="noopener noreferrer">Фото получателя ↗</a>`);
       }
       if (isSafeHttpsUrl(o.ticket_file_url)) {
-        links.push(`<a href="${escapeAttr(o.ticket_file_url)}" target="_blank" rel="noopener noreferrer">Загруженный билет ↗</a>`);
+        links.push(`<a href="${escapeAttr(o.ticket_file_url)}" target="_blank" rel="noopener noreferrer">Загруженный 2-й QR-билет ↗</a>`);
       }
 
       const safeOrderId = escapeAttr(String(o.id || ''));
+      const pairSeatRow = o.pair_seat_pref
+        ? `<div><strong>Соседнее кресло (1+1):</strong> <span style="color:#fbbf24;font-weight:700;">${escapeHtml(o.pair_seat_pref)}</span></div>`
+        : '';
+      const receiptThumb = isSafeHttpsUrl(o.pair_receipt_url)
+        ? `<div style="margin:6px 0;"><a href="${escapeAttr(o.pair_receipt_url)}" target="_blank" rel="noopener noreferrer"><img src="${escapeAttr(o.pair_receipt_url)}" alt="Скрин 1-го билета" style="max-height:110px;border-radius:6px;border:1px solid #eab308;" /></a></div>`
+        : '';
 
       return `
         <article class="order-card" data-order-id="${safeOrderId}">
@@ -380,8 +389,10 @@ function renderOrdersPane() {
             </div>
             <div><strong>Получатель:</strong> ${escapeHtml(o.receiver_name || 'Гость')} (<code>${escapeHtml(recvUser)}</code>)</div>
             <div><strong>Телефон (Telegram Verified):</strong> <code>${escapeHtml(o.verified_phone || '—')}</code></div>
-            <div><strong>Город и кинотеатр:</strong> ${escapeHtml(o.city_cinema || '—')}</div>
+            <div><strong>Город, кинотеатр и сеанс:</strong> ${escapeHtml(o.city_cinema || '—')}</div>
+            ${pairSeatRow}
             <div><strong>Кто подарил (×2 ❤️):</strong> ${escapeHtml(sendUser)}</div>
+            ${receiptThumb}
             ${links.length ? `<div class="thumb-links">${links.join('')}</div>` : ''}
           </div>
 
@@ -643,12 +654,14 @@ function renderLimitsForm() {
   const dailyIn = document.getElementById('cfg-max-daily');
   const totalIn = document.getElementById('cfg-max-total');
   const premIn = document.getElementById('cfg-max-premiere');
+  const pairIn = document.getElementById('cfg-require-pair-receipt');
   const pauseIn = document.getElementById('cfg-is-paused');
 
   if (winIn) winIn.value = String(s.win_every_n_hits ?? 100);
-  if (dailyIn) dailyIn.value = String(s.max_daily_tickets ?? 5);
-  if (totalIn) totalIn.value = String(s.max_total_tickets ?? 150);
+  if (dailyIn) dailyIn.value = String(s.max_daily_tickets ?? 8);
+  if (totalIn) totalIn.value = String(s.max_total_tickets ?? 100);
   if (premIn) premIn.value = String(s.max_premiere_winners ?? 20);
+  if (pairIn) pairIn.checked = s.require_pair_receipt !== false;
   if (pauseIn) pauseIn.checked = Boolean(s.is_paused);
 }
 
@@ -663,9 +676,10 @@ async function handleSaveLimitsSubmit(e) {
     const rawTotal = document.getElementById('cfg-max-total')?.value;
     const rawPrem = document.getElementById('cfg-max-premiere')?.value;
     const p_win_every_n_hits = Math.max(1, Number(rawWin !== '' && rawWin != null ? rawWin : 100));
-    const p_max_daily_tickets = Math.max(0, Number(rawDaily !== '' && rawDaily != null ? rawDaily : 5));
-    const p_max_total_tickets = Math.max(0, Number(rawTotal !== '' && rawTotal != null ? rawTotal : 150));
+    const p_max_daily_tickets = Math.max(0, Number(rawDaily !== '' && rawDaily != null ? rawDaily : 8));
+    const p_max_total_tickets = Math.max(0, Number(rawTotal !== '' && rawTotal != null ? rawTotal : 100));
     const p_max_premiere_winners = Math.max(0, Number(rawPrem !== '' && rawPrem != null ? rawPrem : 20));
+    const p_require_pair_receipt = Boolean(document.getElementById('cfg-require-pair-receipt')?.checked);
     const p_is_paused = Boolean(document.getElementById('cfg-is-paused')?.checked);
 
     const { data, error } = await adminSupabase.rpc('admin_update_config', {
@@ -674,6 +688,7 @@ async function handleSaveLimitsSubmit(e) {
       p_max_premiere_winners,
       p_is_paused,
       p_max_total_tickets,
+      p_require_pair_receipt,
     });
 
     if (error || !data?.ok) {

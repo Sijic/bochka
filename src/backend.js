@@ -1094,6 +1094,8 @@ export async function submitGiftTicketOrder({
   tgUser,
   cityCinema,
   fallbackPhone = '',
+  pairReceiptUrl = '',
+  pairSeatPref = '',
 }) {
   const viewerUid = getViewerUid(tgUser);
   const db = getCloudDb();
@@ -1109,6 +1111,8 @@ export async function submitGiftTicketOrder({
         hasVerifiedPhone: true,
         verifiedPhone: phone,
         cityCinema,
+        pairReceiptUrl,
+        pairSeatPref,
       };
       safeWriteJson(PASSES_STORAGE_KEY, passes);
 
@@ -1120,6 +1124,8 @@ export async function submitGiftTicketOrder({
         orderId: 777,
         verifiedPhone: phone,
         cityCinema,
+        pairReceiptUrl,
+        pairSeatPref,
       };
     }
     return { ok: false, reason: 'offline' };
@@ -1134,6 +1140,8 @@ export async function submitGiftTicketOrder({
       p_receiver_name: tgUser?.name || '',
       p_city_cinema: cityCinema,
       p_fallback_phone: fallbackPhone || null,
+      p_pair_receipt_url: pairReceiptUrl || null,
+      p_pair_seat_pref: pairSeatPref || '',
     });
 
     if (error || !data?.ok) {
@@ -1148,6 +1156,8 @@ export async function submitGiftTicketOrder({
       receiverUsername: tgUser?.username || '',
       phone: data.verified_phone || fallbackPhone,
       cityCinema: data.city_cinema || cityCinema,
+      pairSeatPref: data.pair_seat_pref || pairSeatPref,
+      pairReceiptUrl: data.pair_receipt_url || pairReceiptUrl,
     });
 
     return {
@@ -1155,9 +1165,70 @@ export async function submitGiftTicketOrder({
       orderId: data.order_id,
       verifiedPhone: data.verified_phone,
       cityCinema: data.city_cinema,
+      pairReceiptUrl: data.pair_receipt_url || pairReceiptUrl,
+      pairSeatPref: data.pair_seat_pref || pairSeatPref,
     };
   } catch {
     return { ok: false, reason: 'network_error' };
+  }
+}
+
+export async function fetchTicketPoolStatus() {
+  const db = getCloudDb();
+  if (!db || isTestBogActive()) {
+    return {
+      ok: true,
+      dailyIssued: 0,
+      maxDaily: 8,
+      dailyRemaining: 8,
+      totalIssued: 0,
+      maxTotal: 100,
+      totalRemaining: 100,
+      isPaused: false,
+      requirePairReceipt: true,
+    };
+  }
+  try {
+    const { data, error } = await db.rpc('get_ticket_pool_status_rpc');
+    if (!error && data?.ok) {
+      return {
+        ok: true,
+        dailyIssued: Number(data.daily_issued || 0),
+        maxDaily: Number(data.max_daily ?? 8),
+        dailyRemaining: Number(data.daily_remaining ?? 0),
+        totalIssued: Number(data.total_issued || 0),
+        maxTotal: Number(data.max_total ?? 100),
+        totalRemaining: Number(data.total_remaining ?? 0),
+        isPaused: Boolean(data.is_paused),
+        requirePairReceipt: data.require_pair_receipt !== false,
+      };
+    }
+  } catch { /* ignore */ }
+  return { ok: false, dailyRemaining: 8, maxDaily: 8, maxTotal: 100, requirePairReceipt: true };
+}
+
+export async function uploadPairTicketReceipt(giftId, blob) {
+  if (!blob) return { ok: false, reason: 'no_file' };
+  const db = getCloudDb();
+  if (!db) {
+    return { ok: true, url: 'local_receipt_preview', local: true };
+  }
+  const cleanId = String(giftId || 'pair').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 16) || 'pair';
+  const ext = blob.type === 'image/jpeg' ? 'jpg' : blob.type === 'image/png' ? 'png' : 'webp';
+  const path = `receipts/${cleanId}_${Date.now()}.${ext}`;
+  try {
+    const { error } = await db.storage
+      .from(ENV.supabasePassesBucket)
+      .upload(path, blob, {
+        contentType: blob.type || 'image/webp',
+        cacheControl: '31536000',
+        upsert: false,
+      });
+    if (error) return { ok: false, reason: error.message || 'upload_failed' };
+    const { data: pub } = db.storage.from(ENV.supabasePassesBucket).getPublicUrl(path);
+    return { ok: true, url: pub?.publicUrl || '' };
+  } catch (err) {
+    return { ok: false, reason: err?.message || 'upload_error' };
   }
 }
 

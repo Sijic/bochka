@@ -76,6 +76,8 @@ import {
   requestServerCinemaTicket,
   reconcileServerTicketPasses,
   reclaimServerTicketPass,
+  fetchTicketPoolStatus,
+  uploadPairTicketReceipt,
 } from './backend.js';
 import { WorkshopDuelController, createBarrelWatchChannel } from './duel.js';
 import { mountTestBogHUD } from './testbog.js';
@@ -2038,6 +2040,7 @@ async function startNewbieOnboardingRound() {
   configureBottomAttemptsMode('squares');
 
   launchWorkshopGameplay(false);
+  refreshLevel3TicketPoolBar(state.round?.workshopLevel || 1).catch(() => {});
 
   // v11.6: Пошаговое наполнение сердец (0→1→2→3) и ударов ([ ][ ][ ]→[🟨][🟨][🟨]) при прилёте в HUD!
   if (state.pendingLevelStartFly) {
@@ -2154,6 +2157,7 @@ async function startDemoRound({ resumeAttempts = null } = {}) {
   configureBottomAttemptsMode('squares');
 
   launchWorkshopGameplay(false);
+  refreshLevel3TicketPoolBar(state.round?.workshopLevel || 1).catch(() => {});
 
   // v11.6: Пошаговое наполнение сердец (0→1→2→3) и ударов ([ ][ ][ ]→[🟨][🟨][🟨]) при прилёте в HUD!
   if (state.pendingLevelStartFly) {
@@ -2242,6 +2246,7 @@ async function startDailyShiftRound() {
   configureBottomAttemptsMode('squares');
 
   launchWorkshopGameplay(false);
+  refreshLevel3TicketPoolBar(state.round?.workshopLevel || 1).catch(() => {});
 
   // v11.6: Пошаговое наполнение сердец (0→1→2→3) и ударов ([ ][ ][ ]→[🟨][🟨][🟨]) при прилёте в HUD!
   if (state.pendingLevelStartFly) {
@@ -2336,6 +2341,7 @@ async function startViralFriendRound(pack) {
   configureBottomAttemptsMode('squares');
 
   launchWorkshopGameplay(false);
+  refreshLevel3TicketPoolBar(state.round?.workshopLevel || 1).catch(() => {});
 
   // v11.6: Пошаговое наполнение сердец (0→1→2→3) и ударов ([ ][ ][ ]→[🟨][🟨][🟨]) при прилёте в HUD!
   if (state.pendingLevelStartFly) {
@@ -3143,7 +3149,10 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
   const retId = document.getElementById('reticle-id');
 
   if (duelCtrl?.isActive || state.watchingBarrelId || !state.round.running || state.round.pausedForModal || index < 0) {
-    reticle?.setAttribute('hidden', '');
+    if (reticle) {
+      reticle.setAttribute('hidden', '');
+      reticle.classList.remove('is-knocking', 'is-radar-human', 'is-radar-empty', 'is-radar-ticket', 'is-radar-trap');
+    }
     audio.stopListening();
     return;
   }
@@ -3164,6 +3173,7 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
 
   const isTarget = !alreadyStruck && index === state.round.targetIndex;
   const silentRadarMode = !audio.enabled && !alreadyStruck && !isSteamHazard;
+  const kind = state.round.targetKind || 'human';
 
   if (reticle && retId) {
     reticle.removeAttribute('hidden');
@@ -3173,26 +3183,67 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
     const batchNum = obscured ? '?? [ПАР]' : (BARREL_BATCH_CODES[index] || `0${index + 1}`);
     const labelBase = `${t('reticleBatch')}${batchNum}`;
 
+    // v14.0: Визуальный сонар-радар вокруг бочки (работает в беззвучном режиме и при удержании пальца)
+    reticle.classList.remove('is-radar-human', 'is-radar-empty', 'is-radar-ticket', 'is-radar-trap');
+
+    const nowH = performance.now();
+    const canBuzz = nowH - lastSilentRadarHapticAt > 620;
+    const vib = (pattern) => {
+      try {
+        if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+          navigator.vibrate(pattern);
+        }
+      } catch { /* ignore */ }
+    };
+
     if (alreadyStruck) {
       retId.textContent = `${labelBase} // ${t('reticleEmpty')}`;
     } else if (isSteamHazard) {
-      retId.textContent = `${labelBase} // ⚠️ ПАРОВАЯ ТРУБА (−4с O₂)`;
-    } else if (silentRadarMode) {
-      const kind = state.round.targetKind || 'human';
-      const hitLabel = kind === 'empty'
-        ? '🕳 ПУСТОЕ ЭХО · РАДАР'
-        : kind === 'ticket'
-          ? '🎞 ГУЛ ПРОЕКТОРА · РАДАР'
-          : '🎯 СТУК ИЗНУТРИ · РАДАР';
-      retId.textContent = isTarget ? `${labelBase} // ${hitLabel}` : `${labelBase} // 🔇 ПОМЕХИ ЦЕХА`;
-      const now = performance.now();
-      if (now - lastSilentRadarHapticAt > 550) {
-        lastSilentRadarHapticAt = now;
-        if (isTarget) Haptics.medium();
-        else Haptics.light();
+      retId.textContent = `${labelBase} // ⚠️ ПАРОВАЯ ТРУБА (−3с O₂)`;
+      reticle.classList.add('is-radar-trap');
+      if (canBuzz) {
+        lastSilentRadarHapticAt = nowH;
+        Haptics.error();
+        vib([25, 35, 25, 35, 25]);
+      }
+    } else if (isTarget) {
+      if (kind === 'empty') {
+        reticle.classList.add('is-radar-empty');
+        retId.textContent = `${labelBase} // 🕳 ПУСТОЕ ЭХО · ШИРОКОЕ КОЛЬЦО`;
+        if (canBuzz) {
+          lastSilentRadarHapticAt = nowH;
+          Haptics.light();
+          vib([75]);
+        }
+      } else if (kind === 'ticket') {
+        reticle.classList.add('is-radar-ticket');
+        retId.textContent = `${labelBase} // 🎟 ЗОЛОТОЙ ПРОБЛЕСК · БИЛЕТ 1+1`;
+        if (canBuzz) {
+          lastSilentRadarHapticAt = nowH;
+          Haptics.success();
+          vib([35, 60, 35, 60, 50]);
+        }
+      } else {
+        reticle.classList.add('is-radar-human');
+        retId.textContent = silentRadarMode
+          ? `${labelBase} // 🎯 ЖИВОЙ ПУЛЬС (ТУК-ТУК) · РАДАР`
+          : `${labelBase} // 🎯 ЖИВОЙ СТУК ИЗНУТРИ`;
+        if (canBuzz) {
+          lastSilentRadarHapticAt = nowH;
+          Haptics.medium();
+          vib([45, 90, 55]);
+        }
       }
     } else {
-      retId.textContent = `${labelBase} // ${t('reticleListening')}`;
+      reticle.classList.add('is-radar-trap');
+      retId.textContent = silentRadarMode
+        ? `${labelBase} // ⚠️ РВАНАЯ ДРОЖЬ (ЛОВУШКА / ПУСТО)`
+        : `${labelBase} // ${t('reticleListening')}`;
+      if (canBuzz && silentRadarMode) {
+        lastSilentRadarHapticAt = nowH;
+        Haptics.light();
+        vib([20, 30, 20]);
+      }
     }
 
     const showPulse =
@@ -3200,7 +3251,7 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
       (silentRadarMode ||
         (state.round.modeType !== 'premiere' &&
           !state.round.isBlitz &&
-          Number(state.round.workshopLevel || 1) <= 2));
+          Number(state.round.workshopLevel || 1) <= 3));
     reticle.classList.toggle('is-knocking', showPulse);
   }
 
@@ -3208,6 +3259,26 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
     audio.stopListening();
   } else {
     audio.setListeningBarrel(index);
+  }
+}
+
+async function refreshLevel3TicketPoolBar(level = 1) {
+  const bar = document.getElementById('hud-ticket-pool-bar');
+  if (!bar) return;
+  if (Number(level || 1) < 3) {
+    bar.setAttribute('hidden', '');
+    return;
+  }
+  const st = await fetchTicketPoolStatus().catch(() => null);
+  if (!st) return;
+  state.ticketPoolStatus = st;
+  bar.removeAttribute('hidden');
+  if (st.dailyRemaining > 0 && !st.isPaused) {
+    bar.classList.remove('is-empty');
+    bar.textContent = `🎟 Сегодня в пуле цеха осталось: ${st.dailyRemaining} из ${st.maxDaily} парных билетов (1+1)`;
+  } else {
+    bar.classList.add('is-empty');
+    bar.textContent = '⭐ Дневной пул билетов разобран — сейчас в бочках удвоенные очки в Гонку за Закрытую Премьеру! Новая партия билетов в 00:00 МСК';
   }
 }
 
@@ -3458,12 +3529,13 @@ async function handleBarrelStrike(index, worldPoint) {
 
   scene.triggerEmptyBarrelOpen(index);
   if (index === r.steamHazardIndex) {
-    r.airLeft = Math.max(0.5, r.airLeft - 4.0);
+    // v14.0: Мягкий баланс паровой ловушки на Ур.2 — только −1 удар и −3 сек O₂ (без мгновенного слива всей жизни!)
+    r.airLeft = Math.max(0.5, r.airLeft - 3.0);
     updateAirHUD(r.airLeft);
     scene.triggerSteamHazardBurst?.(index);
     audio.playSteamPenaltyBurst?.();
     r.strikeLog.push(`[Удар ${r.attemptsUsed}: Пар]`);
-    showToast('⚠️ Пробитая труба с паром! −4 сек воздуха O₂');
+    showToast('⚠️ Пробитая труба с паром! −1 удар и −3 сек O₂');
   } else {
     r.strikeLog.push(`[Удар ${r.attemptsUsed}: Пусто]`);
   }
@@ -3896,7 +3968,7 @@ function finishTicketSendAndReturnToGame({ passId, recipientName, shareUrl }) {
 
   openTelegramShare(
     shareUrl,
-    `🎟 ${recipientName}, дарю тебе билет в кино на триллер «БОЧКА» (17 декабря)! Открой в течение 24ч и нажми «Спасибо!»: `
+    `🎟 ${recipientName}, погнали в кино на «БОЧКУ» с 17 декабря! Я выбил нам второе кресло рядом за 0 ₽ (1+1) — открой за 24ч: `
   );
 
   showToast(
@@ -4226,6 +4298,18 @@ async function openIncomingPassScreen(passId) {
     return;
   }
   state.activePassData = passData;
+  state.pairReceiptUrl = '';
+  const poolMeta = await fetchTicketPoolStatus().catch(() => ({ requirePairReceipt: true }));
+  state.requirePairReceipt = poolMeta?.requirePairReceipt !== false;
+  const receiptBox = document.getElementById('pair-receipt-upload-box');
+  if (receiptBox) {
+    if (state.requirePairReceipt) receiptBox.removeAttribute('hidden');
+    else receiptBox.setAttribute('hidden', '');
+  }
+  const rPrev = document.getElementById('pair-receipt-preview');
+  const rStat = document.getElementById('pair-receipt-status');
+  if (rPrev) { rPrev.removeAttribute('src'); rPrev.setAttribute('hidden', ''); }
+  if (rStat) rStat.textContent = 'На скриншоте должны быть видны кинотеатр, дата, время, ряд и место.';
 
   const photoEl = document.getElementById('pass-holder-photo');
   const numEl = document.getElementById('pass-virtual-number');
@@ -4442,8 +4526,27 @@ async function handleAcceptIncomingPass() {
   const errEl = document.getElementById('pass-claim-error');
   const phoneBadge = document.getElementById('pass-verified-phone-badge');
   const refreshBtn = document.getElementById('btn-refresh-tg-contact');
-  const cityCinema = (document.getElementById('input-pass-city-cinema')?.value || '').trim() || 'Виртуальный билет';
+  const cityCinema = (document.getElementById('input-pass-city-cinema')?.value || '').trim();
+  const pairSeatPref = (document.getElementById('input-pair-seat-pref')?.value || '').trim();
   errEl?.setAttribute('hidden', '');
+
+  if (cityCinema.length < 3) {
+    if (errEl) {
+      errEl.textContent = 'Укажи город, кинотеатр и время сеанса (например: Москва, КАРО Октябрь, 17.12 20:00).';
+      errEl.removeAttribute('hidden');
+    }
+    Haptics.error();
+    return;
+  }
+
+  if (state.requirePairReceipt !== false && !state.pairReceiptUrl) {
+    if (errEl) {
+      errEl.textContent = 'Загрузи скриншот купленного 1-го билета (с рядом и местом), чтобы мы выкупили соседнее кресло за 0 ₽!';
+      errEl.removeAttribute('hidden');
+    }
+    Haptics.error();
+    return;
+  }
 
   const btn = document.getElementById('btn-accept-gift-pass');
   if (btn) btn.disabled = true;
@@ -4457,7 +4560,7 @@ async function handleAcceptIncomingPass() {
         refreshBtn?.removeAttribute('hidden');
         if (phoneBadge) {
           phoneBadge.textContent =
-            'В чате @bochka_film_bot нажми «📱 Подтвердить номер телефона», вернись и снова нажми «Забрать виртуальный билет»!';
+            'В чате @bochka_film_bot нажми «📱 Подтвердить номер телефона», вернись и снова нажми кнопку ниже!';
           phoneBadge.removeAttribute('hidden');
         }
         return;
@@ -4469,6 +4572,8 @@ async function handleAcceptIncomingPass() {
       tgUser: state.tg?.user,
       cityCinema,
       fallbackPhone: state.verifiedContactPhone,
+      pairReceiptUrl: state.pairReceiptUrl || '',
+      pairSeatPref,
     });
 
     if (!res.ok) {
@@ -4480,14 +4585,16 @@ async function handleAcceptIncomingPass() {
       } else if (errEl) {
         const messages = {
           telegram_required:
-            'Открой эту подарочную ссылку внутри Telegram (@bochka_film_bot), чтобы подтвердить аккаунт и забрать виртуальный билет!',
+            'Открой эту подарочную ссылку внутри Telegram (@bochka_film_bot), чтобы подтвердить аккаунт и забрать 2-й билет рядом за 0 ₽!',
           contact_not_verified:
             'Нажми «📱 Подтвердить номер телефона» в @bochka_film_bot и затем ещё раз нажми кнопку ниже!',
           phone_already_used:
-            'На этот номер телефона уже выписывался подарочный билет в рамках акции (1 уникальный номер = 1 билет)!',
+            'На этот номер телефона уже выписывался парный билет в рамках акции (1 уникальный номер = 1 билет)!',
+          pair_receipt_required:
+            'Загрузи скриншот купленного 1-го билета (с рядом и местом), чтобы получить соседнее кресло за 0 ₽!',
         };
         errEl.textContent =
-          messages[res.reason] || 'Не удалось активировать виртуальный билет. Проверь интернет и открой ссылку в @bochka_film_bot.';
+          messages[res.reason] || 'Не удалось оформить заявку на соседнее кресло. Проверь интернет и открой ссылку в @bochka_film_bot.';
         errEl.removeAttribute('hidden');
         if (res.reason === 'contact_not_verified') {
           document.getElementById('btn-verify-tg-contact')?.removeAttribute('hidden');
@@ -5200,17 +5307,39 @@ async function rebuildPackPortraitPreview(newSource = undefined) {
   }
 }
 
+async function handleQuick1TapPrankClick() {
+  const quickBtn = document.getElementById('btn-pack-quick-1tap');
+  const quickTxt = document.getElementById('btn-pack-quick-1tap-text');
+  if (quickBtn?.disabled) return;
+  if (quickBtn) quickBtn.disabled = true;
+  if (quickTxt) quickTxt.textContent = '⏳ Завариваем крышку…';
+  try {
+    state.pack.screamerType = 'saw_scream';
+    const inp = document.getElementById('input-custom-phrase');
+    if (inp) inp.value = 'Вытащи меня из цеха — с нас поход в кино!';
+    if (!state.pack.processed) {
+      await initPackConstructorDefaults();
+    }
+    await handleSealBarrelClick();
+  } finally {
+    if (quickBtn) quickBtn.disabled = false;
+    if (quickTxt) quickTxt.textContent = '⚡ БЫСТРЫЙ ПРАНК В 1 КАСАНИЕ (+3 ❤️)';
+  }
+}
+
 async function handleSealBarrelClick() {
   const sealBtn = document.getElementById('btn-seal-barrel');
   const sealTxt = document.getElementById('btn-seal-text');
-  if (!sealBtn || !sealTxt) return;
+  const quickBtn = document.getElementById('btn-pack-quick-1tap');
+  if (!sealBtn || !sealTxt || sealBtn.disabled) return;
 
   if (voiceRecorder?.isRecording) {
     voiceRecorder.stop();
   }
 
   sealBtn.disabled = true;
-  sealTxt.textContent = t('sealingProgress');
+  if (quickBtn) quickBtn.disabled = true;
+  sealTxt.textContent = '⏳ Завариваем крышку…';
   audio.playWeldSeal();
 
   try {
@@ -5292,6 +5421,7 @@ async function handleSealBarrelClick() {
     refreshQuestUI().catch(() => {});
   } finally {
     sealBtn.disabled = false;
+    if (quickBtn) quickBtn.disabled = false;
     sealTxt.textContent = t('btnSealBarrel');
   }
 }
@@ -8035,7 +8165,34 @@ function bindUIEvents() {
     if (phraseCounter) phraseCounter.textContent = `${phraseInput.value.length}/45`;
   });
 
+  document.getElementById('btn-pack-quick-1tap')?.addEventListener('click', () => handleQuick1TapPrankClick());
   document.getElementById('btn-seal-barrel')?.addEventListener('click', () => handleSealBarrelClick());
+  document.getElementById('input-pair-receipt-file')?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const statusEl = document.getElementById('pair-receipt-status');
+    const prevEl = document.getElementById('pair-receipt-preview');
+    if (statusEl) statusEl.textContent = '⏳ Сжимаем и загружаем скриншот 1-го билета…';
+    try {
+      const processed = await processPortraitToWebP(file, 'none');
+      const uploadBlob = processed?.blob || file;
+      const up = await uploadPairTicketReceipt(state.activePassData?.id || 'pair', uploadBlob);
+      if (up?.ok && up.url) {
+        state.pairReceiptUrl = up.url;
+        if (prevEl) {
+          prevEl.src = processed?.dataUrl || up.url;
+          prevEl.removeAttribute('hidden');
+        }
+        if (statusEl) statusEl.textContent = '✓ Скриншот 1-го билета загружен! Теперь нажми кнопку ниже.';
+        Haptics.success();
+      } else {
+        if (statusEl) statusEl.textContent = `⚠️ Ошибка загрузки (${up?.reason || 'попробуй JPG/PNG < 500 КБ'}).`;
+        Haptics.error();
+      }
+    } catch {
+      if (statusEl) statusEl.textContent = '⚠️ Не удалось обработать изображение. Выбери скриншот билета (JPG/PNG).';
+    }
+  });
 
   // Экран 5: Финал раунда и Суперигра «Гонка за Премьерой»
   document.getElementById('btn-copy-ticket-code')?.addEventListener('click', async () => {
@@ -8442,9 +8599,11 @@ function showToast(text) {
   el.textContent = text;
   el.removeAttribute('hidden');
   if (toastTimer) clearTimeout(toastTimer);
+  // v14.0: На экране Тиля (#screen-ocean) тост прячется за 1.2 сек и выводится в верхней зоне под таймером!
+  const durationMs = state.activeScreen === 'ocean' ? 1200 : 2800;
   toastTimer = window.setTimeout(() => {
     el.setAttribute('hidden', '');
-  }, 2800);
+  }, durationMs);
 }
 
 bootstrap();

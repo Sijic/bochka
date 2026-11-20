@@ -1064,6 +1064,9 @@ export class WorkshopScene {
 
       const proxyMesh = new THREE.Mesh(proxyHitGeo, proxyHitMat);
       proxyMesh.position.y = 0.72;
+      // v14.0: На мобильных экранах (360-420px) расширяем хитбокс захвата касания на +25%!
+      const mobileHitBoost = window.innerWidth <= 440 ? 1.25 : 1.0;
+      proxyMesh.scale.set(mobileHitBoost, 1.08, mobileHitBoost);
       proxyMesh.userData.barrelIndex = i;
       group.add(proxyMesh);
 
@@ -1735,12 +1738,13 @@ export class WorkshopScene {
       if (this.pointerDownInfo) {
         const dx = e.clientX - this.pointerDownInfo.x;
         const dy = e.clientY - this.pointerDownInfo.y;
-        if (Math.hypot(dx, dy) > 16) {
+        // v14.0: Мягкий допуск сдвига пальца до 22px без срыва прослушки!
+        if (Math.hypot(dx, dy) > 22) {
           this.pointerDownInfo.dragged = true;
         }
       }
 
-      if (this.interactive && (e.pointerType !== 'touch' || this.pointerDownInfo?.listening)) {
+      if (this.interactive && (e.pointerType !== 'touch' || (this.pointerDownInfo?.listening && this.pointerDownInfo?.dragged))) {
         const nowMs = performance.now();
         if (!this._lastHoverRayMs || nowMs - this._lastHoverRayMs >= 45) {
           this._lastHoverRayMs = nowMs;
@@ -1760,7 +1764,8 @@ export class WorkshopScene {
         clearTimeout(this._listenHoldTimer);
         this._listenHoldTimer = null;
       }
-      const holdMs = e.pointerType === 'touch' ? 280 : 380;
+      // v14.0: Быстрый старт прослушки за 170 мс (тач) / 240 мс (мышь)
+      const holdMs = e.pointerType === 'touch' ? 170 : 240;
       this.pointerDownInfo = {
         x: e.clientX,
         y: e.clientY,
@@ -1773,14 +1778,14 @@ export class WorkshopScene {
         point: hit ? hit.point : null,
       };
 
-      // v8.1: удержание пальца > 280 мс (тач) / 380 мс (мышь) -> живая прослушка бочки; тап/клик -> удар ломом
+      // v14.0: удержание пальца > 170 мс -> живой визуальный радар + прослушка; короткий тап -> удар ломом
       if (hit && !this.barrels[hit.index]?.struck) {
         const downX = e.clientX;
         const downY = e.clientY;
         const idx = hit.index;
         this._listenHoldTimer = window.setTimeout(() => {
           this._listenHoldTimer = null;
-          if (!this.pointerDownInfo || this.pointerDownInfo.barrelIndex !== idx) return;
+          if (!this.pointerDownInfo || this.pointerDownInfo.barrelIndex !== idx || this.pointerDownInfo.dragged) return;
           this.pointerDownInfo.listening = true;
           this.listeningIndex = idx;
           this._setHovered(idx, downX, downY);
