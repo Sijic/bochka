@@ -119,6 +119,16 @@
            ВКЛАДКА 1: АНАЛИТИКА И ВОРОНКА + ПОСУТОЧНЫЙ ГРАФИК
            ================================================================ -->
       <section class="adm-pane is-active" id="pane-analytics">
+        <div class="adm-panel" id="team-start-links-bar" style="margin-bottom:14px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;">
+          <div>
+            <strong style="color:#fde68a;font-size:13px;">🚀 Две стартовые ссылки запуска посева (автонумерация 1..∞ без потолка)</strong>
+            <div class="mono-muted" style="margin-top:2px;">Продюсеры → 1 раз пакуют себя (<code>pr_...</code>) · Блогеры → Ур.1 → Ур.2 пакуют себя для Stories (<code>bl_...</code>)</div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;">
+            <button type="button" class="adm-btn adm-btn-gold" id="btn-copy-team-prod">🎬 Ссылка в чат продюсеров (team_prod)</button>
+            <button type="button" class="adm-btn adm-btn-ghost" id="btn-copy-team-blog" style="border-color:rgba(250,204,21,0.6);color:#fef08a;">🔥 Ссылка для блогеров (team_blog)</button>
+          </div>
+        </div>
         <div class="kpi-grid" id="kpi-grid">
           <div class="kpi-card">
             <span class="kpi-label">УНИКАЛЬНЫХ ИГРОКОВ</span>
@@ -187,14 +197,14 @@
           </div>
           <div class="kpi-grid" id="traffic-kpi-grid" style="margin-bottom: 12px;">
             <div class="kpi-card">
-              <span class="kpi-label">ПРОДЮСЕРЫ И ДРУЗЬЯ (src_prod1..6)</span>
+              <span class="kpi-label">ПРОДЮСЕРЫ И ДРУЗЬЯ (pr_*)</span>
               <strong class="kpi-val" id="traffic-friends-seed">0</strong>
-              <span class="kpi-foot">Стартовый посев продюсеров и их друзей</span>
+              <span class="kpi-foot">Общие ссылки продюсеров и их ветки</span>
             </div>
             <div class="kpi-card kpi-gold">
-              <span class="kpi-label">БЛОГЕРЫ (src_blogger_&lt;имя&gt;)</span>
+              <span class="kpi-label">БЛОГЕРЫ И STORIES (bl_*)</span>
               <strong class="kpi-val" id="traffic-bloggers-til">0</strong>
-              <span class="kpi-foot">Именные стартовые ссылки блогеров и их аудитории</span>
+              <span class="kpi-foot">Общие ссылки блогеров и их аудитория</span>
             </div>
             <div class="kpi-card kpi-accent">
               <span class="kpi-label">ОРГАНИКА И РЕФЕРАЛЫ (ref_* / pack_*)</span>
@@ -207,48 +217,16 @@
               <span class="kpi-foot">Instagram Stories, Reels и WhatsApp</span>
             </div>
           </div>
-          <div class="funnel-bars" id="traffic-tags-bars"></div>
-          <div class="seed-link-builder" id="seed-link-builder" style="margin-top:12px;padding:12px;border-radius:8px;background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.35);">
-            <div style="font-weight:700;font-size:13px;color:#fde68a;margin-bottom:6px;">
-              🛡 Стартовая ссылка «Бот-Админ посева» (для команды и продюсеров — без участия в розыгрышах)
-            </div>
-            <p class="field-hint" style="margin:0 0 8px;">
-              Открой <code>startapp=seed_admin</code> (или <code>src_prod1..6</code>) → выбери <strong>«Я продюсер — рассылаю друзьям»</strong> или <strong>«Я рассылаю блогерам»</strong> → введи <code>@аккаунт друга</code> или <code>имя блогера на английском</code> → упакуй персональную бочку и отправь ссылку! На админов посева розыгрыши не действуют, а вся цепочка получателя уходит под его меткой.
-            </p>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
-              <button type="button" class="adm-btn adm-btn-gold" data-seed-preset="seed_admin">🛡 Бот-Админ посева (единая)</button>
-              <button type="button" class="adm-btn adm-btn-ghost" data-seed-preset="src_prod1">Продюсер 1</button>
-              <button type="button" class="adm-btn adm-btn-ghost" data-seed-preset="src_prod2">Продюсер 2</button>
-              <button type="button" class="adm-btn adm-btn-ghost" data-seed-preset="src_prod3">Продюсер 3</button>
-              <button type="button" class="adm-btn adm-btn-ghost" data-seed-preset="src_prod4">Продюсер 4</button>
-              <button type="button" class="adm-btn adm-btn-ghost" data-seed-preset="src_prod5">Продюсер 5</button>
-              <button type="button" class="adm-btn adm-btn-ghost" data-seed-preset="src_prod6">Продюсер 6</button>
-            </div>
-            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
-              <input
-                type="text"
-                id="seed-blogger-name"
-                class="adm-input"
-                placeholder="Имя блогера (напр. danya или Даня)"
-                maxlength="24"
-                style="max-width:260px;"
-              />
-              <input
-                type="text"
-                id="seed-generated-url"
-                class="adm-input"
-                readonly
-                value="https://t.me/bochka_film_bot?startapp=seed_admin"
-                style="flex:1;min-width:260px;font-family:monospace;"
-              />
-              <button type="button" class="adm-btn adm-btn-gold" id="btn-copy-seed-url">📋 Копировать ссылку</button>
-            </div>
+          <div id="broadcast-summary-wrap" style="margin-bottom:12px;">
+            <div class="mono-muted" style="margin-bottom:6px;">📡 СВОДКА ПО КАЖДОМУ ПРОДЮСЕРУ И БЛОГЕРУ (НОМЕРА 1..N · ЦЕПОЧКА · ЗАЯВКИ 1+1):</div>
+            <div class="funnel-bars" id="broadcast-summary-box"></div>
           </div>
+          <div class="funnel-bars" id="traffic-tags-bars"></div>
           <p class="field-hint" style="margin-top:10px;">
-            🔗 <strong>Единый формат ссылок посева (включая Instagram Stories и TikTok):</strong>
-            <code>https://t.me/bochka_film_bot?startapp=src_prod1</code> … <code>src_prod6</code>,
-            <code>https://t.me/bochka_film_bot?startapp=src_blogger_&lt;имя&gt;</code>.
-            Прямые веб-ссылки в сторис НЕ используйте — открывайте строго через Telegram-бота!
+            🔗 <strong>Две командные точки входа (строго через Telegram-бота):</strong>
+            Чат продюсеров: <code>https://t.me/bochka_film_bot?startapp=team_prod</code> ·
+            Блогеры: <code>https://t.me/bochka_film_bot?startapp=team_blog</code> (или <code>bi_&lt;barrelId&gt;</code>).
+            Каждому зашедшему по <code>pr_&lt;id&gt;</code> / <code>bl_&lt;id&gt;</code> сервер атомарно присваивает номер <code>1..∞</code>.
           </p>
         </div>
       </section>
@@ -330,6 +308,19 @@
             </div>
             <button type="button" class="adm-btn adm-btn-gold" id="btn-top100-csv">⬇ CSV (все 100 / текущий фильтр)</button>
           </div>
+          <div id="top100-tracking-search-bar" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0 12px;padding:10px 12px;border-radius:8px;background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.35);">
+            <span class="mono-muted" style="color:#fde68a;">🔎 ПОИСК ПО НОМЕРУ:</span>
+            <input
+              type="text"
+              id="top100-code-search"
+              class="adm-input"
+              placeholder="Введи полный код (напр. bl_timur_17 или pr_sergey_4)"
+              maxlength="48"
+              style="flex:1;min-width:240px;font-family:monospace;"
+            />
+            <button type="button" class="adm-btn adm-btn-gold" id="btn-top100-code-find">Найти игрока и ветку</button>
+          </div>
+          <div id="top100-code-result" hidden style="margin-bottom:12px;padding:12px;border-radius:8px;background:rgba(15,15,20,0.92);border:1px solid rgba(250,204,21,0.5);"></div>
           <div class="filter-pills" id="top100-type-pills">
             <button type="button" class="pill-btn is-active" data-top-type="all">Все</button>
             <button type="button" class="pill-btn" data-top-type="blogger">🎤 Блогеры</button>

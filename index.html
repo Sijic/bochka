@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0d0d'/%3E%3Crect x='8' y='4' width='16' height='24' rx='2' fill='none' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='11' x2='25' y2='11' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='21' x2='25' y2='21' stroke='%23eab308' stroke-width='2'/%3E%3C/svg%3E" />
   <title>БОЧКА — Заводской триллер | Вызволи друга за 3 удара ломом</title>
-  <meta name="bochka-build" content="v14.2-seed-admin-hub" />
+  <meta name="bochka-build" content="v14.3-auto-seq-broadcast" />
   <meta name="description" content="Четыре цеха завода, заваренные 200-литровые бочки и 30 секунд кислорода. Запиши фото и голос друга на дно бочки, проверь его слух и забери допуск на закрытую Премьеру 17 декабря." />
 
   <!-- Open Graph / Telegram / WhatsApp Link Preview -->
@@ -548,95 +548,6 @@
   </section>
 
   <!-- ====================================================================
-       ЭКРАН 3.9: БОТ-АДМИН ПОСЕВА (ПЕРВЫЕ ИГРОКИ КОМАНДЫ — БЕЗ РОЗЫГРЫШЕЙ)
-       ==================================================================== -->
-  <section class="screen screen-scroll" id="screen-seed-hub" hidden>
-    <div class="panel-sheet seed-hub-sheet">
-      <div class="sheet-header">
-        <div>
-          <span class="mono-tag">🛡 БОТ-АДМИН ПОСЕВА // ПЕРВЫЕ ИГРОКИ КОМАНДЫ</span>
-          <h2 class="section-title">КТО И КОМУ ЗАПУСКАЕТ ВОЛНУ?</h2>
-        </div>
-      </div>
-
-      <div class="seed-admin-notice" id="seed-admin-notice">
-        🛡 <strong>Режим команды (Админ посева):</strong> розыгрыши билетов и Закрытой Премьеры на твой аккаунт <strong>не действуют</strong> — весь призовой пул остаётся реальным зрителям!
-      </div>
-
-      <div class="seed-role-grid" role="radiogroup" aria-label="Кому отправляем бочку">
-        <button type="button" class="seed-role-card is-active" id="btn-seed-role-friends" data-seed-role="friends">
-          <span class="seed-role-ico">🎬</span>
-          <strong>Я ПРОДЮСЕР — РАССЫЛАЮ ДРУЗЬЯМ</strong>
-          <small>Личная бочка другу по его @аккаунту / имени → цепочка на твой слот продюсера</small>
-        </button>
-        <button type="button" class="seed-role-card" id="btn-seed-role-bloggers" data-seed-role="bloggers">
-          <span class="seed-role-ico">🔥</span>
-          <strong>Я РАССЫЛАЮ БЛОГЕРАМ</strong>
-          <small>Имя блогера на английском → вся его аудитория запишется на его именную ветку</small>
-        </button>
-      </div>
-
-      <!-- Форма: Продюсер -> Друзьям -->
-      <div class="seed-form-box" id="seed-role-friends-box">
-        <label class="field-label" for="seed-hub-prod-select">ТВОЙ СЛОТ ПРОДЮСЕРА:</label>
-        <select id="seed-hub-prod-select" class="industrial-input">
-          <option value="src_prod1">Продюсер #1 (src_prod1)</option>
-          <option value="src_prod2">Продюсер #2 (src_prod2)</option>
-          <option value="src_prod3">Продюсер #3 (src_prod3)</option>
-          <option value="src_prod4">Продюсер #4 (src_prod4)</option>
-          <option value="src_prod5">Продюсер #5 (src_prod5)</option>
-          <option value="src_prod6">Продюсер #6 (src_prod6)</option>
-        </select>
-
-        <label class="field-label" for="input-seed-friend-handle" style="margin-top:10px;">
-          АККАУНТ ИЛИ ИМЯ ДРУГА (ДЛЯ ПЕРСОНАЛЬНОЙ ССЫЛКИ):
-        </label>
-        <input
-          type="text"
-          id="input-seed-friend-handle"
-          class="industrial-input"
-          maxlength="36"
-          autocomplete="off"
-          placeholder="Например: @ivan_petrov или Алексей"
-        />
-      </div>
-
-      <!-- Форма: Рассылка Блогерам (строго имя на английском) -->
-      <div class="seed-form-box" id="seed-role-bloggers-box" hidden>
-        <label class="field-label" for="input-seed-blogger-en">
-          ИМЯ БЛОГЕРА НА АНГЛИЙСКОМ (ЛАТИНИЦЕЙ, БЕЗ ПРОБЕЛОВ):
-        </label>
-        <input
-          type="text"
-          id="input-seed-blogger-en"
-          class="industrial-input"
-          maxlength="24"
-          autocomplete="off"
-          inputmode="latin"
-          placeholder="Например: danya, masha_kino, timur"
-        />
-        <small class="mono-tag" style="display:block;margin-top:5px;opacity:.8;">
-          Только английские буквы, цифры и _ (a-z, 0-9, _). Блогер откроет бочку и вся его волна уйдёт под этой меткой в /admin/.
-        </small>
-      </div>
-
-      <div class="seed-tag-preview" id="seed-hub-tag-preview">
-        🏷 Персональная метка цепочки: <strong>src_prod1</strong>
-      </div>
-
-      <p class="rescue-error-box" id="seed-hub-error" hidden></p>
-
-      <button type="button" class="btn-primary btn-full" id="btn-seed-hub-go-pack">
-        🛢 УПАКОВАТЬ ПЕРСОНАЛЬНУЮ БОЧКУ → ПОЛУЧИТЬ ССЫЛКУ
-      </button>
-
-      <button type="button" class="btn-ghost btn-full" id="btn-seed-hub-play-demo" style="margin-top:8px;">
-        🔒 ПОИГРАТЬ В ЦЕХ (ОТКРОЕТСЯ ПОСЛЕ 1-Й БОЧКИ · БЕЗ РОЗЫГРЫШЕЙ)
-      </button>
-    </div>
-  </section>
-
-  <!-- ====================================================================
        ЭКРАН 4: КОНСТРУКТОР ПРАНКА «УПАКОВАТЬ В БОЧКУ» (ФОТО + ГОЛОС ДО 5 СЕК)
        ==================================================================== -->
   <section class="screen" id="screen-pack" hidden>
@@ -845,10 +756,10 @@
       </p>
       <div class="seed-sent-meta" id="sent-seed-meta" hidden></div>
       <button type="button" class="btn-secondary btn-full" id="btn-sent-copy-link" hidden style="margin-bottom:8px;">
-        📋 СКОПИРОВАТЬ ССЫЛКУ НА БОЧКУ (ДЛЯ ДРУЗЕЙ / СТОРИС)
+        📋 СКОПИРОВАТЬ ОДНУ ОБЩУЮ ССЫЛКУ (ДЛЯ ДРУЗЕЙ / STORIES)
       </button>
-      <button type="button" class="btn-secondary btn-full" id="btn-sent-pack-another" hidden style="margin-bottom:8px;">
-        ➕ УПАКОВАТЬ ЕЩЁ (СЛЕДУЮЩЕМУ ДРУГУ / БЛОГЕРУ)
+      <button type="button" class="btn-secondary btn-full" id="btn-sent-copy-blogger-invite" hidden style="margin-bottom:8px;">
+        🔥 СКОПИРОВАТЬ ЭТУ ЖЕ БОЧКУ КАК ВХОД ДЛЯ БЛОГЕРА (bi_...)
       </button>
       <button type="button" class="btn-primary btn-full" id="btn-sent-play">
         <span id="btn-sent-play-text">▶️ ИГРАТЬ УРОВЕНЬ 3</span>

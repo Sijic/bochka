@@ -63,23 +63,36 @@ export function initTelegram() {
       trailerRefUid: '',
       openGiftFork: false,
       trafficSource: '',
-      seedAdminMode: false,
-      seedProducerPreset: 'src_prod1',
+      teamSeedRole: '',
+      broadcastLinkType: '',
     };
     const clean = String(raw || '').trim();
     if (!clean) return res;
+    const low = clean.toLowerCase();
     if (clean === 'giftfork') {
       res.openGiftFork = true;
-    } else if (clean.toLowerCase() === 'seed_admin' || clean.toLowerCase() === 'admin_seed') {
-      res.seedAdminMode = true;
-      res.seedProducerPreset = 'src_prod1';
-      res.trafficSource = 'seed_admin';
-    } else if (/^(?:seed_prod|seed_prd|src_prod|src_prd)(\d*)$/i.test(clean)) {
-      const m = clean.match(/^(?:seed_prod|seed_prd|src_prod|src_prd)(\d*)$/i);
-      const num = m?.[1] || '1';
-      res.seedAdminMode = true;
-      res.seedProducerPreset = `src_prod${num}`;
-      res.trafficSource = `src_prod${num}`;
+    } else if (low === 'team_prod' || low === 'seed_admin' || low === 'admin_seed' || /^(?:seed_prod|src_prod)\d*$/.test(low)) {
+      res.teamSeedRole = 'prod';
+      res.trafficSource = 'team_prod';
+    } else if (low === 'team_blog' || low === 'seed_blog') {
+      res.teamSeedRole = 'blog';
+      res.trafficSource = 'team_blog';
+    } else if (low.startsWith('pr_') && clean.length > 3) {
+      res.barrelParam = clean.slice(3);
+      res.autoOpenPack = true;
+      res.broadcastLinkType = 'pr';
+      res.trafficSource = `pr_${res.barrelParam}`;
+    } else if (low.startsWith('bl_') && clean.length > 3) {
+      res.barrelParam = clean.slice(3);
+      res.autoOpenPack = true;
+      res.broadcastLinkType = 'bl';
+      res.trafficSource = `bl_${res.barrelParam}`;
+    } else if (low.startsWith('bi_') && clean.length > 3) {
+      res.barrelParam = clean.slice(3);
+      res.autoOpenPack = true;
+      res.teamSeedRole = 'blog';
+      res.broadcastLinkType = 'bi';
+      res.trafficSource = 'team_blog';
     } else if (clean.startsWith('pack_')) {
       res.barrelParam = clean.slice(5);
       res.autoOpenPack = true;
@@ -139,8 +152,8 @@ export function initTelegram() {
       trailerRefUid: urlExtras.ref || parsed.trailerRefUid,
       openGiftFork: urlExtras.giftfork || parsed.openGiftFork,
       trafficSource,
-      seedAdminMode: Boolean(urlExtras.seedAdmin || parsed.seedAdminMode),
-      seedProducerPreset: parsed.seedProducerPreset || 'src_prod1',
+      teamSeedRole: urlExtras.teamSeedRole || parsed.teamSeedRole || '',
+      broadcastLinkType: parsed.broadcastLinkType || '',
     };
   }
 
@@ -206,14 +219,15 @@ export function initTelegram() {
     trailerRefUid: urlExtras.ref || parsed.trailerRefUid,
     openGiftFork: urlExtras.giftfork || parsed.openGiftFork,
     trafficSource,
-    seedAdminMode: Boolean(urlExtras.seedAdmin || parsed.seedAdminMode),
-    seedProducerPreset: parsed.seedProducerPreset || 'src_prod1',
+    teamSeedRole: urlExtras.teamSeedRole || parsed.teamSeedRole || '',
+    broadcastLinkType: parsed.broadcastLinkType || '',
   };
 }
 
 function extractUrlExtraParams() {
   try {
     const sp = new URLSearchParams(window.location.search);
+    const seedQ = (sp.get('team') || sp.get('seed') || '').trim().toLowerCase();
     return {
       duel: (sp.get('duel') || '').trim(),
       watch: (sp.get('watch') || '').trim(),
@@ -222,10 +236,10 @@ function extractUrlExtraParams() {
       src: (sp.get('src') || '').trim(),
       utm: (sp.get('utm') || sp.get('utm_source') || sp.get('utm_campaign') || '').trim(),
       giftfork: sp.get('giftfork') === '1',
-      seedAdmin: sp.get('seed_admin') === '1' || sp.get('seed') === 'admin',
+      teamSeedRole: seedQ === 'prod' || sp.get('seed_admin') === '1' ? 'prod' : seedQ === 'blog' ? 'blog' : '',
     };
   } catch {
-    return { duel: '', watch: '', trailer: false, ref: '', src: '', utm: '', giftfork: false, seedAdmin: false };
+    return { duel: '', watch: '', trailer: false, ref: '', src: '', utm: '', giftfork: false, teamSeedRole: '' };
   }
 }
 

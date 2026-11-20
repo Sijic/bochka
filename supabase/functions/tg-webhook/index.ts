@@ -281,13 +281,42 @@ Deno.serve(async (req: Request) => {
 
     const action = body.clientAction || body.event;
 
+    // v14.3: Сводный пуш создателю многоразовой бочки ТОЛЬКО на круглых отметках (1, 10, 50, 100, 500, 1000, 5000)
+    if (action === "broadcast_milestone" && body.senderTgId && body.barrelId) {
+      const { data: bRow } = await adminDb
+        .from("barrels")
+        .select("short_id, sender_tg_id, is_broadcast, broadcast_prefix, visitor_seq")
+        .eq("short_id", String(body.barrelId))
+        .maybeSingle();
+      if (!bRow || !bRow.is_broadcast || bRow.sender_tg_id !== String(body.senderTgId)) {
+        return jsonResp({ ok: true, skipped: true });
+      }
+      const seq = Number(body.visitorSeq || bRow.visitor_seq || 0);
+      const allowedMilestones = new Set([1, 10, 50, 100, 500, 1000, 5000]);
+      if (!allowedMilestones.has(seq)) {
+        return jsonResp({ ok: true, skipped: true, reason: "not_milestone" });
+      }
+      const prefix = escapeHtml(bRow.broadcast_prefix || "твоя бочка");
+      await tgApi("sendMessage", {
+        chat_id: body.senderTgId,
+        parse_mode: "HTML",
+        text:
+          `🔥 <b>Твою бочку (${prefix}) открыли уже ${seq} чел.!</b>\n` +
+          `Подписчики и друзья разносят волну по цепочке — статистика обновляется в реальном времени.`,
+        reply_markup: {
+          inline_keyboard: [[{ text: "🏆 ОТКРЫТЬ ЦЕХ «БОЧКИ»", url: MINI_APP_LINK }]],
+        },
+      });
+      return jsonResp({ ok: true, milestone: seq });
+    }
+
     if (action === "barrel_search_started" && body.senderTgId && body.barrelId) {
       const { data: bRow } = await adminDb
         .from("barrels")
-        .select("short_id, sender_tg_id")
+        .select("short_id, sender_tg_id, is_broadcast")
         .eq("short_id", String(body.barrelId))
         .maybeSingle();
-      if (!bRow || bRow.sender_tg_id !== String(body.senderTgId)) {
+      if (!bRow || bRow.sender_tg_id !== String(body.senderTgId) || bRow.is_broadcast) {
         return jsonResp({ ok: true, skipped: true });
       }
 
@@ -320,6 +349,16 @@ Deno.serve(async (req: Request) => {
     }
 
     if ((action === "barrel_opened" || action === "opened") && body.senderTgId) {
+      if (body.barrelId) {
+        const { data: bCheck } = await adminDb
+          .from("barrels")
+          .select("is_broadcast")
+          .eq("short_id", String(body.barrelId))
+          .maybeSingle();
+        if (bCheck?.is_broadcast) {
+          return jsonResp({ ok: true, skipped: true, reason: "broadcast_no_spam" });
+        }
+      }
       const { data: sUser } = await adminDb
         .from("users")
         .select("tg_user_id")

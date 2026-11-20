@@ -66,7 +66,9 @@ import {
   getPlayerRecoveryCode,
   restoreProfileByRecoveryCode,
   recordTrafficSource,
-  registerSeedAdmin,
+  buildBroadcastPrefix,
+  registerTeamSeed,
+  assignBroadcastVisitor,
   recordPlayerMeta,
   awardV8LevelProgress,
   checkFriendDuplicateConnection,
@@ -334,163 +336,61 @@ function parseSeedSourceMeta(rawSrc = '') {
   return { isSeed: false, kind: '', num: '', slugName: '', label: '', tag: clean };
 }
 
-function isSeedAdminSession() {
+// v14.3: Две чистые командные ветки посева (team_prod -> pr_<id>, team_blog / bi_<id> -> bl_<id>)
+function getTeamSeedRole() {
+  if (state.tg?.teamSeedRole === 'prod' || state.tg?.teamSeedRole === 'blog') {
+    return state.tg.teamSeedRole;
+  }
+  if (state.profile?.isBloggerSeed) return 'blog';
+  if (state.profile?.isSeedAdmin) return 'prod';
+  return '';
+}
+
+function isProducerPackFirstRequired() {
   if (state.incomingParam || state.incomingPassId || state.tg?.duelRoomParam || state.tg?.watchBarrelParam) {
     return false;
   }
-  return Boolean(state.tg?.seedAdminMode || state.profile?.isSeedAdmin);
-}
-
-function getSeedHubState() {
-  if (!state.seedHub) {
-    state.seedHub = {
-      role: 'friends',
-      prodSlot: state.tg?.seedProducerPreset || 'src_prod1',
-      targetHandle: '',
-      targetTag: state.tg?.seedProducerPreset || 'src_prod1',
-      sentCount: 0,
-      lastCreatedForHandle: '',
-      lastCreatedForTag: '',
-    };
-  }
-  return state.seedHub;
-}
-
-function syncSeedHubUI() {
-  const sh = getSeedHubState();
-  const isBloggers = sh.role === 'bloggers';
-  document.getElementById('btn-seed-role-friends')?.classList.toggle('is-active', !isBloggers);
-  document.getElementById('btn-seed-role-bloggers')?.classList.toggle('is-active', isBloggers);
-  const fBox = document.getElementById('seed-role-friends-box');
-  const bBox = document.getElementById('seed-role-bloggers-box');
-  if (fBox) fBox.toggleAttribute('hidden', isBloggers);
-  if (bBox) bBox.toggleAttribute('hidden', !isBloggers);
-
-  const prodSel = document.getElementById('seed-hub-prod-select');
-  if (prodSel && !isBloggers) {
-    sh.prodSlot = prodSel.value || sh.prodSlot || 'src_prod1';
-  }
-  const bloggerRaw = (document.getElementById('input-seed-blogger-en')?.value || '').trim();
-  const bloggerSlug = bloggerRaw.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24);
-  const previewTag = isBloggers ? (bloggerSlug ? `src_blogger_${bloggerSlug}` : 'src_blogger_<имя>') : sh.prodSlot;
-
-  const prevEl = document.getElementById('seed-hub-tag-preview');
-  if (prevEl) {
-    prevEl.textContent = `🏷 Персональная метка цепочки: ${previewTag}`;
-  }
-  const playBtn = document.getElementById('btn-seed-hub-play-demo');
-  if (playBtn) {
-    const unlocked = sh.sentCount > 0 || Number(state.profile?.packedCount || 0) > 0 || Boolean(state.profile?.seedFirstPackDone);
-    playBtn.disabled = !unlocked;
-    playBtn.textContent = unlocked
-      ? '🎮 ПОИГРАТЬ В ЦЕХ (УРОВЕНЬ 1 · РЕЖИМ АДМИНА БЕЗ РОЗЫГРЫШЕЙ)'
-      : '🔒 ПОИГРАТЬ В ЦЕХ (ОТКРОЕТСЯ ПОСЛЕ 1-Й БОЧКИ · БЕЗ РОЗЫГРЫШЕЙ)';
-  }
-}
-
-function openSeedAdminHub() {
-  const sh = getSeedHubState();
-  const prodSel = document.getElementById('seed-hub-prod-select');
-  if (prodSel && state.tg?.seedProducerPreset && /^src_prod[1-6]$/.test(state.tg.seedProducerPreset)) {
-    prodSel.value = state.tg.seedProducerPreset;
-    sh.prodSlot = state.tg.seedProducerPreset;
-  }
-  document.getElementById('seed-hub-error')?.setAttribute('hidden', '');
-  syncSeedHubUI();
-  showScreen('seedHub');
-}
-
-function handleSeedHubGoPackClick() {
-  const sh = getSeedHubState();
-  const errEl = document.getElementById('seed-hub-error');
-  errEl?.setAttribute('hidden', '');
-
-  if (sh.role === 'bloggers') {
-    const raw = (document.getElementById('input-seed-blogger-en')?.value || '').trim();
-    if (!raw || !/^[a-zA-Z0-9_]{2,24}$/.test(raw)) {
-      if (errEl) {
-        errEl.textContent = 'Введи имя блогера строго на английском (латиницей: a-z, 0-9, _ от 2 символов), например: danya или masha_kino';
-        errEl.removeAttribute('hidden');
-      }
-      Haptics.error();
-      return;
-    }
-    const slug = raw.toLowerCase();
-    sh.targetHandle = slug;
-    sh.targetTag = `src_blogger_${slug}`;
-  } else {
-    const prodSlot = (document.getElementById('seed-hub-prod-select')?.value || 'src_prod1').trim();
-    const rawFriend = (document.getElementById('input-seed-friend-handle')?.value || '').trim();
-    if (rawFriend.length < 2) {
-      if (errEl) {
-        errEl.textContent = 'Введи @аккаунт или имя друга (минимум 2 символа), чтобы ссылка была персональной!';
-        errEl.removeAttribute('hidden');
-      }
-      Haptics.error();
-      return;
-    }
-    sh.prodSlot = prodSlot;
-    sh.targetHandle = rawFriend.slice(0, 36);
-    sh.targetTag = prodSlot;
-  }
-
-  applySeedPackModeUI(true);
-  showScreen('pack');
+  return getTeamSeedRole() === 'prod' && !state.profile?.seedFirstPackDone && Number(state.profile?.packedCount || 0) <= 0;
 }
 
 function isInitialSeedPackRequired() {
-  // Только прямой стартовый вход продюсера/блогера (НЕ по чужой бочке pack_, билету gift_ или дуэли duel_)
-  if (state.incomingParam || state.incomingPassId || state.tg?.duelRoomParam || state.tg?.watchBarrelParam) {
-    return false;
-  }
-  if (isSeedAdminSession()) {
-    return !state.profile?.seedFirstPackDone && Number(state.profile?.packedCount || 0) <= 0;
-  }
-  const meta = parseSeedSourceMeta(state.tg?.trafficSource || state.profile?.trafficSource || '');
-  if (!meta.isSeed) return false;
-  if (state.profile?.seedFirstPackDone) return false;
-  if (Number(state.profile?.packedCount || 0) >= 1) return false;
-  return true;
+  return isProducerPackFirstRequired();
 }
 
 function refreshInitialSeedGateUI() {
   const banner = document.getElementById('gate-seed-banner');
   const teaser = document.getElementById('gate-teaser');
   const enterSoundSpan = document.querySelector('#btn-enter-sound span');
-  if (isSeedAdminSession()) {
+  const role = getTeamSeedRole();
+  if (role === 'prod' && !state.incomingParam) {
+    const pref = buildBroadcastPrefix('prod', state.tg?.user);
     if (banner) {
-      banner.textContent =
-        '🛡 БОТ-АДМИН ПОСЕВА · КОМАНДА — Розыгрыши билетов и Премьеры на тебя не действуют. Выбери, кому шлёшь (друзьям или блогерам), упакуй персональную бочку и отправь ссылку!';
+      banner.textContent = `🎬 КОМАНДА ПРОДЮСЕРОВ (${pref}) — Запакуй СЕБЯ в бочку 1 раз и получи ОДНУ общую ссылку для всех друзей и чатов! Каждому пришедшему бот сам выдаст номер 1..∞. Розыгрыши на команду не действуют.`;
       banner.removeAttribute('hidden');
     }
     if (teaser) {
       teaser.textContent =
-        'Ты — первый игрок команды (админ посева). Выбери «Рассылаю друзьям» или «Рассылаю блогерам», введи @аккаунт друга или имя блогера на английском и отправь персональную бочку!';
+        'Шаг 1: запакуй себя (фото + скример/голос) → получишь одну общую ссылку pr_... для всех друзей. Шаг 2: можно сразу играть!';
     }
     if (enterSoundSpan) {
-      enterSoundSpan.textContent = '🛡 ОТКРЫТЬ БОТ-АДМИН ПОСЕВА';
+      enterSoundSpan.textContent = '🎬 ЗАПАКОВАТЬ СЕБЯ И ПОЛУЧИТЬ ССЫЛКУ';
     }
     return;
   }
-  if (!isInitialSeedPackRequired()) {
-    banner?.setAttribute('hidden', '');
+  if (role === 'blog') {
+    const pref = buildBroadcastPrefix('blog', state.tg?.user);
+    if (banner) {
+      banner.textContent = `🔥 ВХОД ДЛЯ БЛОГЕРА (${pref}) — Пройди Раунд 1, в Раунде 2 найди пустую бочку и запакуй туда СЕБЯ → получишь ОДНУ общую ссылку (bl_...) для Stories и канала! Твоя аудитория участвует в розыгрыше 1+1 на 100%.`;
+      banner.removeAttribute('hidden');
+    }
+    if (teaser) {
+      teaser.textContent = state.incomingParam
+        ? 'Сначала выберись из бочки продюсера в Раунде 1, затем в Раунде 2 запакуй себя — и забирай одну общую ссылку для своих Stories!'
+        : 'Пройди короткий Раунд 1, в Раунде 2 запакуй себя (лицо + крик/скример) и получи одну общую ссылку для Stories и канала!';
+    }
     return;
   }
-  const meta = parseSeedSourceMeta(state.tg?.trafficSource || state.profile?.trafficSource || '');
-  if (banner) {
-    banner.textContent =
-      meta.kind === 'producer'
-        ? `🎬 СТАРТ ПОСЕВА · ${meta.label} — Ты среди первых! Сначала упакуй в бочку друга или блогера и отправь ссылку, а потом откроется игра.`
-        : `🔥 СТАРТ ПОСЕВА · ${meta.label} — Ты запускаешь волну! Сначала упакуй в бочку друга или себя (фото + голос) и отправь ссылку — сразу после откроется игра!`;
-    banner.removeAttribute('hidden');
-  }
-  if (teaser) {
-    teaser.textContent =
-      'Шаг 1: закатай первую бочку и отправь ссылку другу или в Сторис — твоя именная метка закрепится за всей цепочкой. Шаг 2: сразу откроется 3D-игра!';
-  }
-  if (enterSoundSpan) {
-    enterSoundSpan.textContent = '🎬 УПАКОВАТЬ ПЕРВУЮ БОЧКУ И НАЧАТЬ';
-  }
+  banner?.setAttribute('hidden', '');
 }
 
 function applySeedPackModeUI(active) {
@@ -498,48 +398,34 @@ function applySeedPackModeUI(active) {
   const tagEl = document.getElementById('pack-screen-tag');
   const titleEl = document.getElementById('pack-screen-title');
   const customDetails = document.getElementById('pack-custom-details');
-  if (active) {
-    if (isSeedAdminSession() && state.seedHub?.targetTag) {
-      const sh = state.seedHub;
-      const isBlogger = sh.role === 'bloggers';
-      if (tagEl) tagEl.textContent = `🛡 БОТ-АДМИН ПОСЕВА · МЕТКА ${sh.targetTag.toUpperCase()}`;
-      if (titleEl) {
-        titleEl.textContent = isBlogger
-          ? `БОЧКА ДЛЯ БЛОГЕРА: ${sh.targetHandle.toUpperCase()}`
-          : `БОЧКА ДЛЯ ДРУГА: ${sh.targetHandle}`;
-      }
-      if (ban) {
-        ban.textContent = isBlogger
-          ? `🔥 Персональная бочка для блогера ${sh.targetHandle} (${sh.targetTag}): загрузи фото / голос или жми 1 касание — вся его волна привяжется к этой метке! Розыгрыши на админа не действуют.`
-          : `🎬 Персональная бочка другу ${sh.targetHandle} (${sh.targetTag}): упакуй и отправь ссылку — друг сразу попадёт в игру, а его цепочка пойдёт на ${sh.targetTag}!`;
-        ban.removeAttribute('hidden');
-      }
-      if (customDetails) customDetails.open = true;
-      return;
+  const role = getTeamSeedRole();
+  if (active && (role === 'prod' || role === 'blog')) {
+    const pref = buildBroadcastPrefix(role, state.tg?.user);
+    const isBlog = role === 'blog';
+    if (tagEl) {
+      tagEl.textContent = isBlog
+        ? `🔥 БЛОГЕР-БОЧКА · АВТОНУМЕРАЦИЯ ${pref}_1..∞`
+        : `🎬 ПРОДЮСЕР-БОЧКА · АВТОНУМЕРАЦИЯ ${pref}_1..∞`;
     }
-    const meta = parseSeedSourceMeta(state.tg?.trafficSource || state.profile?.trafficSource || '');
-    if (tagEl) tagEl.textContent = `ШАГ 1 ИЗ 2 · ${meta.label || 'СТАРТ ПОСЕВА'} (${meta.tag || 'seed'})`;
     if (titleEl) {
-      titleEl.textContent =
-        meta.kind === 'producer' ? 'УПАКУЙ ДРУГА ИЛИ БЛОГЕРА' : 'УПАКУЙ ПЕРВУЮ БОЧКУ';
+      titleEl.textContent = isBlog ? 'ЗАПАКУЙ СЕБЯ ДЛЯ STORIES И КАНАЛА' : 'ЗАПАКУЙ СЕБЯ В ОБЩУЮ БОЧКУ';
     }
     if (ban) {
-      ban.textContent =
-        meta.kind === 'producer'
-          ? `🎬 СТАРТ ПОСЕВА (${meta.label}): сначала закатай друга или блогера и отправь ссылку — сразу после отправки откроется игра (Уровень 1)!`
-          : `🔥 СТАРТ ПОСЕВА (${meta.label}): сначала закатай друга или себя в бочку и отправь ссылку в TG / Сторис — сразу после отправки откроется игра (Уровень 1)!`;
+      ban.textContent = isBlog
+        ? `🔥 Запакуй СЕБЯ (своё лицо + крик/скример) 1 раз → получишь ОДНУ общую ссылку bl_... для Stories и канала! Всем подписчикам сервер сам выдаст номера ${pref}_1, ${pref}_2...`
+        : `🎬 Запакуй СЕБЯ 1 раз → получишь ОДНУ общую ссылку pr_... для всех друзей и чатов! Каждому сервер сам выдаст номер ${pref}_1, ${pref}_2... (розыгрыши на команду не действуют).`;
       ban.removeAttribute('hidden');
     }
     if (customDetails) customDetails.open = true;
-  } else {
-    if (tagEl) tagEl.textContent = 'ФОТО УЖЕ ГОТОВО — ЖМИ ОТПРАВИТЬ ИЛИ ЗАМЕНИ';
-    if (titleEl) titleEl.textContent = 'УПАКУЙ В БОЧКУ ДРУГА';
-    if (ban) {
-      ban.textContent = '🔒 Чтобы выиграть парный билет 1+1 и играть дальше на супер-приз — отправь пранк другу в 1 касание!';
-      if (!state.profile.mustSendFriendPack) ban.setAttribute('hidden', '');
-    }
-    if (customDetails) customDetails.open = false;
+    return;
   }
+  if (tagEl) tagEl.textContent = 'ФОТО УЖЕ ГОТОВО — ЖМИ ОТПРАВИТЬ ИЛИ ЗАМЕНИ';
+  if (titleEl) titleEl.textContent = 'УПАКУЙ В БОЧКУ ДРУГА';
+  if (ban) {
+    ban.textContent = '🔒 Чтобы выиграть парный билет 1+1 и играть дальше на супер-приз — отправь пранк другу в 1 касание!';
+    if (!state.profile.mustSendFriendPack) ban.setAttribute('hidden', '');
+  }
+  if (customDetails) customDetails.open = false;
 }
 
 function loadLocalV9Flags() {
@@ -1633,14 +1519,28 @@ async function bootstrap() {
   prewarmYouTubeTrailerPlayer();
   bindUIEvents();
   loadLocalV9Flags();
-  // v14.2: Записываем метку трафика (pack_/src_prod*/src_blogger_*) и статус админа СРАЗУ в первые 150 мс до рендера превью!
+  // v14.3: Сразу в первые 150 мс регистрируем роль команды (team_prod/team_blog) ИЛИ атомарно нумеруем входящего по pr_/bl_!
+  const earlyRole = state.tg?.teamSeedRole || '';
+  const earlyTeamPromise = earlyRole
+    ? ((state.profile.isSeedAdmin = true),
+      (state.profile.isBloggerSeed = earlyRole === 'blog'),
+      registerTeamSeed(state.tg?.user, earlyRole).catch(() => {}))
+    : Promise.resolve();
+  const earlyBroadcastAssignPromise =
+    state.incomingParam && (state.tg?.broadcastLinkType === 'pr' || state.tg?.broadcastLinkType === 'bl')
+      ? assignBroadcastVisitor(state.incomingParam, state.tg?.user)
+          .then((res) => {
+            if (res?.seedTrackingCode) {
+              state.profile.seedTrackingCode = res.seedTrackingCode;
+              state.profile.seedPrefix = res.seedPrefix || '';
+              state.profile.seedSeq = res.seedSeq || 0;
+            }
+          })
+          .catch(() => {})
+      : Promise.resolve();
   const earlyTrafficPromise = state.tg?.trafficSource
     ? ((state.profile.trafficSource = state.tg.trafficSource),
       recordTrafficSource(state.tg?.user, state.tg.trafficSource).catch(() => {}))
-    : Promise.resolve();
-  const earlySeedAdminPromise = isSeedAdminSession()
-    ? ((state.profile.isSeedAdmin = true),
-      registerSeedAdmin(state.tg?.user, state.tg?.seedProducerPreset || state.tg?.trafficSource || 'seed_admin').catch(() => {}))
     : Promise.resolve();
   refreshInitialSeedGateUI();
   document.getElementById('btn-enter-sound')?.removeAttribute('disabled');
@@ -1648,7 +1548,11 @@ async function bootstrap() {
   await initPackConstructorDefaults();
 
   mergeFreshProfile(await fetchPlayerProfile(state.tg?.user), { preserveProgress: false });
-  await Promise.all([earlyTrafficPromise, earlySeedAdminPromise]);
+  if (earlyRole) {
+    state.profile.isSeedAdmin = true;
+    if (earlyRole === 'blog') state.profile.isBloggerSeed = true;
+  }
+  await Promise.all([earlyTrafficPromise, earlyTeamPromise, earlyBroadcastAssignPromise]);
   refreshInitialSeedGateUI();
   recordPlayerMeta(state.tg?.user).catch(() => {});
   if (state.tg?.duelRoomParam) {
@@ -1911,11 +1815,13 @@ function showScreen(name) {
   }
   document.getElementById('topbar')?.toggleAttribute('hidden', name === 'gate');
   document.getElementById('nav-workshop')?.classList.toggle('is-active', name === 'workshop' || name === 'modeA');
+  if (name === 'pack' && (getTeamSeedRole() === 'prod' || getTeamSeedRole() === 'blog')) {
+    applySeedPackModeUI(true);
+  }
   const ids = {
     gate: 'screen-gate',
     modeA: 'screen-mode-a',
     workshop: 'screen-workshop',
-    seedHub: 'screen-seed-hub',
     pack: 'screen-pack',
     finale: 'screen-finale',
     sent: 'screen-sent',
@@ -2188,15 +2094,11 @@ async function enterWorkshopGate(withSound) {
       return;
     }
     await startViralFriendRound(state.incomingPack);
-  } else if (isSeedAdminSession()) {
-    // v14.2: Единый Бот-Админ посева (startapp=seed_admin / src_prod1..6) — выбор роли (друзьям / блогерам), ввод получателя -> упаковка бочки!
-    openSeedAdminHub();
-  } else if (isInitialSeedPackRequired()) {
-    // v14.1: Начальный посев (src_prod1..6 / src_blogger_<имя>) — сначала упаковать первую бочку и отправить, и только потом играть!
+  } else if (isProducerPackFirstRequired()) {
+    // v14.3 Ветка А (team_prod): продюсер сразу пакует СЕБЯ 1 раз и получает одну общую ссылку pr_<id>!
     applySeedPackModeUI(true);
     showScreen('pack');
-    const meta = parseSeedSourceMeta(state.tg?.trafficSource || state.profile?.trafficSource || '');
-    showToast(`🎬 ${meta.label || 'СТАРТ ПОСЕВА'}: сначала упакуй первую бочку и отправь ссылку — потом откроется игра!`);
+    showToast('🎬 Запакуй СЕБЯ в бочку 1 раз — получишь одну общую ссылку для всех друзей и чатов!');
   } else if (state.profile.mustSendFriendPack) {
     // v9.0: Если игрок закрыл игру на обязательной упаковке друга (Раунд 2) — возвращаем ровно на это же место!
     document.getElementById('pack-mandatory-banner')?.removeAttribute('hidden');
@@ -5618,8 +5520,9 @@ async function handleSealBarrelClick() {
     // Уровень бочки выбирается автоматически по прогрессу игрока
     const autoZone = Math.max(1, Math.min(4, Number(state.profile?.currentLevel || 1)));
 
-    const seedAdminActive = isSeedAdminSession();
-    const sh = seedAdminActive ? getSeedHubState() : null;
+    const teamRole = getTeamSeedRole();
+    const isBroadcastPack = teamRole === 'prod' || teamRole === 'blog';
+    const broadcastPrefix = isBroadcastPack ? buildBroadcastPrefix(teamRole, state.tg?.user) : '';
     const created = await createBarrelPack({
       mode: 'friend',
       message: phrase,
@@ -5631,25 +5534,22 @@ async function handleSealBarrelClick() {
       tgUser: state.tg.user,
       processedImage: state.pack.processed,
       recordedVoice: state.pack.voice,
-      seedTrafficSource: sh?.targetTag || '',
-      seedTargetHandle: sh?.targetHandle || '',
+      isBroadcast: isBroadcastPack,
+      broadcastPrefix,
     });
 
     state.pack.lastShareUrl = created.shareUrl;
+    state.pack.lastBloggerInviteUrl = created.bloggerInviteUrl || '';
+    state.pack.lastBroadcastPrefix = created.broadcastPrefix || broadcastPrefix || '';
+    state.pack.lastBroadcastRole = isBroadcastPack ? teamRole : '';
     state.pack.lastWebUrl = created.webUrl;
     state.pack.shareLifeClaimedForUrl = '';
     state.profile.premiereScore = Math.max(Number(state.profile.premiereScore || 0), Number(created.premiereScore || 72));
     state.profile.temuSurgeClaimed = true;
     const prevRatingPct = computeSuperPrizeRatingPct(state.profile);
-    const wasInitialSeedPack = isInitialSeedPackRequired();
+    const wasProducerFirstPack = isProducerPackFirstRequired();
     state.profile.packedCount = Math.max(1, Number(state.profile.packedCount || 0) + 1);
-    if (seedAdminActive && sh) {
-      sh.sentCount = (sh.sentCount || 0) + 1;
-      sh.lastCreatedForHandle = sh.targetHandle || '';
-      sh.lastCreatedForTag = sh.targetTag || '';
-      state.profile.seedFirstPackDone = true;
-      applySeedPackModeUI(false);
-    } else if (wasInitialSeedPack) {
+    if (isBroadcastPack) {
       state.profile.seedFirstPackDone = true;
       applySeedPackModeUI(false);
     }
@@ -5660,11 +5560,10 @@ async function handleSealBarrelClick() {
     document.getElementById('pack-mandatory-banner')?.setAttribute('hidden', '');
 
     // v11.0 Честная экономика: после отправки жизни улетают ровно 3 ❤️ (5 быть не может, пока реальные друзья не зашли!).
-    // Шкала Супер-приза слегка сдвигается авансом (+3%), а главный рывок (+20% / +500 ⭐) даётся, когда друг зайдёт играть!
     const wasLifeRefill = Boolean(state.pack.forLifeRefill);
     state.pack.forLifeRefill = false;
     const prevRoundLvl = Math.max(1, Number(state.round?.workshopLevel || 2));
-    const targetNextLevel = (seedAdminActive || wasInitialSeedPack)
+    const targetNextLevel = wasProducerFirstPack
       ? 1
       : wasLifeRefill
         ? Math.max(2, prevRoundLvl)
@@ -5680,25 +5579,23 @@ async function handleSealBarrelClick() {
       pointsDelta: 0,
       livesDelta: Math.max(0, nextLives - prevLives),
     }).catch(() => {});
-    await syncUiStage(state.tg?.user, (seedAdminActive || wasInitialSeedPack) ? 1 : 3).catch(() => {});
+    await syncUiStage(state.tg?.user, wasProducerFirstPack ? 1 : 3).catch(() => {});
 
-    const personalPrefix =
-      seedAdminActive && sh?.targetHandle
-        ? sh.role === 'bloggers'
-          ? `🛢 Персональная бочка для ${sh.targetHandle}! Заварил тебя в 3D-цеху фильма «БОЧКА» — надень наушники и выберись за 3 удара`
-          : `🛢 ${sh.targetHandle}, я заварил тебя в цеху «БОЧКИ»! Надень наушники — найди нужную крышку за 3 удара`
+    const sharePrefix =
+      teamRole === 'blog'
+        ? '🛢 Я заварил себя в 3D-цеху фильма «БОЧКА»! Надень наушники — вытащи меня за 3 удара и забирай парный билет 1+1 в кино'
         : '🛢 Кто-то заварил тебя в цеху «БОЧКИ»! Надень наушники — найди нужную крышку за 3 удара';
     openTelegramShare(
       created.shareUrl,
-      `${personalPrefix}${phrase ? `: «${phrase}»` : ''}`
+      `${sharePrefix}${phrase ? `: «${phrase}»` : ''}`
     );
     updatePremiereBarsUI();
     refreshHudLevelLabel();
     // v12.5: На экране отправки сначала скрываем новые 3 ❤️ (показываем 0 ❤️), чтобы игрок ГЛАЗАМИ увидел прилёт 0→1→2→3 в шапку!
-    state.pendingLevelStartFly = { lives: (seedAdminActive || wasInitialSeedPack) ? 1 : 3, strikes: 3 };
+    state.pendingLevelStartFly = { lives: wasProducerFirstPack ? 1 : 3, strikes: 3 };
     Haptics.success();
     applyProgressiveDisclosureUI({ skipPromoteFromSocial: true });
-    showSentScreen({ wasLifeRefill, wasInitialSeedPack, wasSeedAdminPack: seedAdminActive, prevRatingPct });
+    showSentScreen({ wasLifeRefill, wasBroadcastPack, broadcastRole: teamRole, prevRatingPct });
     setHudVisualLivesDisplay(0);
     window.setTimeout(() => {
       flyRewardToHud({
@@ -5717,14 +5614,14 @@ async function handleSealBarrelClick() {
   }
 }
 
-function showSentScreen({ wasLifeRefill = false, wasInitialSeedPack = false, wasSeedAdminPack = false, prevRatingPct = null } = {}) {
-  const targetLvl = (wasInitialSeedPack || wasSeedAdminPack) ? 1 : Math.max(3, Number(state.profile?.currentLevel || 3));
+function showSentScreen({ wasLifeRefill = false, wasBroadcastPack = false, broadcastRole = '', prevRatingPct = null } = {}) {
+  const targetLvl = wasBroadcastPack && broadcastRole === 'prod' ? 1 : Math.max(3, Number(state.profile?.currentLevel || 3));
   const spec = getWorkshopLevelSpec(targetLvl);
   const titleEl = document.getElementById('sent-title');
   const txt = document.getElementById('sent-text');
   const btnTxt = document.getElementById('btn-sent-play-text');
   const copyBtn = document.getElementById('btn-sent-copy-link');
-  const packAnotherBtn = document.getElementById('btn-sent-pack-another');
+  const blogInvBtn = document.getElementById('btn-sent-copy-blogger-invite');
   const seedMetaEl = document.getElementById('sent-seed-meta');
   const nextPct = computeSuperPrizeRatingPct(state.profile);
   const startPct = prevRatingPct !== null ? Math.min(nextPct, prevRatingPct) : Math.max(0, nextPct - 3);
@@ -5742,40 +5639,47 @@ function showSentScreen({ wasLifeRefill = false, wasInitialSeedPack = false, was
     }, 160);
   }
   if (sNote) {
-    sNote.textContent = (wasInitialSeedPack || wasSeedAdminPack)
-      ? 'Твоя именная метка посева закреплена за этой бочкой! Все друзья, блогеры и их друзья по цепочке автоматически засчитаются в аналитику.'
+    sNote.textContent = wasBroadcastPack
+      ? 'Эта одна ссылка работает на 10 000+ человек сразу: каждому сервер сам выдаст порядковый номер _1, _2, _3... без спама в личку!'
       : 'За отправку шкала чуть сдвинулась (+3% аванс). Когда друг реально зайдёт играть по твоей ссылке — получишь +20% (+500 ⭐) к шкале Супер-приза!';
   }
   if (copyBtn) {
     if (state.pack?.lastShareUrl) copyBtn.removeAttribute('hidden');
     else copyBtn.setAttribute('hidden', '');
   }
-  if (packAnotherBtn) {
-    if (wasSeedAdminPack || isSeedAdminSession()) packAnotherBtn.removeAttribute('hidden');
-    else packAnotherBtn.setAttribute('hidden', '');
+  if (blogInvBtn) {
+    if (wasBroadcastPack && broadcastRole === 'prod' && state.pack?.lastBloggerInviteUrl) {
+      blogInvBtn.removeAttribute('hidden');
+    } else {
+      blogInvBtn.setAttribute('hidden', '');
+    }
   }
   if (seedMetaEl) {
-    if (wasSeedAdminPack && state.seedHub?.lastCreatedForTag) {
-      seedMetaEl.textContent = `🛡 Кому: ${state.seedHub.lastCreatedForHandle || 'получатель'} · Метка цепочки: ${state.seedHub.lastCreatedForTag} · Ссылка: ${state.pack?.lastShareUrl || ''}`;
+    if (wasBroadcastPack && state.pack?.lastShareUrl) {
+      const pref = state.pack.lastBroadcastPrefix || (broadcastRole === 'blog' ? 'bl_team' : 'pr_team');
+      seedMetaEl.textContent = `🚀 Твоя одна общая ссылка (${pref}_1..∞): ${state.pack.lastShareUrl}`;
       seedMetaEl.removeAttribute('hidden');
     } else {
       seedMetaEl.setAttribute('hidden', '');
     }
   }
-  if (wasSeedAdminPack) {
-    const sh = state.seedHub || {};
-    if (titleEl) titleEl.textContent = '🛡 ПЕРСОНАЛЬНАЯ БОЧКА ГОТОВА И УЛЕТЕЛА!';
-    if (txt) {
-      txt.textContent = `Бочка для «${sh.lastCreatedForHandle || 'получателя'}» с меткой ${sh.lastCreatedForTag || 'src_prod1'} готова! Можешь сразу упаковать следующую для другого друга или блогера, либо протестировать игру (розыгрыши на админа не действуют).`;
+  if (wasBroadcastPack) {
+    const isBlog = broadcastRole === 'blog';
+    if (titleEl) {
+      titleEl.textContent = isBlog
+        ? '🔥 ГОТОВО! ТВОЯ ОБЩАЯ ССЫЛКА ДЛЯ STORIES И КАНАЛА'
+        : '🎬 ГОТОВО! ТВОЯ ОДНА ОБЩАЯ ССЫЛКА ДЛЯ ВСЕХ ДРУЗЕЙ';
     }
-    if (btnTxt) btnTxt.textContent = '▶️ ПОИГРАТЬ В ЦЕХ — УРОВЕНЬ 1 (БЕЗ РОЗЫГРЫШЕЙ)';
-  } else if (wasInitialSeedPack) {
-    const meta = parseSeedSourceMeta(state.tg?.trafficSource || state.profile?.trafficSource || '');
-    if (titleEl) titleEl.textContent = '🎬 ПЕРВАЯ БОЧКА УЛЕТЕЛА! ВОЛНА ЗАПУЩЕНА!';
     if (txt) {
-      txt.textContent = `Старт посева (${meta.label || meta.tag || 'SEED'}) активирован! Отправь ссылку другу / блогеру или скопируй её в Сторис — а сам теперь можешь начинать игру с Уровня 1!`;
+      txt.textContent = isBlog
+        ? 'Скопируй эту одну ссылку в Stories, описание и Telegram-канал — каждый подписчик откроет именно твою бочку и получит номер 1..∞!'
+        : 'Кидай эту одну ссылку всем друзьям и в любые чаты без повторной упаковки — каждому сервер выдаст личный номер 1..∞!';
     }
-    if (btnTxt) btnTxt.textContent = '▶️ НАЧАТЬ ИГРУ — УРОВЕНЬ 1 (4 БОЧКИ)';
+    if (btnTxt) {
+      btnTxt.textContent = isBlog
+        ? `▶️ ИГРАТЬ ДАЛЬШЕ — УРОВЕНЬ ${spec.level} (${spec.barrelCount} ${formatBarrelWord(spec.barrelCount)})`
+        : '▶️ ПОИГРАТЬ В ЦЕХ — УРОВЕНЬ 1 (БЕЗ РОЗЫГРЫШЕЙ)';
+    }
   } else {
     if (titleEl) titleEl.textContent = 'КРАСАВА! БОЧКА УЛЕТЕЛА ДРУГУ!';
     if (txt) {
@@ -8135,13 +8039,8 @@ function bindUIEvents() {
   // Экран 4: Конструктор пранка (Фото + Голосовуха)
   document.getElementById('btn-close-pack')?.addEventListener('click', () => {
     if (voiceRecorder?.isRecording) voiceRecorder.stop();
-    // v14.2: В режиме Бот-Админа посева крестик возвращает в окно выбора роли/получателя
-    if (isSeedAdminSession()) {
-      openSeedAdminHub();
-      return;
-    }
-    // v14.1 + v9.0: Нельзя закрыть крестиком, пока не отправлена стартовая бочка посева (src_blogger*) или обязательная бочка Раунда 2!
-    if (isInitialSeedPackRequired() || state.profile.mustSendFriendPack) {
+    // v14.3 + v9.0: Нельзя закрыть крестиком, пока продюсер (team_prod) не запаковал свою общую бочку или не закрыт замок Раунда 2!
+    if (isProducerPackFirstRequired() || state.profile.mustSendFriendPack) {
       const ban = document.getElementById('pack-mandatory-banner');
       if (ban) {
         ban.removeAttribute('hidden');
@@ -8630,40 +8529,11 @@ function bindUIEvents() {
     showScreen('pack');
   });
 
-  // v14.2: События Бот-Админа посева (#screen-seed-hub)
-  document.getElementById('btn-seed-role-friends')?.addEventListener('click', () => {
-    getSeedHubState().role = 'friends';
-    document.getElementById('seed-hub-error')?.setAttribute('hidden', '');
-    syncSeedHubUI();
-    Haptics.light();
-  });
-  document.getElementById('btn-seed-role-bloggers')?.addEventListener('click', () => {
-    getSeedHubState().role = 'bloggers';
-    document.getElementById('seed-hub-error')?.setAttribute('hidden', '');
-    syncSeedHubUI();
-    Haptics.light();
-  });
-  document.getElementById('seed-hub-prod-select')?.addEventListener('change', () => syncSeedHubUI());
-  document.getElementById('input-seed-blogger-en')?.addEventListener('input', () => syncSeedHubUI());
-  document.getElementById('btn-seed-hub-go-pack')?.addEventListener('click', () => handleSeedHubGoPackClick());
-  document.getElementById('btn-seed-hub-play-demo')?.addEventListener('click', async () => {
-    const sh = getSeedHubState();
-    const unlocked = sh.sentCount > 0 || Number(state.profile?.packedCount || 0) > 0 || Boolean(state.profile?.seedFirstPackDone);
-    if (!unlocked) {
-      showToast('🔒 Сначала упакуй и отправь 1-ю персональную бочку — потом откроется игра!');
-      Haptics.error();
-      return;
-    }
-    if (!audio._userMuted) await audio.unlock(true);
-    await startNewbieOnboardingRound();
-  });
-
-  document.getElementById('btn-sent-pack-another')?.addEventListener('click', () => {
-    const friendIn = document.getElementById('input-seed-friend-handle');
-    const blogIn = document.getElementById('input-seed-blogger-en');
-    if (friendIn) friendIn.value = '';
-    if (blogIn) blogIn.value = '';
-    openSeedAdminHub();
+  document.getElementById('btn-sent-copy-blogger-invite')?.addEventListener('click', async () => {
+    if (!state.pack?.lastBloggerInviteUrl) return;
+    await copyToClipboard(state.pack.lastBloggerInviteUrl);
+    showToast('✓ Входная ссылка для блогера (bi_...) скопирована!');
+    Haptics.success();
   });
 
   document.getElementById('btn-sent-copy-link')?.addEventListener('click', async () => {

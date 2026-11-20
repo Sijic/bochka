@@ -112,6 +112,27 @@ function resolveShareBaseUrl() {
  * - сохраняет запись через `create_barrel_pack_rpc`,
  * - внутри ТГ отдаёт `https://t.me/bochka_film_bot/play?startapp=<short_id>`, а для веба — `https://bochka.quest/?b=<short_id>`.
  */
+export function buildBroadcastPrefix(role = 'prod', tgUser = null) {
+  const map = {
+    а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y',
+    к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f',
+    х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
+  };
+  const raw = String(tgUser?.username || tgUser?.name || getViewerUid(tgUser) || 'team')
+    .trim()
+    .replace(/^@+/, '')
+    .toLowerCase();
+  const slug = raw
+    .split('')
+    .map((ch) => (map[ch] !== undefined ? map[ch] : ch))
+    .join('')
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 20) || 'team';
+  const pref = role === 'blog' ? 'bl' : 'pr';
+  return `${pref}_${slug}`;
+}
+
 export async function createBarrelPack({
   mode = 'friend',
   message = '',
@@ -125,6 +146,8 @@ export async function createBarrelPack({
   recordedVoice = null,
   seedTrafficSource = '',
   seedTargetHandle = '',
+  isBroadcast = false,
+  broadcastPrefix = '',
 }) {
   const id = randomShortId(7);
   const cleanZone = Math.max(1, Math.min(4, Number(zoneId) || 1));
@@ -199,6 +222,8 @@ export async function createBarrelPack({
         p_target_index: targetIndex,
         p_seed_traffic_source: String(seedTrafficSource || '').trim() || null,
         p_seed_target_handle: String(seedTargetHandle || '').trim() || null,
+        p_is_broadcast: Boolean(isBroadcast),
+        p_broadcast_prefix: isBroadcast ? (String(broadcastPrefix || '').trim() || null) : null,
       });
 
       if (!rpcErr && rpcRes?.ok) {
@@ -278,10 +303,20 @@ export async function createBarrelPack({
   const baseOrigin = resolveShareBaseUrl();
   const sep = baseOrigin.includes('?') ? '&' : '?';
   const bogFlag = isTestBogActive() ? 'testbog=1&' : '';
+  const cleanBroadcastPref = isBroadcast
+    ? String(createPackRpcData?.broadcast_prefix || broadcastPrefix || '').trim()
+    : '';
+  const startPrefix = isBroadcast
+    ? (cleanBroadcastPref.startsWith('bl_') ? 'bl_' : 'pr_')
+    : 'pack_';
   const webUrl = `${baseOrigin}${sep}${bogFlag}b=${encodeURIComponent(id)}`;
   const tgMiniAppUrl =
     !isTestBogActive()
-      ? `https://t.me/${ENV.tgBotUsername || 'bochka_film_bot'}?startapp=pack_${encodeURIComponent(id)}`
+      ? `https://t.me/${ENV.tgBotUsername || 'bochka_film_bot'}?startapp=${startPrefix}${encodeURIComponent(id)}`
+      : webUrl;
+  const bloggerInviteUrl =
+    !isTestBogActive()
+      ? `https://t.me/${ENV.tgBotUsername || 'bochka_film_bot'}?startapp=bi_${encodeURIComponent(id)}`
       : webUrl;
 
   return {
@@ -291,8 +326,11 @@ export async function createBarrelPack({
     surgeTriggered,
     premiereScore: updatedProf.premiereScore,
     uiStage: updatedProf.uiStage,
-    shareUrl: isTelegramMiniApp() ? tgMiniAppUrl : webUrl,
+    isBroadcast: Boolean(isBroadcast),
+    broadcastPrefix: cleanBroadcastPref,
+    shareUrl: isBroadcast || isTelegramMiniApp() ? tgMiniAppUrl : webUrl,
     tgUrl: tgMiniAppUrl,
+    bloggerInviteUrl,
     webUrl,
     pack: localPacks[id],
   };
@@ -341,6 +379,9 @@ export async function loadBarrelPack(rawParam) {
           senderUid: data.sender_uid || '',
           senderTgId: data.sender_tg_id || '',
           senderName: data.sender_name || '',
+          isBroadcast: Boolean(data.is_broadcast),
+          broadcastPrefix: data.broadcast_prefix || '',
+          visitorSeq: Number(data.visitor_seq || 0),
           openedCount: 0,
         };
       }
@@ -463,6 +504,11 @@ export async function recordBarrelResult(
     localPacks[pack.id].attemptsUsed = attemptsUsed;
     localPacks[pack.id].timeLeft = Number(timeLeft.toFixed(1));
     safeWriteJson(PACKS_STORAGE_KEY, localPacks);
+  }
+
+  // v14.3: Для многоразовых бочек продюсеров/блогеров не спамим личку на каждое открытие (только сводки на круглых числах!)
+  if (pack.isBroadcast) {
+    return { notified: false, skippedBroadcast: true, senderBonusCredited };
   }
 
   // Антиспам-троттлинг уведомлений отправителю (не чаще 1 раза в 15с на бочку и исход)
@@ -1504,7 +1550,7 @@ export async function notifyBarrelSearchStarted(pack, viewerTgUser = null) {
     } catch { /* ignore */ }
   }
 
-  if (senderTgId) {
+  if (senderTgId && !pack.isBroadcast) {
     const throttleKey = `bochka_ping_start_${pack.id}`;
     const lastTs = Number(safeRead(throttleKey, '0') || 0);
     if (Date.now() - lastTs > 15000) {
@@ -2179,6 +2225,77 @@ export async function claimDuelPremiereBankReward(tgUser = null, { pointsBonus =
  * v13.0: Атомарный запрос бесплатного билета в кино через жёсткий серверный пул Supabase
  * (проверяет is_paused, дату 16.12.2026, max_total_tickets, max_daily_tickets, hourly_cap).
  */
+export async function registerTeamSeed(tgUser = null, role = 'prod') {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  const cleanRole = role === 'blog' ? 'blog' : 'prod';
+  if (!db || isTestBogActive()) {
+    return { ok: true, isSeedAdmin: true, isBloggerSeed: cleanRole === 'blog', local: true };
+  }
+  try {
+    const { data, error } = await db.rpc('register_team_seed_rpc', {
+      p_uid: uid,
+      p_role: cleanRole,
+      p_tg_id: tgUser?.id || null,
+      p_tg_username: tgUser?.username || null,
+      p_display_name: tgUser?.name || '',
+    });
+    if (!error && data?.ok) {
+      return {
+        ok: true,
+        isSeedAdmin: Boolean(data.is_seed_admin),
+        isBloggerSeed: Boolean(data.is_blogger_seed),
+      };
+    }
+    return { ok: false, isSeedAdmin: false, isBloggerSeed: false };
+  } catch {
+    return { ok: false, isSeedAdmin: false, isBloggerSeed: false };
+  }
+}
+
+export async function assignBroadcastVisitor(barrelId, tgUser = null) {
+  const cleanId = String(barrelId || '').trim();
+  if (!cleanId) return { ok: false };
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  if (!db || isTestBogActive()) {
+    return { ok: true, local: true };
+  }
+  try {
+    const { data, error } = await db.rpc('assign_broadcast_visitor_rpc', {
+      p_barrel_id: cleanId,
+      p_visitor_uid: uid,
+      p_tg_id: tgUser?.id || null,
+      p_tg_username: tgUser?.username || null,
+      p_display_name: tgUser?.name || '',
+    });
+    if (!error && data?.ok) {
+      if (data.milestone_hit && data.sender_tg_id) {
+        sendTelegramPing({
+          clientAction: 'broadcast_milestone',
+          senderTgId: data.sender_tg_id,
+          barrelId: cleanId,
+          visitorSeq: Number(data.visitor_seq || 1),
+        }).catch(() => {});
+      }
+      return {
+        ok: true,
+        isBroadcast: Boolean(data.is_broadcast),
+        assignedNow: Boolean(data.assigned_now),
+        seedPrefix: data.seed_prefix || '',
+        seedSeq: Number(data.seed_seq || 0),
+        seedTrackingCode: data.seed_tracking_code || '',
+        rootTrackingCode: data.root_tracking_code || '',
+        visitorSeq: Number(data.visitor_seq || 0),
+        milestoneHit: Boolean(data.milestone_hit),
+      };
+    }
+    return { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}
+
 export async function registerSeedAdmin(tgUser = null, seedTag = 'seed_admin') {
   const uid = getViewerUid(tgUser);
   const db = getCloudDb();

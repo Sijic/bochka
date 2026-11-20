@@ -288,13 +288,17 @@ function renderTrafficSourcesSummary(totalPlayers = 0) {
       const rawTag = String(r.tag || 'organic');
       const label =
         tagLabels[rawTag] ||
-        (rawTag === 'src_test' || rawTag.startsWith('src_test')
-          ? `🧪 Тестовые (${rawTag}) и их цепочка`
-          : rawTag.startsWith('src_friend')
-            ? `🤝 Друзья продюсеров (${rawTag})`
-            : rawTag.startsWith('src_')
-              ? `🎤 Блогер / канал: ${rawTag.slice(4)} (${rawTag})`
-              : `🔗 Метка: ${rawTag}`);
+        (rawTag.startsWith('pr_')
+          ? `🎬 Продюсер (${rawTag}) и его ветка`
+          : rawTag.startsWith('bl_')
+            ? `🔥 Блогер (${rawTag}) и его аудитория`
+            : rawTag === 'src_test' || rawTag.startsWith('src_test')
+              ? `🧪 Тестовые (${rawTag}) и их цепочка`
+              : rawTag.startsWith('src_friend')
+                ? `🤝 Друзья продюсеров (${rawTag})`
+                : rawTag.startsWith('src_')
+                  ? `🎤 Блогер / канал: ${rawTag.slice(4)} (${rawTag})`
+                  : `🔗 Метка: ${rawTag}`);
       const packed = Number(r.barrels_packed || 0);
       const invited = Number(r.friends_brought || 0);
 
@@ -324,6 +328,50 @@ function renderTrafficSourcesSummary(totalPlayers = 0) {
       return rowEl;
     })
   );
+
+  // v14.3: Сводка по многоразовым бочкам продюсеров (pr_*) и блогеров (bl_*)
+  const bcastBox = document.getElementById('broadcast-summary-box');
+  if (bcastBox) {
+    const bList = Array.isArray(tr.broadcast_summary) ? tr.broadcast_summary : [];
+    if (!bList.length) {
+      const emptyEl = document.createElement('p');
+      emptyEl.className = 'mono-muted';
+      emptyEl.textContent = 'Пока нет активных многоразовых бочек (pr_* / bl_*). Скопируйте ссылку team_prod или team_blog сверху.';
+      bcastBox.replaceChildren(emptyEl);
+    } else {
+      const maxSeqTop = Math.max(1, ...bList.map((b) => Number(b.max_seq || 0)));
+      bcastBox.replaceChildren(
+        ...bList.map((b) => {
+          const pref = String(b.prefix || '');
+          const maxSeq = Number(b.max_seq || 0);
+          const chainP = Number(b.chain_players || 0);
+          const further = Number(b.barrels_further || 0);
+          const orders = Number(b.ticket_orders || 0);
+          const ico = pref.startsWith('bl_') ? '🔥' : '🎬';
+          const rangeStr = maxSeq > 0 ? `1..${maxSeq}` : '0';
+
+          const rowEl = document.createElement('div');
+          rowEl.className = 'funnel-row';
+          const topEl = document.createElement('div');
+          topEl.className = 'funnel-row-top';
+          const left = document.createElement('span');
+          left.textContent = `${ico} ${pref} (${b.creator_name || pref}) — номера ${rangeStr}`;
+          const right = document.createElement('strong');
+          right.textContent = `В ветке: ${fmtInt(chainP)} · Бочек дальше: ${fmtInt(further)} · Заявок 1+1: ${fmtInt(orders)}`;
+          topEl.append(left, right);
+
+          const track = document.createElement('div');
+          track.className = 'funnel-track';
+          const fill = document.createElement('div');
+          fill.className = 'funnel-fill';
+          fill.style.width = `${Math.max(4, Math.min(100, Math.round((maxSeq / maxSeqTop) * 100)))}%`;
+          track.appendChild(fill);
+          rowEl.append(topEl, track);
+          return rowEl;
+        })
+      );
+    }
+  }
 }
 
 /* ============================================================================
@@ -744,50 +792,22 @@ function bindAdminEvents() {
   document.getElementById('btn-export-csv')?.addEventListener('click', handleExportOrdersCsv);
   bindTop100Events();
 
-  // v14.1: Генератор стартовых ссылок посева (src_prod1..6 и src_blogger_<имя>)
-  const translitSeedSlug = (raw) => {
-    const map = {
-      а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y',
-      к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f',
-      х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
-    };
-    return String(raw || '')
-      .trim()
-      .toLowerCase()
-      .split('')
-      .map((ch) => (map[ch] !== undefined ? map[ch] : ch))
-      .join('')
-      .replace(/[^a-z0-9_]+/g, '_')
-      .replace(/^_+|_+$/g, '')
-      .slice(0, 24);
-  };
-  const seedInput = document.getElementById('seed-blogger-name');
-  const seedUrlOut = document.getElementById('seed-generated-url');
-  const setSeedTag = (tag) => {
-    if (seedUrlOut) seedUrlOut.value = `https://t.me/bochka_film_bot?startapp=${tag}`;
-  };
-  document.querySelectorAll('[data-seed-preset]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const preset = btn.getAttribute('data-seed-preset') || 'src_prod1';
-      if (seedInput) seedInput.value = '';
-      setSeedTag(preset);
-    });
-  });
-  seedInput?.addEventListener('input', () => {
-    const slug = translitSeedSlug(seedInput.value);
-    setSeedTag(slug ? `src_blogger_${slug}` : 'seed_admin');
-  });
-  document.getElementById('btn-copy-seed-url')?.addEventListener('click', async () => {
-    const val = seedUrlOut?.value || '';
-    if (!val) return;
+  // v14.3: Две готовые стартовые кнопки копирования (team_prod и team_blog)
+  const copyQuickStartLink = async (tag, label) => {
+    const url = `https://t.me/bochka_film_bot?startapp=${tag}`;
     try {
-      await navigator.clipboard.writeText(val);
-      showAdmToast(`✓ Скопировано: ${val}`);
+      await navigator.clipboard.writeText(url);
+      showAdmToast(`✓ Скопировано (${label}): ${url}`);
     } catch {
-      seedUrlOut?.select();
-      showAdmToast('Выделено — нажми Ctrl+C');
+      window.prompt(`Скопируй ссылку (${label}):`, url);
     }
-  });
+  };
+  document.getElementById('btn-copy-team-prod')?.addEventListener('click', () =>
+    copyQuickStartLink('team_prod', 'Чат продюсеров')
+  );
+  document.getElementById('btn-copy-team-blog')?.addEventListener('click', () =>
+    copyQuickStartLink('team_blog', 'Вход для блогеров')
+  );
 
   document.querySelectorAll('[data-adm-tab]').forEach((tabBtn) => {
     tabBtn.addEventListener('click', () => {
@@ -1158,6 +1178,85 @@ function bindTop100Events() {
     loadTop100();
   });
   document.getElementById('btn-top100-csv')?.addEventListener('click', exportTop100Csv);
+
+  // v14.3: Поиск игрока и дерева его рефералов по полному коду с номером (bl_timur_17 / pr_sergey_4)
+  const runCodeLookup = async () => {
+    const inp = document.getElementById('top100-code-search');
+    const out = document.getElementById('top100-code-result');
+    const code = (inp?.value || '').trim().toLowerCase();
+    if (!out) return;
+    if (!code) {
+      out.setAttribute('hidden', '');
+      return;
+    }
+    out.removeAttribute('hidden');
+    const loading = document.createElement('div');
+    loading.className = 'mono-muted';
+    loading.textContent = `⏳ Ищем код ${code}...`;
+    out.replaceChildren(loading);
+
+    const { data, error } = await adminSupabase.rpc('admin_lookup_tracking_code_rpc', { p_code: code });
+    if (error || !data?.ok) {
+      const errNode = document.createElement('div');
+      errNode.style.color = '#fca5a5';
+      errNode.textContent = `Ошибка поиска: ${error?.message || 'rpc_error'}`;
+      out.replaceChildren(errNode);
+      return;
+    }
+    if (!data.found || !data.player) {
+      const nf = document.createElement('div');
+      nf.className = 'mono-muted';
+      nf.textContent = `Игрок с кодом «${code}» пока не найден.`;
+      out.replaceChildren(nf);
+      return;
+    }
+    const pl = data.player;
+    const tree = Array.isArray(data.tree) ? data.tree : [];
+
+    const head = document.createElement('div');
+    head.style.fontWeight = '700';
+    head.style.color = '#fde68a';
+    head.style.marginBottom = '6px';
+    const handle = pl.tg_username ? `@${pl.tg_username}` : pl.uid;
+    head.textContent = `🎯 ${pl.seed_tracking_code} · ${pl.display_name || 'Без имени'} (${handle})`;
+
+    const meta = document.createElement('div');
+    meta.className = 'mono-muted';
+    meta.style.marginBottom = '8px';
+    meta.textContent = `Источник: ${pl.seed_prefix || '—'} · Ур.${pl.current_level || 1} · ⭐ ${fmtInt(pl.premiere_points)} · Бочек отправил: ${pl.packed_count || 0} · Привёл в ветку: ${tree.length}`;
+
+    const listWrap = document.createElement('div');
+    if (!tree.length) {
+      const empty = document.createElement('div');
+      empty.className = 'mono-muted';
+      empty.textContent = 'Пока никого не привёл дальше по цепочке.';
+      listWrap.appendChild(empty);
+    } else {
+      const title = document.createElement('div');
+      title.style.fontSize = '12px';
+      title.style.color = '#bbf7d0';
+      title.style.marginBottom = '4px';
+      title.textContent = `🌳 Дерево приведённых от ${pl.seed_tracking_code} (${tree.length} чел.):`;
+      listWrap.appendChild(title);
+      tree.forEach((ch, idx) => {
+        const line = document.createElement('div');
+        line.className = 'mono-muted';
+        line.style.padding = '3px 0';
+        const chHandle = ch.tg_username ? `@${ch.tg_username}` : ch.uid;
+        line.textContent = `${idx + 1}. ${ch.display_name || 'Игрок'} (${chHandle}) · root=${ch.root_tracking_code || '—'} · Ур.${ch.current_level || 1} · бочек: ${ch.packed_count || 0}`;
+        listWrap.appendChild(line);
+      });
+    }
+    out.replaceChildren(head, meta, listWrap);
+  };
+
+  document.getElementById('btn-top100-code-find')?.addEventListener('click', runCodeLookup);
+  document.getElementById('top100-code-search')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      runCodeLookup();
+    }
+  });
 }
 
 function fmtInt(n) {
