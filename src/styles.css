@@ -1871,6 +1871,20 @@ body[data-screen="ocean"] .toast {
   100% { transform: translate(-49%, -49%) rotate(1.5deg); }
 }
 
+.gate-seed-banner {
+  margin: 8px 0 8px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.22), rgba(220, 38, 38, 0.16));
+  border: 1.5px solid rgba(250, 204, 21, 0.85);
+  color: #fef3c7;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+  box-shadow: 0 0 18px rgba(234, 179, 8, 0.2);
+}
 .gate-silent-radar-banner {
   margin: 10px 0 6px;
   padding: 8px 10px;

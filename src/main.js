@@ -299,11 +299,114 @@ let duelCtrl = null;
 
 const V9_PROGRESS_STORAGE_KEY = 'bochka_v9_progress';
 
+// v14.1: Распознавание начальных ссылок посева — продюсеры (src_prod1..6 / src_prd1..6) и блогеры с именем на конце (src_blogger_<имя>)
+function parseSeedSourceMeta(rawSrc = '') {
+  const clean = String(rawSrc || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '');
+  if (!clean.startsWith('src_')) return { isSeed: false, kind: '', num: '', slugName: '', label: '', tag: '' };
+
+  let m = clean.match(/^src_(?:prod|prd)(\d*)(?:_(.+))?$/);
+  if (m) {
+    const num = m[1] || '';
+    const slugName = (m[2] || '').replace(/_+/g, ' ').trim().toUpperCase();
+    const label = `ПРОДЮСЕР${num ? ` #${num}` : ''}${slugName ? ` · ${slugName}` : ''}`;
+    return { isSeed: true, kind: 'producer', num, slugName, label, tag: clean };
+  }
+
+  m = clean.match(/^src_blogger(\d*)(?:_(.+))?$/);
+  if (m) {
+    const num = m[1] || '';
+    const slugName = (m[2] || '').replace(/_+/g, ' ').trim().toUpperCase();
+    const label = `БЛОГЕР${num ? ` #${num}` : ''}${slugName ? ` · ${slugName}` : ''}`;
+    return { isSeed: true, kind: 'blogger', num, slugName, label, tag: clean };
+  }
+
+  m = clean.match(/^src_seed(?:_(.+))?$/);
+  if (m) {
+    const slugName = (m[1] || '').replace(/_+/g, ' ').trim().toUpperCase();
+    const label = `ПОСЕВ${slugName ? ` · ${slugName}` : ''}`;
+    return { isSeed: true, kind: 'seed', num: '', slugName, label, tag: clean };
+  }
+
+  return { isSeed: false, kind: '', num: '', slugName: '', label: '', tag: clean };
+}
+
+function isInitialSeedPackRequired() {
+  // Только прямой стартовый вход продюсера/блогера (НЕ по чужой бочке pack_, билету gift_ или дуэли duel_)
+  if (state.incomingParam || state.incomingPassId || state.tg?.duelRoomParam || state.tg?.watchBarrelParam) {
+    return false;
+  }
+  const meta = parseSeedSourceMeta(state.tg?.trafficSource || state.profile?.trafficSource || '');
+  if (!meta.isSeed) return false;
+  if (state.profile?.seedFirstPackDone) return false;
+  if (Number(state.profile?.packedCount || 0) >= 1) return false;
+  return true;
+}
+
+function refreshInitialSeedGateUI() {
+  const banner = document.getElementById('gate-seed-banner');
+  const teaser = document.getElementById('gate-teaser');
+  const enterSoundSpan = document.querySelector('#btn-enter-sound span');
+  if (!isInitialSeedPackRequired()) {
+    banner?.setAttribute('hidden', '');
+    return;
+  }
+  const meta = parseSeedSourceMeta(state.tg?.trafficSource || state.profile?.trafficSource || '');
+  if (banner) {
+    banner.textContent =
+      meta.kind === 'producer'
+        ? `🎬 СТАРТ ПОСЕВА · ${meta.label} — Ты среди первых! Сначала упакуй в бочку друга или блогера и отправь ссылку, а потом откроется игра.`
+        : `🔥 СТАРТ ПОСЕВА · ${meta.label} — Ты запускаешь волну! Сначала упакуй в бочку друга или себя (фото + голос) и отправь ссылку — сразу после откроется игра!`;
+    banner.removeAttribute('hidden');
+  }
+  if (teaser) {
+    teaser.textContent =
+      'Шаг 1: закатай первую бочку и отправь ссылку другу или в Сторис — твоя именная метка закрепится за всей цепочкой. Шаг 2: сразу откроется 3D-игра!';
+  }
+  if (enterSoundSpan) {
+    enterSoundSpan.textContent = '🎬 УПАКОВАТЬ ПЕРВУЮ БОЧКУ И НАЧАТЬ';
+  }
+}
+
+function applySeedPackModeUI(active) {
+  const ban = document.getElementById('pack-mandatory-banner');
+  const tagEl = document.getElementById('pack-screen-tag');
+  const titleEl = document.getElementById('pack-screen-title');
+  const customDetails = document.getElementById('pack-custom-details');
+  if (active) {
+    const meta = parseSeedSourceMeta(state.tg?.trafficSource || state.profile?.trafficSource || '');
+    if (tagEl) tagEl.textContent = `ШАГ 1 ИЗ 2 · ${meta.label || 'СТАРТ ПОСЕВА'} (${meta.tag || 'seed'})`;
+    if (titleEl) {
+      titleEl.textContent =
+        meta.kind === 'producer' ? 'УПАКУЙ ДРУГА ИЛИ БЛОГЕРА' : 'УПАКУЙ ПЕРВУЮ БОЧКУ';
+    }
+    if (ban) {
+      ban.textContent =
+        meta.kind === 'producer'
+          ? `🎬 СТАРТ ПОСЕВА (${meta.label}): сначала закатай друга или блогера и отправь ссылку — сразу после отправки откроется игра (Уровень 1)!`
+          : `🔥 СТАРТ ПОСЕВА (${meta.label}): сначала закатай друга или себя в бочку и отправь ссылку в TG / Сторис — сразу после отправки откроется игра (Уровень 1)!`;
+      ban.removeAttribute('hidden');
+    }
+    if (customDetails) customDetails.open = true;
+  } else {
+    if (tagEl) tagEl.textContent = 'ФОТО УЖЕ ГОТОВО — ЖМИ ОТПРАВИТЬ ИЛИ ЗАМЕНИ';
+    if (titleEl) titleEl.textContent = 'УПАКУЙ В БОЧКУ ДРУГА';
+    if (ban) {
+      ban.textContent = '🔒 Чтобы выиграть парный билет 1+1 и играть дальше на супер-приз — отправь пранк другу в 1 касание!';
+      if (!state.profile.mustSendFriendPack) ban.setAttribute('hidden', '');
+    }
+    if (customDetails) customDetails.open = false;
+  }
+}
+
 function loadLocalV9Flags() {
   try {
     const raw = JSON.parse(localStorage.getItem(V9_PROGRESS_STORAGE_KEY) || '{}');
     if (raw && typeof raw === 'object') {
       state.profile.mustSendFriendPack = Boolean(raw.mustSendFriendPack);
+      state.profile.seedFirstPackDone = Boolean(raw.seedFirstPackDone);
       const cnt = Math.max(0, Math.round(Number(raw.pendingTicketsCount || 0)));
       const exp = Number(raw.ticketsExpireAt || 0);
       if (cnt > 0 && exp > Date.now()) {
@@ -324,6 +427,7 @@ function saveLocalV9Flags() {
       V9_PROGRESS_STORAGE_KEY,
       JSON.stringify({
         mustSendFriendPack: Boolean(state.profile.mustSendFriendPack),
+        seedFirstPackDone: Boolean(state.profile.seedFirstPackDone),
         pendingTicketsCount: Math.max(0, Math.round(Number(state.profile.pendingTicketsCount || 0))),
         ticketsExpireAt: Number(state.profile.ticketsExpireAt || 0),
       })
@@ -1392,10 +1496,12 @@ async function bootstrap() {
   await initPackConstructorDefaults();
 
   mergeFreshProfile(await fetchPlayerProfile(state.tg?.user), { preserveProgress: false });
+  loadLocalV9Flags();
   if (state.tg?.trafficSource) {
     state.profile.trafficSource = state.tg.trafficSource;
     await recordTrafficSource(state.tg?.user, state.tg.trafficSource).catch(() => {});
   }
+  refreshInitialSeedGateUI();
   recordPlayerMeta(state.tg?.user).catch(() => {});
   if (state.tg?.duelRoomParam) {
     await syncUiStage(state.tg?.user, 4);
@@ -1933,6 +2039,12 @@ async function enterWorkshopGate(withSound) {
       return;
     }
     await startViralFriendRound(state.incomingPack);
+  } else if (isInitialSeedPackRequired()) {
+    // v14.1: Начальный посев (src_prod1..6 / src_blogger_<имя>) — сначала упаковать первую бочку и отправить, и только потом играть!
+    applySeedPackModeUI(true);
+    showScreen('pack');
+    const meta = parseSeedSourceMeta(state.tg?.trafficSource || state.profile?.trafficSource || '');
+    showToast(`🎬 ${meta.label || 'СТАРТ ПОСЕВА'}: сначала упакуй первую бочку и отправь ссылку — потом откроется игра!`);
   } else if (state.profile.mustSendFriendPack) {
     // v9.0: Если игрок закрыл игру на обязательной упаковке друга (Раунд 2) — возвращаем ровно на это же место!
     document.getElementById('pack-mandatory-banner')?.removeAttribute('hidden');
@@ -5369,7 +5481,12 @@ async function handleSealBarrelClick() {
     state.profile.premiereScore = Math.max(Number(state.profile.premiereScore || 0), Number(created.premiereScore || 72));
     state.profile.temuSurgeClaimed = true;
     const prevRatingPct = computeSuperPrizeRatingPct(state.profile);
+    const wasInitialSeedPack = isInitialSeedPackRequired();
     state.profile.packedCount = Math.max(1, Number(state.profile.packedCount || 0) + 1);
+    if (wasInitialSeedPack) {
+      state.profile.seedFirstPackDone = true;
+      applySeedPackModeUI(false);
+    }
 
     // v9.0: Игрок отправил бочку другу — снимаем обязательный замок Раунда 2 и открываем билеты и супер-приз!
     state.profile.mustSendFriendPack = false;
@@ -5381,11 +5498,13 @@ async function handleSealBarrelClick() {
     const wasLifeRefill = Boolean(state.pack.forLifeRefill);
     state.pack.forLifeRefill = false;
     const prevRoundLvl = Math.max(1, Number(state.round?.workshopLevel || 2));
-    const targetNextLevel = wasLifeRefill
-      ? Math.max(2, prevRoundLvl)
-      : prevRoundLvl <= 2
-        ? 3
-        : Math.max(3, prevRoundLvl + 1);
+    const targetNextLevel = wasInitialSeedPack
+      ? 1
+      : wasLifeRefill
+        ? Math.max(2, prevRoundLvl)
+        : prevRoundLvl <= 2
+          ? 3
+          : Math.max(3, prevRoundLvl + 1);
     state.profile.currentLevel = targetNextLevel;
     const prevLives = Math.max(0, Number(state.profile.lives || 0));
     const nextLives = capEarlyLivesIfNoRealFriends(Math.max(3, prevLives + 3));
@@ -5395,7 +5514,7 @@ async function handleSealBarrelClick() {
       pointsDelta: 0,
       livesDelta: Math.max(0, nextLives - prevLives),
     }).catch(() => {});
-    await syncUiStage(state.tg?.user, 3).catch(() => {});
+    await syncUiStage(state.tg?.user, wasInitialSeedPack ? 1 : 3).catch(() => {});
 
     openTelegramShare(
       created.shareUrl,
@@ -5404,10 +5523,10 @@ async function handleSealBarrelClick() {
     updatePremiereBarsUI();
     refreshHudLevelLabel();
     // v12.5: На экране отправки сначала скрываем новые 3 ❤️ (показываем 0 ❤️), чтобы игрок ГЛАЗАМИ увидел прилёт 0→1→2→3 в шапку!
-    state.pendingLevelStartFly = { lives: 3, strikes: 3 };
+    state.pendingLevelStartFly = { lives: wasInitialSeedPack ? 1 : 3, strikes: 3 };
     Haptics.success();
     applyProgressiveDisclosureUI({ skipPromoteFromSocial: true });
-    showSentScreen({ wasLifeRefill, prevRatingPct });
+    showSentScreen({ wasLifeRefill, wasInitialSeedPack, prevRatingPct });
     setHudVisualLivesDisplay(0);
     window.setTimeout(() => {
       flyRewardToHud({
@@ -5426,11 +5545,13 @@ async function handleSealBarrelClick() {
   }
 }
 
-function showSentScreen({ wasLifeRefill = false, prevRatingPct = null } = {}) {
-  const spec = getWorkshopLevelSpec(Math.max(3, Number(state.profile?.currentLevel || 3)));
+function showSentScreen({ wasLifeRefill = false, wasInitialSeedPack = false, prevRatingPct = null } = {}) {
+  const targetLvl = wasInitialSeedPack ? 1 : Math.max(3, Number(state.profile?.currentLevel || 3));
+  const spec = getWorkshopLevelSpec(targetLvl);
   const titleEl = document.getElementById('sent-title');
   const txt = document.getElementById('sent-text');
   const btnTxt = document.getElementById('btn-sent-play-text');
+  const copyBtn = document.getElementById('btn-sent-copy-link');
   const nextPct = computeSuperPrizeRatingPct(state.profile);
   const startPct = prevRatingPct !== null ? Math.min(nextPct, prevRatingPct) : Math.max(0, nextPct - 3);
   const sPct = document.getElementById('sent-rating-pct');
@@ -5447,15 +5568,30 @@ function showSentScreen({ wasLifeRefill = false, prevRatingPct = null } = {}) {
     }, 160);
   }
   if (sNote) {
-    sNote.textContent = `За отправку шкала чуть сдвинулась (+3% аванс). Когда друг реально зайдёт играть по твоей ссылке — получишь +20% (+500 ⭐) к шкале Супер-приза!`;
+    sNote.textContent = wasInitialSeedPack
+      ? 'Твоя именная метка посева закреплена за этой бочкой! Все друзья, блогеры и их друзья по цепочке автоматически засчитаются тебе в аналитику.'
+      : 'За отправку шкала чуть сдвинулась (+3% аванс). Когда друг реально зайдёт играть по твоей ссылке — получишь +20% (+500 ⭐) к шкале Супер-приза!';
   }
-  if (titleEl) titleEl.textContent = 'КРАСАВА! БОЧКА УЛЕТЕЛА ДРУГУ!';
-  if (txt) {
-    txt.textContent = wasLifeRefill
-      ? `Бочка улетела другу — у тебя снова ровно 3 ❤️ жизни! Возвращайся на Уровень ${spec.level}!`
-      : `У тебя ровно 3 ❤️ жизни (9 ударов)! Впереди Уровень ${spec.level} (${spec.barrelCount} ${formatBarrelWord(spec.barrelCount).toLowerCase()}) — ищи билет в кино!`;
+  if (copyBtn) {
+    if (state.pack?.lastShareUrl) copyBtn.removeAttribute('hidden');
+    else copyBtn.setAttribute('hidden', '');
   }
-  if (btnTxt) btnTxt.textContent = `▶️ ИГРАТЬ УРОВЕНЬ ${spec.level} (${spec.barrelCount} ${formatBarrelWord(spec.barrelCount)})`;
+  if (wasInitialSeedPack) {
+    const meta = parseSeedSourceMeta(state.tg?.trafficSource || state.profile?.trafficSource || '');
+    if (titleEl) titleEl.textContent = '🎬 ПЕРВАЯ БОЧКА УЛЕТЕЛА! ВОЛНА ЗАПУЩЕНА!';
+    if (txt) {
+      txt.textContent = `Старт посева (${meta.label || meta.tag || 'SEED'}) активирован! Отправь ссылку другу / блогеру или скопируй её в Сторис — а сам теперь можешь начинать игру с Уровня 1!`;
+    }
+    if (btnTxt) btnTxt.textContent = '▶️ НАЧАТЬ ИГРУ — УРОВЕНЬ 1 (4 БОЧКИ)';
+  } else {
+    if (titleEl) titleEl.textContent = 'КРАСАВА! БОЧКА УЛЕТЕЛА ДРУГУ!';
+    if (txt) {
+      txt.textContent = wasLifeRefill
+        ? `Бочка улетела другу — у тебя снова ровно 3 ❤️ жизни! Возвращайся на Уровень ${spec.level}!`
+        : `У тебя ровно 3 ❤️ жизни (9 ударов)! Впереди Уровень ${spec.level} (${spec.barrelCount} ${formatBarrelWord(spec.barrelCount).toLowerCase()}) — ищи билет в кино!`;
+    }
+    if (btnTxt) btnTxt.textContent = `▶️ ИГРАТЬ УРОВЕНЬ ${spec.level} (${spec.barrelCount} ${formatBarrelWord(spec.barrelCount)})`;
+  }
   showScreen('sent');
 }
 
@@ -7806,8 +7942,8 @@ function bindUIEvents() {
   // Экран 4: Конструктор пранка (Фото + Голосовуха)
   document.getElementById('btn-close-pack')?.addEventListener('click', () => {
     if (voiceRecorder?.isRecording) voiceRecorder.stop();
-    // v9.0: На Раунде 2 нельзя закрыть крестиком и играть дальше, пока не отправил друга в бочке!
-    if (state.profile.mustSendFriendPack) {
+    // v14.1 + v9.0: Нельзя закрыть крестиком, пока не отправлена стартовая бочка посева (src_prod*/src_blogger*) или обязательная бочка Раунда 2!
+    if (isInitialSeedPackRequired() || state.profile.mustSendFriendPack) {
       const ban = document.getElementById('pack-mandatory-banner');
       if (ban) {
         ban.removeAttribute('hidden');
@@ -7815,8 +7951,13 @@ function bindUIEvents() {
         void ban.offsetWidth;
         ban.classList.add('is-shake');
       }
+      document.getElementById('btn-pack-quick-1tap')?.classList.add('btn-temu-pulse');
       document.getElementById('btn-seal-barrel')?.classList.add('btn-temu-pulse');
-      showToast('🔒 Чтобы выиграть билет и играть дальше на супер-приз — обязательно отправь друга в бочке!');
+      showToast(
+        isInitialSeedPackRequired()
+          ? '🔒 Сначала упакуй первую бочку и отправь другу или блогеру — сразу после отправки откроется игра!'
+          : '🔒 Чтобы выиграть билет и играть дальше на супер-приз — обязательно отправь друга в бочке!'
+      );
       Haptics.error();
       return;
     }
@@ -8291,8 +8432,19 @@ function bindUIEvents() {
     showScreen('pack');
   });
 
+  document.getElementById('btn-sent-copy-link')?.addEventListener('click', async () => {
+    if (!state.pack?.lastShareUrl) return;
+    await copyToClipboard(state.pack.lastShareUrl);
+    showToast('✓ Ссылка на твою бочку скопирована — кидай другу или вставляй в Сторис!');
+    Haptics.success();
+  });
+
   document.getElementById('btn-sent-play')?.addEventListener('click', async () => {
-    await audio.unlock(true);
+    if (!audio._userMuted) await audio.unlock(true);
+    if (Number(state.profile?.currentLevel || 1) <= 1) {
+      await startNewbieOnboardingRound();
+      return;
+    }
     state.pendingLevelStartFly = {
       lives: Math.min(3, Math.max(1, Number(state.profile?.lives || 3))),
       strikes: 3,

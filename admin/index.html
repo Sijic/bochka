@@ -187,14 +187,14 @@
           </div>
           <div class="kpi-grid" id="traffic-kpi-grid" style="margin-bottom: 12px;">
             <div class="kpi-card">
-              <span class="kpi-label">ДРУЗЬЯ ПРОДЮСЕРОВ (src_friends)</span>
+              <span class="kpi-label">ПРОДЮСЕРЫ И ДРУЗЬЯ (src_prod1..6)</span>
               <strong class="kpi-val" id="traffic-friends-seed">0</strong>
-              <span class="kpi-foot">Личный посев 10 друзей команды</span>
+              <span class="kpi-foot">Стартовый посев продюсеров и их друзей</span>
             </div>
             <div class="kpi-card kpi-gold">
-              <span class="kpi-label">БЛОГЕРЫ И ВИДЕО ТИЛЯ (src_til / src_blogger1..5)</span>
+              <span class="kpi-label">БЛОГЕРЫ (src_blogger_&lt;имя&gt;)</span>
               <strong class="kpi-val" id="traffic-bloggers-til">0</strong>
-              <span class="kpi-foot">Персональные приглашения и интеграции</span>
+              <span class="kpi-foot">Именные стартовые ссылки блогеров и их аудитории</span>
             </div>
             <div class="kpi-card kpi-accent">
               <span class="kpi-label">ОРГАНИКА И РЕФЕРАЛЫ (ref_* / pack_*)</span>
@@ -208,10 +208,45 @@
             </div>
           </div>
           <div class="funnel-bars" id="traffic-tags-bars"></div>
+          <div class="seed-link-builder" id="seed-link-builder" style="margin-top:12px;padding:12px;border-radius:8px;background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.35);">
+            <div style="font-weight:700;font-size:13px;color:#fde68a;margin-bottom:6px;">
+              🚀 Генератор стартовых ссылок посева (сначала упаковка бочки → потом игра)
+            </div>
+            <p class="field-hint" style="margin:0 0 8px;">
+              Кто заходит по ссылке <code>src_prod1..6</code> или <code>src_blogger_&lt;имя&gt;</code>, начинает с обязательной упаковки 1-й бочки другу/блогеру — и только после отправки открывается игра. Вся его цепочка друзей автоматически привязывается к его имени в отчёте!
+            </p>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+              <button type="button" class="adm-btn adm-btn-ghost" data-seed-preset="src_prod1">Продюсер 1</button>
+              <button type="button" class="adm-btn adm-btn-ghost" data-seed-preset="src_prod2">Продюсер 2</button>
+              <button type="button" class="adm-btn adm-btn-ghost" data-seed-preset="src_prod3">Продюсер 3</button>
+              <button type="button" class="adm-btn adm-btn-ghost" data-seed-preset="src_prod4">Продюсер 4</button>
+              <button type="button" class="adm-btn adm-btn-ghost" data-seed-preset="src_prod5">Продюсер 5</button>
+              <button type="button" class="adm-btn adm-btn-ghost" data-seed-preset="src_prod6">Продюсер 6</button>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+              <input
+                type="text"
+                id="seed-blogger-name"
+                class="adm-input"
+                placeholder="Имя блогера (напр. danya или Даня)"
+                maxlength="24"
+                style="max-width:260px;"
+              />
+              <input
+                type="text"
+                id="seed-generated-url"
+                class="adm-input"
+                readonly
+                value="https://t.me/bochka_film_bot?startapp=src_prod1"
+                style="flex:1;min-width:260px;font-family:monospace;"
+              />
+              <button type="button" class="adm-btn adm-btn-gold" id="btn-copy-seed-url">📋 Копировать ссылку</button>
+            </div>
+          </div>
           <p class="field-hint" style="margin-top:10px;">
             🔗 <strong>Единый формат ссылок посева (включая Instagram Stories и TikTok):</strong>
             <code>https://t.me/bochka_film_bot?startapp=src_prod1</code> … <code>src_prod6</code>,
-            <code>https://t.me/bochka_film_bot?startapp=src_blogger1</code> … <code>src_blogger5</code>.
+            <code>https://t.me/bochka_film_bot?startapp=src_blogger_&lt;имя&gt;</code>.
             Прямые веб-ссылки в сторис НЕ используйте — открывайте строго через Telegram-бота!
           </p>
         </div>

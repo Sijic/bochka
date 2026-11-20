@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0d0d'/%3E%3Crect x='8' y='4' width='16' height='24' rx='2' fill='none' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='11' x2='25' y2='11' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='21' x2='25' y2='21' stroke='%23eab308' stroke-width='2'/%3E%3C/svg%3E" />
   <title>БОЧКА — Заводской триллер | Вызволи друга за 3 удара ломом</title>
-  <meta name="bochka-build" content="v14.0-pair-1plus1-viral" />
+  <meta name="bochka-build" content="v14.1-seed-pack-first" />
   <meta name="description" content="Четыре цеха завода, заваренные 200-литровые бочки и 30 секунд кислорода. Запиши фото и голос друга на дно бочки, проверь его слух и забери допуск на закрытую Премьеру 17 декабря." />
 
   <!-- Open Graph / Telegram / WhatsApp Link Preview -->
@@ -150,9 +150,11 @@
       <h1 class="metal-logo" data-i18n="gateTitle">БОЧКА</h1>
       <p class="gate-subtitle" data-i18n="gateSubtitle">НАЙДИ ЧЕЛОВЕКА В БОЧКЕ ПО СТУКУ</p>
 
-      <p class="gate-teaser" data-i18n="gateTeaser">
+      <p class="gate-teaser" id="gate-teaser" data-i18n="gateTeaser">
         В одной из 4 заваренных бочек заперт человек. У тебя 3 попытки ломом — прислушайся, откуда идёт стук!
       </p>
+
+      <div class="gate-seed-banner" id="gate-seed-banner" hidden></div>
 
       <div class="gate-silent-radar-banner" id="gate-silent-radar-banner">
         🔇 Играешь в метро без звука? Удерживай бочку — смотри на пульс радара и виброотклик!
@@ -552,8 +554,8 @@
     <div class="panel-sheet pack-clean">
       <div class="sheet-header">
         <div>
-          <span class="mono-tag">ФОТО УЖЕ ГОТОВО — ЖМИ ОТПРАВИТЬ ИЛИ ЗАМЕНИ</span>
-          <h2 class="section-title">УПАКУЙ В БОЧКУ ДРУГА</h2>
+          <span class="mono-tag" id="pack-screen-tag">ФОТО УЖЕ ГОТОВО — ЖМИ ОТПРАВИТЬ ИЛИ ЗАМЕНИ</span>
+          <h2 class="section-title" id="pack-screen-title">УПАКУЙ В БОЧКУ ДРУГА</h2>
         </div>
         <button type="button" class="icon-close" id="btn-close-pack" aria-label="Назад">✕</button>
       </div>
@@ -752,6 +754,9 @@
       <p class="sent-text" id="sent-text">
         Тебе начислено 3 ❤️ жизни! Пока ждёшь, как друг откроет бочку — проходи следующий уровень и лови билет в кино!
       </p>
+      <button type="button" class="btn-secondary btn-full" id="btn-sent-copy-link" hidden style="margin-bottom:8px;">
+        📋 СКОПИРОВАТЬ ССЫЛКУ НА БОЧКУ (ДЛЯ ДРУЗЕЙ / СТОРИС)
+      </button>
       <button type="button" class="btn-primary btn-full" id="btn-sent-play">
         <span id="btn-sent-play-text">▶️ ИГРАТЬ УРОВЕНЬ 3</span>
       </button>

@@ -744,6 +744,51 @@ function bindAdminEvents() {
   document.getElementById('btn-export-csv')?.addEventListener('click', handleExportOrdersCsv);
   bindTop100Events();
 
+  // v14.1: Генератор стартовых ссылок посева (src_prod1..6 и src_blogger_<имя>)
+  const translitSeedSlug = (raw) => {
+    const map = {
+      а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y',
+      к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f',
+      х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
+    };
+    return String(raw || '')
+      .trim()
+      .toLowerCase()
+      .split('')
+      .map((ch) => (map[ch] !== undefined ? map[ch] : ch))
+      .join('')
+      .replace(/[^a-z0-9_]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 24);
+  };
+  const seedInput = document.getElementById('seed-blogger-name');
+  const seedUrlOut = document.getElementById('seed-generated-url');
+  const setSeedTag = (tag) => {
+    if (seedUrlOut) seedUrlOut.value = `https://t.me/bochka_film_bot?startapp=${tag}`;
+  };
+  document.querySelectorAll('[data-seed-preset]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const preset = btn.getAttribute('data-seed-preset') || 'src_prod1';
+      if (seedInput) seedInput.value = '';
+      setSeedTag(preset);
+    });
+  });
+  seedInput?.addEventListener('input', () => {
+    const slug = translitSeedSlug(seedInput.value);
+    setSeedTag(slug ? `src_blogger_${slug}` : 'src_prod1');
+  });
+  document.getElementById('btn-copy-seed-url')?.addEventListener('click', async () => {
+    const val = seedUrlOut?.value || '';
+    if (!val) return;
+    try {
+      await navigator.clipboard.writeText(val);
+      showAdmToast(`✓ Скопировано: ${val}`);
+    } catch {
+      seedUrlOut?.select();
+      showAdmToast('Выделено — нажми Ctrl+C');
+    }
+  });
+
   document.querySelectorAll('[data-adm-tab]').forEach((tabBtn) => {
     tabBtn.addEventListener('click', () => {
       const target = tabBtn.getAttribute('data-adm-tab');
