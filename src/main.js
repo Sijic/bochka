@@ -350,6 +350,179 @@ function mergeFreshProfile(freshProfile, { preserveProgress = true } = {}) {
   state.profile = merged;
 }
 
+/* ============================================================================
+   v13.1: ЗАПОМИНАНИЕ ПРОГРЕССА РАУНДОВ + 1 ЖИЗНЬ И 3 УДАРА РАЗ В СУТКИ + 1 УДАР/ЧАС
+   ============================================================================ */
+const SESSION_RESUME_STORAGE_KEY = 'bochka_v13_session_resume';
+const HOURLY_STRIKE_REGEN_MS = 60 * 60 * 1000;
+
+function getMoscowDateKey(ts = Date.now()) {
+  try {
+    const msk = new Date(ts + 3 * 3600 * 1000);
+    return msk.toISOString().slice(0, 10);
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
+function readSessionResume() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SESSION_RESUME_STORAGE_KEY) || 'null');
+    if (raw && typeof raw === 'object') return raw;
+  } catch { /* ignore */ }
+  return null;
+}
+
+function saveSessionResumeSnapshot(overrides = {}) {
+  try {
+    const prev = readSessionResume() || {};
+    const curLvl = Math.max(
+      1,
+      Number(overrides.currentLevel ?? state.profile?.currentLevel ?? state.round?.workshopLevel ?? prev.currentLevel ?? 1)
+    );
+    const maxAtt = state.round?.isBlitz ? 5 : 3;
+    const rawAtt = overrides.attemptsLeft != null
+      ? Number(overrides.attemptsLeft)
+      : state.activeScreen === 'workshop' && state.round?.running
+        ? Number(state.round?.attemptsLeft ?? 3)
+        : Number(prev.attemptsLeft ?? 3);
+    const cleanAtt = Math.max(0, Math.min(maxAtt, Math.round(rawAtt)));
+    const curLives = Math.max(0, Math.round(Number(overrides.lives ?? state.profile?.lives ?? prev.lives ?? 1)));
+    const curPts = Math.max(0, Math.round(Number(overrides.premierePoints ?? state.profile?.premierePoints ?? prev.premierePoints ?? 0)));
+
+    // Если удары < 3 и таймер почасового восстановления ещё не запущен — фиксируем старт отсчёта!
+    let nextRegenAt = overrides.lastStrikeRegenAt !== undefined
+      ? Number(overrides.lastStrikeRegenAt || 0)
+      : Number(prev.lastStrikeRegenAt || 0);
+    if (cleanAtt < 3 && nextRegenAt <= 0) {
+      nextRegenAt = Date.now();
+    } else if (cleanAtt >= 3) {
+      nextRegenAt = 0;
+    }
+
+    const snap = {
+      currentLevel: curLvl,
+      lastScreen: String(overrides.lastScreen || state.activeScreen || prev.lastScreen || 'workshop'),
+      attemptsLeft: cleanAtt,
+      lives: curLives,
+      premierePoints: curPts,
+      mustSendFriendPack: Boolean(state.profile?.mustSendFriendPack),
+      lastDailyLifeDate: String(overrides.lastDailyLifeDate || prev.lastDailyLifeDate || getMoscowDateKey()),
+      lastStrikeRegenAt: nextRegenAt,
+      savedAt: Date.now(),
+    };
+    localStorage.setItem(SESSION_RESUME_STORAGE_KEY, JSON.stringify(snap));
+    return snap;
+  } catch {
+    return null;
+  }
+}
+
+function applyPassiveDailyLifeAndHourlyStrikes({ silent = false } = {}) {
+  const prev = readSessionResume();
+  const now = Date.now();
+  const todayMsk = getMoscowDateKey(now);
+  if (!prev) {
+    return {
+      dailyLifeGranted: false,
+      hourlyStrikesGranted: 0,
+      snapshot: saveSessionResumeSnapshot({ lastDailyLifeDate: todayMsk }),
+    };
+  }
+
+  let lives = Math.max(
+    0,
+    Math.round(Number(state.profile?.lives != null ? state.profile.lives : prev.lives ?? 1))
+  );
+  // Если в сохранённой сессии уровень/очки выше — восстанавливаем их без потери прогресса!
+  const savedLvl = Math.max(1, Number(prev.currentLevel || 1));
+  const savedPts = Math.max(0, Math.round(Number(prev.premierePoints || 0)));
+  if (savedLvl > Number(state.profile?.currentLevel || 1)) {
+    state.profile.currentLevel = savedLvl;
+  }
+  if (savedPts > Number(state.profile?.premierePoints || 0)) {
+    state.profile.premierePoints = savedPts;
+  }
+
+  let attemptsLeft = Math.max(0, Math.min(3, Math.round(Number(prev.attemptsLeft ?? 3))));
+  let lastDailyLifeDate = String(prev.lastDailyLifeDate || todayMsk);
+  let lastStrikeRegenAt = Number(prev.lastStrikeRegenAt || 0);
+  let dailyLifeGranted = false;
+  let hourlyStrikesGranted = 0;
+
+  // 1. Суточное восстановление (МСК): строго 1 ❤️ жизнь и 3 удара 1 раз в сутки!
+  if (lastDailyLifeDate && lastDailyLifeDate < todayMsk) {
+    lastDailyLifeDate = todayMsk;
+    if (lives <= 0) {
+      lives = 1;
+      attemptsLeft = 3;
+      lastStrikeRegenAt = 0;
+      dailyLifeGranted = true;
+    } else if (attemptsLeft < 3) {
+      attemptsLeft = 3;
+      lastStrikeRegenAt = 0;
+      dailyLifeGranted = true;
+    }
+  }
+
+  // 2. Почасовое восстановление ударов: +1 удар каждый час, если игрок вышел без них (< 3)!
+  if (attemptsLeft < 3) {
+    if (lastStrikeRegenAt <= 0) {
+      lastStrikeRegenAt = Number(prev.savedAt || now);
+    }
+    const elapsedHours = Math.floor((now - lastStrikeRegenAt) / HOURLY_STRIKE_REGEN_MS);
+    if (elapsedHours >= 1) {
+      hourlyStrikesGranted = Math.min(3 - attemptsLeft, elapsedHours);
+      attemptsLeft = Math.min(3, attemptsLeft + hourlyStrikesGranted);
+      lastStrikeRegenAt = attemptsLeft >= 3 ? 0 : lastStrikeRegenAt + hourlyStrikesGranted * HOURLY_STRIKE_REGEN_MS;
+      // Если игрок уходил при 0 жизней и 0 ударов, а за час восстановился удар — даём сыграть этим ударом!
+      if (lives <= 0 && attemptsLeft > 0) {
+        lives = 1;
+      }
+    }
+  } else {
+    lastStrikeRegenAt = 0;
+  }
+
+  state.profile.lives = lives;
+  const snapshot = saveSessionResumeSnapshot({
+    currentLevel: state.profile.currentLevel,
+    attemptsLeft,
+    lives,
+    premierePoints: state.profile.premierePoints,
+    lastDailyLifeDate,
+    lastStrikeRegenAt,
+  });
+
+  if (state.activeScreen === 'workshop' && state.round?.running && (dailyLifeGranted || hourlyStrikesGranted > 0)) {
+    state.round.attemptsLeft = Math.max(Number(state.round.attemptsLeft || 0), attemptsLeft);
+    renderAttemptSquares(state.round.attemptsLeft, state.round.isBlitz ? 5 : 3);
+  }
+  updatePremiereBarsUI();
+  refreshHudLevelLabel();
+
+  if (!silent) {
+    if (dailyLifeGranted) {
+      showToast('🌅 Новый день! Вернулась 1 ❤️ жизнь и 3 удара!');
+    } else if (hourlyStrikesGranted > 0) {
+      showToast(`⏳ За время отсутствия восстановилось +${hourlyStrikesGranted} удар(а) (1 удар/час)!`);
+    }
+  }
+  return { dailyLifeGranted, hourlyStrikesGranted, snapshot };
+}
+
+function formatNextStrikeRegenHint() {
+  const snap = readSessionResume();
+  const att = snap ? Math.max(0, Math.min(3, Number(snap.attemptsLeft ?? 0))) : 0;
+  if (att >= 3) {
+    return '🌅 1 ❤️ жизнь и 3 удара возвращаются 1 раз в сутки · +1 удар каждый час при трате';
+  }
+  const baseTs = Number(snap?.lastStrikeRegenAt || snap?.savedAt || Date.now());
+  const remMs = Math.max(60000, HOURLY_STRIKE_REGEN_MS - ((Date.now() - baseTs) % HOURLY_STRIKE_REGEN_MS));
+  const mins = Math.max(1, Math.ceil(remMs / 60000));
+  return `⏳ +1 удар восстановится через ~${mins} мин · 🌅 1 ❤️ жизнь и 3 удара — 1 раз в сутки`;
+}
+
 function syncPendingTicketsFloatingUI() {
   const btn = document.getElementById('hud-pending-tickets-btn');
   const txt = document.getElementById('hud-pending-tickets-text');
@@ -1167,8 +1340,25 @@ async function bootstrap() {
       },
       reconcileTickets: () => reconcileSentTicketsLifecycle(),
       getSentTickets: () => readSentTicketsLedger(),
+      getResumeSnapshot: () => readSessionResume(),
+      applyPassiveRegen: (opts) => applyPassiveDailyLifeAndHourlyStrikes(opts || {}),
     };
   }
+
+  // v13.1: Автосохранение прогресса при сворачивании/выходе и минутный тик почасового восстановления ударов
+  window.addEventListener('pagehide', () => saveSessionResumeSnapshot());
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      saveSessionResumeSnapshot();
+    } else if (state.entered) {
+      applyPassiveDailyLifeAndHourlyStrikes({ silent: false });
+    }
+  });
+  window.setInterval(() => {
+    if (state.entered && document.visibilityState === 'visible') {
+      applyPassiveDailyLifeAndHourlyStrikes({ silent: false });
+    }
+  }, 60000);
 
   // Предзагрузка входящей вирусной бочки (?b=jakaqgx или startapp=jakaqgx)
   if (state.incomingParam) {
@@ -1450,6 +1640,9 @@ function updateControlHintText() {
 function showScreen(name) {
   state.activeScreen = name;
   document.body.setAttribute('data-screen', name);
+  if (state.entered && ['workshop', 'pack', 'modeA', 'finale'].includes(name)) {
+    saveSessionResumeSnapshot({ lastScreen: name });
+  }
   closeBurgerDrawer();
   if (name !== 'workshop') {
     document.getElementById('workshop-rescue-cta')?.setAttribute('hidden', '');
@@ -1712,6 +1905,7 @@ async function enterWorkshopGate(withSound) {
   }
 
   loadLocalV9Flags();
+  const passiveRegen = applyPassiveDailyLifeAndHourlyStrikes({ silent: false });
   reconcileSentTicketsLifecycle({ silent: false });
   syncSentTicketsWithServer({ silent: false }).catch(() => {});
   syncPendingTicketsFloatingUI();
@@ -1743,7 +1937,22 @@ async function enterWorkshopGate(withSound) {
     showScreen('pack');
     showToast('🔒 Отправь друга в бочке, чтобы выиграть билет и продолжить на супер-приз!');
   } else {
-    await startNewbieOnboardingRound();
+    // v13.1: Если игрок уже проходил уровни и вышел из приложения — возвращаем СТРОГО на его сохранённый уровень и удары!
+    const snap = passiveRegen?.snapshot || readSessionResume();
+    const resumeLvl = Math.max(Number(state.profile?.currentLevel || 1), Number(snap?.currentLevel || 1));
+    const hasSavedProgress = resumeLvl >= 2 || Boolean(state.profile?.hasPlayedSolo);
+    if (hasSavedProgress) {
+      state.profile.currentLevel = resumeLvl;
+      const resumeAttempts = snap && snap.attemptsLeft != null ? Math.max(0, Math.min(3, Number(snap.attemptsLeft))) : 3;
+      await startDemoRound({ resumeAttempts });
+      if (resumeAttempts <= 0 && Number(state.profile?.lives || 0) <= 0) {
+        openLivesRecoveryModal({ forLevel: resumeLvl });
+      } else if (!passiveRegen?.dailyLifeGranted && !passiveRegen?.hourlyStrikesGranted) {
+        showToast(`💾 Прогресс восстановлен: Уровень ${resumeLvl} · ❤️ ${state.profile.lives} · 🟨 ${state.round.attemptsLeft}/3 ударов`);
+      }
+    } else {
+      await startNewbieOnboardingRound();
+    }
   }
 }
 
@@ -1850,7 +2059,7 @@ async function startNewbieOnboardingRound() {
     .catch(() => {});
 }
 
-async function startDemoRound() {
+async function startDemoRound({ resumeAttempts = null } = {}) {
   const demoChars = t('demoChars');
   const pickIdx = Math.floor(Math.random() * DEMO_PORTRAITS.length);
   const charMeta = Array.isArray(demoChars) && demoChars[pickIdx]
@@ -1906,7 +2115,9 @@ async function startDemoRound() {
     isDailyShift: false,
     dailyShiftCode: '',
     startedAtMs: performance.now(),
-    attemptsLeft: spec.isBlitz ? 5 : 3,
+    attemptsLeft: resumeAttempts != null
+      ? Math.max(0, Math.min(spec.isBlitz ? 5 : 3, Number(resumeAttempts)))
+      : (spec.isBlitz ? 5 : 3),
     attemptsUsed: 0,
     rescueStage: 0,
     airLeft: spec.airSec,
@@ -2540,6 +2751,9 @@ function renderAttemptSquares(attemptsLeft, totalCount = null) {
     sq.classList.toggle('is-live', alive);
     sq.classList.toggle('is-spent', !alive);
   });
+  if (state.entered && state.activeScreen === 'workshop' && state.round?.running) {
+    saveSessionResumeSnapshot({ attemptsLeft });
+  }
 }
 
 /* ============================================================================
@@ -3926,7 +4140,11 @@ function openLivesRecoveryModal({ forLevel = null } = {}) {
   // v10.0: Проиграл (0 ❤️) -> ТОЛЬКО 1 чёткий путь: закатать и отправить новому другу (+3 ❤️ и +200 ⭐), без лишнего выбора!
   if (titleEl) titleEl.textContent = '☠️ Жизни кончились! Закатай друга и получи +3 ❤️';
   if (pr) {
-    pr.textContent = `Чтобы вернуть +3 ❤️ (9 ударов) и набрать больше приглашений и ⭐ баллов на Премьеру (сейчас ⭐ ${fmtPoints(curPts)}) — закатай нового друга в бочку!`;
+    pr.textContent = `Чтобы вернуть +3 ❤️ (9 ударов) и набрать больше приглашений и ⭐ баллов на закрытую Премьеру в Москве (сейчас ⭐ ${fmtPoints(curPts)}) — закатай нового друга в бочку!`;
+  }
+  const regenHint = document.getElementById('lives-recovery-regen-hint');
+  if (regenHint) {
+    regenHint.textContent = formatNextStrikeRegenHint();
   }
   friendBtn?.removeAttribute('hidden');
   kpBtn?.setAttribute('hidden', '');
