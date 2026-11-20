@@ -141,7 +141,7 @@ class WorkshopAudio {
 
   async unlock(withSound = true) {
     this.enabled = Boolean(withSound);
-    if (this.enabled) this._userMuted = false;
+    this._userMuted = !this.enabled;
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
 

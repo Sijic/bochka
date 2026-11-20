@@ -8226,7 +8226,7 @@ function bindUIEvents() {
       showToast('🎟 Другу ушло сообщение: «Жду билет!» · Погнали на Раунд 2 (6 бочек — найди пустую)!');
       Haptics.success();
       state.profile.currentLevel = 2;
-      audio.unlock(true).catch(() => {});
+      if (!audio._userMuted) audio.unlock(true).catch(() => {});
       startDemoRound();
       return;
     }
@@ -8271,7 +8271,7 @@ function bindUIEvents() {
       showToast('🍿 Другу ушло: «Нашёл тебя! Идём в кино!» · Раунд 2 (6 бочек — найди пустую)!');
       Haptics.success();
       state.profile.currentLevel = 2;
-      audio.unlock(true).catch(() => {});
+      if (!audio._userMuted) audio.unlock(true).catch(() => {});
       startDemoRound();
       return;
     }
