@@ -1632,20 +1632,23 @@ async function bootstrap() {
   initVisibilityAndAntiSeekGuards();
   prewarmYouTubeTrailerPlayer();
   bindUIEvents();
+  loadLocalV9Flags();
+  // v14.2: Записываем метку трафика (pack_/src_prod*/src_blogger_*) и статус админа СРАЗУ в первые 150 мс до рендера превью!
+  const earlyTrafficPromise = state.tg?.trafficSource
+    ? ((state.profile.trafficSource = state.tg.trafficSource),
+      recordTrafficSource(state.tg?.user, state.tg.trafficSource).catch(() => {}))
+    : Promise.resolve();
+  const earlySeedAdminPromise = isSeedAdminSession()
+    ? ((state.profile.isSeedAdmin = true),
+      registerSeedAdmin(state.tg?.user, state.tg?.seedProducerPreset || state.tg?.trafficSource || 'seed_admin').catch(() => {}))
+    : Promise.resolve();
+  refreshInitialSeedGateUI();
   document.getElementById('btn-enter-sound')?.removeAttribute('disabled');
   document.getElementById('btn-enter-mute')?.removeAttribute('disabled');
   await initPackConstructorDefaults();
 
   mergeFreshProfile(await fetchPlayerProfile(state.tg?.user), { preserveProgress: false });
-  loadLocalV9Flags();
-  if (state.tg?.trafficSource) {
-    state.profile.trafficSource = state.tg.trafficSource;
-    await recordTrafficSource(state.tg?.user, state.tg.trafficSource).catch(() => {});
-  }
-  if (isSeedAdminSession()) {
-    state.profile.isSeedAdmin = true;
-    await registerSeedAdmin(state.tg?.user, state.tg?.seedProducerPreset || state.tg?.trafficSource || 'seed_admin').catch(() => {});
-  }
+  await Promise.all([earlyTrafficPromise, earlySeedAdminPromise]);
   refreshInitialSeedGateUI();
   recordPlayerMeta(state.tg?.user).catch(() => {});
   if (state.tg?.duelRoomParam) {
