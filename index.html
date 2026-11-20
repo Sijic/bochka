@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0d0d'/%3E%3Crect x='8' y='4' width='16' height='24' rx='2' fill='none' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='11' x2='25' y2='11' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='21' x2='25' y2='21' stroke='%23eab308' stroke-width='2'/%3E%3C/svg%3E" />
   <title>БОЧКА — Заводской триллер | Вызволи друга за 3 удара ломом</title>
-  <meta name="bochka-build" content="v7.0-clean-gameplay" />
+  <meta name="bochka-build" content="v13.0-ticket-guard" />
   <meta name="description" content="Четыре цеха завода, заваренные 200-литровые бочки и 30 секунд кислорода. Запиши фото и голос друга на дно бочки, проверь его слух и забери допуск на закрытую Премьеру 17 декабря." />
 
   <!-- Open Graph / Telegram / WhatsApp Link Preview -->
@@ -68,10 +68,15 @@
     </button>
 
     <div class="topbar-right">
-      <button type="button" class="nav-link nav-prize" id="nav-prize" title="Допуск на Премьеру">
+      <button type="button" class="nav-link nav-prize" id="nav-prize" title="Допуск на Премьеру" hidden>
         <span class="topbar-meter-ico" aria-hidden="true">🔥</span>
-        <span class="topbar-meter-text" id="top-premiere-pct">72.0%</span>
+        <span class="topbar-meter-text" id="top-premiere-pct">0%</span>
         <span class="cap-badge" id="top-caps-count" hidden>0</span>
+      </button>
+
+      <button type="button" class="nav-link top-rating-pill" id="top-rating-pill" title="Шкала рейтинга Супер-приза (добери 100% для финала!)">
+        <span class="top-rating-lbl">🏆 <strong id="top-rating-pct">0%</strong></span>
+        <span class="top-rating-track"><span class="top-rating-fill" id="top-rating-fill" style="width:0%"></span></span>
       </button>
 
       <button type="button" class="nav-link top-lives-pill" id="top-lives-pill" title="Жизни в цеху">
@@ -106,13 +111,16 @@
     </div>
 
     <div class="burger-list">
+      <button type="button" class="burger-item burger-item-gold" id="btn-burger-pack-friend">🛢 ЗАКАТАТЬ И ПРИГЛАСИТЬ ДРУГА (+3 ❤️)</button>
+      <button type="button" class="burger-item burger-item-gold" id="btn-burger-send-tickets">🎟 РАЗОСЛАТЬ БИЛЕТЫ ДРУЗЬЯМ (<span id="burger-tickets-count">0</span>)</button>
+      <button type="button" class="burger-item" id="btn-burger-leaderboard">🏆 РЕЙТИНГ НА ПРЕМЬЕРУ (⭐ + 🛢)</button>
       <button type="button" class="burger-item is-active" id="nav-workshop" data-i18n="navWorkshop">ЦЕХ</button>
-      <button type="button" class="burger-item" id="nav-trailer" data-i18n="navTrailer">ТРЕЙЛЕР</button>
-      <a class="burger-item" id="nav-kinopoisk" href="https://www.kinopoisk.ru/film/11226275/" target="_blank" rel="noopener noreferrer" data-i18n="navKinopoisk">КИНОПОИСК ↗</a>
-      <button type="button" class="burger-item" id="btn-burger-rules" data-i18n="burgerRules">ПРАВИЛА</button>
-      <button type="button" class="burger-item" id="btn-burger-share">📤 СОЦСЕТИ + ⭐</button>
-      <button type="button" class="burger-item stage4-only-item" id="btn-burger-duel">⚔️ НА СЧЁТ ТРИ!</button>
+      <button type="button" class="burger-item" id="btn-burger-duel">⚔️ ДУЭЛЬ «НА СЧЁТ ТРИ!»</button>
+      <button type="button" class="burger-item" id="nav-trailer" data-i18n="navTrailer">🎬 ТРЕЙЛЕР</button>
+      <button type="button" class="burger-item" id="btn-burger-rules" data-i18n="burgerRules">📜 ПРАВИЛА СУПЕР-ПРИЗА</button>
       <button type="button" class="burger-item" id="btn-burger-sound">🔊 ЗВУК: ВКЛ</button>
+      <button type="button" class="burger-item" id="btn-burger-test-ticket" hidden>🎟 ТЕСТ: ВЫБИТЬ БИЛЕТ (УР. 3)</button>
+      <button type="button" class="burger-item" id="btn-burger-reset-test">🔄 НАЧАТЬ С НАЧАЛА (УР. 1)</button>
     </div>
 
     <div class="burger-lang-row">
@@ -208,44 +216,25 @@
   </section>
 
   <!-- ====================================================================
-       ЭКРАН 2 (РЕЖИМ А): ЧИСТЫЙ ВХОД БЕЗ ID — ДЕМО / УПАКОВАТЬ / ПРЕМЬЕРА
+       ЭКРАН 2 (РЕЖИМ А v11.5): ВЫБОР ПРЯМО ПО СТОЯЩИМ 3D-БОЧКАМ В ЦЕХУ!
+       Только 2 бочки («ЗАКАТАТЬ ДРУГА» и «ТРЕЙЛЕР ДРУГУ») + 3-я бочка «ПОДАРИТЬ БИЛЕТ» если есть билет!
        ==================================================================== -->
-  <section class="screen" id="screen-mode-a" hidden>
-    <div class="mode-card">
-      <div class="tech-corner tl"></div>
-      <div class="tech-corner tr"></div>
-      <div class="tech-corner bl"></div>
-      <div class="tech-corner br"></div>
-
-      <span class="mono-tag" data-i18n="modeATag">СЕКТОР 04 // ДЕМО-ПРОТОКОЛ</span>
-      <h2 class="section-title" data-i18n="modeATitle">В ОДНОЙ ИЗ ШЕСТИ БОЧЕК ЗАПЕРТ ГЕРОЙ ФИЛЬМА</h2>
-      <p class="mode-desc" data-i18n="modeADesc">
-        Прислушайся к металлу и найди живую бочку за 3 удара — или сразу закатай фото и голос друга в стальную бочку и отправь короткую ссылку.
-      </p>
-
-      <div class="mode-actions">
-        <button type="button" class="btn-primary" id="btn-go-pack">
-          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="6" ry="2"/><path d="M6 5v14c0 1.1 2.7 2 6 2s6-.9 6-2V5M6 10c0 1.1 2.7 2 6 2s6-.9 6-2M6 15c0 1.1 2.7 2 6 2s6-.9 6-2"/></svg>
-          <span data-i18n="btnPackFriendMain">УПАКОВАТЬ ДРУГА В БОЧКУ</span>
-        </button>
-        <button type="button" class="btn-secondary" id="btn-start-demo">
-          <span id="btn-start-level-label">▶ УР. 1 · 4 БОЧКИ (+⭐)</span>
-        </button>
-      </div>
-
-      <div class="mode-extra-grid">
-        <button type="button" class="btn-secondary btn-full mode-duel-btn" id="btn-mode-a-duel">
-          ⚔️ СТОЛ ДРУЗЕЙ «НА СЧЁТ ТРИ!» (2–3 ИГРОКА)
-        </button>
-        <button type="button" class="btn-ghost btn-full" id="btn-mode-a-share-hub">
-          📤 РАЗОСЛАТЬ ТРЕЙЛЕР / БОЧКУ В СОЦСЕТИ (+❤️ И ⭐)
-        </button>
-      </div>
-
-      <button type="button" class="btn-ghost btn-full mode-premiere-shortcut" id="btn-mode-a-premiere" hidden>
-        <span data-i18n="btnStartPremiereRace">🏆 ВОЙТИ В ЦЕХ: ГОНКА ЗА ПРЕМЬЕРОЙ</span>
+  <section class="screen mode-barrel-hub" id="screen-mode-a" hidden>
+    <div class="mode-barrel-top-strip">
+      <span class="mono-tag accent-tag">ВЫБЕРИ БОЧКУ В ЦЕХУ — ЖМИ ПРЯМО ПО БОЧКЕ</span>
+      <button type="button" class="btn-secondary btn-compact mode-resume-btn" id="btn-start-demo">
+        <span id="btn-start-level-label">▶ ИГРАТЬ УР. 1</span>
       </button>
     </div>
+
+    <!-- Проекции кликабельных табличек прямо под стоящими 3D-бочками -->
+    <div class="mode-barrel-labels" id="mode-a-barrel-labels"></div>
+
+    <!-- Скрытые совместимые якоря (Гонка за премьерой закрыта до 100% шкалы!) -->
+    <button type="button" id="btn-go-pack" hidden></button>
+    <button type="button" id="btn-mode-a-share-hub" hidden></button>
+    <button type="button" id="btn-mode-a-duel" hidden></button>
+    <button type="button" id="btn-mode-a-premiere" hidden></button>
   </section>
 
   <!-- ====================================================================
@@ -262,12 +251,17 @@
           <span class="attempt-sq is-live"></span>
           <span class="attempt-sq is-live"></span>
         </div>
-        <span class="hud-pts-pill" id="hud-pts-pill">⭐ <strong id="hud-pts-val">0</strong>/1500</span>
+        <span class="hud-pts-pill hud-rating-pill" id="hud-pts-pill" title="Шкала рейтинга Супер-приза (добери до 100% — за друзей +20%, за бочки по чуть-чуть!)">
+          <span class="hud-rating-label">🏆 <strong id="hud-rating-pct">0%</strong></span>
+          <span class="hud-rating-track"><span class="hud-rating-fill" id="hud-rating-fill" style="width:0%"></span></span>
+          <span class="sr-only" id="hud-pts-val">0</span>
+        </span>
         <div class="premiere-lives-big" id="hud-premiere-lives-big" hidden>
           <span>❤️ ×</span><strong id="hud-lives-big-num">3</strong>
         </div>
       </div>
       <span class="hud-slim-o2"><strong id="air-seconds">30.0</strong> <small>O₂</small></span>
+      <button type="button" class="hud-slim-menu-btn" id="btn-hud-menu" aria-label="Меню цеха" title="Меню: пригласить друга, билеты, рейтинг">☰</button>
       <div class="hud-slim-airbar"><div class="air-bar-fill" id="air-bar-fill"></div></div>
     </div>
     <div class="hud-task-banner" id="hud-task-banner">Слушай бочки (удерживай палец) и найди живого друга!</div>
@@ -296,16 +290,34 @@
       </span>
     </div>
 
+    <!-- v9.0: Висящая кнопка накопленных билетов для друзей («Отправить билеты пока не сгорели!») -->
+    <button type="button" class="hud-pending-tickets-btn" id="hud-pending-tickets-btn" hidden>
+      <span id="hud-pending-tickets-text">🎟 ОТПРАВИТЬ БИЛЕТЫ (1) · ПОКА НЕ СГОРЕЛИ! (+3 ❤️)</span>
+    </button>
+
+    <!-- v8.5: Баннер-подсказка в цеху после проигрыша 1-й жизни (не перекрывает 3D-цех!) -->
+    <div class="workshop-rescue-cta" id="workshop-rescue-cta" hidden>
+      <p class="workshop-rescue-msg" id="workshop-rescue-msg">
+        Попытки кончились! Посмотри трейлер, чтобы спасти друга из бочки и получить ещё шанс (+3 ❤️)
+      </p>
+      <button type="button" class="btn-primary workshop-rescue-btn" id="btn-workshop-watch-trailer">
+        🎬 СМОТРЕТЬ ТРЕЙЛЕР → +3 ❤️ И СПАСТИ ДРУГА
+      </button>
+    </div>
+
     <!-- Одна компактная подсказка внизу -->
     <p class="hud-hint-line" id="hud-hint-text" data-i18n="hudHintMobile">
       Удерживай палец — слушать звук внутри · Короткий тап — удар ломом
     </p>
   </section>
 
-  <!-- Индустриальный импульс давления/пара при промахе (0.4 сек, без 2D-спрайтов духов/людей) -->
+  <!-- v8.1: Полноэкранный живой анимированный кино-хоррор скример (60fps canvas + 2-кадровая анимация глаз/фонаря/рта/рук) -->
   <div class="screamer-overlay" id="screamer-overlay" data-variant="hand" hidden aria-hidden="true">
+    <canvas class="screamer-canvas" id="screamer-canvas"></canvas>
+    <img class="screamer-img" id="screamer-img" src="./public/sprites/horror_barrel_face.webp" alt="" hidden />
     <div class="screamer-fx-layer" id="screamer-fx-layer"></div>
-    <div class="screamer-caption" id="screamer-caption" data-i18n="screamerHand">ВЫБРОС РЖАВОЙ ПЫЛИ // ПУСТАЯ БОЧКА</div>
+    <div class="screamer-glitch-bars" aria-hidden="true"></div>
+    <div class="screamer-caption" id="screamer-caption" hidden></div>
   </div>
 
   <!-- Белый морской свет растворения стен цеха при вводе секретного кода 19 -> 97 -> 3 удара -->
@@ -318,40 +330,36 @@
     <div class="ocean-sky-bg" aria-hidden="true"></div>
 
     <div class="ocean-waves-wrap" aria-hidden="true">
-      <img src="./assets/keyed/ocean_beach_bg.webp" alt="" class="ocean-panorama-img" />
+      <img src="./public/sprites/ocean_sea_real.webp" alt="Северное море — на небе только и разговоров, что о море" class="ocean-panorama-img ocean-photo-real" />
       <div class="ocean-surf-shimmer"></div>
     </div>
 
-    <!-- Берег из фильма: Тиль сидит у прибоя слева, справа лежит ржавая бочка для тапов на время -->
-    <div class="ocean-beach-stage">
-      <div class="ocean-till-seat" aria-hidden="true">
-        <img src="./assets/keyed/ocean_till_sitting.webp" alt="" class="ocean-till-sitting-img" />
-      </div>
-
-      <button type="button" class="ocean-barrel-tap-target" id="btn-ocean-tap-barrel" aria-label="Стучать по бочке на берегу">
+    <!-- Реалистичный берег Северного моря: Тиль сидит слева на фоне, справа интерактивная ржавая бочка с торчащей рукой и надписью «ТИЛЬ» -->
+    <div class="ocean-beach-stage ocean-beach-real">
+      <button type="button" class="ocean-barrel-tap-target ocean-barrel-real" id="btn-ocean-tap-barrel" aria-label="Стучать по бочке с надписью ТИЛЬ">
         <img
-          src="./assets/keyed/ocean_barrel_closed.webp"
-          alt="Ржавая бочка на берегу"
-          class="ocean-barrel-lying-img"
+          src="./public/sprites/ocean_barrel_til_hand.webp"
+          alt="Ржавая бочка с надписью ТИЛЬ и торчащей рукой"
+          class="ocean-barrel-lying-img ocean-barrel-photo"
           id="ocean-barrel-img"
         />
-        <span class="ocean-tap-prompt-badge" id="ocean-tap-prompt">👊 СТУЧИ НА ВРЕМЯ!</span>
+        <span class="ocean-tap-prompt-badge" id="ocean-tap-prompt">👊 ТАПАЙ ПО БОЧКЕ «ТИЛЬ» → +100% ⚡ И +2 ❤️!</span>
       </button>
     </div>
 
     <div class="ocean-ui-layer">
-      <div class="ocean-top-box">
-        <span class="mono-tag ocean-tag" data-i18n="oceanTag">СЕКРЕТНЫЙ УРОВЕНЬ // СЕВЕРНОЕ МОРЕ · 19·97</span>
-        <p class="ocean-quote-line">
-          <span id="ocean-typewriter"></span><span class="typewriter-caret" id="ocean-caret">|</span>
+      <div class="ocean-top-box ocean-sky-quote-box">
+        <span class="mono-tag ocean-tag" data-i18n="oceanTag">СЕВЕРНОЕ МОРЕ · 19·97</span>
+        <p class="ocean-quote-line ocean-quote-visible">
+          <span id="ocean-typewriter">На небе только и разговоров, что о море и о бочке…</span><span class="typewriter-caret" id="ocean-caret" hidden>|</span>
         </p>
 
-        <!-- Интерактивная мини-игра: Бочка с Тилем (12 сек быстрых тапов — зарядка энергии 0% -> 100%) -->
+        <!-- Интерактивная мини-игра: Бочка «ТИЛЬ» (энергия 0% -> 100% + восстановление жизней ❤️) -->
         <div class="ocean-tapper-hud" id="ocean-tapper-hud">
           <div class="ocean-tapper-stats">
-            <span>⏱ ВРЕМЯ: <strong id="ocean-tap-timer">12.0</strong> СЕК</span>
+            <span>⏱ <strong id="ocean-tap-timer">12.0</strong>с</span>
             <span>⚡ ЭНЕРГИЯ: <strong id="ocean-tap-count">0</strong>%</span>
-            <span class="ocean-tier-hint">ТАПАЙ ПО БОЧКЕ ТИЛЯ → 100% И НАЗАД В БОЙ!</span>
+            <span>❤️ НАГРАДА: <strong>6 ❤️ НА ДУЭЛЬ</strong></span>
           </div>
           <div class="ocean-tapper-bar-track">
             <div class="ocean-tapper-bar-fill" id="ocean-tap-fill"></div>
@@ -359,22 +367,20 @@
         </div>
       </div>
 
-      <div class="ocean-bottom-card">
-        <div class="ocean-bonus-pill" id="ocean-bonus-pill" data-i18n="oceanBonusBadge">
-          🌊 ТАПАЙ ПО БОЧКЕ НА БЕРЕГУ (10 СЕК): ВЫБЕЙ ДО +5 ❤️ И БИЛЕТ ДРУГУ!
-        </div>
-        <div class="ocean-actions">
-          <button type="button" class="btn-primary btn-full" id="btn-ocean-start-tap">
-            👊 СТУЧАТЬ ПО БОЧКЕ (СТАРТ 10 СЕК)
+      <div class="ocean-bottom-card ocean-bottom-slim">
+        <div class="ocean-bonus-pill" id="ocean-bonus-pill" hidden></div>
+        <div class="ocean-actions ocean-actions-slim">
+          <button type="button" class="btn-primary ocean-tap-main-btn" id="btn-ocean-start-tap">
+            👊 СТУЧИ ПО БОЧКЕ!
           </button>
-          <button type="button" class="btn-primary btn-full" id="btn-ocean-claim-gift" hidden>
-            🎟 ВЫБИТ БИЛЕТ ДРУГУ! ОФОРМИТЬ ПОДАРОК (+×2 ЖИЗНЕЙ) →
+          <button type="button" class="btn-primary ocean-tap-main-btn" id="btn-ocean-claim-gift" hidden>
+            🎟 ЗАБРАТЬ БИЛЕТ (+3 ❤️) →
           </button>
-          <button type="button" class="btn-secondary btn-full" id="btn-ocean-story" data-i18n="btnOceanDownloadStory">
-            СКАЧАТЬ ОТКРЫТКУ СТОРИС 9:16 (БЕЗ СПОЙЛЕРА КОДА)
+          <button type="button" class="btn-secondary ocean-mini-icon-btn" id="btn-ocean-story" title="Скачать открытку 9:16">
+            📸
           </button>
-          <button type="button" class="btn-ghost btn-full" id="btn-ocean-back" data-i18n="btnOceanBackWorkshop">
-            ВЕРНУТЬСЯ В ЦЕХ
+          <button type="button" class="btn-ghost ocean-mini-back-btn" id="btn-ocean-back">
+            ← В ЦЕХ
           </button>
         </div>
       </div>
@@ -420,6 +426,11 @@
           <span class="pass-sender-credit" id="pass-sender-line">Подарок из цеха «Бочки»</span>
         </div>
       </div>
+
+      <!-- v12.5: Кнопка благодарности другу-отправителю (+25% ему к шкале Супер-приза!) -->
+      <button type="button" class="btn-primary btn-full" id="btn-pass-say-thanks" style="margin:6px 0;">
+        🙏 СКАЗАТЬ «СПАСИБО!» ДРУГУ (+25% ЕМУ К ШКАЛЕ СУПЕР-ПРИЗА!)
+      </button>
 
       <!-- Блокировка самовыкупа (receiver_tg_id == sender_tg_id) -->
       <div class="rescue-error-box" id="pass-self-warning" hidden data-i18n="passSelfClaimBlocked">
@@ -513,6 +524,10 @@
         <button type="button" class="icon-close" id="btn-close-pack" aria-label="Назад">✕</button>
       </div>
 
+      <div class="pack-mandatory-banner" id="pack-mandatory-banner" hidden>
+        🔒 Чтобы выиграть билет в кино и играть дальше на супер-приз — обязательно отправь друга в бочке!
+      </div>
+
       <div class="pack-top-row">
         <div class="barrel-mouth-preview pack-mini-preview">
           <img id="pack-preview-img" alt="Портрет на дне бочки" />
@@ -532,7 +547,7 @@
       <div class="screamer-cards" id="pack-screamer-picker">
         <button type="button" class="screamer-card is-active" data-pack-screamer="saw_scream">
           <span class="sc-preview-btn" data-preview-screamer="saw_scream" title="Прослушать">🔊</span>
-          <span class="sc-ico">🪚</span><b>Визг циркулярки</b><small>режущий визг и крик</small>
+          <span class="sc-ico">🔪</span><b>Визг циркулярки</b><small>режущий визг и крик</small>
         </button>
         <button type="button" class="screamer-card" data-pack-screamer="lid_blast">
           <span class="sc-preview-btn" data-preview-screamer="lid_blast" title="Прослушать">🔊</span>
@@ -545,6 +560,14 @@
         <button type="button" class="screamer-card" data-pack-screamer="tesla_siren">
           <span class="sc-preview-btn" data-preview-screamer="tesla_siren" title="Прослушать">🔊</span>
           <span class="sc-ico">⚡</span><b>Ток и сирена</b><small>высоковольтный ревун</small>
+        </button>
+        <button type="button" class="screamer-card is-prank" data-pack-screamer="prank_rooster">
+          <span class="sc-preview-btn" data-preview-screamer="prank_rooster" title="Прослушать">🔊</span>
+          <span class="sc-ico">🐔</span><b>Петух (живой крик)</b><small>реальное кукареку</small>
+        </button>
+        <button type="button" class="screamer-card is-prank" data-pack-screamer="prank_dog_alarm">
+          <span class="sc-preview-btn" data-preview-screamer="prank_dog_alarm" title="Прослушать">🔊</span>
+          <span class="sc-ico">🐕</span><b>Злая собака (лай)</b><small>реальный лай ротвейлера</small>
         </button>
         <button type="button" class="screamer-card" data-pack-screamer="custom_scream">
           <span class="sc-ico">🎙</span><b>Свой крик (3 сек) 🔥 ХИТ</b><small>×1.5 ответов друзей</small>
@@ -564,8 +587,8 @@
         <div class="voice-ready-row" id="voice-ready-row" hidden>
           <span class="voice-meta-tag" id="voice-meta-tag">КРИК ЗАПИСАН</span>
           <div class="voice-ready-actions">
-            <button type="button" class="chip is-active" id="btn-play-voice-muffled">🛢 В БОЧКЕ</button>
-            <button type="button" class="chip" id="btn-play-voice-clean">▶ ЧИСТО</button>
+            <button type="button" class="chip is-active" id="btn-play-voice-muffled" title="Прослушать голос с эхом железной бочки (этот вариант услышит друг)">🛢 ЭХО БОЧКИ</button>
+            <button type="button" class="chip" id="btn-play-voice-clean" title="Прослушать оригинальный голос без эффекта бочки">🎤 БЕЗ ЭФФЕКТА</button>
             <button type="button" class="chip chip-danger" id="btn-clear-voice" aria-label="Удалить">✕</button>
           </div>
         </div>
@@ -586,7 +609,7 @@
 
       <button type="button" class="btn-primary btn-full pack-send-btn" id="btn-seal-barrel">
         <span id="btn-seal-text" data-i18n="btnSealBarrel">🚀 ОТПРАВИТЬ ДРУГУ В 1 КЛИК</span>
-        <small class="btn-sub-line">+3 ❤️ (9 ударов) и +200 ⭐ · фото можно не менять</small>
+        <small class="btn-sub-line">Сразу: +3 ❤️ жизни · Когда друг зайдёт: +20% к шкале Супер-приза!</small>
       </button>
     </div>
   </section>
@@ -623,17 +646,22 @@
         «На небе только и разговоров, что о бочке…»
       </blockquote>
 
+      <button type="button" class="btn-secondary btn-compact finale-replay-voice-btn" id="btn-finale-replay-voice" hidden>
+        🔊 ПРОСЛУШАТЬ ГОЛОС ИЗ БОЧКИ ЕЩЁ РАЗ
+      </button>
+
       <p class="finale-next-step" id="finale-next-step"></p>
 
-      <!-- v8.0: Экран Уровня 3 — найден бесплатный билет другу (выбор из списка друзей или новому другу) -->
+      <!-- v11.0: Экран Уровня 3+ — найден настоящий билет в кино (всё 100% на одном экране!) -->
       <div class="golden-winner-box" id="finale-ticket-win-box" hidden>
-        <span class="mono-tag accent-tag">🎟 БЕСПЛАТНЫЙ БИЛЕТ В КИНО ДЛЯ ДРУГА</span>
-        <p class="golden-winner-contact" style="margin:4px 0 6px;">
-          Ты нашёл бесплатный билет в кино! По закону цеха этот билет — только для твоего друга. Кому отправим?
+        <span class="mono-tag accent-tag" id="finale-ticket-badge">🎟 БИЛЕТ В КИНО НА «БОЧКУ» ДЛЯ ДРУГА</span>
+        <img src="./public/sprites/cinema_ticket_card.webp" class="cinema-ticket-visual" alt="Кинобилет на фильм БОЧКА — 17 декабря" />
+        <p class="golden-winner-contact" style="margin:3px 0 6px;">
+          Отправь билет другу из списка или новому другу (+ещё больше к шкале Супер-приза!), либо прибереги билет и играй дальше.
         </p>
-        <div class="ticket-friends-list" id="ticket-friends-list"></div>
+        <div class="ticket-friends-list" id="ticket-friends-list" hidden></div>
         <button type="button" class="btn-primary btn-full" id="btn-ticket-send-new">
-          🚀 ОТПРАВИТЬ НОВОМУ ДРУГУ (БИЛЕТ + ИГРА + СКРИМЕР)
+          🎟 ОТПРАВИТЬ БИЛЕТ ДРУГУ (СПИСОК ДРУЗЕЙ / НОВЫЙ ДРУГ)
         </button>
       </div>
 
@@ -651,27 +679,44 @@
         <button type="button" class="btn-secondary btn-full" id="btn-cinema-reply">
           <span id="btn-cinema-reply-text" data-i18n="btnGoCinema">🍿 ПОЙДУ В КИНО 17 ДЕКАБРЯ!</span>
         </button>
+        <button type="button" class="btn-ghost btn-full finale-share-btn" id="btn-finale-share-result" hidden>
+          🏆 ПОДЕЛИТЬСЯ РЕЗУЛЬТАТОМ И РАНГОМ В СОЦСЕТЯХ
+        </button>
       </div>
     </div>
   </section>
 
-  <!-- v7.0: экран «Бочка улетела другу» (одна кнопка) -->
+  <!-- v11.0: экран «Бочка улетела другу» + анимированная шкала Супер-приза -->
   <section class="screen" id="screen-sent" hidden>
     <div class="panel-sheet sent-sheet">
       <div class="sent-ico" aria-hidden="true">🛢🚀</div>
       <h2 class="section-title" id="sent-title">БОЧКА УЛЕТЕЛА ДРУГУ!</h2>
+      <div class="sent-rating-box" id="sent-rating-box">
+        <div class="sent-rating-head">
+          <span>🏆 ШКАЛА СУПЕР-ПРИЗА</span>
+          <strong id="sent-rating-pct">0%</strong>
+        </div>
+        <div class="sent-rating-track">
+          <div class="sent-rating-fill" id="sent-rating-fill" style="width:0%"></div>
+        </div>
+        <small id="sent-rating-note">
+          За отправку шкала чуть сдвинулась (+3% аванс). Когда друг зайдёт играть по ссылке — получишь +20% (+500 ⭐) к шкале Супер-приза!
+        </small>
+      </div>
       <p class="sent-text" id="sent-text">
-        Бочка со скримером улетела другу! Пока ждёшь, как он подорвётся — проходи следующий уровень и забирай бесплатный билет в кино!
+        Тебе начислено 3 ❤️ жизни! Пока ждёшь, как друг откроет бочку — проходи следующий уровень и лови билет в кино!
       </p>
       <button type="button" class="btn-primary btn-full" id="btn-sent-play">
-        <span id="btn-sent-play-text">▶️ ИГРАТЬ УРОВЕНЬ 2</span>
+        <span id="btn-sent-play-text">▶️ ИГРАТЬ УРОВЕНЬ 3</span>
       </button>
     </div>
   </section>
 
-  <!-- v7.0: полноэкранный скример при проигрыше (100vw x 100dvh, 1.8 сек) -->
+  <!-- v8.1: полноэкранный хоррор-скример при проигрыше (100vw x 100dvh, 1.8 сек, VHS-глитч + стробоскоп) -->
   <div class="fx-scream" id="fx-scream" data-variant="weld" hidden aria-hidden="true">
     <div class="fx-scream-flash"></div>
+    <div class="fx-scream-glitch" aria-hidden="true"></div>
+    <div class="fx-scream-vignette" aria-hidden="true"></div>
     <img class="fx-scream-face" id="fx-scream-face" alt="" />
     <div class="fx-scream-text" id="fx-scream-text">ТЕБЯ ЗАКАТАЛИ В БОЧКУ!</div>
   </div>
@@ -695,33 +740,46 @@
       <div class="tech-corner br"></div>
 
       <div class="modal-head">
-        <span class="mono-tag accent-tag" data-i18n="goldenForkTag">ЗОЛОТАЯ БОЧКА ВСКРЫТА // ПРАВИЛО ЧУЖОГО БИЛЕТА</span>
+        <span class="mono-tag accent-tag" id="golden-fork-tag">🎟 БИЛЕТ В КИНО НА ФИЛЬМ «БОЧКА»</span>
         <button type="button" class="icon-close" id="btn-close-golden-fork" aria-label="Отложить">✕</button>
       </div>
 
-      <h3 class="section-title rescue-title" data-i18n="goldenForkTitle">
-        ВНУТРИ НАСТОЯЩИЙ БИЛЕТ В КИНО! СЕБЕ ЗАБРАТЬ НЕЛЬЗЯ
+      <img src="./public/sprites/cinema_ticket_card.webp" class="cinema-ticket-visual" alt="Кинобилет на фильм БОЧКА — 17 декабря" />
+
+      <h3 class="section-title rescue-title" id="golden-fork-title">
+        ВНУТРИ БИЛЕТ В КИНО ДЛЯ ТВОЕГО ДРУГА!
       </h3>
-      <p class="modal-hint" data-i18n="goldenForkDesc">
-        По закону цеха обычный билет нельзя забрать себе в карман. Решай: сожги его в топке ради запаса жизней к Премьере (×2 до 12 ❤️ + 150 ⭐) — или оформи именной билет другу и получи +4 ❤️ и +3500 ⭐ в ТОП-10!
+      <p class="modal-hint" id="golden-fork-desc">
+        Отправь этот билет другу в Telegram — он получит приглашение на «БОЧКУ» (17 декабря), а ты сразу получишь <strong>+3 ❤️ жизни</strong> и <strong>+500 ⭐</strong> на супер-приз!
+      </p>
+
+      <div class="golden-fork-friends-section" id="golden-fork-friends-section">
+        <div class="mono-tag" style="margin-bottom:4px;">👥 ДРУЗЬЯ, КОТОРЫЕ УЖЕ ИГРАЮТ С ТОБОЙ (ПОЛУЧАТ В ИГРЕ + В ЧАТЕ TG):</div>
+        <div class="ticket-friends-list" id="golden-fork-friends-list"></div>
+      </div>
+
+      <div class="golden-fork-ledger-box" id="golden-fork-ledger-box" hidden></div>
+
+      <p class="mono-tag" style="opacity:.78; font-size:10.5px; line-height:1.35; margin:4px 0 6px;">
+        ⏳ Правила билета: отправить можно 1 раз · если друг не зашёл за 24ч — билет вернётся тебе · за неделю до 17.12 напомним другу активировать (иначе можно вернуть) · за день (16.12) неактивированные билеты сгорают.
       </p>
 
       <div class="fork-choices-stack" id="fork-choices-stack">
-        <button type="button" class="btn-burn-furnace btn-full" id="btn-burn-ticket-x2">
-          <span data-i18n="btnBurnTicketX2">🔥 ПУТЬ А: СЖЕЧЬ БИЛЕТ (×2 ДО 12 ❤️ + 150 ⭐)</span>
-        </button>
-
-        <div class="fork-or-divider" aria-hidden="true"><span>ИЛИ ПОДАРИ БИЛЕТ ДРУГУ</span></div>
-
         <button type="button" class="btn-primary btn-full" id="btn-gift-ticket-toggle">
-          <span data-i18n="btnGiftTicketToggle">🎟 ПУТЬ Б: ПОДАРИТЬ БИЛЕТ ДРУГУ (+4 ❤️ И +3500 ⭐)</span>
+          <span id="btn-gift-ticket-label">🚀 ОТПРАВИТЬ НОВОМУ ДРУГУ (ЕЩЁ НЕ ИГРАЛ → +25% К ШКАЛЕ!)</span>
         </button>
+
+        <button type="button" class="btn-secondary btn-full" id="btn-defer-ticket-pile">
+          <span>⏳ ПРИБЕРЕЧЬ БИЛЕТ — ИГРАТЬ ДАЛЬШЕ</span>
+        </button>
+
+        <button type="button" id="btn-burn-ticket-x2" hidden></button>
       </div>
 
       <!-- Форма оформления подарочной ссылки startapp=gift_<id> (Путь Б) -->
       <div class="gift-pass-form" id="gift-pass-form" hidden>
-        <p class="gift-face-warn" data-i18n="giftFaceWarn">
-          🎟 Отправь другу именной виртуальный билет в Telegram — тебе сразу начислится +4 ❤️ и +3500 ⭐ в ТОП-10!
+        <p class="gift-face-warn">
+          🎟 Отправь новому другу именной билет на «БОЧКУ» (17 декабря) — получишь <strong>+3 ❤️</strong> и <strong>+500 ⭐ (+25% к шкале Супер-приза)</strong>!
         </p>
 
         <div class="gift-photo-row">
@@ -750,24 +808,24 @@
         </p>
 
         <button type="button" class="btn-primary btn-full" id="btn-issue-gift-pass">
-          <span data-i18n="btnIssueGiftPass">🎟 ОТПРАВИТЬ ВИРТУАЛЬНЫЙ БИЛЕТ В TELEGRAM (+×2 ❤️)</span>
+          <span>🎟 ОТПРАВИТЬ БИЛЕТ ДРУГУ В TELEGRAM (+3 ❤️ · +500 ⭐)</span>
         </button>
       </div>
 
       <!-- Готовая короткая ссылка ?pass=ID для пересылки другу -->
       <div class="share-result-box" id="gift-pass-share-box" hidden>
-        <p class="share-hint" data-i18n="giftPassReadyLabel">
-          ВИРТУАЛЬНЫЙ БИЛЕТ ВЫПУЩЕН! Перешли его другу — когда он откроет билет, твои жизни удвоятся (×2):
+        <p class="share-hint">
+          🎟 БИЛЕТ ВЫПУЩЕН! Перешли ссылку другу в Telegram — когда он откроет билет и нажмёт «Спасибо!», твоя шкала Супер-приза прыгнет на +25%!
         </p>
         <div class="share-url-row" hidden>
           <input type="text" id="output-gift-pass-url" class="industrial-input" readonly />
           <button type="button" class="btn-ghost" id="btn-copy-gift-pass" data-i18n="btnCopyLink">КОПИРОВАТЬ</button>
         </div>
         <div class="finale-cta-stack" style="margin-top:8px;">
-          <button type="button" class="btn-primary btn-full" id="btn-share-gift-tg">🚀 ОТПРАВИТЬ ВИРТУАЛЬНЫЙ БИЛЕТ В TELEGRAM</button>
+          <button type="button" class="btn-primary btn-full" id="btn-share-gift-tg">🚀 ОТПРАВИТЬ БИЛЕТ В TELEGRAM</button>
           <button type="button" class="btn-secondary" id="btn-share-gift-native" data-i18n="btnShareNative" hidden>ОТПРАВИТЬ ДРУГУ</button>
           <button type="button" class="btn-ghost btn-full gift-done-btn" id="btn-done-gift-pass">
-            ПРОДОЛЖИТЬ ГОНКУ ЗА ПРЕМЬЕРОЙ →
+            ▶ ВЕРНУТЬСЯ В ИГРУ
           </button>
         </div>
       </div>
@@ -780,13 +838,17 @@
   <div class="modal-backdrop" id="modal-lives-recovery" hidden>
     <div class="modal-card lives-recovery-card">
       <span class="mono-tag danger-tag">ЖИЗНИ КОНЧИЛИСЬ</span>
-      <h3 class="lives-recovery-title" id="lives-recovery-title">Верни +3 ❤️ (9 ударов) и продолжай!</h3>
-      <p class="lives-recovery-progress" id="lives-recovery-progress"></p>
-      <button type="button" class="btn-primary btn-full" id="btn-life-rec-kp" data-life-action="kp">🎬 «Буду смотреть» на Кинопоиске (+3 ❤️ · 5 сек)</button>
-      <button type="button" class="btn-primary btn-full" id="btn-life-rec-friend" data-life-action="pack_friend" hidden>🛢 Отправить скример НОВОМУ другу (+3 ❤️ + 200 ⭐)</button>
-      <button type="button" class="btn-secondary btn-full" data-life-action="sub">🔔 Подписаться на канал «КиноЦех» (+1 ❤️ сразу)</button>
-      <button type="button" class="btn-secondary btn-full" data-life-action="like">👍 Поставить лайк трейлеру (+1 ❤️ сразу)</button>
-      <button type="button" class="btn-ghost btn-full" id="btn-lives-recovery-close">Позже</button>
+      <h3 class="lives-recovery-title" id="lives-recovery-title">☠️ Жизни на нуле! Закатай друга и получи +3 ❤️</h3>
+      <p class="lives-recovery-progress" id="lives-recovery-progress">
+        Чтобы вернуть жизни и продолжить борьбу за закрытую Премьеру — закатай нового друга в бочку и отправь ссылку!
+      </p>
+      <button type="button" class="btn-primary btn-full btn-temu-pulse" id="btn-life-rec-friend" data-life-action="pack_friend">
+        🛢 ЗАКАТАТЬ И ОТПРАВИТЬ НОВОМУ ДРУГУ (+3 ❤️ И +200 ⭐)
+      </button>
+      <button type="button" class="btn-secondary btn-full" id="btn-life-rec-kp" data-life-action="kp" hidden></button>
+      <button type="button" class="btn-secondary btn-full" data-life-action="sub" hidden></button>
+      <button type="button" class="btn-secondary btn-full" data-life-action="like" hidden></button>
+      <button type="button" class="btn-ghost btn-full" id="btn-lives-recovery-close">Закрыть</button>
     </div>
   </div>
 
@@ -1056,11 +1118,23 @@
     <!-- Круглые аватарки захвата над 3D-бочками (проекция координат Three.js) -->
     <div class="duel-barrel-badges" id="duel-barrel-badges" aria-hidden="true"></div>
 
-    <div class="duel-top-panel">
+    <!-- v12.0: Мини-панель живого боя: Раунд/Бочки + Дуэльные Жизни (❤️ 6) + Энергия (⚡) + Пропуск -->
+    <div class="duel-live-mini-bar" id="duel-live-mini-bar" hidden>
+      <span id="duel-live-mini-status">⚔️ РАУНД 1/3 · 10/10</span>
+      <span class="duel-lives-pill" id="duel-lives-pill" title="Жизни в дуэли (мимо = −1 ❤️, Тиль выдаёт минимум 6 ❤️)">❤️ <strong id="duel-lives-val">6</strong></span>
+      <span class="duel-energy-pill" id="duel-energy-pill" title="Каждый удар тратит 20% энергии. Можешь пропустить ход, чтобы сэкономить!">
+        <span>⚡ <strong id="duel-energy-val">100%</strong></span>
+        <span class="duel-energy-track"><span class="duel-energy-fill" id="duel-energy-fill" style="width:100%"></span></span>
+      </span>
+      <button type="button" class="btn-duel-skip-pill" id="btn-duel-skip-strike" hidden>⏭ ПРОПУСТИТЬ (ЭКОНОМ ⚡)</button>
+      <button type="button" class="icon-close" id="btn-duel-live-close" aria-label="Выйти из боя">✕</button>
+    </div>
+
+    <div class="duel-top-panel" id="duel-top-panel">
       <div class="duel-top-head">
         <div>
           <span class="mono-tag accent-tag" id="duel-room-code">СТОЛ #ROOM</span>
-          <strong class="duel-main-heading">⚔️ НА СЧЁТ ТРИ! · СИНХРОННЫЙ БОЙ В ЦЕХУ</strong>
+          <strong class="duel-main-heading">🎟 ДУЭЛЬ ЗА БИЛЕТЫ В КИНО! · НА СЧЁТ ТРИ</strong>
         </div>
         <div class="duel-top-btns">
           <button type="button" class="hud-mini-btn" id="btn-duel-add-bot" hidden>+ БОТ 🤖</button>
@@ -1069,17 +1143,17 @@
       </div>
 
       <div class="duel-pot-banner" id="duel-pot-banner">
-        🏆 БАНК ЗАКРЫТОЙ ПРЕМЬЕРЫ: ×3 ОЧКИ РЕЙТИНГА (17 ДЕКАБРЯ) + ШАНС БИЛЕТА СО СТОЛА
+        🎟 РЕДКИЙ БИЛЕТ В БОЧКАХ! Бей без пауз пока есть ❤️ и ⚡: 💨 пусто (−1 ❤️) · ☠️ скример (−2 ❤️) · ❤️ редкая жизнь · ⭐ баллы! Тиль даёт 6 ❤️!
       </div>
 
       <div class="duel-slots-row" id="duel-slots-row"></div>
 
       <div class="duel-lobby-actions">
-        <button type="button" class="btn-primary btn-full" id="btn-duel-play-solo">
-          ⚡ ИГРАТЬ В ОДНОГО (СОЛО · БАНК ПРЕМЬЕРЫ ×3)
+        <button type="button" class="btn-primary btn-full" id="btn-duel-invite-third">
+          📣 ПОЗВАТЬ ДРУЗЕЙ (ПУШ ВСЕМ В БАЗЕ · НУЖНО ЕЩЁ 2)
         </button>
-        <button type="button" class="btn-secondary btn-full" id="btn-duel-invite-third">
-          ➕ ПОЗВАТЬ ДРУЗЕЙ В КОМНАТУ (ДО 3 ИГРОКОВ)
+        <button type="button" class="btn-secondary btn-full" id="btn-duel-play-solo">
+          🤖 ПРОДОЛЖИТЬ В ОДНОГО (ПРОТИВ БОТА, ПОКА ЖДЁШЬ)
         </button>
         <button type="button" class="btn-primary btn-full" id="btn-duel-start-go">
           🔥 НА СЧЁТ ТРИ! СТАРТ С ДРУЗЬЯМИ
@@ -1150,13 +1224,20 @@
         <button type="button" class="btn-secondary btn-compact" id="btn-close-leaderboard" aria-label="Закрыть">✕ ЗАКРЫТЬ</button>
       </div>
 
-      <!-- Личная карточка игрока в рейтинге -->
+      <!-- Личная карточка игрока в рейтинге + ВИДИМАЯ ШКАЛА СУПЕР-ПРИЗА (0% -> 100%) -->
       <div class="leader-me-banner" id="leader-me-banner">
-        <div>
-          <span class="mono-label">ТВОЯ ПОЗИЦИЯ В ГОНКЕ:</span>
-          <strong id="leader-me-rank">#—</strong>
+        <div style="flex:1;">
+          <span class="mono-label">ШКАЛА РЕЙТИНГА НА СУПЕР-ПРИЗ (ДОБЕРИ 100%):</span>
+          <div class="leader-rating-bar-wrap">
+            <div class="leader-rating-bar-track">
+              <div class="leader-rating-bar-fill" id="leader-rating-fill" style="width:0%"></div>
+            </div>
+            <strong id="leader-rating-pct">0%</strong>
+          </div>
+          <small id="leader-rating-breakdown">👥 Друзья в игре: 0 (+20% каждый) · ⭐ Из бочек: 0</small>
         </div>
         <div class="leader-me-right">
+          <strong id="leader-me-rank">#—</strong>
           <strong id="leader-me-points">⭐ 0</strong>
           <small id="leader-me-gap">До ТОП-10: расчёт...</small>
         </div>
@@ -1167,12 +1248,21 @@
         <div class="mono-tag">Загрузка рейтинга из Supabase...</div>
       </div>
 
+      <!-- Правило супер-приза за неделю до показа (10 декабря) -->
+      <div class="premiere-final-rule-box">
+        <img src="./public/sprites/points_token_barrel.webp" class="premiere-token-thumb" alt="Баллы в бочке" />
+        <div>
+          <strong>🏆 СУПЕР-ПРИЗ ЗА НЕДЕЛЮ ДО ПОКАЗА (10 ДЕКАБРЯ)</strong>
+          <small>Собирай <strong>⭐ баллы из бочек</strong> и <strong>🛢 закатывай друзей</strong> — игроки с наибольшим числом приглашений и очков сразятся за главный приз Премьеры 17 декабря!</small>
+        </div>
+      </div>
+
       <!-- Компактная подсказка без перегруза экрана -->
       <div class="points-guide-box">
-        <span class="mono-label">КАК НАБРАТЬ ОЧКИ (⭐):</span>
+        <span class="mono-label">КАК ПОДНЯТЬСЯ В ТОП:</span>
         <div class="points-guide-grid">
-          <span>📸 Бочка другу: <strong>+2500 ⭐ (+2 ❤️)</strong></span>
-          <span>🎬 Трейлер / КП: <strong>+250..500 ⭐</strong></span>
+          <span>🛢 Закатать друга: <strong>+200..2500 ⭐ (+3 ❤️)</strong></span>
+          <span>🎟 Билет другу: <strong>+500 ⭐ (+3 ❤️)</strong></span>
         </div>
       </div>
 

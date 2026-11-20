@@ -237,42 +237,22 @@ export function drawBarrelInteriorFX(ctx, size, frameStyle = 'flashlight') {
   ctx.fillRect(0, 0, size, size);
 
   if (frameStyle === 'flashlight') {
-    const beam = ctx.createRadialGradient(half * 0.72, half * 0.58, size * 0.02, half * 0.9, half * 0.82, size * 0.54);
-    beam.addColorStop(0, 'rgba(224, 246, 255, 0.22)');
-    beam.addColorStop(0.52, 'rgba(125, 211, 252, 0.05)');
-    beam.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    // v11.0: Чистая реалистичная кромка стальной бочки из фильма (без кислотного синего кольца и мультяшных капель!)
+    const beam = ctx.createRadialGradient(half * 0.78, half * 0.62, size * 0.04, half, half, size * 0.52);
+    beam.addColorStop(0, 'rgba(255, 244, 214, 0.09)');
+    beam.addColorStop(0.58, 'rgba(0, 0, 0, 0)');
+    beam.addColorStop(0.88, 'rgba(18, 12, 8, 0.34)');
+    beam.addColorStop(1, 'rgba(6, 5, 4, 0.68)');
     ctx.fillStyle = beam;
     ctx.fillRect(0, 0, size, size);
 
     ctx.save();
-    ctx.strokeStyle = 'rgba(56, 189, 248, 0.78)';
-    ctx.lineWidth = size * 0.012;
+    ctx.strokeStyle = 'rgba(120, 88, 52, 0.36)';
+    ctx.lineWidth = size * 0.014;
     ctx.beginPath();
-    ctx.arc(half, half, size * 0.44, -Math.PI * 0.82, -Math.PI * 0.16);
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(250, 204, 21, 0.55)';
-    ctx.lineWidth = size * 0.008;
-    ctx.beginPath();
-    ctx.arc(half, half, size * 0.455, Math.PI * 0.12, Math.PI * 0.65);
+    ctx.arc(half, half, size * 0.472, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
-
-    const drops = [
-      [0.16, 0.26, 5.2], [0.84, 0.28, 4.4], [0.13, 0.56, 5.0],
-      [0.86, 0.58, 4.6], [0.24, 0.81, 4.2], [0.76, 0.80, 5.4], [0.50, 0.12, 3.8],
-    ];
-    for (const [nx, ny, r] of drops) {
-      const x = nx * size;
-      const y = ny * size;
-      const dg = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, 0.5, x, y, r);
-      dg.addColorStop(0, 'rgba(240, 249, 255, 0.88)');
-      dg.addColorStop(0.5, 'rgba(125, 211, 252, 0.34)');
-      dg.addColorStop(1, 'rgba(15, 23, 42, 0.38)');
-      ctx.fillStyle = dg;
-      ctx.beginPath();
-      ctx.ellipse(x, y, r * 0.88, r * 1.15, 0.12, 0, Math.PI * 2);
-      ctx.fill();
-    }
   } else if (frameStyle === 'weld') {
     ctx.save();
     ctx.shadowColor = '#f97316';

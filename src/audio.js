@@ -12,10 +12,12 @@ const SFX_PATHS = {
   scream1: './assets/sfx/scream_1.mp3',
   scream2: './assets/sfx/scream_2.mp3',
   hum: './assets/sfx/factory_hum.mp3',
-  // v8.0: 3 целевых звука прослушки (L1 человек, L2 пустая бочка, L3+ билет)
+  // v8.0: 3 целевых звука прослушки (L1 человек, L2 пустая бочка, L3+ билет) + глухие подсказки «я тут»
   target_human: './public/sfx/targets/human_knock.mp3',
   target_empty: './public/sfx/targets/empty_echo.mp3',
   target_ticket: './public/sfx/targets/ticket_projector.mp3',
+  target_muffled_1: './public/sfx/targets/muffled_clue_1.mp3',
+  target_muffled_2: './public/sfx/targets/muffled_clue_2.mp3',
   // v8.0: 10 киношных звуков-обманок внутри бочек (mono <= 12 KB)
   decoy_dog_chain: './public/sfx/decoys/dog_chain.mp3',
   decoy_nail_scrape: './public/sfx/decoys/nail_scrape.mp3',
@@ -32,6 +34,37 @@ const SFX_PATHS = {
   scream_lid_blast: './public/sfx/screamers/lid_blast.mp3',
   scream_basement_shriek: './public/sfx/screamers/basement_shriek.mp3',
   scream_tesla_siren: './public/sfx/screamers/tesla_siren.mp3',
+  // v8.2: 7 разных реальных актёрских скримеров (по одному на каждого персонажа!) + жуткие звуки внутри бочек
+  horror_char_0: './public/sfx/horror/char_0.mp3',
+  horror_char_1: './public/sfx/horror/char_1.mp3',
+  horror_char_2: './public/sfx/horror/char_2.mp3',
+  horror_char_3: './public/sfx/horror/char_3.mp3',
+  horror_char_4: './public/sfx/horror/char_4.mp3',
+  horror_char_5: './public/sfx/horror/char_5.mp3',
+  horror_char_6: './public/sfx/horror/char_6.mp3',
+  horror_jumpscare_shriek: './public/sfx/horror/jumpscare_shriek.mp3',
+  horror_jumpscare_lunge: './public/sfx/horror/jumpscare_lunge.mp3',
+  horror_jumpscare_klaxon: './public/sfx/horror/jumpscare_klaxon.mp3',
+  horror_jumpscare_waterphone: './public/sfx/horror/jumpscare_waterphone.mp3',
+  horror_barrel_scratch: './public/sfx/horror/barrel_scratch_nails.mp3',
+  horror_barrel_banging: './public/sfx/horror/barrel_banging_panic.mp3',
+  horror_barrel_breath: './public/sfx/horror/barrel_whisper_breath.mp3',
+  horror_barrel_groan: './public/sfx/horror/barrel_metal_groan.mp3',
+  // v8.1: Бесплатные CC0 индустриальные и жуткие SFX из Patch.gg (Kenney)
+  patch_metal_heavy: './public/sfx/patch/metal_heavy.mp3',
+  patch_metal_clang: './public/sfx/patch/metal_clang.mp3',
+  patch_bell_ominous: './public/sfx/patch/bell_ominous.mp3',
+  patch_creak_eerie: './public/sfx/patch/creak_eerie.mp3',
+  patch_metal_latch: './public/sfx/patch/metal_latch.mp3',
+  patch_barrel_ring: './public/sfx/patch/barrel_ring.mp3',
+  patch_slime_slosh: './public/sfx/patch/slime_slosh.mp3',
+  patch_blast_crunch: './public/sfx/patch/blast_crunch.mp3',
+  patch_sub_boom: './public/sfx/patch/sub_boom.mp3',
+  patch_tesla_arc: './public/sfx/patch/tesla_arc.mp3',
+  patch_hatch_slam: './public/sfx/patch/hatch_slam.mp3',
+  // v11.5: Настоящие живые записи петуха (кукареку) и злой собаки (лай ротвейлера) для пранк-скримеров
+  prank_real_rooster: './public/sfx/pranks/real_rooster.mp3',
+  prank_real_dog: './public/sfx/pranks/real_dog_bark.mp3',
 };
 
 export const DECOY_SOUND_KEYS = [
@@ -45,6 +78,14 @@ export const DECOY_SOUND_KEYS = [
   'decoy_can_drink',
   'decoy_cassette_bass',
   'decoy_lighter_sigh',
+  'horror_barrel_scratch',
+  'horror_barrel_banging',
+  'horror_barrel_breath',
+  'horror_barrel_groan',
+  'patch_creak_eerie',
+  'patch_metal_latch',
+  'patch_slime_slosh',
+  'patch_bell_ominous',
 ];
 
 const SCREAMER_KEY_ALIAS = {
@@ -56,6 +97,8 @@ const SCREAMER_KEY_ALIAS = {
   custom_scream: 'basement_shriek',
   tesla_siren: 'tesla_siren',
   siren_cam: 'tesla_siren',
+  prank_rooster: 'prank_rooster',
+  prank_dog_alarm: 'prank_dog_alarm',
 };
 
 class WorkshopAudio {
@@ -93,10 +136,12 @@ class WorkshopAudio {
     this.muffledLoopRunning = false;
     this.cleanVoiceSrc = null;
     this.cleanFallbackAudio = null;
+    this._userMuted = false;
   }
 
   async unlock(withSound = true) {
     this.enabled = Boolean(withSound);
+    if (this.enabled) this._userMuted = false;
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
 
@@ -106,15 +151,15 @@ class WorkshopAudio {
       this.master.gain.value = (this.enabled && !this.modalDucked) ? 0.96 : 0.0;
       this.master.connect(this.ctx.destination);
 
-      // Пиковый компрессор-лимитер на 0 dBFS для максимально громких скримеров на телефоне
+      // Пиковый компрессор-лимитер на 0 dBFS для максимально мощных кино-скримеров на телефоне и ПК
       const comp = this.ctx.createDynamicsCompressor();
-      comp.threshold.value = -5;
-      comp.knee.value = 3;
-      comp.ratio.value = 18;
+      comp.threshold.value = -3;
+      comp.knee.value = 2;
+      comp.ratio.value = 20;
       comp.attack.value = 0.001;
-      comp.release.value = 0.12;
+      comp.release.value = 0.1;
       const boost = this.ctx.createGain();
-      boost.gain.value = 1.45;
+      boost.gain.value = 2.15;
       boost.connect(comp).connect(this.master);
       this.screamerBus = boost;
 
@@ -164,6 +209,7 @@ class WorkshopAudio {
       return this.enabled;
     }
     this.enabled = !this.enabled;
+    this._userMuted = !this.enabled;
     if (this.enabled && this.ctx.state === 'suspended') {
       try {
         await this.ctx.resume();
@@ -217,6 +263,18 @@ class WorkshopAudio {
 
   updateListenerCamera(camPos) {
     if (!this.ctx) return;
+    const now = performance.now();
+    if (this._lastListenerMs && now - this._lastListenerMs < 110) return;
+    if (
+      this._lastListenerPos &&
+      Math.abs(camPos.x - this._lastListenerPos.x) < 0.05 &&
+      Math.abs(camPos.y - this._lastListenerPos.y) < 0.05 &&
+      Math.abs(camPos.z - this._lastListenerPos.z) < 0.05
+    ) {
+      return;
+    }
+    this._lastListenerMs = now;
+    this._lastListenerPos = { x: camPos.x, y: camPos.y, z: camPos.z };
     this._setupListener(camPos.x, camPos.y, camPos.z);
   }
 
@@ -554,16 +612,40 @@ class WorkshopAudio {
       this.muffledChainGain.gain.setTargetAtTime(0.58, this.ctx.currentTime, 0.08);
     }
 
+    let listenCycle = 0;
     const playOnce = () => {
       if (this.activeBarrel !== index) return;
-      Haptics.light();
+      listenCycle += 1;
+      const isTarget = index === this.targetIndex;
+      Haptics.barrelListenPulse(isTarget);
       if (!this.ctx || !this.enabled) return;
       const dest = this.panners[index] || this.master;
-      const key = this.getBarrelSoundKey(index);
-      const played = this._playInsideBarrelSample(key, dest, index === this.targetIndex ? 1.05 : 0.92);
+      // v11.6 Прослушка: на целевой бочке с человеком (Ур. 1, Ур. 4, Ур. 5+) с 1-го прослушивания слышно глухое «я тут...»!
+      const useMuffledVoiceClue =
+        isTarget &&
+        this.targetKind === 'human' &&
+        !this.senderVoiceBuffer &&
+        (listenCycle === 1 || listenCycle % 2 === 0 || Math.random() < 0.55);
+      const key = useMuffledVoiceClue
+        ? (listenCycle % 4 === 0 ? 'target_muffled_2' : 'target_muffled_1')
+        : this.getBarrelSoundKey(index);
+      const played = this._playInsideBarrelSample(key, dest, isTarget ? 1.15 : 0.94);
       if (!played) {
-        if (index === this.targetIndex) this._triggerTargetCycle(index);
+        if (isTarget) this._triggerTargetCycle(index);
         else this._triggerEmptyCycle(index);
+      } else if (!isTarget) {
+        // v8.1: Лёгкий странный обертон из Patch внутри обманной бочки
+        const eerieLayer = ['patch_creak_eerie', 'patch_metal_latch', 'patch_slime_slosh'][index % 3];
+        const eBuf = this.buffers.get(eerieLayer);
+        if (eBuf && Math.random() < 0.55) {
+          const eSrc = this.ctx.createBufferSource();
+          eSrc.buffer = eBuf;
+          eSrc.playbackRate.value = 0.72 + Math.random() * 0.25;
+          const eg = this.ctx.createGain();
+          eg.gain.value = 0.28;
+          eSrc.connect(eg).connect(dest);
+          try { eSrc.start(this.ctx.currentTime + 0.14); } catch { /* ignore */ }
+        }
       }
     };
 
@@ -627,6 +709,34 @@ class WorkshopAudio {
       if (this.activeListenSource === src) this.activeListenSource = null;
     };
     return true;
+  }
+
+  playRewardImpact(stepIdx = 0) {
+    if (!this.ctx || !this.enabled) return;
+    try {
+      const now = this.ctx.currentTime;
+      const baseHz = 240 + Math.min(8, stepIdx) * 58;
+      // Плотный ударный бас + звонкий золотой клик попадания в HUD («БАХ!»)
+      const osc1 = this.ctx.createOscillator();
+      const osc2 = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc1.type = 'triangle';
+      osc2.type = 'sine';
+      osc1.frequency.setValueAtTime(baseHz * 0.65, now);
+      osc1.frequency.exponentialRampToValueAtTime(92, now + 0.14);
+      osc2.frequency.setValueAtTime(baseHz * 2.0, now);
+      osc2.frequency.exponentialRampToValueAtTime(baseHz * 2.5, now + 0.11);
+      g.gain.setValueAtTime(0.001, now);
+      g.gain.linearRampToValueAtTime(0.46, now + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+      osc1.connect(g);
+      osc2.connect(g);
+      g.connect(this.master);
+      osc1.start(now);
+      osc2.start(now);
+      osc1.stop(now + 0.24);
+      osc2.stop(now + 0.24);
+    } catch { /* ignore */ }
   }
 
   stopListening() {
@@ -880,7 +990,7 @@ class WorkshopAudio {
   }
 
   playStrike(index) {
-    Haptics.heavy();
+    Haptics.crowbarHit();
     if (!this.ctx || !this.enabled) return;
     const dest = this.panners[index] || this.master;
     const now = this.ctx.currentTime;
@@ -895,6 +1005,29 @@ class WorkshopAudio {
       g.gain.value = 0.95;
       src.connect(g).connect(dest);
       src.start(now);
+    }
+
+    // v8.1: Плотный стальной удар ломом из Patch.gg (CC0) поверх базового удара
+    const patchHitBuf = this.buffers.get('patch_metal_heavy') || this.buffers.get('patch_metal_clang');
+    if (patchHitBuf) {
+      const pSrc = this.ctx.createBufferSource();
+      pSrc.buffer = patchHitBuf;
+      pSrc.playbackRate.value = 0.88 + Math.random() * 0.22;
+      const pg = this.ctx.createGain();
+      pg.gain.value = 0.88;
+      pSrc.connect(pg).connect(dest);
+      pSrc.start(now);
+    }
+    const ringBuf = this.buffers.get('patch_barrel_ring');
+    if (ringBuf) {
+      const rSrc = this.ctx.createBufferSource();
+      rSrc.buffer = ringBuf;
+      rSrc.playbackRate.value = 0.72 + (index % 4) * 0.08;
+      const rg = this.ctx.createGain();
+      rg.gain.setValueAtTime(0.42, now + 0.015);
+      rg.gain.exponentialRampToValueAtTime(0.001, now + 0.85);
+      rSrc.connect(rg).connect(dest);
+      rSrc.start(now + 0.015);
     }
 
     const sub = this.ctx.createOscillator();
@@ -932,108 +1065,141 @@ class WorkshopAudio {
   }
 
   /**
-   * 4 фирменных 0.4-секундных скримера из фильма (без собак!):
-   * 0 — рука с постера (скрежет ногтей по стали + удар)
-   * 1 — пастор Тиль Швайгер (тяжёлый выдох + колокольный удар золотого креста)
-   * 2 — отец с фонарём (щелчок прожектора + глухой шёпот "No, no!")
-   * 3 — пацан-блогер (стробоскоп затвора + цифровой визг битого видео)
+   * v8.1: 4 реальных кино-хоррор скримера (waterphone, визг, ревун, удар в грудь + вибрация, БЕЗ аркадных писков)
    */
   playMiniScreamer(variant = 0) {
-    Haptics.error();
+    const idx = ((Math.round(Number(variant) || 0) % 7) + 7) % 7;
+    const hapticMap = ['saw_scream', 'lid_blast', 'lid_blast', 'tesla_siren', 'tesla_siren', 'basement_shriek', 'basement_shriek'];
+    const charKey = `horror_char_${idx}`;
+    const fallbackFile = `./public/sfx/horror/char_${idx}.mp3`;
+    Haptics.screamer(hapticMap[idx]);
+    if (this._userMuted) return;
+
+    // Если игрок кликнул до декодирования WebAudio — мгновенно бьём реальным актёрским треком через HTMLAudio!
+    if (!this.ctx || !this.enabled || !this.buffers.has(charKey)) {
+      try {
+        const direct = new Audio(fallbackFile);
+        direct.volume = 1.0;
+        direct.play().catch(() => {});
+      } catch { /* ignore */ }
+    }
     if (!this.ctx || !this.enabled) return;
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
+    }
     const now = this.ctx.currentTime;
-    const v = ((variant % 4) + 4) % 4;
+    const bus = this.screamerBus || this.master;
 
-    // Общий резкий суб-удар в грудь (0.4 сек)
-    const sub = this.ctx.createOscillator();
-    const subG = this.ctx.createGain();
-    sub.type = 'sine';
-    sub.frequency.setValueAtTime(118, now);
-    sub.frequency.exponentialRampToValueAtTime(34, now + 0.36);
-    subG.gain.setValueAtTime(0.88, now);
-    subG.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
-    sub.connect(subG).connect(this.master);
-    sub.start(now);
-    sub.stop(now + 0.41);
-
-    if (v === 0) {
-      // Вариант 0: Бледная грязная рука скребёт ногтями по стали из горловины
-      const buf = this.buffers.get('scream1');
-      if (buf) {
-        const src = this.ctx.createBufferSource();
-        src.buffer = buf;
-        const g = this.ctx.createGain();
-        g.gain.setValueAtTime(0.88, now);
-        g.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
-        src.connect(g).connect(this.master);
-        src.start(now);
-        src.stop(now + 0.43);
-      }
-      if (this.noiseBuffer) {
-        const nSrc = this.ctx.createBufferSource();
-        nSrc.buffer = this.noiseBuffer;
-        const bp = this.ctx.createBiquadFilter();
-        bp.type = 'bandpass';
-        bp.frequency.setValueAtTime(2850, now);
-        bp.frequency.exponentialRampToValueAtTime(920, now + 0.38);
-        bp.Q.value = 8.5;
-        const ng = this.ctx.createGain();
-        ng.gain.setValueAtTime(0.55, now);
-        ng.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
-        nSrc.connect(bp).connect(ng).connect(this.master);
-        nSrc.start(now);
-        nSrc.stop(now + 0.41);
-      }
-      return;
-    }
-
-    if (v === 1) {
-      // Вариант 1: Прорыв паровой магистрали под давлением (резкий выброс пара + гул контура)
-      this.playSteamPenaltyBurst();
-      return;
-    }
-
-    if (v === 2) {
-      // Вариант 2: Короткое замыкание силовой проводки цеха (треск дуги + гул трансформатора)
-      const click = this.ctx.createOscillator();
-      const cg = this.ctx.createGain();
-      click.type = 'sawtooth';
-      click.frequency.setValueAtTime(1850, now);
-      click.frequency.exponentialRampToValueAtTime(140, now + 0.14);
-      cg.gain.setValueAtTime(0.42, now);
-      cg.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
-      click.connect(cg).connect(this.master);
-      click.start(now);
-      click.stop(now + 0.17);
-      return;
-    }
-
-    // Вариант 3: Пацан-блогер врубает стробоскоп вспышки смартфона с цифровым визгом битого видео
-    const sBuf = this.buffers.get('scream2') || this.buffers.get('scream1');
-    if (sBuf) {
-      const src = this.ctx.createBufferSource();
-      src.buffer = sBuf;
-      src.playbackRate.value = 1.18;
+    const b = this.buffers.get(charKey) || this.buffers.get('horror_jumpscare_shriek');
+    if (b) {
+      const s = this.ctx.createBufferSource();
+      s.buffer = b;
       const g = this.ctx.createGain();
-      g.gain.setValueAtTime(0.75, now);
-      g.gain.exponentialRampToValueAtTime(0.001, now + 0.41);
-      src.connect(g).connect(this.master);
-      src.start(now);
-      src.stop(now + 0.42);
+      const dur = Math.min(3.45, b.duration || 3.35);
+      // Полный необрезанный реальный крик/голос персонажа до самого конца с плавным хвостом эха!
+      g.gain.setValueAtTime(1.85, now);
+      g.gain.setValueAtTime(1.85, now + Math.max(0.5, dur - 0.25));
+      g.gain.linearRampToValueAtTime(0.001, now + dur);
+      s.connect(g).connect(bus);
+      s.start(now);
+      s.stop(now + dur + 0.08);
     }
-    const glitch = this.ctx.createOscillator();
-    const gg = this.ctx.createGain();
-    glitch.type = 'square';
-    glitch.frequency.setValueAtTime(2200, now);
-    glitch.frequency.setValueAtTime(640, now + 0.08);
-    glitch.frequency.setValueAtTime(3100, now + 0.16);
-    glitch.frequency.setValueAtTime(420, now + 0.24);
-    glitch.frequency.setValueAtTime(1750, now + 0.32);
-    gg.gain.setValueAtTime(0.24, now);
-    gg.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
-    glitch.connect(gg).connect(this.master);
-    glitch.start(now);
-    glitch.stop(now + 0.41);
+  }
+
+  /**
+   * v8.1: Странные живые звуки из случайных бочек в темноте (3D-панорама + резонанс 200л стали + микровибрация)
+   */
+  playBarrelEerieSound(index = 0, kind = 'knock_urgent') {
+    if (!this.ctx || !this.enabled || this.modalDucked) return;
+    if (this.activeBarrel >= 0) return; // не перебиваем активную прослушку игрока
+    const dest = this.panners[index] || this.master;
+    const now = this.ctx.currentTime;
+
+    // Резонансная цепь «внутри заваренной 200-литровой бочки» + короткое металлическое эхо
+    const hp = this.ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 72;
+
+    const bodyRes = this.ctx.createBiquadFilter();
+    bodyRes.type = 'peaking';
+    bodyRes.frequency.value = 320 + (index % 4) * 28;
+    bodyRes.Q.value = 3.2;
+    bodyRes.gain.value = 7.0;
+
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 2150;
+    lp.Q.value = 1.4;
+
+    const wetDelay = this.ctx.createDelay(0.25);
+    wetDelay.delayTime.value = 0.068;
+    const wetGain = this.ctx.createGain();
+    wetGain.gain.value = 0.3;
+
+    const outGain = this.ctx.createGain();
+    outGain.gain.value = 0.82;
+
+    hp.connect(bodyRes).connect(lp);
+    lp.connect(outGain);
+    lp.connect(wetDelay).connect(wetGain).connect(outGain);
+    outGain.connect(dest);
+
+    Haptics.barrelEerie();
+
+    const playSample = (key, { rate = 1.0, vol = 0.85, delay = 0 } = {}) => {
+      const b = this.buffers.get(key);
+      if (!b) return false;
+      const src = this.ctx.createBufferSource();
+      src.buffer = b;
+      src.playbackRate.value = rate;
+      const g = this.ctx.createGain();
+      g.gain.value = vol;
+      src.connect(g).connect(hp);
+      src.start(now + delay);
+      return true;
+    };
+
+    if (kind === 'knock_urgent') {
+      if (!playSample('horror_barrel_banging', { rate: 0.96 + Math.random() * 0.1, vol: 0.95 })) {
+        [0, 0.17, 0.36].forEach((off, i) => {
+          playSample('knockInside', { rate: 0.92 + i * 0.06, vol: 0.72 + i * 0.08, delay: off });
+        });
+      }
+      return;
+    }
+
+    if (kind === 'creak_metal') {
+      playSample('horror_barrel_groan', { rate: 0.92 + Math.random() * 0.16, vol: 0.92 })
+        || playSample('patch_creak_eerie', { rate: 0.64 + Math.random() * 0.22, vol: 0.88 });
+      return;
+    }
+
+    if (kind === 'nails_scrape') {
+      playSample('horror_barrel_scratch', { rate: 0.95 + Math.random() * 0.12, vol: 0.95 })
+        || playSample('decoy_nail_scrape', { rate: 0.95, vol: 0.75 });
+      return;
+    }
+
+    if (kind === 'wet_slosh') {
+      playSample('patch_slime_slosh', { rate: 0.66 + Math.random() * 0.18, vol: 0.82 });
+      playSample('horror_barrel_breath', { rate: 0.9, vol: 0.65, delay: 0.12 });
+      return;
+    }
+
+    if (kind === 'latch_rattle') {
+      playSample('patch_metal_latch', { rate: 0.84, vol: 0.85 });
+      playSample('patch_metal_latch', { rate: 1.06, vol: 0.68, delay: 0.21 });
+      playSample('chain1', { rate: 0.92, vol: 0.42, delay: 0.08 });
+      return;
+    }
+
+    if (kind === 'ominous_bell') {
+      playSample('patch_bell_ominous', { rate: 0.56 + Math.random() * 0.16, vol: 0.72 });
+      return;
+    }
+
+    // whisper_groan: жуткое прерывистое дыхание и шёпот изнутри бочки
+    playSample('horror_barrel_breath', { rate: 0.94 + Math.random() * 0.12, vol: 0.98 });
   }
 
   /**
@@ -1174,10 +1340,21 @@ class WorkshopAudio {
    * Промах по пустой бочке: громкий гулкий звон пустого железа + резкий пшик пара + вибрация телефона
    */
   playEmptyBarrelClang(index = 0) {
-    try { navigator.vibrate?.([70, 30, 110]); } catch { /* ignore */ }
+    Haptics.lidBlast();
     if (!this.ctx || !this.enabled) return;
     const dest = this.panners[index] || this.master;
     const now = this.ctx.currentTime;
+
+    const slamBuf = this.buffers.get('patch_hatch_slam') || this.buffers.get('patch_barrel_ring');
+    if (slamBuf) {
+      const s = this.ctx.createBufferSource();
+      s.buffer = slamBuf;
+      s.playbackRate.value = 0.84 + Math.random() * 0.18;
+      const sg = this.ctx.createGain();
+      sg.gain.value = 0.85;
+      s.connect(sg).connect(dest);
+      s.start(now);
+    }
 
     // Неоднородные обертоны пустой стальной бочки (долгий гул)
     const partials = [[118, 0.55, 1.7], [187, 0.42, 1.45], [293, 0.34, 1.15], [441, 0.24, 0.85], [663, 0.16, 0.6]];
@@ -1255,24 +1432,114 @@ class WorkshopAudio {
    * реальный нормализованный сэмпл (-0.3 dBFS) + пиковый компрессор + суб-удар + максимальная вибрация
    */
   playFullScreamer(variant = 'saw_scream', { preview = false } = {}) {
-    try {
-      navigator.vibrate?.(preview ? [140, 40, 180] : [350, 50, 450, 50, 500]);
-    } catch { /* ignore */ }
+    const normKey = SCREAMER_KEY_ALIAS[variant] || 'saw_scream';
+    if (preview) {
+      Haptics.heavy();
+    } else {
+      Haptics.screamer(normKey);
+    }
     if (!this.ctx || !this.enabled) return;
     const now = this.ctx.currentTime;
-    const normKey = SCREAMER_KEY_ALIAS[variant] || 'saw_scream';
     const bus = this.screamerBus || this.master;
 
-    const sampleKey = `scream_${normKey}`;
-    const sampleBuf = this.buffers.get(sampleKey) || this.buffers.get('scream1');
+    // v11.5: Настоящие живые записи петуха (кукареку) и злого ротвейлера — без синтетики и пищалок!
+    if (normKey === 'prank_rooster' || normKey === 'prank_dog_alarm') {
+      const realKey = normKey === 'prank_rooster' ? 'prank_real_rooster' : 'prank_real_dog';
+      const playRealPrankBuf = (buf) => {
+        if (!buf || !this.ctx || !this.enabled) return;
+        const t0 = this.ctx.currentTime;
+        const src = this.ctx.createBufferSource();
+        src.buffer = buf;
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(preview ? 1.35 : 1.95, t0);
+        src.connect(g).connect(bus);
+        src.start(t0);
+        if (preview) src.stop(t0 + 2.55);
+      };
+      const cached = this.buffers.get(realKey);
+      if (cached) {
+        playRealPrankBuf(cached);
+      } else {
+        const url = SFX_PATHS[realKey];
+        if (url) {
+          fetch(url)
+            .then((r) => (r.ok ? r.arrayBuffer() : null))
+            .then((ab) => (ab && this.ctx ? this.ctx.decodeAudioData(ab) : null))
+            .then((decoded) => {
+              if (decoded) {
+                this.buffers.set(realKey, decoded);
+                playRealPrankBuf(decoded);
+              }
+            })
+            .catch(() => {});
+        }
+      }
+      if (!preview) this.playLidBlowOff?.(false);
+      return;
+    }
+
+    const horrorMap = {
+      saw_scream: 'horror_jumpscare_shriek',
+      lid_blast: 'horror_jumpscare_lunge',
+      tesla_siren: 'horror_jumpscare_klaxon',
+      basement_shriek: 'horror_jumpscare_waterphone',
+    };
+    const sampleBuf =
+      this.buffers.get(horrorMap[normKey] || 'horror_jumpscare_shriek') ||
+      this.buffers.get(`scream_${normKey}`) ||
+      this.buffers.get('scream1');
     if (sampleBuf) {
       const src = this.ctx.createBufferSource();
       src.buffer = sampleBuf;
       const g = this.ctx.createGain();
-      g.gain.setValueAtTime(preview ? 0.88 : 1.38, now);
+      g.gain.setValueAtTime(preview ? 1.15 : 1.75, now);
       src.connect(g).connect(bus);
       src.start(now);
-      if (preview) src.stop(now + 1.15);
+      if (preview) src.stop(now + 1.95);
+    }
+
+    // v8.1: Второй слой Patch CC0 (взрыв / разряд / колокол + глубокий sub_boom)
+    const extraPatchKey =
+      normKey === 'lid_blast'
+        ? 'patch_blast_crunch'
+        : normKey === 'tesla_siren'
+          ? 'patch_tesla_arc'
+          : normKey === 'basement_shriek'
+            ? 'patch_bell_ominous'
+            : 'patch_sub_boom';
+    const extraBuf = this.buffers.get(extraPatchKey);
+    if (extraBuf) {
+      const ex = this.ctx.createBufferSource();
+      ex.buffer = extraBuf;
+      ex.playbackRate.value = normKey === 'basement_shriek' ? 0.65 : 1.0;
+      const eg = this.ctx.createGain();
+      eg.gain.setValueAtTime(preview ? 0.65 : 1.05, now);
+      ex.connect(eg).connect(bus);
+      ex.start(now);
+      if (preview) ex.stop(now + 1.1);
+    }
+    if (!preview) {
+      const subBoom = this.buffers.get('patch_sub_boom');
+      if (subBoom && extraPatchKey !== 'patch_sub_boom') {
+        const sb = this.ctx.createBufferSource();
+        sb.buffer = subBoom;
+        const sbg = this.ctx.createGain();
+        sbg.gain.value = 0.95;
+        sb.connect(sbg).connect(bus);
+        sb.start(now);
+      }
+      const secondHorror = this.buffers.get(normKey === 'saw_scream' ? 'horror_jumpscare_waterphone' : 'horror_jumpscare_shriek');
+      if (secondHorror) {
+        const sh = this.ctx.createBufferSource();
+        sh.buffer = secondHorror;
+        sh.playbackRate.value = 0.92;
+        const shg = this.ctx.createGain();
+        shg.gain.setValueAtTime(0.75, now + 0.05);
+        shg.gain.exponentialRampToValueAtTime(0.001, now + 1.45);
+        sh.connect(shg).connect(bus);
+        sh.start(now + 0.05);
+        sh.stop(now + 1.5);
+      }
     }
 
     const boom = this.ctx.createOscillator();
@@ -1454,22 +1721,6 @@ class WorkshopAudio {
       data[i] = last * 2.6;
     }
     return buf;
-  }
-
-  playChainRattle() {
-    Haptics.medium();
-    if (!this.enabled || !this.ctx) return;
-    const key = Math.random() < 0.5 ? 'chain1' : 'chain2';
-    const buf = this.buffers.get(key);
-    if (buf) {
-      const src = this.ctx.createBufferSource();
-      src.buffer = buf;
-      src.playbackRate.value = 0.92 + Math.random() * 0.18;
-      const g = this.ctx.createGain();
-      g.gain.value = 0.78;
-      src.connect(g).connect(this.master);
-      try { src.start(0); } catch { /* ignore */ }
-    }
   }
 
   playCountdownBeat(isFinalGo = false) {

@@ -7,6 +7,7 @@ import {
   startDuelAnte,
   settleDuelRound,
   claimDuelPremiereBankReward,
+  requestServerCinemaTicket,
 } from './backend.js';
 
 /**
@@ -15,7 +16,7 @@ import {
  * Все промежуточные клики, таймеры и «Погреметь цепями» идут строго через WebSocket в оперативной памяти (0 записей в БД).
  */
 export class WorkshopDuelController {
-  constructor({ scene, audio, getTgUser, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDuelDefeatToTil }) {
+  constructor({ scene, audio, getTgUser, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels }) {
     this.scene = scene;
     this.audio = audio;
     this.getTgUser = getTgUser;
@@ -25,7 +26,16 @@ export class WorkshopDuelController {
     this.onOpenGoldenFork = onOpenGoldenFork;
     this.onExitToHub = onExitToHub;
     this.onDuelDefeatToTil = onDuelDefeatToTil;
+    this.onFlyRating = onFlyRating;
+    this.onFlyLife = onFlyLife;
+    this.onReturnToLevels = onReturnToLevels;
     this.soloMode = false;
+    this.energy = 100;
+    this.duelLives = 6; // v12.0: Минимум 6 жизней именно на Дуэль (Тиль всегда пополняет минимум до 6 ❤️!)
+    this.duelRoundsWithoutTicket = 0; // Если не нашёл билет за 3 раунда -> возврат на уровни искать пацана!
+    this.maxDuelRounds = 3;
+    this.batchResolved = false; // true, когда кто-то выбил 🎟 Билет или бочки кончились
+    this.skippedThisTurn = false;
 
     this.active = false;
     this.roomId = '';
@@ -42,6 +52,8 @@ export class WorkshopDuelController {
     this.antePaidForRound = '';
     this.barrelCount = 10;
     this.safeIndices = [];
+    this.barrelLoot = {}; // { [idx]: { kind: 'ticket'|'points'|'empty'|'screamer', value, label } }
+    this.batchHasTicket = false;
     this.openedIndices = []; // уже вскрытые в текущей партии бочки (не закрываются, пока не откроют все!)
     this.claims = {}; // { [barrelIndex]: { uid, name, avatar, ts } }
     this.claimTimeLeft = 3.0;
@@ -95,6 +107,11 @@ export class WorkshopDuelController {
     this.openedIndices = [];
     this.claims = {};
     this.spectatorUids = [];
+    this.energy = 100;
+    this.duelLives = Math.max(6, Number(this.duelLives || 6));
+    this.batchResolved = false;
+    this.skippedThisTurn = false;
+    this.syncEnergyUI();
 
     this.players = [
       {
@@ -112,6 +129,9 @@ export class WorkshopDuelController {
 
     const overlay = document.getElementById('duel-overlay');
     overlay?.removeAttribute('hidden');
+    overlay?.classList.remove('is-playing');
+    document.body.classList.add('is-duel-active');
+    document.getElementById('duel-live-mini-bar')?.setAttribute('hidden', '');
     document.getElementById('duel-result-box')?.setAttribute('hidden', '');
     document.getElementById('duel-spectator-bar')?.setAttribute('hidden', '');
     document.getElementById('duel-countdown-banner')?.setAttribute('hidden', '');
@@ -152,7 +172,11 @@ export class WorkshopDuelController {
       this.channel = null;
     }
     this.clearBarrelClaimBadges();
-    document.getElementById('duel-overlay')?.setAttribute('hidden', '');
+    const overlay = document.getElementById('duel-overlay');
+    overlay?.setAttribute('hidden', '');
+    overlay?.classList.remove('is-playing', 'is-finished');
+    document.body.classList.remove('is-duel-active');
+    document.getElementById('duel-live-mini-bar')?.setAttribute('hidden', '');
     this.scene?.setActiveBarrelCount(6);
     if (triggerCallback) {
       this.onExitToHub?.();
@@ -334,17 +358,44 @@ export class WorkshopDuelController {
       }
     }
 
+    const isPlaying = this.phase === 'countdown' || this.phase === 'claim' || this.phase === 'reveal';
+    const isFinished = this.phase === 'finished';
+    const overlayEl = document.getElementById('duel-overlay');
+    overlayEl?.classList.toggle('is-playing', isPlaying);
+    overlayEl?.classList.toggle('is-finished', isFinished);
+    const liveMiniBar = document.getElementById('duel-live-mini-bar');
+    if (liveMiniBar) {
+      if (isPlaying || isFinished) {
+        liveMiniBar.removeAttribute('hidden');
+        const miniStatus = document.getElementById('duel-live-mini-status');
+        if (miniStatus) {
+          const vsBot = this.players.some((p) => p.isBot);
+          miniStatus.textContent = isFinished
+            ? '🏁 ИТОГ РАУНДА'
+            : vsBot
+              ? '🤖 БОЙ С БОТОМ (ПОКА ЖДЁМ ДРУЗЕЙ)'
+              : `⚔️ БОЙ · ${count} ИГРОКА`;
+        }
+      } else {
+        liveMiniBar.setAttribute('hidden', '');
+      }
+    }
+
     if (invite3Btn) {
       if (count < 3 && (this.phase === 'lobby' || this.phase === 'finished')) {
         invite3Btn.removeAttribute('hidden');
+        const need = Math.max(1, 3 - count);
         invite3Btn.textContent =
           count === 1
-            ? '📲 ПОЗВАТЬ ДРУГА ЗА СТОЛ «НА СЧЁТ ТРИ!»'
-            : '➕ ПОЗВАТЬ 3-ГО КЕНТА (ЦЕХ ДОБАВИТ +450 ⭐ И ШАНС БИЛЕТА!)';
+            ? `📣 ПОЗВАТЬ ДРУЗЕЙ (ПУШ ВСЕМ В БАЗЕ · НУЖНО ЕЩЁ ${need})`
+            : '📣 ПОЗВАТЬ 3-ГО ДРУГА (ПУШ ВСЕМ · +450 ⭐ И БИЛЕТ!)';
       } else {
         invite3Btn.setAttribute('hidden', '');
       }
     }
+
+    // v11.0: На небо к Тилю — СТРОГО только при поражении и пустой энергии (кнопки ожидания в лобби больше нет!)
+    this.syncEnergyUI();
 
     if (slotsEl) {
       const cards = [];
@@ -419,13 +470,15 @@ export class WorkshopDuelController {
       if (!hasChallenger) {
         this.players.push({
           uid: 'bot_workshop_master',
-          name: 'Мастер Цеха',
+          name: 'Мастер Цеха [БОТ]',
           avatar: '',
           joinedAt: Date.now() + 10,
           isBot: true,
         });
       }
       this.renderLobbyUI();
+      document.getElementById('duel-overlay')?.classList.add('is-playing');
+      document.getElementById('duel-live-mini-bar')?.removeAttribute('hidden');
       await this.hostInitiateRound();
     } finally {
       this._soloStarting = false;
@@ -459,6 +512,8 @@ export class WorkshopDuelController {
 
     let safeIndices = this.safeIndices;
     let openedIndices = prevOpened;
+    let barrelLoot = this.barrelLoot || {};
+    let batchHasTicket = Boolean(this.batchHasTicket);
 
     if (needFreshRack) {
       const indices = Array.from({ length: barrelCount }, (_, i) => i);
@@ -466,8 +521,46 @@ export class WorkshopDuelController {
         const j = Math.floor(Math.random() * (i + 1));
         [indices[i], indices[j]] = [indices[j], indices[i]];
       }
-      safeIndices = indices.slice(0, safeCount);
+      // v12.5: Сбалансированная, напряжённая Охота за Билетом в партии из 10 бочек:
+      // - 🎟 БИЛЕТ В КИНО — РЕДКИЙ (~35% партий в Раундах 1-2, гарантирован на 3-м раунде если ещё не выпадал!)
+      // - ТОЛЬКО 1 редкая бочка ❤️ +1 ЖИЗНЬ (макс 6 ❤️, больше не раздувается!)
+      // - 2-3 бочки ⭐ БАЛЛЫ (350 / 250 / 150 ⭐)
+      // - 3 пустых (💨 −1 ❤️) + 2-3 скримера (☠️ −2 ❤️ — реальная опасность быстро потерять жизни!)
+      batchHasTicket = (this.duelRoundsWithoutTicket || 0) >= 2 ? true : Math.random() < 0.35;
+      const pointTiers = [350, 250, 150];
+      barrelLoot = {};
+      safeIndices = [];
+      let cursor = 0;
+
+      if (batchHasTicket) {
+        const tIdx = indices[cursor++];
+        barrelLoot[tIdx] = { kind: 'ticket', value: 1000, label: '🎟 БИЛЕТ В КИНО!' };
+        safeIndices.push(tIdx);
+      }
+
+      const lIdx = indices[cursor++];
+      barrelLoot[lIdx] = { kind: 'life', value: 1, label: '❤️ +1 ЖИЗНЬ' };
+      safeIndices.push(lIdx);
+
+      const ptsSlots = batchHasTicket ? 2 : 3;
+      for (let p = 0; p < ptsSlots && cursor < barrelCount; p++) {
+        const pIdx = indices[cursor++];
+        const val = pointTiers[p % pointTiers.length];
+        barrelLoot[pIdx] = { kind: 'points', value: val, label: `⭐ +${val}` };
+        safeIndices.push(pIdx);
+      }
+
+      for (let e = 0; e < 3 && cursor < barrelCount; e++) {
+        const eIdx = indices[cursor++];
+        barrelLoot[eIdx] = { kind: 'empty', value: 0, label: '💨 ПУСТО (−1 ❤️)' };
+      }
+
+      while (cursor < barrelCount) {
+        const sIdx = indices[cursor++];
+        barrelLoot[sIdx] = { kind: 'screamer', value: -2, label: '☠️ СКРИМЕР (−2 ❤️)' };
+      }
       openedIndices = [];
+      this.batchResolved = false;
     }
 
     const roundKey =
@@ -485,6 +578,8 @@ export class WorkshopDuelController {
       spectatorUids: this.players.map((p) => p.uid).filter((u) => !contenders.includes(u)),
       barrelCount,
       safeIndices,
+      barrelLoot,
+      batchHasTicket,
       openedIndices,
     };
 
@@ -508,6 +603,8 @@ export class WorkshopDuelController {
     this.spectatorUids = payload.spectatorUids || [];
     this.barrelCount = payload.barrelCount || 10;
     this.safeIndices = payload.safeIndices || [0, 2, 4, 6, 8];
+    this.barrelLoot = payload.barrelLoot || this.barrelLoot || {};
+    this.batchHasTicket = Boolean(payload.batchHasTicket);
     this.openedIndices = Array.isArray(payload.openedIndices) ? [...payload.openedIndices] : [];
     this.claims = {};
 
@@ -562,6 +659,7 @@ export class WorkshopDuelController {
 
     // Обратный отсчёт: РАЗ... ДВА... ТРИ — БЕЙ!
     this.phase = 'countdown';
+    this.renderLobbyUI();
     const banner = document.getElementById('duel-countdown-banner');
     const bannerText = document.getElementById('duel-countdown-text');
     const bannerSub = document.getElementById('duel-countdown-sub');
@@ -599,10 +697,94 @@ export class WorkshopDuelController {
     });
   }
 
+  refillFromTil() {
+    this.duelLives = Math.max(6, Number(this.duelLives || 0));
+    this.energy = 100;
+    this.syncEnergyUI();
+  }
+
+  syncEnergyUI() {
+    const valEl = document.getElementById('duel-energy-val');
+    const fillEl = document.getElementById('duel-energy-fill');
+    const livesEl = document.getElementById('duel-lives-val');
+    const livesPill = document.getElementById('duel-lives-pill');
+    const skipBtn = document.getElementById('btn-duel-skip-strike');
+    const statusEl = document.getElementById('duel-live-mini-status');
+    const pct = Math.max(0, Math.min(100, Math.round(Number(this.energy || 0))));
+    const dl = Math.max(0, Math.round(Number(this.duelLives ?? 6)));
+    if (valEl) valEl.textContent = `${pct}%`;
+    if (fillEl) {
+      fillEl.style.width = `${pct}%`;
+      fillEl.classList.toggle('is-low', pct <= 20);
+    }
+    if (livesEl) livesEl.textContent = String(dl);
+    if (livesPill) livesPill.classList.toggle('is-low', dl <= 1);
+    const closedLeft = Math.max(0, (this.barrelCount || 10) - (this.openedIndices?.length || 0));
+    const curRound = Math.min(this.maxDuelRounds || 3, (this.duelRoundsWithoutTicket || 0) + 1);
+    if (statusEl) {
+      statusEl.textContent = `🎟 РАУНД ${curRound}/${this.maxDuelRounds || 3} · ЗАКРЫТО ${closedLeft}/${this.barrelCount || 10}`;
+    }
+    if (skipBtn) {
+      const hasMyClaim = Object.values(this.claims || {}).some((c) => c.uid === this.myUid);
+      const canSkip = this.phase === 'claim' && !this.skippedThisTurn && !hasMyClaim && !this.spectatorUids.includes(this.myUid);
+      if (canSkip) skipBtn.removeAttribute('hidden');
+      else skipBtn.setAttribute('hidden', '');
+    }
+  }
+
+  skipCurrentStrike() {
+    if (!this.active || this.phase !== 'claim' || this.skippedThisTurn) return;
+    const hasMyClaim = Object.values(this.claims || {}).some((c) => c.uid === this.myUid);
+    if (hasMyClaim) return;
+    this.skippedThisTurn = true;
+    this.syncEnergyUI();
+    Haptics.light();
+    this.onToast?.(`⚡ Ход пропущен! Энергия сохранена (${this.energy}%) — бей по оставшимся бочкам в следующем раунде!`);
+    const bannerSub = document.getElementById('duel-countdown-sub');
+    if (bannerSub) {
+      bannerSub.textContent = `⏭ ТЫ СЭКОНОМИЛ ЭНЕРГИЮ (⚡ ${this.energy}%)! Ждём удар соперника...`;
+    }
+  }
+
+  continueBatchOrRematch() {
+    if (!this.active) return;
+    // Если 3 раунда подряд не нашёл билет — возвращаемся в цех на уровни (искать пацана и набивать ⭐)!
+    if (this.duelRoundsWithoutTicket >= (this.maxDuelRounds || 3)) {
+      this.duelRoundsWithoutTicket = 0;
+      document.getElementById('duel-result-box')?.setAttribute('hidden', '');
+      if (this.onReturnToLevels) {
+        this.onReturnToLevels();
+      } else {
+        this.leaveRoom(true);
+      }
+      return;
+    }
+    // Если кончились дуэльные жизни (СТРОГО 0 ❤️!) — на Небо к Тилю (он даёт 6 ❤️ + ⚡ 100%)!
+    if (this.duelLives <= 0) {
+      if (this.onDuelDefeatToTil) {
+        document.getElementById('duel-result-box')?.setAttribute('hidden', '');
+        this.onToast?.('🌊 Жизни на нуле (0 ❤️) — к Тилю на берег зарядить 6 ❤️ на дуэль!');
+        this.onDuelDefeatToTil({ roomId: this.roomId, solo: this.soloMode });
+      }
+      return;
+    }
+    // Если жизни ещё есть (> 0 ❤️), а энергия на нуле — восстанавливаем энергию без ухода к Тилю!
+    if (this.energy <= 0) {
+      this.energy = 100;
+      this.syncEnergyUI();
+    }
+    const closedLeft = Math.max(0, (this.barrelCount || 10) - (this.openedIndices?.length || 0));
+    // Пока НИКТО не нашёл 🎟 Билет и есть закрытые бочки — продолжаем драться по этой же партии!
+    const keepCurrentBatch = !this.batchResolved && closedLeft >= 2;
+    this.hostInitiateRound({ isFreeRerack: keepCurrentBatch });
+  }
+
   beginClaimWindow() {
     this.phase = 'claim';
-    this.claimTimeLeft = 3.0;
+    this.claimTimeLeft = 3.2;
+    this.skippedThisTurn = false;
     const amISpectator = this.spectatorUids.includes(this.myUid);
+    this.syncEnergyUI();
 
     if (!amISpectator) {
       this.scene.setInteractive(true);
@@ -640,6 +822,9 @@ export class WorkshopDuelController {
           }
           if (!free.length) return;
           const pick = free[Math.floor(Math.random() * free.length)];
+          // v9.1: Визуальный и звуковой удар бота по конкретной бочке — игрок сразу видит, какую именно бочку занял бот!
+          this.scene.triggerStrikeFX?.(pick);
+          this.audio.playStrike?.(pick);
           this.applyBarrelClaim(
             {
               uid: bot.uid,
@@ -678,13 +863,16 @@ export class WorkshopDuelController {
         const myLocked = Object.values(this.claims).find((c) => c.uid === this.myUid);
         bannerSub.textContent = amISpectator
           ? 'Ты в нокауте — жми «Погреметь цепями» внизу!'
-          : myLocked
-            ? '✓ Твоя бочка захвачена! Ждём вскрытия...'
-            : `Выбирай из ${closedLeft} закрытых бочек!`;
+          : this.skippedThisTurn
+            ? `⏭ Ход пропущен · Энергия сохранена (⚡ ${this.energy}%)`
+            : myLocked
+              ? `✓ Твоя бочка захвачена (⚡ ${this.energy}%)! Ждём вскрытия...`
+              : `Бей любую из ${closedLeft} закрытых бочек (−25% ⚡) или жми «Пропустить»!`;
       }
 
       const claimedCount = new Set(Object.values(this.claims).map((c) => c.uid)).size;
-      if (claimedCount >= this.contenderUids.length || this.claimTimeLeft <= 0) {
+      const expectedClaimers = this.contenderUids.length - (this.skippedThisTurn ? 1 : 0);
+      if (claimedCount >= Math.max(1, expectedClaimers) || this.claimTimeLeft <= 0) {
         clearInterval(this.claimInterval);
         this.claimInterval = null;
         if (this.isHost()) {
@@ -711,16 +899,32 @@ export class WorkshopDuelController {
       return true;
     }
 
-    // Если я уже захватил бочку в этом раунде — игнорируем повторный клик
+    // Если я уже захватил бочку или пропустил ход ради экономии энергии — игнорируем повторный клик
     const alreadyMine = Object.entries(this.claims).find(([, c]) => c.uid === this.myUid);
-    if (alreadyMine) return true;
+    if (alreadyMine || this.skippedThisTurn) return true;
+
+    if (this.duelLives <= 0) {
+      Haptics.error();
+      this.onToast?.('🌊 Жизни кончились (0 ❤️) — к Тилю за 6 ❤️ на дуэль!');
+      return true;
+    }
+    // Пока есть жизни (> 0 ❤️), энергия не выгоняет к Тилю — при 0% она просто перезаряжается на новый рывок!
+    if (this.energy < 25) {
+      this.energy = 100;
+      this.syncEnergyUI();
+    }
 
     const existing = this.claims[barrelIndex];
     if (existing && existing.uid !== this.myUid) {
       Haptics.error();
-      this.onToast?.(`⛔ Занято (${existing.name})! Быстрее бей соседнюю закрытую бочку!`);
+      const bCode = BARREL_BATCH_CODES[barrelIndex] || String(barrelIndex + 1);
+      this.onToast?.(`⚔️ Вы ударили в одну бочку №${bCode}! ${existing.name} успел чуть раньше — бей по другой закрытой!`);
       return true;
     }
+
+    // Каждый удар тратит 25% энергии (можно пропустить и сэкономить!)
+    this.energy = Math.max(0, this.energy - 25);
+    this.syncEnergyUI();
 
     const claimPayload = {
       uid: this.myUid,
@@ -735,6 +939,7 @@ export class WorkshopDuelController {
     Haptics.medium();
 
     this.applyBarrelClaim(claimPayload, true);
+    this.syncEnergyUI();
     return true;
   }
 
@@ -765,8 +970,16 @@ export class WorkshopDuelController {
   finalizeClaimsAndBroadcastReveal() {
     if (this.phase !== 'claim') return;
 
-    // Если кто-то замешкался за 3.0 сек — назначаем ему свободную ЗАКРЫТУЮ бочку автоматически
+    // Если игрок сам не нажал удар (или нажал «Пропустить») — НЕ тратим его энергию!
+    // Авто-захват остаётся только для ботов/соперников, которые не успели ударить.
     for (const uid of this.contenderUids) {
+      if (uid === this.myUid) {
+        const hasMyClaim = Object.values(this.claims).some((c) => c.uid === this.myUid);
+        if (!hasMyClaim) {
+          this.skippedThisTurn = true;
+          continue;
+        }
+      }
       const hasClaim = Object.values(this.claims).some((c) => c.uid === uid);
       if (!hasClaim) {
         for (let b = 0; b < this.barrelCount; b++) {
@@ -789,12 +1002,22 @@ export class WorkshopDuelController {
       roundKey: this.roundKey,
       claims: this.claims,
       safeIndices: this.safeIndices,
+      barrelLoot: this.barrelLoot,
+      batchHasTicket: this.batchHasTicket,
       openedIndices: this.openedIndices,
       contenderUids: this.contenderUids,
     };
 
     this.broadcast('duel_reveal', revealPayload);
     this.executeReveal(revealPayload);
+  }
+
+  getLootForBarrel(idx) {
+    const item = this.barrelLoot?.[idx];
+    if (item) return item;
+    return this.safeIndices.includes(idx)
+      ? { kind: 'points', value: 250, label: '⭐ +250' }
+      : { kind: 'empty', value: 0, label: '💨 ПУСТО' };
   }
 
   async executeReveal(payload) {
@@ -805,116 +1028,162 @@ export class WorkshopDuelController {
 
     this.claims = payload.claims || this.claims;
     this.safeIndices = payload.safeIndices || this.safeIndices;
+    if (payload.barrelLoot) this.barrelLoot = payload.barrelLoot;
+    if (typeof payload.batchHasTicket === 'boolean') this.batchHasTicket = payload.batchHasTicket;
     if (Array.isArray(payload.openedIndices)) {
       this.openedIndices = [...payload.openedIndices];
     }
-    this.renderBarrelClaimBadges();
 
     const bannerText = document.getElementById('duel-countdown-text');
     const bannerSub = document.getElementById('duel-countdown-sub');
     if (bannerText) bannerText.textContent = 'ВСКРЫТИЕ БОЧЕК!';
 
-    const survivors = [];
-    const eliminated = [];
+    const entries = [];
+    let anyScreamer = false;
+    let anyPoints = false;
 
     for (const [bStr, claim] of Object.entries(this.claims)) {
       const bIdx = Number(bStr);
-      const isSafe = this.safeIndices.includes(bIdx);
+      const loot = this.getLootForBarrel(bIdx);
       this.scene.triggerEmptyBarrelOpen(bIdx);
       if (!this.openedIndices.includes(bIdx)) {
         this.openedIndices.push(bIdx);
       }
-      if (isSafe) {
-        survivors.push(claim);
-      } else {
-        eliminated.push(claim);
-      }
+      if (loot.kind === 'screamer') anyScreamer = true;
+      if (loot.value > 0) anyPoints = true;
+      entries.push({ barrelIndex: bIdx, claim, loot });
     }
 
-    const myClaimEntry = Object.entries(this.claims).find(([, c]) => c.uid === this.myUid);
-    const iSurvived = myClaimEntry ? this.safeIndices.includes(Number(myClaimEntry[0])) : false;
+    const myEntry = entries.find((e) => e.claim.uid === this.myUid) || null;
+    const oppEntry = entries.find((e) => e.claim.uid !== this.myUid) || null;
 
-    if (eliminated.length > 0) {
+    if (anyScreamer) {
       this.audio.playMiniScreamer(0);
       this.scene.triggerScreamerShake(0.45);
     }
-    if (survivors.length > 0) {
-      this.audio.playLidBlowOff(iSurvived);
+    if (anyPoints) {
+      this.audio.playLidBlowOff(Boolean(myEntry && myEntry.loot.value > 0));
     }
 
-    // Подсвечиваем бейджи над бочками (зелёный = выжил, красный = скример)
+    // v12.5: Жёсткий баланс Дуэли:
+    // - 🎟 БИЛЕТ -> Победа в партии!
+    // - ❤️ +1 ЖИЗНЬ -> +1 дуэльная жизнь (максимум 6 ❤️, больше не раздувается!)
+    // - ⭐ БАЛЛЫ -> баллы летят прямо в шкалу Супер-приза!
+    // - 💨 ПУСТО -> −1 ❤️ · ☠️ СКРИМЕР -> −2 ❤️ (жизни реально быстро тают при ошибках!)
+    if (myEntry) {
+      const k = myEntry.loot.kind;
+      if (k === 'ticket' || k === 'points') {
+        this.onFlyRating?.({
+          count: k === 'ticket' ? 4 : 3,
+          label: myEntry.loot.label,
+          barrelIndex: myEntry.barrelIndex,
+        });
+        if (k === 'points') {
+          claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: myEntry.loot.value, solo: this.soloMode })
+            .then((bankRes) => {
+              if (bankRes?.ok) {
+                this.onProfileSync?.({ premierePoints: bankRes.premierePoints });
+              }
+            })
+            .catch(() => {});
+        }
+      } else if (k === 'life') {
+        this.duelLives = Math.min(6, Math.max(1, Number(this.duelLives || 0) + 1));
+        this.onFlyLife?.({ count: 1, label: '+1 ❤️', barrelIndex: myEntry.barrelIndex });
+      } else if (k === 'empty') {
+        this.duelLives = Math.max(0, Number(this.duelLives || 0) - 1);
+      } else if (k === 'screamer') {
+        this.duelLives = Math.max(0, Number(this.duelLives || 0) - 2);
+      }
+    }
+
+    // Показываем прямо над каждой вскрытой бочкой, ЧТО выпало (🎟 БИЛЕТ / ⭐ +250 / ❤️ +1 / 💨 −1 ❤️ / ☠️ −2 ❤️)!
     this.renderBarrelClaimBadges(true);
+    this.syncEnergyUI();
 
-    // СЦЕНАРИЙ 1: ЧИСТЫЙ ПОБЕДИТЕЛЬ (остался ровно 1 выживший!)
-    if (survivors.length === 1) {
-      const winner = survivors[0];
-      if (bannerSub) bannerSub.textContent = `🏆 ВЫЖИЛ ТОЛЬКО ${winner.name.toUpperCase()}!`;
+    // v13.0: К Тилю на Северное море — СТРОГО ТОЛЬКО ПРИ НУЛЕ ЖИЗНЕЙ (duelLives <= 0)!
+    // Если жизни ещё есть (> 0 ❤️), а энергия дошла до 0% — передышка (энергия восстанавливается до 100%) и играем дальше!
+    if (this.duelLives > 0 && this.energy <= 0) {
+      this.energy = 100;
+      this.syncEnergyUI();
+    }
+    const ticketEntry = entries.find((e) => e.loot.kind === 'ticket') || null;
+    const closedLeftNow = Math.max(0, (this.barrelCount || 10) - (this.openedIndices?.length || 0));
+    const needTilNow = !ticketEntry && this.duelLives <= 0;
+    this.batchResolved = Boolean(ticketEntry || closedLeftNow < 2);
 
-      const settleRes = await settleDuelRound({
-        roomId: this.roomId,
-        roundKey: this.roundKey,
-        winnerUid: winner.uid,
-        playerUids: Array.from(
-          new Set(
-            this.roundParticipants?.length
-              ? this.roundParticipants
-              : this.players.map((p) => p.uid)
-          )
-        ),
-        tgUser: this.getTgUser?.(),
-      });
+    const summaryLine = entries
+      .map((e) => `${e.claim.uid === this.myUid ? 'ТЫ' : e.claim.name}: ${e.loot.label}`)
+      .join('  vs  ');
 
+    if (bannerSub) {
+      bannerSub.textContent = ticketEntry
+        ? ticketEntry.claim.uid === this.myUid
+          ? `🎟 БИЛЕТ В КИНО ТВОЙ! (${summaryLine})`
+          : `💥 ${ticketEntry.claim.name.toUpperCase()} НАШЁЛ БИЛЕТ РАНЬШЕ! (${summaryLine})`
+        : needTilNow
+          ? `🌊 ЖИЗНИ НА НУЛЕ (❤️ 0) — ОТПРАВЛЯЕМСЯ К ТИЛЮ ЗА 6 ❤️!`
+          : `🔨 ИГРАЕМ ДАЛЬШЕ! ОСТАЛОСЬ ${closedLeftNow} БОЧЕК (${summaryLine})`;
+    }
+
+    // v12.5: БЕЗ ПЕРЕРЫВОВ И ВОПРОСОВ «БИТЬ ДАЛЬШЕ?» — пока никто не нашёл билет и есть жизни + энергия, бой идёт АВТОМАТОМ!
+    if (!ticketEntry && !needTilNow && closedLeftNow >= 2) {
       this.scheduleTimeout(() => {
         if (!this.active) return;
-        this.phase = 'finished';
-        this.spectatorUids = [];
-        document.getElementById('duel-countdown-banner')?.setAttribute('hidden', '');
-        document.getElementById('duel-spectator-bar')?.setAttribute('hidden', '');
-        this.showRoundResultCard(winner, settleRes);
-      }, 1500);
+        this.clearBarrelClaimBadges();
+        if (this.isHost()) {
+          this.hostInitiateRound({ isFreeRerack: true });
+        }
+      }, 1550);
       return;
     }
 
-    const closedLeftAfter = Math.max(0, this.barrelCount - this.openedIndices.length);
+    const settleRes = ticketEntry
+      ? await settleDuelRound({
+          roomId: this.roomId,
+          roundKey: this.roundKey,
+          winnerUid: ticketEntry.claim.uid,
+          playerUids: Array.from(
+            new Set(
+              this.roundParticipants?.length
+                ? this.roundParticipants
+                : this.players.map((p) => p.uid)
+            )
+          ),
+          tgUser: this.getTgUser?.(),
+        })
+      : { potLives: 0, winnerLives: null, winnerPoints: null, goldenTicketDropped: false };
 
-    // СЦЕНАРИЙ 2: СУПЕРФИНАЛ 1 НА 1 (из 3 игроков выжили двое — вскрытые бочки остаются открытыми!)
-    if (survivors.length === 2 && this.contenderUids.length === 3) {
-      const outPlayer = eliminated[0];
-      if (bannerText) bannerText.textContent = 'СУПЕРФИНАЛ 1 НА 1!';
-      if (bannerSub) {
-        bannerSub.textContent =
-          closedLeftAfter >= 2
-            ? `${outPlayer?.name || '3-й игрок'} в нокауте! Добиваем оставшиеся ${closedLeftAfter} закрытых бочек!`
-            : `${outPlayer?.name || '3-й игрок'} в нокауте! Все бочки открыты — выкатываем новые 10!`;
-      }
-      this.scheduleTimeout(() => {
-        if (!this.active || !this.isHost()) return;
-        this.hostInitiateRound({
-          isFreeRerack: true,
-          suddenDeathContenders: survivors.map((s) => s.uid),
-        });
-      }, 1900);
-      return;
+    let serverTicketRes = null;
+    if (ticketEntry && ticketEntry.claim.uid === this.myUid) {
+      serverTicketRes = await requestServerCinemaTicket(this.getTgUser?.(), 'duel').catch(() => ({
+        ok: false,
+        granted: false,
+        reason: 'network_error',
+        fallbackPoints: 500,
+      }));
     }
 
-    // СЦЕНАРИЙ 3: НИЧЬЯ (все промахнулись ИЛИ все выжили) -> добиваем оставшиеся закрытые бочки!
-    if (bannerText) bannerText.textContent = '⚡ НИЧЬЯ!';
-    if (bannerSub) {
-      bannerSub.textContent =
-        closedLeftAfter >= this.contenderUids.length
-          ? `Бочки не обновляются — бьёмся дальше на оставшихся ${closedLeftAfter} закрытых (0 ❤️)!`
-          : 'Все 10 бочек вскрыты! Выкатываем новую партию без списания жизней!';
-    }
     this.scheduleTimeout(() => {
-      if (!this.active || !this.isHost()) return;
-      this.hostInitiateRound({
-        isFreeRerack: true,
-        suddenDeathContenders: this.contenderUids.length === 2 && this.players.length === 3 ? this.contenderUids : null,
+      if (!this.active) return;
+      this.phase = 'finished';
+      this.spectatorUids = [];
+      document.getElementById('duel-countdown-banner')?.setAttribute('hidden', '');
+      document.getElementById('duel-spectator-bar')?.setAttribute('hidden', '');
+      this.showRoundResultCard(ticketEntry?.claim || null, settleRes, {
+        myEntry,
+        oppEntry,
+        summaryLine,
+        ticketFound: Boolean(ticketEntry),
+        serverTicketGranted: Boolean(serverTicketRes?.granted),
+        serverTicketRes,
       });
-    }, 1750);
+    }, 1650);
   }
 
-  showRoundResultCard(winner, settleRes) {
+  showRoundResultCard(ticketWinner, settleRes, detail = {}) {
+    // Убираем плавающие бейджи над бочками, чтобы они НИКОГДА не перекрывали кнопки итоговой карточки!
+    this.clearBarrelClaimBadges();
     const box = document.getElementById('duel-result-box');
     const titleEl = document.getElementById('duel-result-title');
     const subEl = document.getElementById('duel-result-sub');
@@ -922,78 +1191,125 @@ export class WorkshopDuelController {
     const inviteLivesBtn = document.getElementById('btn-duel-invite-lives');
 
     box?.removeAttribute('hidden');
-    const iWon = winner.uid === this.myUid;
+    const mySkipped = !detail.myEntry;
+    const myLoot = detail.myEntry?.loot || { kind: 'skip', value: 0, label: '⏭ ПРОПУСТИЛ (⚡ СОХРАНЕНА)' };
+    const oppName = detail.oppEntry?.claim?.name || 'Мастер Цеха [БОТ]';
+    const oppLoot = detail.oppEntry?.loot || { kind: 'empty', value: 0, label: '💨 ПУСТО' };
+    const iFoundTicket = Boolean(ticketWinner && ticketWinner.uid === this.myUid);
+    const oppFoundTicket = Boolean(ticketWinner && ticketWinner.uid !== this.myUid);
+    const closedLeft = Math.max(0, (this.barrelCount || 10) - (this.openedIndices?.length || 0));
 
-    if (iWon) {
-      Haptics.success();
-      // v8.0: Банк Закрытой Премьеры — утроенные очки рейтинга + шанс мгновенного билета со стола!
-      const bankBonus = this.players.length >= 3 ? 900 : 600;
-      claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: bankBonus, solo: this.soloMode })
+    const serverTicketGranted = Boolean(detail.serverTicketGranted);
+    // Начисляем ⭐ очки в рейтинг за найденный билет или бочку с баллами
+    const myPointsEarned = myLoot.kind === 'points' ? myLoot.value : iFoundTicket ? 500 : 0;
+    if (myPointsEarned > 0 || iFoundTicket) {
+      claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: myPointsEarned, solo: this.soloMode })
         .then((bankRes) => {
           if (bankRes?.ok) {
-            this.onProfileSync?.({
-              lives: bankRes.lives ?? settleRes.winnerLives,
-              premiereScore: settleRes.winnerScore,
-              premierePoints: bankRes.premierePoints ?? settleRes.winnerPoints,
-              hasPendingTicket: Boolean(bankRes.ticketDropped || settleRes.hasPendingTicket),
-            });
-            if (bankRes.ticketDropped && !settleRes.goldenTicketDropped) {
-              this.scheduleTimeout(() => this.onOpenGoldenFork?.(), 950);
+            const patch = {
+              premiereScore: settleRes?.winnerScore,
+              premierePoints: bankRes.premierePoints ?? settleRes?.winnerPoints,
+            };
+            if (serverTicketGranted || bankRes.ticketDropped) {
+              patch.hasPendingTicket = true;
+              if (detail.serverTicketRes?.pendingTicketsCount != null) {
+                patch.pendingTicketsCount = Number(detail.serverTicketRes.pendingTicketsCount);
+              }
             }
+            this.onProfileSync?.(patch);
           }
         })
         .catch(() => {});
-      this.onProfileSync?.({
-        lives: settleRes.winnerLives,
-        premiereScore: settleRes.winnerScore,
-        premierePoints: settleRes.winnerPoints,
-        hasPendingTicket: settleRes.hasPendingTicket,
-      });
-    } else {
-      Haptics.error();
-      // v8.0: Проигравший НЕ вылетает в меню поражения — его перебрасывает в «Бочку с Тилем» (12с тапалка энергии)!
-      if (this.onDuelDefeatToTil) {
-        if (titleEl) titleEl.textContent = '💥 ТЕБЯ СНЕСЛО В ПОДВАЛ К БОЧКЕ ТИЛЯ!';
-        if (subEl) subEl.textContent = 'Заряди энергию 0% → 100% за 12 секунд тапами по Бочке Тиля и мгновенно вернись в дуэль!';
-        this.scheduleTimeout(() => {
-          if (!this.active) return;
-          box?.setAttribute('hidden', '');
-          this.onDuelDefeatToTil({ roomId: this.roomId, solo: this.soloMode });
-        }, 1250);
-        return;
-      }
     }
 
-    if (titleEl) {
-      const bankBonus = this.players.length >= 3 ? 900 : 600;
-      titleEl.textContent = iWon
-        ? `🏆 БАНК ЗАКРЫТОЙ ПРЕМЬЕРЫ ТВОЙ: +${bankBonus} ⭐ (×3) И +${settleRes.potLives} ❤️!`
-        : `💥 ПОБЕДИЛ ${winner.name.toUpperCase()} (ЗАБРАЛ БАНК ${settleRes.potLives} ❤️)`;
+    // Учёт раундов дуэли без билета: если соперник забрал билет ИЛИ закрытые бочки закончились без твоего билета!
+    if (iFoundTicket) {
+      this.duelRoundsWithoutTicket = 0;
+    } else if (oppFoundTicket || closedLeft < 2) {
+      this.duelRoundsWithoutTicket = (this.duelRoundsWithoutTicket || 0) + 1;
     }
 
-    if (subEl) {
-      if (iWon && settleRes.goldenTicketDropped) {
-        subEl.textContent =
-          '🎟 БОНУС ОТ СТОЛА НА ТРОИХ: ТЕБЕ ВЫПАЛА ЗОЛОТАЯ БОЧКА С ПОДАРОЧНЫМ БИЛЕТОМ В КИНО!';
-      } else if (this.players.length >= 3) {
-        subEl.textContent = iWon
-          ? `Бонус стола на троих начислен: +${settleRes.scoreBonus} к шкале Премьеры и +${settleRes.pointsBonus} ⭐ в рейтинг ТОП-10!`
-          : 'Все игроки снова в строю! Бери реванш на счёт три — втроём банк выше!';
+    const outOfRounds = !iFoundTicket && this.duelRoundsWithoutTicket >= (this.maxDuelRounds || 3);
+    // v13.0: К Тилю — СТРОГО ТОЛЬКО при 0 ❤️ жизней!
+    const needTilRefill = !iFoundTicket && !outOfRounds && this.duelLives <= 0;
+
+    if (iFoundTicket) {
+      Haptics.success();
+      if (serverTicketGranted) {
+        if (titleEl) titleEl.textContent = '🎟 ПОБЕДА! ТЫ НАШЁЛ БИЛЕТ В КИНО! (+500 ⭐)';
+        if (subEl) {
+          subEl.textContent = `Вскрыл билет раньше ${oppName} (${oppLoot.label})! Отправь билет другу и продолжай набирать шкалу Закрытого показа!`;
+        }
+        this.scheduleTimeout(() => this.onOpenGoldenFork?.(), 900);
       } else {
-        subEl.textContent =
-          'Позови 3-го друга перед реваншем — цех досыплет +450 ⭐ очков ТОП-10 и шанс Золотой бочки с билетом!';
+        if (titleEl) titleEl.textContent = '🏆 ПОБЕДА В ДУЭЛИ! СУПЕР-БОНУС +500 ⭐!';
+        if (subEl) {
+          subEl.textContent = `Вскрыл призовую бочку раньше ${oppName}! Суточный пул билетов уже разобран — вместо билета тебе зачислено +500 ⭐ в шкалу Закрытой Премьеры!`;
+        }
+      }
+    } else if (outOfRounds) {
+      Haptics.error();
+      if (titleEl) titleEl.textContent = '🔄 3 РАУНДА БЕЗ БИЛЕТА — ПОРА В ЦЕХ НА УРОВНИ!';
+      if (subEl) {
+        subEl.textContent = `${oppFoundTicket ? `${oppName} перехватил 🎟 билет!` : 'Бочки в партии кончились.'} Возвращайся на уровни цеха — спасай пацана и набивай ⭐ для шкалы Закрытого показа!`;
+      }
+    } else if (oppFoundTicket) {
+      Haptics.error();
+      const leftRounds = Math.max(1, (this.maxDuelRounds || 3) - this.duelRoundsWithoutTicket);
+      if (titleEl) titleEl.textContent = `💥 ПРОИГРАЛ! ${oppName.toUpperCase()} НАШЁЛ 🎟 БИЛЕТ!`;
+      if (subEl) {
+        subEl.textContent = needTilRefill
+          ? `У тебя закончились силы (❤️ ${this.duelLives} · ⚡ ${this.energy}%). Отправляемся к Тилю на берег — он зарядит 6 ❤️ жизней и ⚡ 100% на дуэль!`
+          : `Ты открыл: ${myLoot.label}. Осталось попыток-раундов до возврата на уровни: ${leftRounds}. Жми новую партию!`;
+      }
+    } else if (needTilRefill) {
+      Haptics.error();
+      if (titleEl) titleEl.textContent = `🌊 СИЛЫ НА НУЛЕ (❤️ ${this.duelLives} · ⚡ ${this.energy}%) — К ТИЛЮ!`;
+      if (subEl) {
+        subEl.textContent = `Итог хода: Ты (${myLoot.label}) vs ${oppName} (${oppLoot.label}). Тиль на берегу Северного моря даст минимум 6 ❤️ жизней и ⚡ 100% энергии на Дуэль!`;
+      }
+    } else {
+      Haptics.light();
+      const statusVerb = mySkipped
+        ? '⏭ ЭНЕРГИЯ СЭКОНОМЛЕНА — БИЛЕТ ЕЩЁ В ЦЕХУ!'
+        : myLoot.kind === 'life'
+          ? '❤️ +1 ЖИЗНЬ ИЗ БОЧКИ! ИЩЕМ 🎟 БИЛЕТ ДАЛЬШЕ!'
+          : myLoot.kind === 'points'
+            ? `⭐ ${myLoot.label} В РЕЙТИНГ! БИЛЕТ ЕЩЁ НЕ НАЙДЕН!`
+            : `💨 МИМО (−1 ❤️)! БИЛЕТ ЕЩЁ В ОСТАВШИХСЯ БОЧКАХ!`;
+      if (titleEl) titleEl.textContent = statusVerb;
+      if (subEl) {
+        subEl.textContent = `Ход: Ты (${myLoot.label}) vs ${oppName} (${oppLoot.label}) · В запасе ❤️ ${this.duelLives} и ⚡ ${this.energy}%. Осталось ${closedLeft} закрытых бочек — найди 🎟 Билет раньше соперника!`;
       }
     }
 
-    if (rematchBtn) rematchBtn.removeAttribute('hidden');
-    if (inviteLivesBtn) inviteLivesBtn.removeAttribute('hidden');
-    this.renderLobbyUI();
-
-    if (iWon && settleRes.goldenTicketDropped) {
+    if (needTilRefill && this.onDuelDefeatToTil) {
       this.scheduleTimeout(() => {
-        this.onOpenGoldenFork?.();
-      }, 1100);
+        if (!this.active || this.phase !== 'finished') return;
+        box?.setAttribute('hidden', '');
+        this.onDuelDefeatToTil({ roomId: this.roomId, solo: this.soloMode });
+      }, 2400);
     }
+
+    if (rematchBtn) {
+      if (outOfRounds) {
+        rematchBtn.textContent = '▶ НА УРОВНИ ЦЕХА — ИСКАТЬ ПАЦАНА И НАБИВАТЬ ⭐';
+      } else if (needTilRefill) {
+        rematchBtn.textContent = '🌊 НА НЕБО К ТИЛЮ — ЗАБРАТЬ 6 ❤️ И ⚡ 100%';
+      } else if (!this.batchResolved && closedLeft >= 2) {
+        rematchBtn.textContent = `🔨 БИТЬ ДАЛЬШЕ (ИЩЕМ 🎟 БИЛЕТ · ${closedLeft} БОЧЕК · ❤️ ${this.duelLives} · ⚡ ${this.energy}%)`;
+      } else {
+        const nextR = Math.min(this.maxDuelRounds || 3, (this.duelRoundsWithoutTicket || 0) + 1);
+        rematchBtn.textContent = `🔄 НОВАЯ ПАРТИЯ ЗА БИЛЕТОМ (РАУНД ${nextR}/${this.maxDuelRounds || 3} · ❤️ ${this.duelLives})`;
+      }
+      rematchBtn.removeAttribute('hidden');
+    }
+    if (inviteLivesBtn) {
+      inviteLivesBtn.textContent = '🛢 ЗАКАТАТЬ НОВОГО ДРУГА (+3 ❤️ · +20% К ШКАЛЕ)';
+      inviteLivesBtn.removeAttribute('hidden');
+    }
+    this.syncEnergyUI();
+    this.renderLobbyUI();
   }
 
   showNoLivesPrompt() {
@@ -1040,8 +1356,10 @@ export class WorkshopDuelController {
     for (const [bStr, claim] of Object.entries(this.claims)) {
       const idx = Number(bStr);
       const badge = document.createElement('div');
-      const isSafe = this.safeIndices.includes(idx);
-      const stateCls = revealed ? (isSafe ? 'is-safe' : 'is-dead') : 'is-locked';
+      const loot = this.getLootForBarrel(idx);
+      const isGood = loot.value > 0;
+      const isTrap = loot.kind === 'screamer';
+      const stateCls = revealed ? (isGood ? 'is-safe' : isTrap ? 'is-dead' : 'is-empty') : 'is-locked';
       badge.className = `duel-barrel-badge ${stateCls}`;
       badge.dataset.barrelIndex = String(idx);
 
@@ -1049,9 +1367,12 @@ export class WorkshopDuelController {
       const ava = claim.avatar
         ? `<img src="${escapeAttr(claim.avatar)}" alt="" />`
         : `<span>${escapeHtml(initials)}</span>`;
+      const lootTag = revealed ? `<b class="duel-badge-loot">${escapeHtml(loot.label)}</b>` : '';
+      const shortName = claim.uid === this.myUid ? 'ТЫ' : (claim.name || '').slice(0, 12);
       badge.innerHTML = `
         <div class="duel-badge-ava">${ava}</div>
-        <small>${escapeHtml((claim.name || '').slice(0, 12))}</small>
+        <small>${escapeHtml(shortName)}</small>
+        ${lootTag}
       `;
       wrap.appendChild(badge);
     }

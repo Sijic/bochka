@@ -137,6 +137,28 @@ export function initTelegram() {
     const hasVer = (v) => typeof tg.isVersionAtLeast === 'function' && tg.isVersionAtLeast(v);
     if (hasVer('6.1') && typeof tg.setHeaderColor === 'function') tg.setHeaderColor('#0d0d0d');
     if (hasVer('6.1') && typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor('#0d0d0d');
+    const syncTgSafeAreas = () => {
+      try {
+        const root = document.documentElement;
+        const sa = tg.safeAreaInset || {};
+        const csa = tg.contentSafeAreaInset || {};
+        const topPx = (Number(sa.top) || 0) + (Number(csa.top) || 0);
+        const botPx = (Number(sa.bottom) || 0) + (Number(csa.bottom) || 0);
+        if (topPx > 0) root.style.setProperty('--safe-top', `${topPx}px`);
+        if (botPx > 0) root.style.setProperty('--safe-bottom', `${botPx}px`);
+      } catch {
+        /* ignore */
+      }
+    };
+    syncTgSafeAreas();
+    if (typeof tg.onEvent === 'function') {
+      tg.onEvent('viewportChanged', () => {
+        syncTgSafeAreas();
+        window.dispatchEvent(new Event('resize'));
+      });
+      tg.onEvent('safeAreaChanged', syncTgSafeAreas);
+      tg.onEvent('contentSafeAreaChanged', syncTgSafeAreas);
+    }
   } catch {
     /* ignore older client methods */
   }
@@ -271,56 +293,132 @@ export function requestTelegramContact({ giftId = '' } = {}) {
   });
 }
 
+let _hapticTimers = [];
+
+function _clearHapticTimers() {
+  for (const id of _hapticTimers) {
+    try { clearTimeout(id); } catch { /* ignore */ }
+  }
+  _hapticTimers = [];
+}
+
+function _tgHaptic(kind, style) {
+  const tg = getWebApp();
+  if (!tg?.HapticFeedback) return;
+  try {
+    if (kind === 'impact') tg.HapticFeedback.impactOccurred(style);
+    else if (kind === 'notification') tg.HapticFeedback.notificationOccurred(style);
+    else if (kind === 'selection') tg.HapticFeedback.selectionChanged();
+  } catch { /* ignore */ }
+}
+
+function _navVibrate(pattern) {
+  try {
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      navigator.vibrate(pattern);
+    }
+  } catch { /* ignore */ }
+}
+
+function _runTgSequence(steps = []) {
+  _clearHapticTimers();
+  for (const [delayMs, kind, style] of steps) {
+    if (delayMs <= 0) {
+      _tgHaptic(kind, style);
+    } else {
+      _hapticTimers.push(window.setTimeout(() => _tgHaptic(kind, style), delayMs));
+    }
+  }
+}
+
 export const Haptics = {
   light() {
-    const tg = getWebApp();
-    try {
-      if (tg?.HapticFeedback && isTelegramMiniApp()) {
-        tg.HapticFeedback.impactOccurred('light');
-        return;
-      }
-    } catch { /* ignore */ }
-    if (navigator.vibrate) navigator.vibrate(10);
+    _tgHaptic('impact', 'light');
+    _navVibrate(14);
   },
   medium() {
-    const tg = getWebApp();
-    try {
-      if (tg?.HapticFeedback && isTelegramMiniApp()) {
-        tg.HapticFeedback.impactOccurred('medium');
-        return;
-      }
-    } catch { /* ignore */ }
-    if (navigator.vibrate) navigator.vibrate(22);
+    _tgHaptic('impact', 'medium');
+    _navVibrate(26);
   },
   heavy() {
-    const tg = getWebApp();
-    try {
-      if (tg?.HapticFeedback && isTelegramMiniApp()) {
-        tg.HapticFeedback.impactOccurred('heavy');
-        return;
-      }
-    } catch { /* ignore */ }
-    if (navigator.vibrate) navigator.vibrate([38, 18, 28]);
+    _tgHaptic('impact', 'heavy');
+    _navVibrate([48, 20, 34]);
   },
   error() {
-    const tg = getWebApp();
-    try {
-      if (tg?.HapticFeedback && isTelegramMiniApp()) {
-        tg.HapticFeedback.notificationOccurred('error');
-        return;
-      }
-    } catch { /* ignore */ }
-    if (navigator.vibrate) navigator.vibrate([65, 30, 85]);
+    _tgHaptic('notification', 'error');
+    _navVibrate([80, 30, 110]);
   },
   success() {
-    const tg = getWebApp();
-    try {
-      if (tg?.HapticFeedback && isTelegramMiniApp()) {
-        tg.HapticFeedback.notificationOccurred('success');
-        return;
-      }
-    } catch { /* ignore */ }
-    if (navigator.vibrate) navigator.vibrate([25, 35, 45]);
+    _tgHaptic('notification', 'success');
+    _navVibrate([28, 35, 55]);
+  },
+  // v8.1: Металлический удар ломом (двойная отдача в руку + Taptic iOS + Android rumble)
+  crowbarHit() {
+    _runTgSequence([
+      [0, 'impact', 'rigid'],
+      [48, 'impact', 'heavy'],
+      [115, 'impact', 'medium'],
+    ]);
+    _navVibrate([65, 22, 48, 18, 26]);
+  },
+  // v8.1: Живой пульс при прослушке бочки (сердцебиение у цели / скрежет-тиканье у обманки)
+  barrelListenPulse(isTarget = false) {
+    if (isTarget) {
+      _runTgSequence([
+        [0, 'impact', 'soft'],
+        [150, 'impact', 'medium'],
+      ]);
+      _navVibrate([28, 110, 44]);
+    } else {
+      _runTgSequence([
+        [0, 'selection', ''],
+        [90, 'impact', 'light'],
+      ]);
+      _navVibrate([16, 55, 22]);
+    }
+  },
+  // v8.1: Тихая дрожь, когда в темноте сама шевелится / стучит «странная» бочка
+  barrelEerie() {
+    _runTgSequence([
+      [0, 'impact', 'soft'],
+      [110, 'impact', 'light'],
+    ]);
+    _navVibrate([22, 70, 28]);
+  },
+  // v8.1: Срыв крышки бочки (резкий хлопок)
+  lidBlast() {
+    _runTgSequence([
+      [0, 'impact', 'heavy'],
+      [55, 'impact', 'rigid'],
+      [130, 'notification', 'error'],
+    ]);
+    _navVibrate([100, 28, 155, 30, 90]);
+  },
+  // v8.1: Полноценная хоррор-вибрация скримера (серия жёстких толчков 0.7 сек на iOS + Android)
+  screamer(variant = 'saw_scream') {
+    const key = String(variant || '');
+    if (key === 'tesla_siren' || key === 'siren_cam') {
+      _runTgSequence([
+        [0, 'notification', 'error'],
+        [75, 'impact', 'rigid'],
+        [150, 'impact', 'heavy'],
+        [240, 'impact', 'rigid'],
+        [340, 'notification', 'error'],
+        [460, 'impact', 'heavy'],
+        [580, 'impact', 'rigid'],
+      ]);
+      _navVibrate([120, 30, 120, 30, 180, 35, 240, 30, 220]);
+      return;
+    }
+    _runTgSequence([
+      [0, 'impact', 'heavy'],
+      [60, 'notification', 'error'],
+      [140, 'impact', 'rigid'],
+      [230, 'impact', 'heavy'],
+      [350, 'notification', 'error'],
+      [490, 'impact', 'heavy'],
+    ]);
+    _navVibrate([150, 35, 220, 35, 300, 40, 340]);
   },
 };
 

@@ -526,7 +526,7 @@ function getLocalPreviewProfile() {
     trailerRewarded: false,
     kpClickRewarded: false,
     dailySocialMask: '',
-    lives: 3,
+    lives: 1,
     rawSharesToday: 0,
     rawSharesDay: today,
     dailyBlitzPoints: 0,
@@ -623,15 +623,13 @@ export async function syncUiStage(tgUser = null, targetStage = 1, { force = fals
 }
 
 /**
- * ШАГ 5 & v6: Шкала «Допуск на Премьеру» открывается сразу после 1-й упакованной бочки (Стадия 3+)
+ * v11.5: Гонка за Премьерой закрыта, пока игрок не наберёт шкалу Супер-приза (100% / 1500+ ⭐ и друзей)!
  */
 export function isPremiereRaceUnlocked(questState = getQuestState(), profile = null) {
-  if (isTestBogActive()) {
-    return getStoredUiStage() >= 3 || (profile?.packedCount || 0) >= 1 || Boolean(profile?.temuSurgeClaimed);
-  }
-  const packedOk = (questState?.packedCount || 0) >= 1 || (profile?.packedCount || 0) >= 1;
-  const stageOk = getStoredUiStage() >= 3 || Number(profile?.uiStage || 1) >= 3 || Boolean(profile?.temuSurgeClaimed);
-  return Boolean(packedOk || stageOk);
+  const pts = Math.max(0, Number(profile?.premierePoints || 0));
+  const friends = Math.max(0, Number(profile?.friendsBrought || 0));
+  const score = Math.max(0, Number(profile?.premiereScore || 0));
+  return score >= 100 || (pts >= 1500 && friends >= 1);
 }
 
 export async function fetchPlayerProfile(tgUser = null) {
@@ -667,6 +665,10 @@ export async function fetchPlayerProfile(tgUser = null) {
           premiereConfirmed: Boolean(data.premiere_confirmed),
           premiereCode: data.premiere_code || '',
           hasPendingTicket: Boolean(data.has_pending_ticket),
+          pendingTicketsCount: Math.max(
+            Number(data.pending_tickets_count || 0),
+            data.has_pending_ticket ? 1 : 0
+          ),
           kpVerified: Boolean(data.kp_verified),
           packedCount: Number(data.packed_count || 0),
           friendsBrought: Number(data.friends_brought || 0),
@@ -907,6 +909,7 @@ export async function createGiftTicketPass({
   const cleanSender = (senderName || tgUser?.name || '').trim().slice(0, 32);
 
   let remotePhotoUrl = '';
+  let cloudIssued = false;
   const db = getCloudDb();
   if (db) {
     try {
@@ -935,23 +938,35 @@ export async function createGiftTicketPass({
         p_recipient_photo_url: remotePhotoUrl || null,
       });
 
-      if (error || !data?.ok) {
-        return { ok: false, error: data?.reason || 'rpc_error' };
+      if (!error && data?.ok) {
+        cloudIssued = true;
+      } else if (!isTestBogActive()) {
+        // v13.0: Жёсткий серверный стоп-кран! Если Supabase активен и отклонил выпуск билета
+        // (no_pending_ticket / campaign_ended_dec16 / sandbox_uid_blocked), локальный обход ЗАПРЕЩЁН!
+        return {
+          ok: false,
+          reason: data?.reason || error?.message || 'no_pending_ticket',
+        };
       }
-    } catch {
-      return { ok: false, error: 'network_error' };
+    } catch (err) {
+      if (!isTestBogActive()) {
+        return { ok: false, reason: err?.message || 'server_ticket_error' };
+      }
     }
-  } else if (isTestBogActive()) {
+  }
+
+  // Локальный фоллбэк разрешён ТОЛЬКО в оффлайн-разработке (!db) или в изолированном ?testbog=1
+  if (!cloudIssued) {
     const passes = safeReadJson(PASSES_STORAGE_KEY, {}) || {};
     passes[giftId] = {
       id: giftId,
       status: 'issued',
       orderStatus: '',
-      recipientName: cleanRecipient || 'Тестовый Друг',
-      recipientPhotoUrl: processedPassPhoto?.dataUrl || '',
-      senderName: cleanSender || 'Тест-Бог',
-      senderUid: 'sandbox_friend_sender',
-      senderTgId: '',
+      recipientName: cleanRecipient || 'Друг',
+      recipientPhotoUrl: remotePhotoUrl || processedPassPhoto?.dataUrl || '',
+      senderName: cleanSender || 'Друг',
+      senderUid: uid,
+      senderTgId: tgUser?.id ? String(tgUser.id) : '',
       hasVerifiedPhone: false,
       verifiedPhone: '',
       cityCinema: '',
@@ -975,9 +990,11 @@ export async function createGiftTicketPass({
   return {
     ok: true,
     passId: giftId,
+    giftId,
     shareUrl: tgUrl,
     tgUrl,
     webUrl,
+    localFallback: !cloudIssued,
   };
 }
 
@@ -2081,6 +2098,90 @@ export async function claimDuelPremiereBankReward(tgUser = null, { pointsBonus =
   }
   saveLocalPreviewProfile(prof);
   return { ok: true, premierePoints: prof.premierePoints, lives: prof.lives, ticketDropped: false };
+}
+
+/**
+ * v13.0: Атомарный запрос бесплатного билета в кино через жёсткий серверный пул Supabase
+ * (проверяет is_paused, дату 16.12.2026, max_total_tickets, max_daily_tickets, hourly_cap).
+ */
+export async function requestServerCinemaTicket(tgUser = null, source = 'level3') {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  if (db && !isTestBogActive()) {
+    try {
+      const { data, error } = await db.rpc('try_award_cinema_ticket_rpc', {
+        p_uid: uid,
+        p_source: source,
+      });
+      if (!error && data?.ok) {
+        return {
+          ok: true,
+          granted: Boolean(data.granted),
+          reason: data.reason || '',
+          fallbackPoints: Number(data.fallback_points || 0),
+          premierePoints: data.premiere_points != null ? Number(data.premiere_points) : null,
+          pendingTicketsCount: Number(data.pending_tickets_count || 0),
+          dailyIssued: Number(data.daily_tickets_issued || 0),
+          maxDaily: Number(data.max_daily_tickets || 5),
+          ticketsWon: Number(data.tickets_won || 0),
+          maxTotal: Number(data.max_total_tickets || 150),
+        };
+      }
+      return {
+        ok: false,
+        granted: false,
+        reason: data?.reason || error?.message || 'rpc_error',
+        fallbackPoints: 250,
+      };
+    } catch (err) {
+      return { ok: false, granted: false, reason: err?.message || 'network_error', fallbackPoints: 250 };
+    }
+  }
+  // Оффлайн-режим (!db) или ?testbog=1
+  return { ok: true, granted: true, reason: 'local_preview', fallbackPoints: 0, pendingTicketsCount: 1 };
+}
+
+/**
+ * v13.0: Серверная сверка жизненного цикла билетов в ticket_passes (24ч автовозврат + сгорание 16.12).
+ */
+export async function reconcileServerTicketPasses(tgUser = null) {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  if (!db || isTestBogActive()) return { ok: false, offline: true };
+  try {
+    const { data, error } = await db.rpc('reconcile_user_ticket_passes_rpc', { p_uid: uid });
+    if (!error && data?.ok) {
+      return {
+        ok: true,
+        returnedCount: Number(data.returned_count || 0),
+        burnedCount: Number(data.burned_count || 0),
+        pendingTicketsCount: Number(data.pending_tickets_count || 0),
+        passes: Array.isArray(data.passes) ? data.passes : [],
+      };
+    }
+  } catch { /* ignore */ }
+  return { ok: false };
+}
+
+/**
+ * v13.0: Серверный возврат неактивированного билета отправителем (с 10.12 или после 24ч).
+ */
+export async function reclaimServerTicketPass(tgUser = null, passId = '') {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  if (!db || isTestBogActive()) return { ok: true, offline: true };
+  try {
+    const { data, error } = await db.rpc('reclaim_gift_ticket_pass_rpc', {
+      p_uid: uid,
+      p_short_id: String(passId || '').trim(),
+    });
+    if (!error && data?.ok) {
+      return { ok: true, pendingTicketsCount: Number(data.pending_tickets_count || 1) };
+    }
+    return { ok: false, reason: data?.reason || error?.message || 'reclaim_denied' };
+  } catch (err) {
+    return { ok: false, reason: err?.message || 'network_error' };
+  }
 }
 
 function safeWriteJson(k, obj) {

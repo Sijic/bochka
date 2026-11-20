@@ -137,6 +137,7 @@ function renderAnalyticsPane() {
   const burned = Number(s.tickets_burned ?? 0);
   const dailyIssued = Number(s.daily_tickets_issued ?? 0);
   const maxDaily = Number(s.max_daily_tickets ?? 5);
+  const maxTotal = Number(s.max_total_tickets ?? 150);
 
   const kFactor = players > 0 ? (opened / players).toFixed(2) : '0.00';
 
@@ -149,7 +150,7 @@ function renderAnalyticsPane() {
   setText('kpi-trailers', fmtInt(trailers));
   setText('kpi-cinema-clicks', fmtInt(cinema));
   setText('kpi-ocean-opens', fmtInt(ocean));
-  setText('kpi-tickets-summary', `${won} выпало (сегодня ${dailyIssued}/${maxDaily})`);
+  setText('kpi-tickets-summary', `${won}/${maxTotal} пул (сегодня ${dailyIssued}/${maxDaily})`);
   setText('kpi-burned-note', `Сожжено ради ×2 жизней: ${burned}`);
 
   const base = Math.max(1, players, created, opened, kpClicks, trailers);
@@ -640,11 +641,13 @@ function renderLimitsForm() {
   const s = admState.stats || {};
   const winIn = document.getElementById('cfg-win-every');
   const dailyIn = document.getElementById('cfg-max-daily');
+  const totalIn = document.getElementById('cfg-max-total');
   const premIn = document.getElementById('cfg-max-premiere');
   const pauseIn = document.getElementById('cfg-is-paused');
 
   if (winIn) winIn.value = String(s.win_every_n_hits ?? 100);
   if (dailyIn) dailyIn.value = String(s.max_daily_tickets ?? 5);
+  if (totalIn) totalIn.value = String(s.max_total_tickets ?? 150);
   if (premIn) premIn.value = String(s.max_premiere_winners ?? 20);
   if (pauseIn) pauseIn.checked = Boolean(s.is_paused);
 }
@@ -657,9 +660,11 @@ async function handleSaveLimitsSubmit(e) {
   try {
     const rawWin = document.getElementById('cfg-win-every')?.value;
     const rawDaily = document.getElementById('cfg-max-daily')?.value;
+    const rawTotal = document.getElementById('cfg-max-total')?.value;
     const rawPrem = document.getElementById('cfg-max-premiere')?.value;
     const p_win_every_n_hits = Math.max(1, Number(rawWin !== '' && rawWin != null ? rawWin : 100));
     const p_max_daily_tickets = Math.max(0, Number(rawDaily !== '' && rawDaily != null ? rawDaily : 5));
+    const p_max_total_tickets = Math.max(0, Number(rawTotal !== '' && rawTotal != null ? rawTotal : 150));
     const p_max_premiere_winners = Math.max(0, Number(rawPrem !== '' && rawPrem != null ? rawPrem : 20));
     const p_is_paused = Boolean(document.getElementById('cfg-is-paused')?.checked);
 
@@ -668,6 +673,7 @@ async function handleSaveLimitsSubmit(e) {
       p_max_daily_tickets,
       p_max_premiere_winners,
       p_is_paused,
+      p_max_total_tickets,
     });
 
     if (error || !data?.ok) {

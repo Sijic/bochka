@@ -32,15 +32,53 @@ const RUNTIME_ASSETS = [
   'assets/sfx/factory_hum.mp3',
   'assets/sfx/scream_1.mp3',
   'assets/sfx/scream_2.mp3',
+  'assets/sfx/voices/screamer_0.mp3',
+  'assets/sfx/voices/screamer_1.mp3',
+  'assets/sfx/voices/screamer_2.mp3',
+  'assets/sfx/voices/screamer_3.mp3',
+  'assets/sfx/voices/screamer_4.mp3',
+  'assets/sfx/voices/screamer_5.mp3',
   'assets/sfx/water_drop_1.mp3',
   'assets/sfx/water_drop_2.mp3',
   'public/sprites/film_clock.webp',
+  'public/sprites/screamer_hand.webp',
+  'public/sprites/screamer_pastor.webp',
+  'public/sprites/screamer_father.webp',
+  'public/sprites/screamer_blogger.webp',
+  'public/sprites/horror_barrel_face.webp',
+  'public/sprites/horror_barrel_face_f2.webp',
+  'public/sprites/horror_claw_hands.webp',
+  'public/sprites/horror_gasmask_weld.webp',
+  'public/sprites/horror_cctv_face.webp',
+  'public/sprites/horror_hero_warden.webp',
+  'public/sprites/horror_hero_warden_f2.webp',
+  'public/sprites/horror_hero_mechanic.webp',
+  'public/sprites/horror_hero_mechanic_f2.webp',
+  'public/sprites/horror_hero_captive.webp',
+  'public/sprites/horror_hero_captive_f2.webp',
+  'public/sprites/hero_boy_live.webp',
+  'public/sprites/cinema_ticket_barrel.webp',
+  'public/sprites/cinema_ticket_card.webp',
+  'public/sprites/ocean_sea_real.webp',
+  'public/sprites/ocean_barrel_til_hand.webp',
+  'public/sprites/points_token_barrel.webp',
+  'public/sprites/empty_barrel_interior.webp',
+  'public/sprites/empty_barrel_hearts.webp',
 ];
 
 function stripStaticImportMapAndCopyAssets() {
   let outDir = 'dist';
   return {
     name: 'bochka-hybrid-build',
+    configurePreviewServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (!req.url || req.url === '/' || req.url.endsWith('.html') || req.url.includes('/?')) {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+          res.setHeader('Pragma', 'no-cache');
+        }
+        next();
+      });
+    },
     configResolved(config) {
       outDir = config.build.outDir;
     },
@@ -79,6 +117,25 @@ function stripStaticImportMapAndCopyAssets() {
         }
       };
       copyDirRec(sfxRoot, '');
+
+      // Рекурсивно копируем public/textures/* (Patch CC0 PBR-ржавчина + HDRI цеха v8.1)
+      const texRoot = path.join(root, 'public', 'textures');
+      const copyTexRec = (srcDir, relSub) => {
+        if (!fs.existsSync(srcDir)) return;
+        for (const ent of fs.readdirSync(srcDir, { withFileTypes: true })) {
+          const s = path.join(srcDir, ent.name);
+          const r = path.join(relSub, ent.name);
+          if (ent.isDirectory()) {
+            copyTexRec(s, r);
+          } else {
+            for (const dst of [path.join(root, outDir, 'public', 'textures', r), path.join(root, outDir, 'textures', r)]) {
+              fs.mkdirSync(path.dirname(dst), { recursive: true });
+              fs.copyFileSync(s, dst);
+            }
+          }
+        }
+      };
+      copyTexRec(texRoot, '');
 
       const dictSrc = path.join(root, 'src', 'dict.json');
       if (fs.existsSync(dictSrc)) {

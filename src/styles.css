@@ -45,20 +45,17 @@ body {
 #workshop-canvas {
   position: fixed;
   inset: 0;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   display: block;
   z-index: 1;
   touch-action: none;
+  -webkit-touch-callout: none;
+  user-select: none;
 }
 
 .grain-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  opacity: 0.055;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.88' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  display: none;
 }
 
 .vignette-overlay {
@@ -66,7 +63,7 @@ body {
   inset: 0;
   z-index: 2;
   pointer-events: none;
-  background: radial-gradient(circle at 50% 45%, transparent 34%, rgba(6, 6, 7, 0.84) 100%);
+  background: radial-gradient(circle at 50% 45%, transparent 38%, rgba(6, 8, 6, 0.82) 100%);
 }
 
 /* ==========================================================================
@@ -289,9 +286,10 @@ body {
   margin: 4px 0 6px;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: clamp(64px, 15vw, 96px);
-  line-height: 0.94;
-  letter-spacing: 0.1em;
+  font-size: clamp(36px, min(14vw, 13dvh), 88px);
+  line-height: 1.24;
+  letter-spacing: 0.08em;
+  max-width: 100%;
   text-transform: uppercase;
   background: linear-gradient(180deg, #f5e7ca 0%, #eab308 48%, #9a5822 86%, #592e12 100%);
   -webkit-background-clip: text;
@@ -1809,6 +1807,9 @@ button:disabled {
   left: 50%;
   transform: translateX(-50%);
   z-index: 80;
+  max-width: min(92vw, 480px);
+  text-align: center;
+  pointer-events: none;
   padding: 10px 18px;
   background: #0d0d0d;
   border: 1px solid var(--accent);
@@ -3510,13 +3511,9 @@ button:disabled {
    БОЧКА v6.0 — TEMU-STYLE PROGRESSIVE DISCLOSURE (STAGES 1..4 + BURGER + TEMU MODAL)
    ============================================================================ */
 
-/* Стадии 1 и 2: чистый 3D-цех без шапки, навиг. меню, ТОП-10 и шеринга */
+/* Стадии 1 и 2: чистый 3D-цех без верхней шапки (но меню ☰ всегда доступно по кнопке в углу!) */
 body[data-ui-stage="1"] #topbar,
-body[data-ui-stage="2"] #topbar,
-body[data-ui-stage="1"] #burger-drawer,
-body[data-ui-stage="2"] #burger-drawer,
-body[data-ui-stage="1"] #burger-backdrop,
-body[data-ui-stage="2"] #burger-backdrop {
+body[data-ui-stage="2"] #topbar {
   display: none !important;
 }
 
@@ -4422,7 +4419,27 @@ body[data-blitz-unlocked="0"] .blitz-rule-note {
 }
 
 #modal-trailer .video-aspect {
-  max-height: 36dvh !important;
+  position: relative !important;
+  width: 100% !important;
+  aspect-ratio: 16 / 9 !important;
+  max-height: min(52dvh, 380px) !important;
+  overflow: hidden !important;
+  background: #000 !important;
+}
+
+#modal-trailer .video-aspect > iframe,
+#modal-trailer .video-aspect > .yt-fallback-slot,
+#modal-trailer .video-aspect > video {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  border: 0 !important;
+}
+
+#modal-trailer #trailer-video,
+#modal-trailer .video-aspect [hidden] {
+  display: none !important;
 }
 
 #modal-trailer .trailer-custom-bar {
@@ -4452,8 +4469,7 @@ body[data-blitz-unlocked="0"] .blitz-rule-note {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 8px;
-  background: rgba(8, 9, 12, 0.55);
-  backdrop-filter: blur(6px);
+  background: rgba(10, 12, 10, 0.84);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   pointer-events: none;
 }
@@ -4592,7 +4608,7 @@ body[data-blitz-unlocked="0"] .blitz-rule-note {
   width: min(94vw, 440px);
   padding: 5px 12px;
   border-radius: 999px;
-  background: rgba(10, 14, 20, 0.78);
+  background: rgba(11, 14, 11, 0.86);
   border: 1px solid rgba(250, 204, 21, 0.38);
   color: #fef08a;
   font-size: 11.5px;
@@ -4601,7 +4617,6 @@ body[data-blitz-unlocked="0"] .blitz-rule-note {
   letter-spacing: 0.02em;
   z-index: 25;
   pointer-events: none;
-  backdrop-filter: blur(6px);
 }
 .hud-lives-pill {
   display: inline-flex;
@@ -4898,3 +4913,1600 @@ body[data-screen="workshop"] #topbar { display: none !important; }
 .lives-recovery-card { max-width: 380px; display: flex; flex-direction: column; gap: 8px; text-align: center; padding: 14px !important; }
 .lives-recovery-title { margin: 0; font-family: var(--font-display); font-size: 20px; color: #fff; }
 .lives-recovery-progress { margin: 0 0 4px; font-size: 12px; line-height: 1.35; color: #fde68a; }
+
+/* ==========================================================================
+   v8.1: ПОЛНОЭКРАННЫЕ КИНО-ХОРРОР СКРИМЕРЫ (100vw x 100dvh, ФОТОРЕАЛИЗМ,
+   35ms ЧЁРНЫЙ СРЕЗ -> МГНОВЕННЫЙ БРОСОК В ЛИЦО -> ВСПЫШКА И ТРЯСКА)
+   ========================================================================== */
+.screamer-overlay .screamer-canvas {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  display: block !important;
+  z-index: 2 !important;
+}
+
+.screamer-overlay .screamer-img[hidden] {
+  display: none !important;
+}
+
+.screamer-overlay,
+.screamer-overlay[data-variant="hand"],
+.screamer-overlay[data-variant="pastor"],
+.screamer-overlay[data-variant="father"],
+.screamer-overlay[data-variant="blogger"] {
+  background: #000 !important;
+  animation: screamerCinemaCut 3.28s steps(1, end) forwards !important;
+}
+
+.screamer-overlay .screamer-img,
+.screamer-overlay[data-variant="hand"] .screamer-img,
+.screamer-overlay[data-variant="pastor"] .screamer-img,
+.screamer-overlay[data-variant="father"] .screamer-img,
+.screamer-overlay[data-variant="blogger"] .screamer-img {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  max-height: none !important;
+  object-fit: cover !important;
+  object-position: center 42% !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  image-rendering: auto !important;
+  z-index: 2 !important;
+  filter: contrast(1.38) brightness(0.96) saturate(0.85) !important;
+  animation: screamerFaceLunge 0.78s cubic-bezier(0.08, 0.92, 0.18, 1) forwards !important;
+}
+
+.screamer-overlay .screamer-fx-layer,
+.screamer-overlay[data-variant="hand"] .screamer-fx-layer,
+.screamer-overlay[data-variant="pastor"] .screamer-fx-layer,
+.screamer-overlay[data-variant="father"] .screamer-fx-layer,
+.screamer-overlay[data-variant="blogger"] .screamer-fx-layer {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 3 !important;
+  background: radial-gradient(circle at 50% 45%, transparent 25%, rgba(0, 0, 0, 0.72) 72%, rgba(0, 0, 0, 0.98) 100%) !important;
+  animation: screamerFlashStrobe 0.12s steps(2, end) infinite !important;
+}
+
+.screamer-glitch-bars {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.08) 0px,
+    rgba(255, 255, 255, 0.08) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+  mix-blend-mode: overlay;
+  animation: vhsGlitchTear 0.09s steps(2, end) infinite;
+}
+
+.screamer-overlay .screamer-caption {
+  display: none !important;
+}
+
+@keyframes screamerCinemaCut {
+  0% { opacity: 1; }
+  94% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes screamerFaceLunge {
+  0% { opacity: 0; transform: scale(0.88); filter: brightness(0); }
+  5% { opacity: 1; transform: scale(1.06) translate(-16px, 10px) rotate(-2.5deg); filter: brightness(2.4) contrast(2.2) invert(0.85); }
+  12% { opacity: 1; transform: scale(1.18) translate(18px, -12px) rotate(3deg); filter: contrast(1.55) brightness(1.08) saturate(0.75); }
+  22% { opacity: 1; transform: scale(1.24) translate(-14px, -8px) rotate(-2deg); filter: contrast(1.85) brightness(1.35) saturate(0.5); }
+  32% { opacity: 1; transform: scale(1.28) translate(15px, 11px) rotate(2.5deg); filter: contrast(2.1) brightness(0.95) invert(0.9); }
+  42% { opacity: 1; transform: scale(1.32) translate(-12px, 6px) rotate(-1.8deg); filter: contrast(1.6) brightness(1.05) saturate(0.7); }
+  58% { opacity: 1; transform: scale(1.36) translate(11px, -9px) rotate(2deg); filter: contrast(1.7) brightness(0.95); }
+  74% { opacity: 1; transform: scale(1.42) translate(-9px, 7px) rotate(-1.5deg); filter: contrast(1.9) brightness(1.2); }
+  90% { opacity: 0.96; transform: scale(1.48) translate(5px, -4px); filter: contrast(1.4) brightness(0.6); }
+  100% { opacity: 0; transform: scale(1.55); filter: brightness(0); }
+}
+
+@keyframes screamerFlashStrobe {
+  0% { box-shadow: inset 0 0 110px rgba(185, 28, 28, 0.72); opacity: 0.95; }
+  50% { box-shadow: inset 0 0 160px rgba(0, 0, 0, 0.95); opacity: 0.55; }
+  100% { box-shadow: inset 0 0 110px rgba(255, 255, 255, 0.35); opacity: 0.95; }
+}
+
+@keyframes vhsGlitchTear {
+  0% { transform: translate(-8px, 2px); }
+  33% { transform: translate(9px, -3px); }
+  66% { transform: translate(-5px, -2px); }
+  100% { transform: translate(4px, 3px); }
+}
+
+.fx-scream-glitch {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.1) 0px,
+    rgba(255, 255, 255, 0.1) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+  mix-blend-mode: overlay;
+  animation: vhsGlitchTear 0.09s steps(2, end) infinite;
+}
+
+.fx-scream-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 45%, transparent 22%, rgba(127, 29, 29, 0.55) 70%, rgba(0, 0, 0, 0.98) 100%);
+}
+
+.fx-scream[data-fullbleed="1"] .fx-scream-face {
+  width: 100vw !important;
+  height: 100dvh !important;
+  border-radius: 0 !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  object-fit: cover !important;
+  object-position: center 42% !important;
+  z-index: 2 !important;
+  filter: contrast(1.48) saturate(0.72) !important;
+}
+
+.fx-scream[data-fullbleed="1"].is-live .fx-scream-face {
+  animation: fxFullBleedLunge 0.28s cubic-bezier(0.08, 0.92, 0.18, 1) forwards, fxShake 0.07s linear 0.28s infinite !important;
+}
+
+@keyframes fxFullBleedLunge {
+  0% { transform: scale(0.92); filter: brightness(2.6) contrast(2.2) invert(0.9); }
+  35% { transform: scale(1.18); filter: contrast(1.55) brightness(1.05); }
+  100% { transform: scale(1.26); filter: contrast(1.65) saturate(0.65); }
+}
+
+.fx-scream.is-live .fx-scream-face {
+  z-index: 2;
+  filter: contrast(1.65) saturate(0.65);
+}
+
+.fx-scream.is-live .fx-scream-text {
+  z-index: 5;
+  text-shadow: 0 0 28px #b91c1c, 0 4px 0 #000;
+}
+
+body.is-horror-jolt #workshop-canvas,
+body.is-horror-jolt .hud-slim {
+  animation: horrorScreenJolt 0.07s linear infinite;
+}
+
+@keyframes horrorScreenJolt {
+  0% { transform: translate(-7px, 4px); }
+  25% { transform: translate(8px, -5px); }
+  50% { transform: translate(-6px, -4px); }
+  75% { transform: translate(7px, 5px); }
+  100% { transform: translate(0, 0); }
+}
+
+/* ==========================================================================
+   v8.1: ПОЛНАЯ АДАПТИВНОСТЬ И ЮЗАБИЛИТИ ДЛЯ ВСЕХ ЭКРАНОВ (260px..4K + LANDSCAPE)
+   ========================================================================== */
+body[data-ui-stage="1"] .screen,
+body[data-ui-stage="2"] .screen,
+#screen-gate,
+body[data-screen="workshop"] #screen-workshop {
+  inset: 0 !important;
+}
+
+#screen-gate,
+#screen-pack,
+#screen-finale,
+#screen-sent {
+  height: auto !important;
+  max-height: none !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch;
+  padding: calc(10px + var(--safe-top)) 10px calc(12px + var(--safe-bottom)) !important;
+}
+
+body[data-ui-stage="3"] #screen-pack,
+body[data-ui-stage="4"] #screen-pack,
+body[data-ui-stage="3"] #screen-finale,
+body[data-ui-stage="4"] #screen-finale,
+body[data-ui-stage="3"] #screen-sent,
+body[data-ui-stage="4"] #screen-sent {
+  padding-top: 8px !important;
+}
+
+#screen-gate .gate-frame,
+#screen-pack .pack-clean,
+#screen-finale .finale-sheet,
+#screen-sent .sent-sheet {
+  margin-top: auto !important;
+  margin-bottom: auto !important;
+  flex-shrink: 0;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+#screen-mode-a {
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch;
+  padding: 10px 12px calc(16px + var(--safe-bottom)) !important;
+}
+
+#screen-mode-a .mode-card {
+  margin-top: auto !important;
+  margin-bottom: 0 !important;
+  flex-shrink: 0;
+}
+
+/* Трейлер-модалка: всегда прокручиваемая на низких экранах и без горизонтального переполнения */
+#modal-trailer {
+  padding: 8px 10px !important;
+  align-items: safe center;
+}
+
+#modal-trailer .trailer-modal-card {
+  padding: 10px 12px !important;
+  max-height: calc(100dvh - 16px) !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+#modal-trailer .trailer-custom-bar {
+  flex-wrap: wrap !important;
+  gap: 5px !important;
+}
+
+/* Компактная адаптация для альбомной ориентации смартфонов (667x375, 844x390 и т.п.) */
+@media (max-height: 500px) {
+  #screen-gate .gate-frame {
+    padding: 12px 16px !important;
+    width: min(460px, 100%);
+  }
+  #screen-gate .gate-top-meta {
+    margin-bottom: 6px !important;
+  }
+  #screen-gate .age-ring {
+    width: 30px;
+    height: 30px;
+    font-size: 10.5px;
+  }
+  #screen-gate .metal-logo {
+    font-size: clamp(32px, 11dvh, 52px) !important;
+    margin: 2px 0 4px !important;
+  }
+  #screen-gate .gate-actions {
+    margin-top: 10px !important;
+    margin-bottom: 4px !important;
+    gap: 6px !important;
+  }
+  #screen-gate .gate-actions button {
+    padding: 9px 12px !important;
+    font-size: 13.5px !important;
+    min-height: 40px;
+  }
+
+  .hud-slim {
+    height: 34px !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+  .hud-slim-level {
+    font-size: 11.5px !important;
+  }
+  .hud-slim-o2 {
+    font-size: 15px !important;
+  }
+  .hud-task-banner {
+    top: calc(env(safe-area-inset-top, 0px) + 38px) !important;
+    padding: 3px 10px !important;
+    font-size: 10.5px !important;
+    width: min(94vw, 480px) !important;
+  }
+  .hud-hint-line {
+    bottom: max(4px, env(safe-area-inset-bottom)) !important;
+    font-size: 10px !important;
+  }
+
+  #modal-trailer .modal-head {
+    padding: 6px 0 6px !important;
+    margin-bottom: 6px !important;
+  }
+  #modal-trailer .video-aspect {
+    max-height: 40dvh !important;
+    width: min(100%, calc(40dvh * 16 / 9)) !important;
+    margin: 0 auto 6px !important;
+  }
+  #modal-trailer .trailer-custom-bar {
+    padding: 4px 6px !important;
+    margin-bottom: 6px !important;
+  }
+  #modal-trailer .trailer-rescue-box {
+    padding: 6px 8px !important;
+  }
+  #modal-trailer #btn-claim-trailer-life {
+    padding: 8px 10px !important;
+    min-height: 38px !important;
+    font-size: 13px !important;
+  }
+
+  #screen-finale .finale-sheet {
+    padding: 8px 12px !important;
+  }
+  #screen-finale .barrel-mouth-large {
+    width: 74px !important;
+    height: 74px !important;
+  }
+  #screen-finale .finale-message {
+    font-size: 12.5px !important;
+    margin: 3px 0 4px !important;
+  }
+  #screen-finale #btn-cinema-reply,
+  #screen-finale #btn-pack-revenge {
+    min-height: 36px !important;
+    padding: 6px 10px !important;
+    font-size: 12.5px !important;
+  }
+
+  #screen-pack .pack-clean {
+    padding: 6px 10px !important;
+    gap: 4px !important;
+  }
+  #screen-pack .pack-mini-preview {
+    width: 48px !important;
+    height: 48px !important;
+    flex: 0 0 48px !important;
+  }
+  #screen-pack .pack-send-btn {
+    min-height: 38px !important;
+    padding: 5px 8px !important;
+  }
+
+  #screen-mode-a .mode-card {
+    padding: 10px 14px !important;
+  }
+  #screen-mode-a .section-title {
+    font-size: 18px !important;
+    margin: 2px 0 4px !important;
+  }
+  #screen-mode-a .mode-desc {
+    font-size: 12px !important;
+    margin-bottom: 8px !important;
+  }
+}
+
+/* Ультра-узкие экраны (split-screen / встроенные панели 250..340px / iPhone SE 320px) */
+@media (max-width: 340px) {
+  #screen-gate .gate-frame {
+    padding: 14px 10px !important;
+  }
+  .metal-logo {
+    font-size: clamp(32px, 13.5vw, 54px) !important;
+    letter-spacing: 0.05em !important;
+  }
+  .btn-primary,
+  .btn-secondary,
+  .btn-ghost {
+    font-size: 13px !important;
+    padding: 10px 10px !important;
+    gap: 6px !important;
+    letter-spacing: 0.04em !important;
+  }
+  .topbar {
+    padding: 4px 6px !important;
+    gap: 4px !important;
+  }
+  .topbar-brand {
+    gap: 4px !important;
+  }
+  .topbar-brand .brand-word {
+    font-size: 11px !important;
+    letter-spacing: 0.04em !important;
+  }
+  .topbar-right {
+    gap: 3px !important;
+  }
+  .topbar-right .nav-link {
+    padding: 4px 5px !important;
+    font-size: 9px !important;
+    gap: 2px !important;
+  }
+  .cap-badge {
+    min-width: 14px !important;
+    height: 14px !important;
+    font-size: 8.5px !important;
+    padding: 0 3px !important;
+  }
+  .burger-btn {
+    width: 28px !important;
+    height: 28px !important;
+    padding: 4px !important;
+  }
+  .hud-slim {
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+    gap: 4px !important;
+  }
+  .hud-slim-level {
+    font-size: 10px !important;
+  }
+  .hud-slim-center {
+    gap: 4px !important;
+  }
+  .hud-lives-pill,
+  .hud-pts-pill {
+    font-size: 9.5px !important;
+    margin: 0 !important;
+  }
+  .hud-slim-o2 {
+    font-size: 13.5px !important;
+  }
+  .hud-task-banner {
+    font-size: 10px !important;
+    padding: 4px 8px !important;
+  }
+  .hud-hint-line {
+    font-size: 10px !important;
+    padding: 0 8px !important;
+  }
+  .pack-send-btn {
+    min-height: 44px !important;
+    padding: 8px 8px !important;
+    line-height: 1.2 !important;
+  }
+  .pack-send-btn .btn-sub-line {
+    font-size: 9px !important;
+    line-height: 1.2 !important;
+  }
+  .screamer-cards {
+    grid-template-columns: 1fr !important;
+  }
+  .modal-card {
+    padding: 0 10px 12px !important;
+  }
+}
+
+/* ==========================================================================
+   v8.5: БАННЕР В ПУСТОМ ЦЕХУ ПОСЛЕ 3-ГО ПРОМАХА («СМОТРИ ТРЕЙЛЕР -> СПАСИ ДРУГА»)
+   ========================================================================== */
+.workshop-rescue-cta {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(34px + var(--safe-bottom));
+  z-index: 36;
+  width: min(94vw, 460px);
+  padding: 12px 14px;
+  background: rgba(11, 14, 11, 0.94);
+  border: 1.5px solid rgba(234, 179, 8, 0.85);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.9), 0 0 28px rgba(234, 179, 8, 0.25);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  pointer-events: auto;
+}
+
+.workshop-rescue-cta.is-nudge {
+  animation: rescueCtaNudge 0.42s ease;
+}
+
+@keyframes rescueCtaNudge {
+  0%, 100% { transform: translateX(-50%) scale(1); }
+  35% { transform: translateX(-50%) scale(1.045); border-color: #ef4444; }
+  70% { transform: translateX(-50%) scale(0.99); }
+}
+
+.workshop-rescue-msg {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: #fef08a;
+  font-weight: 700;
+}
+
+.workshop-rescue-btn {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 14px;
+  font-size: 14px;
+  pointer-events: auto;
+  cursor: pointer;
+  animation: trailerCtaPulse 1.5s ease-in-out infinite;
+}
+
+@media (max-width: 360px) {
+  .workshop-rescue-cta {
+    bottom: calc(22px + var(--safe-bottom));
+    padding: 9px 10px;
+    gap: 6px;
+  }
+  .workshop-rescue-msg {
+    font-size: 10.5px;
+  }
+  .workshop-rescue-btn {
+    min-height: 40px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+}
+
+@keyframes trailerCtaPulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(234, 179, 8, 0.4); }
+  50% { box-shadow: 0 0 28px rgba(234, 179, 8, 0.88); }
+}
+
+@media (max-height: 500px) {
+  .workshop-rescue-cta {
+    bottom: calc(20px + var(--safe-bottom));
+    padding: 7px 10px;
+    gap: 5px;
+  }
+  .workshop-rescue-msg {
+    font-size: 10.5px;
+  }
+  .workshop-rescue-btn {
+    min-height: 36px;
+    padding: 6px 10px;
+    font-size: 12.5px;
+  }
+}
+
+/* ==========================================================================
+   v9.0: ВСЕ КНОПКИ В ОДИН ЭКРАН + БИЛЕТ В КИНО + ВИСЯЩАЯ КНОПКА БИЛЕТОВ + ДУЭЛЬ БЕЗ ПЛАШКИ
+   ========================================================================== */
+/* 1. Убираем верхнюю плашку и панель дуэли во время активного боя — 100% чистый обзор бочек! */
+body.is-duel-active .topbar {
+  display: none !important;
+}
+
+.duel-overlay.is-playing .duel-top-panel {
+  display: none !important;
+}
+
+.duel-live-mini-bar {
+  position: fixed;
+  top: calc(10px + var(--safe-top));
+  right: 12px;
+  z-index: 62;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px 5px 12px;
+  background: rgba(11, 13, 11, 0.88);
+  border: 1px solid rgba(234, 179, 8, 0.55);
+  color: #fef08a;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: auto;
+}
+
+.duel-live-mini-bar .icon-close {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  font-size: 13px;
+}
+
+.duel-lobby-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.duel-lobby-actions button {
+  min-height: 38px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+}
+
+/* 2. Висящая кнопка накопленных билетов для друзей («Отправить пока не сгорели!») */
+.hud-pending-tickets-btn {
+  position: fixed;
+  top: calc(74px + var(--safe-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 38;
+  max-width: min(94vw, 440px);
+  padding: 7px 14px;
+  background: linear-gradient(90deg, #7f1d1d 0%, #b45309 50%, #7f1d1d 100%);
+  border: 1.5px solid #facc15;
+  color: #fef9c3;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: 0 6px 22px rgba(234, 179, 8, 0.35);
+  animation: trailerCtaPulse 1.6s ease-in-out infinite;
+}
+
+/* 3. Реальный визуал кинобилета «БОЧКА» внутри модалки и финала */
+.cinema-ticket-visual {
+  display: block;
+  width: 100%;
+  max-width: 360px;
+  height: auto;
+  margin: 4px auto 8px;
+  border-radius: 8px;
+  filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.72));
+}
+
+/* 4. Обязательный замок упаковки друга (Раунд 2) */
+.pack-mandatory-banner {
+  padding: 8px 10px;
+  margin: 4px 0 6px;
+  background: rgba(153, 27, 27, 0.32);
+  border: 1.5px solid #ef4444;
+  color: #fef08a;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.pack-mandatory-banner.is-shake {
+  animation: packLockShake 0.42s ease;
+}
+
+@keyframes packLockShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  45% { transform: translateX(6px); }
+  70% { transform: translateX(-4px); }
+}
+
+/* 5. Компактный одноэкранный #screen-pack — ВСЕ кнопки включая «ОТПРАВИТЬ ДРУГУ В 1 КЛИК» влезают без обрезки! */
+#screen-pack .pack-clean {
+  padding: 10px 12px !important;
+  gap: 6px !important;
+  max-width: min(96vw, 480px) !important;
+  max-height: calc(100dvh - 16px) !important;
+  overflow-y: auto;
+}
+
+#screen-pack .sheet-header {
+  margin-bottom: 2px !important;
+}
+
+#screen-pack .sheet-header .section-title {
+  font-size: clamp(18px, 3.2vw, 22px) !important;
+  margin: 0 !important;
+}
+
+#screen-pack .pack-top-row {
+  gap: 8px !important;
+  margin: 2px 0 !important;
+}
+
+#screen-pack .pack-mini-preview {
+  width: 58px !important;
+  height: 58px !important;
+  min-width: 58px !important;
+}
+
+#screen-pack .pack-photo-row {
+  gap: 5px !important;
+}
+
+#screen-pack .pack-photo-row .btn-secondary {
+  min-height: 32px !important;
+  padding: 5px 8px !important;
+  font-size: 11px !important;
+}
+
+#screen-pack .screamer-cards {
+  gap: 5px !important;
+  margin: 2px 0 !important;
+}
+
+#screen-pack .screamer-card {
+  padding: 6px 8px !important;
+  min-height: 44px !important;
+}
+
+#screen-pack .screamer-card b {
+  font-size: 12px !important;
+}
+
+#screen-pack .screamer-card small {
+  font-size: 10px !important;
+}
+
+#screen-pack .voice-pack-box {
+  padding: 6px 8px !important;
+  gap: 5px !important;
+}
+
+#screen-pack .voice-teleprompter-line {
+  font-size: 11px !important;
+  padding: 4px 8px !important;
+}
+
+#screen-pack .voice-rec-btn {
+  min-height: 36px !important;
+  padding: 6px 10px !important;
+  font-size: 12px !important;
+}
+
+#screen-pack .pack-quick-captions {
+  gap: 4px !important;
+  margin: 2px 0 !important;
+}
+
+#screen-pack .pack-caption-chip {
+  padding: 4px 8px !important;
+  font-size: 11px !important;
+}
+
+#screen-pack .pack-phrase-row .industrial-input {
+  min-height: 34px !important;
+  padding: 6px 10px !important;
+  font-size: 12px !important;
+}
+
+#screen-pack .pack-send-btn {
+  min-height: 46px !important;
+  padding: 8px 12px !important;
+  margin-top: 2px !important;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+#screen-pack .pack-send-btn .btn-sub-line {
+  font-size: 10.5px !important;
+  color: rgba(14, 14, 14, 0.86) !important;
+  font-weight: 700 !important;
+  opacity: 1 !important;
+  display: block;
+}
+
+/* 6. Финал: удобная кнопка повторного прослушивания голоса + шаринг ранга + крупное фото */
+.finale-replay-voice-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 2px auto 6px;
+  min-height: 36px;
+  padding: 6px 14px;
+  font-size: 12px;
+  border-color: rgba(234, 179, 8, 0.7);
+  color: #fef08a;
+}
+
+.finale-share-btn {
+  min-height: 38px;
+  font-size: 12px;
+  border: 1px dashed rgba(234, 179, 8, 0.55);
+  color: #fde047;
+}
+
+#screen-finale .finale-sheet {
+  padding: 12px 14px !important;
+  gap: 6px !important;
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+}
+
+#screen-finale .barrel-mouth-large {
+  width: clamp(92px, 16dvh, 126px) !important;
+  height: clamp(92px, 16dvh, 126px) !important;
+}
+
+#screen-finale .finale-cta-stack {
+  gap: 6px !important;
+}
+
+#screen-finale .finale-cta-stack button {
+  min-height: 40px !important;
+  padding: 8px 12px !important;
+  font-size: 12.5px !important;
+}
+
+/* ==========================================================================
+   v9.1: ДУЭЛЬ ИТОГ БЕЗ ЛИШНИХ КНОПОК + НЕБО БЕЗ ПЕРЕКРЫТИЯ БОЧКИ ТИЛЯ + ВЫЛЕЗАЮЩИЙ ПАЦАН
+   ========================================================================== */
+.duel-overlay.is-finished .duel-top-panel {
+  display: none !important;
+}
+
+/* На небе с Тилем: вся центральная сцена (Тиль + бочка) полностью свободна для тапов! */
+.screen-ocean .ocean-beach-stage {
+  bottom: 18% !important;
+  z-index: 12 !important;
+}
+
+.screen-ocean .ocean-barrel-tap-target {
+  z-index: 14 !important;
+  pointer-events: auto !important;
+}
+
+.screen-ocean .ocean-ui-layer {
+  pointer-events: none !important;
+}
+
+.screen-ocean .ocean-top-box {
+  padding: 8px 12px !important;
+  pointer-events: auto;
+}
+
+.screen-ocean .ocean-bottom-slim {
+  padding: 8px 10px !important;
+  max-width: min(94vw, 520px) !important;
+  width: min(94vw, 520px) !important;
+  background: rgba(12, 16, 20, 0.86) !important;
+  border: 1px solid rgba(234, 179, 8, 0.45) !important;
+  pointer-events: auto !important;
+}
+
+.ocean-actions-slim {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.ocean-tap-main-btn {
+  flex: 1 1 auto !important;
+  min-height: 44px !important;
+  padding: 8px 12px !important;
+  font-size: 13.5px !important;
+}
+
+.ocean-mini-icon-btn {
+  flex: 0 0 44px !important;
+  min-height: 44px !important;
+  padding: 0 !important;
+  font-size: 16px !important;
+}
+
+.ocean-mini-back-btn {
+  flex: 0 0 auto !important;
+  min-height: 44px !important;
+  padding: 0 12px !important;
+  font-size: 11.5px !important;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   v9.2: УБИРАЕМ НЕПОНЯТНЫЕ % В ШАПКЕ + КРУПНЫЙ ВЫЛЕЗАЮЩИЙ ИЗ БОЧКИ ПАЦАН
+   ========================================================================== */
+#nav-prize {
+  display: none !important;
+}
+
+/* При спасении герой КРУПНО вылезает прямо из открытой бочки на весь центр экрана! */
+.fx-reveal .fx-reveal-avatar {
+  width: min(76vw, 340px) !important;
+  height: min(76vw, 340px) !important;
+  border-radius: 18px !important;
+  border: 3px solid rgba(234, 179, 8, 0.9) !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.92), 0 0 42px rgba(234, 179, 8, 0.35) !important;
+  overflow: hidden !important;
+}
+
+.fx-reveal.is-live .fx-reveal-avatar img {
+  animation: boyClimbOutBarrel 1.55s cubic-bezier(0.16, 0.94, 0.24, 1) forwards;
+}
+
+#screen-finale .barrel-mouth-large {
+  width: clamp(124px, 21dvh, 168px) !important;
+  height: clamp(124px, 21dvh, 168px) !important;
+  border-radius: 16px !important;
+}
+
+@keyframes boyClimbOutBarrel {
+  0% {
+    transform: translateY(65%) scale(0.78);
+    filter: brightness(0.35) contrast(1.25);
+  }
+  52% {
+    transform: translateY(-3%) scale(1.05);
+    filter: brightness(1.1) contrast(1.04);
+  }
+  100% {
+    transform: translateY(0%) scale(1.0);
+    filter: brightness(1.0) contrast(1.0);
+  }
+}
+
+/* ==========================================================================
+   v10.0: РЕАЛИСТИЧНОЕ МОРЕ И БОЧКА «ТИЛЬ» С РУКОЙ + МЕНЮ ВСЕГДА ДОСТУПНО + ЛУТ В ДУЭЛИ
+   ========================================================================== */
+/* Кнопка меню ☰ доступна на всех стадиях — чтобы в любой момент приглашать друзей и слать билеты! */
+#btn-burger-menu {
+  display: inline-flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.burger-item-gold {
+  border-color: rgba(234, 179, 8, 0.72) !important;
+  background: rgba(234, 179, 8, 0.14) !important;
+  color: #fef08a !important;
+  font-weight: 700 !important;
+}
+
+/* Реалистичное Северное море + бочка с рукой и надписью «ТИЛЬ» */
+.ocean-photo-real {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center 55% !important;
+  image-rendering: auto !important;
+  filter: contrast(1.05) saturate(0.95);
+}
+
+.screen-ocean .ocean-beach-real {
+  left: auto !important;
+  right: clamp(4%, 9vw, 13%) !important;
+  bottom: 14% !important;
+  transform: none !important;
+  width: clamp(210px, 42vw, 390px) !important;
+  justify-content: flex-end !important;
+  z-index: 12 !important;
+}
+
+.screen-ocean .ocean-barrel-real {
+  width: 100% !important;
+}
+
+.screen-ocean .ocean-barrel-photo {
+  width: 100% !important;
+  height: auto !important;
+  image-rendering: auto !important;
+  filter: drop-shadow(0 18px 22px rgba(0, 0, 0, 0.78)) !important;
+}
+
+.screen-ocean .ocean-sky-quote-box {
+  background: rgba(10, 15, 22, 0.78) !important;
+  border: 1px solid rgba(234, 179, 8, 0.45) !important;
+  backdrop-filter: blur(4px);
+}
+
+.screen-ocean .ocean-quote-visible {
+  font-size: clamp(16px, 2.8vw, 24px) !important;
+  color: #f8fafc !important;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9);
+  margin: 4px 0 6px !important;
+}
+
+/* Бейдж лута прямо над бочками в дуэли (⭐ +300 / 🎟 БИЛЕТ / 💨 ПУСТО / ☠️ СКРИМЕР) */
+.duel-badge-loot {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(10, 12, 10, 0.92);
+  border: 1px solid rgba(234, 179, 8, 0.8);
+  color: #fde047;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.duel-barrel-badge.is-dead .duel-badge-loot {
+  border-color: #ef4444;
+  color: #fca5a5;
+}
+
+.duel-barrel-badge.is-empty .duel-badge-loot {
+  border-color: rgba(148, 163, 184, 0.7);
+  color: #cbd5e1;
+}
+
+/* Карточка правила Супер-приза за неделю до показа (10 декабря) + визуальный жетон баллов */
+.premiere-final-rule-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  margin: 8px 0;
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.55);
+  text-align: left;
+}
+
+.premiere-token-thumb {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 10px rgba(234, 179, 8, 0.4));
+}
+
+.premiere-final-rule-box strong {
+  display: block;
+  font-size: 11.5px;
+  color: #fde047;
+  margin-bottom: 2px;
+}
+
+.hud-slim-menu-btn {
+  width: 30px;
+  height: 28px;
+  min-width: 30px;
+  padding: 0;
+  margin-left: 6px;
+  border: 1px solid rgba(234, 179, 8, 0.5);
+  background: rgba(234, 179, 8, 0.12);
+  color: #fde047;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.premiere-final-rule-box small {
+  display: block;
+  font-size: 11px;
+  line-height: 1.3;
+  color: #e5e7eb;
+}
+
+/* ==========================================================================
+   v10.5: ЛЕТЯЩИЕ ЖИЗНИ/УДАРЫ/БАЛЛЫ В HUD + ШКАЛА РЕЙТИНГА СУПЕР-ПРИЗА (0%..100%)
+   ========================================================================== */
+.hud-rating-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 2px 7px !important;
+  background: rgba(234, 179, 8, 0.14);
+  border: 1px solid rgba(234, 179, 8, 0.45);
+  border-radius: 4px;
+}
+
+.hud-rating-label {
+  font-size: 11px;
+  color: #fde047;
+  white-space: nowrap;
+}
+
+.hud-rating-track {
+  display: inline-block;
+  width: clamp(46px, 9vw, 86px);
+  height: 7px;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.hud-rating-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #eab308 0%, #f97316 65%, #22c55e 100%);
+  transition: width 0.45s cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+
+.leader-rating-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 3px;
+}
+
+.leader-rating-bar-track {
+  flex: 1;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.leader-rating-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #eab308 0%, #f97316 60%, #22c55e 100%);
+  transition: width 0.45s ease;
+}
+
+/* Большие летящие награды (❤️ жизни, 🟨 удары, ⭐ баллы) из центра/бочки прямо в HUD! */
+.fly-reward-token {
+  position: fixed;
+  left: 50%;
+  top: 52%;
+  z-index: 9800;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-family: var(--font-display, Oswald, sans-serif);
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: #fff;
+  background: radial-gradient(circle at 30% 30%, rgba(239, 68, 68, 0.96), rgba(127, 29, 29, 0.95));
+  border: 2px solid #fef08a;
+  box-shadow: 0 0 32px rgba(239, 68, 68, 0.85), 0 10px 28px rgba(0, 0, 0, 0.75);
+  transform: translate(-50%, -50%) scale(0.3);
+  will-change: transform, opacity;
+}
+
+.fly-reward-token.is-strike {
+  background: radial-gradient(circle at 30% 30%, #facc15, #b45309);
+  color: #111;
+  box-shadow: 0 0 28px rgba(250, 204, 21, 0.85), 0 10px 26px rgba(0, 0, 0, 0.7);
+}
+
+.fly-reward-token.is-rating {
+  background: radial-gradient(circle at 30% 30%, #fde047, #d97706);
+  color: #111;
+  box-shadow: 0 0 30px rgba(234, 179, 8, 0.9), 0 10px 26px rgba(0, 0, 0, 0.7);
+}
+
+.is-hud-pop {
+  animation: hudTargetPop 0.36s cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+
+@keyframes hudTargetPop {
+  0% { transform: scale(1); filter: brightness(1); }
+  45% { transform: scale(1.38); filter: brightness(1.65); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+
+/* ==========================================================================
+   v11.0: ФИЗИЧЕСКИЙ ВЫХОД ПАЦАНА ИЗ 3D-БОЧКИ + 1-ЭКРАННЫЙ БИЛЕТ + ШКАЛА + ЭНЕРГИЯ ДУЭЛИ
+   ========================================================================== */
+.fly-reward-token.is-air {
+  background: radial-gradient(circle at 30% 30%, #38bdf8, #0369a1);
+  color: #fff;
+  box-shadow: 0 0 28px rgba(56, 189, 248, 0.85), 0 10px 26px rgba(0, 0, 0, 0.7);
+}
+
+/* Шкала Супер-приза всегда видна в шапке (рядом с жизнями и ТОП-10) */
+.top-rating-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 4px 8px !important;
+  border: 1px solid rgba(234, 179, 8, 0.45) !important;
+  background: rgba(234, 179, 8, 0.12) !important;
+  border-radius: 4px;
+}
+.top-rating-lbl {
+  font-size: 11px;
+  color: #fde047;
+  white-space: nowrap;
+}
+.top-rating-track {
+  display: inline-block;
+  width: clamp(38px, 6vw, 72px);
+  height: 7px;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.top-rating-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #eab308 0%, #f97316 65%, #22c55e 100%);
+  transition: width 0.55s cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+
+/* Анимированная шкала Супер-приза на экране «Бочка улетела другу» */
+.sent-rating-box {
+  width: 100%;
+  padding: 10px 12px;
+  margin: 6px 0 8px;
+  background: rgba(234, 179, 8, 0.1);
+  border: 1px solid rgba(234, 179, 8, 0.45);
+  border-radius: 6px;
+  text-align: left;
+}
+.sent-rating-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: #fde047;
+  margin-bottom: 5px;
+}
+.sent-rating-track {
+  width: 100%;
+  height: 11px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.45);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.sent-rating-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #facc15 0%, #f97316 60%, #22c55e 100%);
+  box-shadow: 0 0 12px rgba(250, 204, 21, 0.65);
+}
+.sent-rating-box small {
+  display: block;
+  font-size: 11.5px;
+  line-height: 1.32;
+  color: #e5e7eb;
+}
+
+/* Пацан ФИЗИЧЕСКИ вылезает вверх прямо из вскрытой 3D-бочки (виден цех за спиной!) */
+.fx-reveal.is-boy-climb {
+  background: rgba(4, 6, 5, 0.42) !important;
+  backdrop-filter: none !important;
+  z-index: 9500 !important;
+}
+.fx-reveal.is-boy-climb .fx-reveal-avatar {
+  position: fixed !important;
+  left: var(--barrel-x, 50%) !important;
+  top: var(--barrel-y, 56%) !important;
+  width: min(82vw, 390px) !important;
+  height: min(82vw, 390px) !important;
+  border-radius: 16px !important;
+  border: 3px solid rgba(234, 179, 8, 0.92) !important;
+  box-shadow: 0 28px 72px rgba(0, 0, 0, 0.94), 0 0 48px rgba(234, 179, 8, 0.42) !important;
+  transform: translate(-50%, 10%) scale(0.32);
+  opacity: 0;
+  animation: boyPhysicalClimbFromBarrel 1.75s cubic-bezier(0.16, 0.95, 0.24, 1) forwards !important;
+}
+.fx-reveal.is-boy-climb .fx-reveal-text {
+  position: fixed;
+  left: 50%;
+  bottom: clamp(24px, 7dvh, 64px);
+  transform: translateX(-50%);
+  width: min(92vw, 560px);
+  text-align: center;
+  background: rgba(10, 12, 10, 0.88);
+  border: 1px solid rgba(234, 179, 8, 0.72);
+  padding: 8px 14px;
+  border-radius: 6px;
+}
+@keyframes boyPhysicalClimbFromBarrel {
+  0% {
+    left: var(--barrel-x, 50%);
+    top: var(--barrel-y, 56%);
+    transform: translate(-50%, 24%) scale(0.28);
+    opacity: 0.2;
+    filter: brightness(0.45);
+  }
+  38% {
+    left: var(--barrel-x, 50%);
+    top: calc(var(--barrel-y, 56%) - 96px);
+    transform: translate(-50%, -52%) scale(0.76);
+    opacity: 1;
+    filter: brightness(1.12);
+  }
+  72% {
+    left: 50%;
+    top: 47%;
+    transform: translate(-50%, -50%) scale(1.06);
+    opacity: 1;
+    filter: brightness(1.04);
+  }
+  100% {
+    left: 50%;
+    top: 46%;
+    transform: translate(-50%, -50%) scale(1.0);
+    opacity: 1;
+    filter: brightness(1.0);
+  }
+}
+
+/* 100% одноэкранная посадка Уровня 3 «Билет в кино найден!» (без дубля портрета и обрезки кнопок!) */
+#screen-finale .finale-sheet.is-ticket-mode {
+  padding: 12px 14px !important;
+  gap: 5px !important;
+  max-height: calc(100dvh - 66px) !important;
+  overflow-y: auto !important;
+}
+#screen-finale .finale-sheet.is-ticket-mode .finale-barrel-reveal {
+  display: none !important;
+}
+#screen-finale .finale-sheet.is-ticket-mode .finale-message {
+  font-size: 13px !important;
+  margin: 2px 0 !important;
+  line-height: 1.25 !important;
+}
+#screen-finale .finale-sheet.is-ticket-mode .finale-next-step {
+  font-size: 11.5px !important;
+  margin: 0 !important;
+  line-height: 1.25 !important;
+}
+#screen-finale .finale-sheet.is-ticket-mode #finale-ticket-win-box {
+  padding: 8px 10px !important;
+  margin: 2px 0 !important;
+}
+#screen-finale .finale-sheet.is-ticket-mode .cinema-ticket-visual {
+  max-height: clamp(94px, 21dvh, 142px) !important;
+  width: auto !important;
+  max-width: 100% !important;
+  margin: 4px auto !important;
+  display: block !important;
+  object-fit: contain !important;
+}
+#screen-finale .finale-sheet.is-ticket-mode .golden-winner-contact {
+  font-size: 11.5px !important;
+  line-height: 1.25 !important;
+}
+#screen-finale .finale-sheet.is-ticket-mode .finale-cta-stack {
+  gap: 6px !important;
+  margin-top: 2px !important;
+}
+#screen-finale .finale-sheet.is-ticket-mode button.btn-primary,
+#screen-finale .finale-sheet.is-ticket-mode button.btn-secondary,
+#screen-finale .finale-sheet.is-ticket-mode button.btn-ghost {
+  padding: 9px 12px !important;
+  min-height: 38px !important;
+  font-size: 13px !important;
+}
+
+/* Компактная 2x3 сетка скримеров + пранк-звуков на экране «Упакуй друга» (всё на 1 экран!) */
+#pack-screamer-picker {
+  gap: 6px !important;
+}
+#pack-screamer-picker .screamer-card {
+  padding: 6px 8px !important;
+  min-height: 46px !important;
+}
+#pack-screamer-picker .screamer-card.is-prank {
+  border-color: rgba(250, 204, 21, 0.36);
+  background: rgba(250, 204, 21, 0.06);
+}
+#pack-screamer-picker .screamer-card.is-prank.is-active {
+  border-color: #facc15;
+  background: rgba(250, 204, 21, 0.18);
+}
+
+/* Список друзей, которые уже играют с тобой, в модалке отправки билета */
+.golden-fork-friends-section {
+  width: 100%;
+  margin: 6px 0 8px;
+  padding: 8px;
+  background: rgba(15, 19, 16, 0.72);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  border-radius: 6px;
+  text-align: left;
+}
+#golden-fork-friends-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+.golden-fork-card .cinema-ticket-visual {
+  max-height: clamp(86px, 17dvh, 128px) !important;
+  width: auto !important;
+  max-width: 100% !important;
+  margin: 4px auto 6px !important;
+  display: block !important;
+}
+
+/* Дуэль v11.0: Энергия, кнопка экономии и СТРОГИЙ z-index (бейджи НИКОГДА не перекрывают итог!) */
+.duel-barrel-badges {
+  z-index: 42 !important;
+}
+.duel-result-box {
+  z-index: 76 !important;
+}
+.duel-live-mini-bar {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex-wrap: nowrap !important;
+  white-space: nowrap !important;
+  max-width: calc(100vw - 16px) !important;
+  z-index: 80 !important;
+}
+.duel-live-mini-bar[hidden] {
+  display: none !important;
+}
+.duel-energy-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: rgba(14, 18, 16, 0.86);
+  border: 1px solid rgba(34, 197, 94, 0.55);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #bbf7d0;
+  pointer-events: none;
+  flex-shrink: 0;
+}
+.duel-energy-track {
+  width: 54px;
+  height: 7px;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.duel-energy-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #22c55e, #eab308);
+  transition: width 0.3s ease;
+}
+.duel-energy-fill.is-low {
+  background: linear-gradient(90deg, #ef4444, #f97316);
+}
+.btn-duel-skip-pill {
+  padding: 5px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(250, 204, 21, 0.82);
+  background: rgba(250, 204, 21, 0.22);
+  color: #fef08a;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  pointer-events: auto;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 4;
+}
+.btn-duel-skip-pill:hover {
+  background: rgba(250, 204, 21, 0.28);
+}
+
+/* ==========================================================================
+   v11.5: ДИЕГЕТИЧЕСКОЕ МЕНЮ-ЦЕХ НА НАСТОЯЩИХ СТОЯЩИХ 3D-БОЧКАХ (#screen-mode-a)
+   ========================================================================== */
+#screen-mode-a.mode-barrel-hub {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  pointer-events: none !important;
+  display: block !important;
+  padding: 0 !important;
+}
+#screen-mode-a.mode-barrel-hub[hidden] {
+  display: none !important;
+}
+.mode-barrel-top-strip {
+  position: fixed;
+  top: calc(56px + var(--safe-top));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(94vw, 680px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 12px;
+  background: rgba(10, 12, 10, 0.82);
+  border: 1px solid rgba(234, 179, 8, 0.45);
+  border-radius: 6px;
+  pointer-events: auto;
+  z-index: 32;
+}
+.mode-resume-btn {
+  flex-shrink: 0;
+  padding: 6px 12px !important;
+  min-height: 32px !important;
+  font-size: 12px !important;
+  white-space: nowrap;
+}
+.mode-barrel-labels {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 28;
+}
+.mode-barrel-pill {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 13px;
+  min-width: 146px;
+  max-width: 44vw;
+  background: rgba(11, 13, 11, 0.88);
+  border: 1.5px solid rgba(234, 179, 8, 0.72);
+  border-radius: 6px;
+  color: #fefce8;
+  cursor: pointer;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.78);
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+.mode-barrel-pill:hover,
+.mode-barrel-pill:active {
+  transform: translate(-50%, -56%) scale(1.04);
+  border-color: #fde047;
+  background: rgba(234, 179, 8, 0.22);
+}
+.mode-barrel-pill strong {
+  font-family: var(--font-display, Oswald, sans-serif);
+  font-size: 13.5px;
+  letter-spacing: 0.03em;
+  color: #fde047;
+  white-space: nowrap;
+}
+.mode-barrel-pill small {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: #e5e7eb;
+  white-space: nowrap;
+}
+.mode-barrel-pill.is-gold {
+  border-color: #facc15;
+  background: rgba(66, 42, 6, 0.92);
+  box-shadow: 0 0 24px rgba(250, 204, 21, 0.45), 0 10px 26px rgba(0, 0, 0, 0.82);
+}
+
+/* ==========================================================================
+   v11.6: ЗАБЛОКИРОВАННЫЕ КНОПКИ В МЕНЮ + ЧИСТАЯ МОДАЛКА ОТПРАВКИ БИЛЕТА
+   ========================================================================== */
+.burger-item.is-locked,
+.burger-item:disabled {
+  opacity: 0.42 !important;
+  cursor: not-allowed !important;
+  border-style: dashed !important;
+  border-color: rgba(148, 163, 184, 0.35) !important;
+  background: rgba(15, 18, 20, 0.45) !important;
+  color: #94a3b8 !important;
+  pointer-events: none !important;
+}
+
+#modal-golden-fork {
+  align-items: flex-start !important;
+  overflow-y: auto !important;
+  padding: max(14px, var(--safe-top)) 12px max(18px, var(--safe-bottom)) !important;
+}
+#modal-golden-fork .golden-fork-card {
+  margin: auto !important;
+  max-height: none !important;
+  padding: 14px !important;
+}
+
+.duel-lives-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: rgba(127, 29, 29, 0.72);
+  border: 1px solid rgba(248, 113, 113, 0.72);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 800;
+  color: #fecaca;
+  pointer-events: none;
+  flex-shrink: 0;
+}
+.duel-lives-pill.is-low {
+  background: rgba(185, 28, 28, 0.92);
+  border-color: #ef4444;
+  color: #fff;
+}

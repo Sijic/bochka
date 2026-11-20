@@ -3,6 +3,31 @@ import { resolveSiteAsset } from './env.js';
 
 export const BARREL_BATCH_CODES = ['01', '19', '97', '12', '17', '26', '33', '48', '71', '84', '92', '99'];
 
+// v11.0: Огромный пул мужских и женских кратких имён для случайной надписи краской на бочках
+export const BARREL_SPRAY_NAMES = [
+  'ЖЕНЯ', 'ЖЕКА', 'ГАРИК', 'САНЯ', 'МАКС', 'ДАША', 'КАТЯ', 'ЛЕНА', 'ОЛЯ', 'АНЯ',
+  'КОЛЯ', 'ВАНЯ', 'ДИМА', 'СЕРЁГА', 'АРТЁМ', 'ИЛЬЯ', 'ВЛАД', 'РОМА', 'ПАША', 'ТИМА',
+  'НАСТЯ', 'ПОЛИНА', 'ВИКА', 'КРИС', 'МАША', 'ЮЛЯ', 'ИРА', 'ТАНЯ', 'АЛИНА', 'ДИАНА',
+  'РУСЛАН', 'АРМАН', 'ЕРЛАН', 'МАДИНА', 'АЙГЕРИМ', 'ДАНИЯР', 'БАХА', 'НУРИК', 'АСЕМ', 'АЛИЯ',
+  'МИША', 'КОСТЯ', 'ДЕНИС', 'ОЛЕГ', 'АНТОН', 'ГЛЕБ', 'КИРИЛЛ', 'ВОВА', 'НИКИТА', 'ЕГОР',
+  'СТАС', 'ЛЁХА', 'СЛАВА', 'ТОЛЯ', 'ВИТЯ', 'ГЕНА', 'ЮРА', 'БОРИС', 'ЛИЗА', 'СОФА',
+  'ВАРЯ', 'ЛЕРА', 'КСЮША', 'ЯНА', 'МИЛА', 'ЕВА', 'САША', 'ВАЛЯ', 'РИТА', 'ЗОЯ',
+  'НАДЯ', 'ЛЮДА', 'СВЕТА', 'АРТУР', 'ТИМУР', 'ДАМИР', 'АЛИШЕР', 'САМАТ', 'АЙНУР', 'КАМИЛА',
+  'ЗАРИНА', 'ДИНАРА', 'ЖАННА', 'ОКСАНА', 'МАРИНА', 'ГАЛЯ', 'ВЕРА', 'НИНА', 'МАРАТ', 'РИНАТ',
+  'РУСТЕМ', 'ДАНИЛА', 'ФЕДЯ', 'СЁМА', 'ГРИША', 'ПЕТЯ', 'СТЁПА', 'ЛЁНЯ', 'ВАДИК', 'ЭДИК',
+  'ВИТАЛИК', 'АЛЕСЯ', 'УЛЬЯНА', 'ДАРИНА', 'КИРА', 'МАЙЯ', 'ЭЛИНА', 'АМИНА', 'РОСТИК', 'ЯРИК',
+  'СЕНЯ', 'НАТАША', 'АЛЁНА', 'ДИНА', 'ТОМА', 'ИГОРЬ', 'АНДРЮХА', 'БОГДАН', 'ТАРАС', 'АЗАТ',
+];
+
+function pickRandomBarrelNames(count = 12) {
+  const pool = BARREL_SPRAY_NAMES.slice();
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, count);
+}
+
 export class WorkshopScene {
   constructor(canvas, callbacks = {}) {
     this.canvas = canvas;
@@ -11,34 +36,37 @@ export class WorkshopScene {
     this.onCameraMove = callbacks.onCameraMove || (() => {});
     this.onCeilingDrip = callbacks.onCeilingDrip || (() => {});
 
-    this.width = window.innerWidth;
-    this.height = window.innerHeight;
+    this.width = Math.max(1, canvas.clientWidth || window.innerWidth);
+    this.height = Math.max(1, canvas.clientHeight || window.innerHeight);
     this.isPortrait = this.width / Math.max(1, this.height) < 0.88;
 
     const isMobileScreen = this.isPortrait || this.width <= 540;
+    this._isMobileScreen = isMobileScreen;
     try {
       this.renderer = new THREE.WebGLRenderer({
         canvas,
         antialias: false,
-        powerPreference: isMobileScreen ? 'default' : 'high-performance',
+        powerPreference: 'high-performance',
         alpha: false,
+        stencil: false,
         failIfMajorPerformanceCaveat: false,
       });
     } catch {
       this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
     }
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobileScreen ? 1.15 : 1.25));
-    this.renderer.setSize(this.width, this.height);
+    this._adaptiveDprCap = 1.05;
+    this._perfFrames = 0;
+    this._perfDtAccum = 0;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this._adaptiveDprCap));
+    this.renderer.setSize(this.width, this.height, false);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.14;
-    this.renderer.shadowMap.enabled = !isMobileScreen;
-    if (!isMobileScreen) {
-      this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    }
+    this.renderer.toneMappingExposure = 1.06;
+    // Выключаем тяжёлый PCF shadowMap — под каждой бочкой уже лежат мягкие запечённые контактные тени AO (0 мс GPU!)
+    this.renderer.shadowMap.enabled = false;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0b0907);
-    this.scene.fog = new THREE.FogExp2(0x0d0a08, 0.072);
+    this.scene.background = new THREE.Color(0x121612);
+    this.scene.fog = new THREE.FogExp2(0x121612, 0.036);
 
     this.camera = new THREE.PerspectiveCamera(45, this.width / Math.max(1, this.height), 0.1, 38);
     this.baseCamPos = new THREE.Vector3(0, 2.25, 6.1);
@@ -67,11 +95,27 @@ export class WorkshopScene {
 
     this.shakeIntensity = 0;
     this.flashIntensity = 0;
+    this.screamerStrobe = 0;
+    this.screamerStrobeColor = 0xdc2626;
+    this.cameraRoll = 0;
     this.sparks = [];
+    this.sparkInstanced = null;
+    this.sparkColorAttr = null;
+    this._sparkDummy = new THREE.Object3D();
+    this._sparkUp = new THREE.Vector3(0, 1, 0);
+    this._sparkDir = new THREE.Vector3();
+    this._sparkQuat = new THREE.Quaternion();
+    this.shockRings = [];
     this.rustPuffs = [];
     this.steamPuffs = [];
+    this.darkSmokePuffs = [];
+    this._missFxCounter = 0;
     this.onSteamBurst = null;
     this.onEmptyBarrelHit = null;
+    this.onBarrelEerie = callbacks.onBarrelEerie || null;
+    this.nextEerieCountdown = 4.5;
+    this._sharedLidMat = null;
+    this._patchTextures = [];
     this.waterDrops = [];
     this.floorRipples = [];
     this.nextDripCountdown = 0.85;
@@ -123,6 +167,7 @@ export class WorkshopScene {
     this._buildEnvironment();
     this._buildBarrels();
     this._buildParticles();
+    this._loadPatchAssetsAsync();
     this._applyResponsiveCameraAndLayout();
     this._bindEvents();
     this._animate();
@@ -138,8 +183,8 @@ export class WorkshopScene {
   setGoldenMode(enabled) {
     this.goldenMode = Boolean(enabled);
     if (this.mainSpot) {
-      this.mainSpot.color.setHex(this.goldenMode ? 0xffcf40 : 0xffe0a3);
-      this.mainSpot.intensity = this.goldenMode ? 88 : 72;
+      this.mainSpot.color.setHex(this.goldenMode ? 0xffcf40 : 0xffe4b0);
+      this.mainSpot.intensity = this.goldenMode ? 148 : (this._baseSpotIntensity || 132);
     }
     this.barrels.forEach((b) => {
       b.bodyMat.emissive.setHex(this.goldenMode ? 0x3b2804 : 0x000000);
@@ -164,14 +209,19 @@ export class WorkshopScene {
     this.diveProgress = 0;
     this.diveTargetIndex = targetIndex;
     this.shakeIntensity = 0;
+    this.screamerStrobe = 0;
+    this.cameraRoll = 0;
+    this.nextEerieCountdown = 3.8 + Math.random() * 2.4;
     this.interiorSpot.intensity = 0;
     this.setGoldenMode(golden);
 
     this.barrels.forEach((b, idx) => {
       b.group.visible = idx < this.activeBarrelCount;
+      b.menuLabel = null;
       b.struck = false;
       b.dentTarget = 0;
       b.dentUniforms.uDentDepth.value = 0;
+      if (b.dentUniforms.uDentHeat) b.dentUniforms.uDentHeat.value = 0;
       b.lidGroup.visible = true;
       b.lidGroup.position.set(0, 1.355, 0);
       b.lidGroup.rotation.set(0, idx * 0.9, 0);
@@ -185,7 +235,74 @@ export class WorkshopScene {
     if (portraitUrl) {
       this.setTargetPortrait(targetIndex, portraitUrl);
     }
+    this.randomizeBarrelNames();
     this._applyResponsiveCameraAndLayout();
+  }
+
+  randomizeBarrelNames() {
+    if (!this.barrels?.length) return;
+    const names = pickRandomBarrelNames(this.barrels.length);
+    const visCount = Math.min(this.barrels.length, Math.max(4, this.activeBarrelCount || 12));
+    for (let i = 0; i < this.barrels.length; i++) {
+      this.barrels[i].paintedName = names[i] || '';
+      this.barrels[i].nameTilt = ((Math.random() - 0.5) * 0.12);
+      if (i < visCount) {
+        this._paintBarrelCanvas(this.barrels[i]);
+      }
+    }
+  }
+
+  getBarrelPaintedName(index) {
+    return this.barrels?.[index]?.paintedName || '';
+  }
+
+  getAllBarrelPaintedNames() {
+    return (this.barrels || []).slice(0, this.activeBarrelCount || 12).map((b) => b.paintedName || '');
+  }
+
+  setBarrelPaintedName(index, customName) {
+    const b = this.barrels?.[index];
+    if (!b) return;
+    b.menuLabel = null;
+    b.paintedName = String(customName || '').trim().toUpperCase().slice(0, 12);
+    this._paintBarrelCanvas(b);
+  }
+
+  /**
+   * v11.5: Диегетическое меню-цех на 2 или 3 настоящих стоящих 3D-бочках!
+   * Надписи краской рисуются прямо на корпусе бочек, выбор — кликом прямо по бочке!
+   */
+  setHubBarrelMenu(items = []) {
+    const count = Math.max(1, Math.min(3, items.length || 1));
+    this.activeBarrelCount = count;
+    this.diving = false;
+    this.diveProgress = 0;
+    this.shakeIntensity = 0;
+    this.interiorSpot.intensity = 0;
+    this.setGoldenMode(false);
+
+    this.barrels.forEach((b, idx) => {
+      const visible = idx < count;
+      b.group.visible = visible;
+      b.struck = false;
+      b.dentTarget = 0;
+      b.dentUniforms.uDentDepth.value = 0;
+      if (b.dentUniforms.uDentHeat) b.dentUniforms.uDentHeat.value = 0;
+      b.lidGroup.visible = true;
+      b.lidGroup.position.set(0, 1.355, 0);
+      b.lidGroup.rotation.set(0, idx * 0.6, 0);
+      b.lidVel.set(0, 0, 0);
+      b.lidSpin.set(0, 0, 0);
+      b.lidFlying = false;
+      b.portraitMesh.visible = false;
+      b.ringMesh.material.opacity = visible ? 0.34 : 0;
+      b.menuLabel = visible ? items[idx] : null;
+      if (visible) {
+        this._paintBarrelCanvas(b);
+      }
+    });
+    this._applyResponsiveCameraAndLayout();
+    this.setInteractive(true);
   }
 
   setTargetPortrait(targetIndex, portraitUrl) {
@@ -247,19 +364,24 @@ export class WorkshopScene {
     const localHit = b.bodyMesh.worldToLocal(hitWorld.clone());
     b.dentUniforms.uDentPos.value.copy(localHit);
     b.dentTarget = 1.0;
+    if (b.dentUniforms.uDentHeat) b.dentUniforms.uDentHeat.value = 1.0;
 
-    this.shakeIntensity = 0.22;
+    this.shakeIntensity = Math.max(this.shakeIntensity || 0, 0.28);
+    this.cameraRoll = (Math.random() > 0.5 ? 1 : -1) * 0.038;
+    this.strikeLight.color.setHex(0xffb732);
     this.strikeLight.position.copy(hitWorld).add(new THREE.Vector3(0, 0.18, 0.32));
-    this.flashIntensity = 9.5;
+    this.flashIntensity = 13.5;
 
-    this._spawnSparks(hitWorld, 24);
-    this._impulseChains(1.0);
+    this._spawnSparks(hitWorld, 38);
+    this._spawnShockRing(hitWorld, 0xffc84d);
+    this._impulseChains(1.15);
   }
 
   /**
-   * Срывает крышку ПУСТОЙ бочки при промахе (вылетает облако ржавой пыли, бочка остаётся открытой)
+   * Срывает крышку ПУСТОЙ бочки при промахе:
+   * fxMode = 'steam' (столб горячего белого пара) | 'smoke' (густой чёрно-ржавый масляный дым) | 'auto' (чередование)
    */
-  triggerEmptyBarrelOpen(index) {
+  triggerEmptyBarrelOpen(index, fxMode = 'auto') {
     const b = this.barrels[index];
     if (!b) return;
     b.struck = true;
@@ -272,17 +394,32 @@ export class WorkshopScene {
       b.lidSpin.set(-5.2, sideDir * 3.4, 2.6);
     }
 
+    const mode = fxMode === 'steam' || fxMode === 'smoke'
+      ? fxMode
+      : ((this._missFxCounter++) % 2 === 0 ? 'steam' : 'smoke');
+
     const s = b.group.scale.y || 1;
     const rimWorld = b.group.position.clone().add(new THREE.Vector3(0, 1.36 * s, 0));
-    this._spawnRustDust(rimWorld, 16);
-    // Промах по пустой бочке: резкий пшик белого пара из-под пробитой крышки + опрокидывающее покачивание + вмятина
-    this._spawnSteamPuff(rimWorld.clone().add(new THREE.Vector3(0, 0.05, 0.12)), 10);
+
+    if (mode === 'steam') {
+      // Густой столб горячего белого пара под давлением из вскрытой бочки
+      this._spawnSteamPuff(rimWorld.clone().add(new THREE.Vector3(0, 0.04, 0.08)), 22);
+      this._spawnRustDust(rimWorld, 6);
+      try { this.onSteamBurst?.(); } catch { /* ignore */ }
+    } else {
+      // Тяжёлый чёрно-масляный дым и ржавая пыль вываливаются из пустой бочки
+      this._spawnDarkSmoke(rimWorld.clone().add(new THREE.Vector3(0, 0.05, 0.08)), 24);
+      this._spawnRustDust(rimWorld, 16);
+    }
+
     b.wobble = 1;
     b.wobbleDir = (b.group.position.x >= 0 ? -1 : 1);
     b.dentTarget = 1.0;
     this.shakeIntensity = Math.max(this.shakeIntensity || 0, 0.26);
     this._impulseChains(1.25);
-    try { this.onEmptyBarrelHit?.(index); } catch { /* ignore */ }
+    if (this.renderer?.shadowMap) this.renderer.shadowMap.needsUpdate = true;
+    try { this.onEmptyBarrelHit?.(index, mode); } catch { /* ignore */ }
+    return mode;
   }
 
   /**
@@ -310,11 +447,33 @@ export class WorkshopScene {
   }
 
   /**
-   * Резкий удар тряски камеры при срабатывании 0.4-секундного фирменного скримера
+   * Резкий удар тряски камеры + аварийный стробоскоп цеха при скримере
    */
-  triggerScreamerShake(intensity = 0.36) {
+  triggerScreamerShake(intensity = 0.36, strobeColorHex = 0xdc2626) {
     this.shakeIntensity = Math.max(this.shakeIntensity || 0, intensity);
-    this._impulseChains(1.4);
+    this.screamerStrobe = 1.0;
+    this.screamerStrobeColor = strobeColorHex;
+    this.cameraRoll = (Math.random() > 0.5 ? 1 : -1) * Math.min(0.14, intensity * 0.26);
+    this._impulseChains(1.75);
+  }
+
+  /**
+   * v8.1: «Живая» пугающая дрожь случайной нетронутой бочки в темноте (синхронизируется со звуком изнутри)
+   */
+  triggerBarrelEerieFX(index, kind = 'knock_urgent') {
+    const b = this.barrels[index];
+    if (!b || !b.group.visible || b.struck) return;
+    b.wobble = Math.max(b.wobble || 0, kind === 'knock_urgent' || kind === 'latch_rattle' ? 0.52 : 0.34);
+    b.wobbleDir = Math.random() > 0.5 ? 1 : -1;
+    b.lidRattle = Math.max(b.lidRattle || 0, 0.52);
+    const s = b.group.scale.y || 1;
+    const rimWorld = b.group.position.clone().add(new THREE.Vector3(0, 1.35 * s, 0.18));
+    if (kind === 'wet_slosh' || kind === 'whisper_groan') {
+      this._spawnSteamPuff(rimWorld, 4);
+    } else {
+      this._spawnRustDust(rimWorld, 5);
+    }
+    this._impulseChains(0.35);
   }
 
   /**
@@ -335,7 +494,8 @@ export class WorkshopScene {
     const s = b.group.scale.y || 1;
     this.shakeIntensity = 0.28;
     const rimWorld = b.group.position.clone().add(new THREE.Vector3(0, 1.38 * s, 0));
-    this._spawnSparks(rimWorld, 32);
+    this._spawnSparks(rimWorld, 46);
+    this._spawnShockRing(rimWorld, 0xffd166);
     this._spawnRustDust(rimWorld, 12);
     this._impulseChains(1.6);
 
@@ -360,127 +520,146 @@ export class WorkshopScene {
   }
 
   _buildLighting() {
-    const pmrem = new THREE.PMREMGenerator(this.renderer);
-    const envScene = new THREE.Scene();
-    envScene.background = new THREE.Color(0x14181c);
-
-    const ceilStrip = new THREE.Mesh(
-      new THREE.PlaneGeometry(10, 4),
-      new THREE.MeshBasicMaterial({ color: 0xffe2a8, side: THREE.DoubleSide })
-    );
-    ceilStrip.position.set(0, 6, 2);
-    ceilStrip.rotation.x = Math.PI * 0.5;
-    envScene.add(ceilStrip);
-
-    const leftStrip = new THREE.Mesh(
-      new THREE.PlaneGeometry(6, 5),
-      new THREE.MeshBasicMaterial({ color: 0x6b9ac4, side: THREE.DoubleSide })
-    );
-    leftStrip.position.set(-7, 2.5, 1);
-    leftStrip.rotation.y = Math.PI * 0.5;
-    envScene.add(leftStrip);
-
-    const rightRustStrip = new THREE.Mesh(
-      new THREE.PlaneGeometry(6, 4),
-      new THREE.MeshBasicMaterial({ color: 0xc2611b, side: THREE.DoubleSide })
-    );
-    rightRustStrip.position.set(7, 2.0, 1);
-    rightRustStrip.rotation.y = -Math.PI * 0.5;
-    envScene.add(rightRustStrip);
-
-    this.scene.environment = pmrem.fromScene(envScene, 0.04).texture;
-    pmrem.dispose();
-
-    const hemi = new THREE.HemisphereLight(0xa3b3c2, 0x1e1610, 0.72);
+    // Без тяжёлого PMREM cubemap на каждом пикселе — 3 быстрых кино-источника света в тональности фильма «БОЧКА»
+    const hemi = new THREE.HemisphereLight(0xd4dec0, 0x22251d, 0.92);
     this.hemiLight = hemi;
     this.scene.add(hemi);
 
-    // Главный верхний цеховой прожектор
-    this.mainSpot = new THREE.SpotLight(0xffcf86, 78, 24, Math.PI * 0.40, 0.56, 1.18);
-    this.mainSpot.position.set(0, 6.6, 1.35);
-    this.mainSpot.target.position.set(0, 0.1, -0.55);
-    this.mainSpot.castShadow = true;
-    this.mainSpot.shadow.mapSize.set(512, 512);
-    this.mainSpot.shadow.bias = -0.0005;
+    this.mainSpot = new THREE.SpotLight(0xe6e4cc, 96, 26, Math.PI * 0.44, 0.85, 1.12);
+    this.mainSpot.position.set(0, 6.2, 1.35);
+    this.mainSpot.target.position.set(0, 0.0, -0.55);
+    this.mainSpot.castShadow = false;
+    this._baseSpotIntensity = 96;
     this.scene.add(this.mainSpot, this.mainSpot.target);
 
-    const frontKey = new THREE.DirectionalLight(0xeadbc8, 1.05);
-    frontKey.position.set(0.4, 2.6, 5.4);
-    this.frontKeyLight = frontKey;
-    this.scene.add(frontKey);
-
-    // Холодный контровой свет из двухъярусных решётчатых окон позади маховика
-    const windowBacklight = new THREE.DirectionalLight(0x6ca0bc, 1.65);
-    windowBacklight.position.set(-1.5, 5.2, -5.5);
+    // Мягкий дымный контровой дневной свет из огромных заводских окон фильма
+    const windowBacklight = new THREE.DirectionalLight(0xdce6c4, 1.95);
+    windowBacklight.position.set(-1.4, 5.0, -5.8);
     this.windowBacklight = windowBacklight;
     this.scene.add(windowBacklight);
 
-    const warmFill = new THREE.PointLight(0xd95b12, 3.5, 11);
-    warmFill.position.set(3.4, 1.6, 1.8);
+    // Аварийный свет (активен только в Зоне 3 — 0 нагрузки в обычных уровнях)
+    const warmFill = new THREE.PointLight(0xdc2626, 0, 11);
+    warmFill.position.set(-3.2, 2.8, -1.2);
     this.warmFillLight = warmFill;
     this.scene.add(warmFill);
 
     this.strikeLight = new THREE.PointLight(0xffb732, 0, 6.5);
     this.scene.add(this.strikeLight);
 
-    this.interiorSpot = new THREE.SpotLight(0xdbeafe, 0, 6, Math.PI * 0.22, 0.45, 1.1);
+    this.interiorSpot = new THREE.SpotLight(0xe6edd8, 0, 6, Math.PI * 0.22, 0.45, 1.1);
     this.scene.add(this.interiorSpot, this.interiorSpot.target);
   }
 
   _buildEnvironment() {
-    // 1. Мокрый бетонный пол с зеркальными лужами
-    const floorMaps = this._createWetConcreteTextures();
+    // 1. Быстрый матовый пыльный бетонный пол (MeshLambertMaterial = в 6× быстрее PBR на ноутбуках и телефонах!)
     const floorGeo = new THREE.PlaneGeometry(24, 20);
-    const floorMat = new THREE.MeshStandardMaterial({
-      map: floorMaps.color,
-      roughnessMap: floorMaps.roughness,
-      bumpMap: floorMaps.roughness,
-      bumpScale: 0.018,
-      metalness: 0.2,
-      roughness: 0.62,
+    const floorMat = new THREE.MeshLambertMaterial({
+      color: 0x5c5b4c,
     });
+    this._floorMat = floorMat;
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI * 0.5;
-    floor.receiveShadow = true;
     this.scene.add(floor);
 
-    // 2. Дальняя заводская стена в тумане
-    const wallTex = this._createBackWallWindowShadowTexture();
-    const wallGeo = new THREE.PlaneGeometry(22, 10);
-    const wallMat = new THREE.MeshStandardMaterial({
-      map: wallTex,
-      roughness: 0.94,
-      metalness: 0.06,
+    // 2. Реальный кино-цех фильма «БОЧКА» на заднем плане (огромные заводские окна, мостик, решётка, дымка)
+    // MeshBasicMaterial с fog=true = 0 затрат PBR-шейдера и 100% совпадение с палитрой фильма!
+    const wallGeo = new THREE.PlaneGeometry(15.2, 6.8);
+    const wallMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      fog: true,
     });
+    this._backWallMat = wallMat;
     const backWall = new THREE.Mesh(wallGeo, wallMat);
-    backWall.position.set(0, 4.2, -5.8);
+    backWall.position.set(0, 1.95, -5.2);
     this.scene.add(backWall);
 
-    // 3. ДВУХЪЯРУСНЫЕ РЕШЁТЧАТЫЕ ПРОМЫШЛЕННЫЕ ОКНА ПОД ПОТОЛКОМ (контровой лунный свет)
-    this._buildTwoTierBarredWindows();
+    // 2б. Лёгкие боковые стены, потолочные балки и качающаяся заводская лампа
+    this._buildWorkshopArchitectureFX();
 
-    // 4. ОГРОМНОЕ ЧУГУННОЕ КОЛЕСО-МАХОВИК В КОНТРОВОМ ТУМАНЕ НА ДАЛЬНЕМ ПЛАНЕ
-    this._buildGiantFlywheel();
-
-    // 5. КВАДРАТНЫЕ КОЛОННЫ С ОБЛУПИВШЕЙСЯ СЕРО-ЗЕЛЁНОЙ КАФЕЛЬНОЙ ПЛИТКОЙ + РЖАВЫЕ ЦЕПИ
+    // 3. Советские квадратные колонны с облупившейся белой/серо-зелёной плиткой (как в кадре 01:11:05:05) + цепи
     this._buildTiledColumnsAndChains();
     this._buildFilmWallClock();
     this._buildFactoryZoneProps();
 
-    // 6. Объёмный конус верхнего прожектора в сыром тумане
-    const coneGeo = new THREE.ConeGeometry(4.2, 6.6, 32, 1, true);
+    // 4. Диагональный объёмный пыльный луч из заводских окон (атмосфера кадра factory_hall.jpg)
+    const coneGeo = new THREE.ConeGeometry(4.4, 7.2, 18, 1, true);
     const coneMat = new THREE.MeshBasicMaterial({
-      color: 0xfde68a,
+      color: 0xdce6c6,
       transparent: true,
-      opacity: 0.026,
+      opacity: 0.038,
       side: THREE.DoubleSide,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     });
     const lightCone = new THREE.Mesh(coneGeo, coneMat);
-    lightCone.position.set(0, 3.25, -0.25);
+    lightCone.position.set(-0.6, 3.35, -0.6);
+    lightCone.rotation.z = -0.22;
     this.lightConeMesh = lightCone;
     this.scene.add(lightCone);
+  }
+
+  _buildWorkshopArchitectureFX() {
+    // 1. Быстрые матовые боковые стены цеха (MeshLambertMaterial — без лишней нагрузки на GPU)
+    const sideMat = new THREE.MeshLambertMaterial({ color: 0x1b1e19 });
+    this._ironSideMat = sideMat;
+    const sideGeo = new THREE.PlaneGeometry(16, 8.5);
+    const leftWall = new THREE.Mesh(sideGeo, sideMat);
+    leftWall.position.set(-7.2, 3.8, -0.5);
+    leftWall.rotation.y = Math.PI * 0.46;
+    const rightWall = new THREE.Mesh(sideGeo, sideMat);
+    rightWall.position.set(7.2, 3.8, -0.5);
+    rightWall.rotation.y = -Math.PI * 0.46;
+    this.scene.add(leftWall, rightWall);
+
+    // 2. Верхние стальные двутавровые балки и трубы под потолком
+    const beamMat = new THREE.MeshLambertMaterial({ color: 0x161918 });
+    for (const bz of [-3.6, -1.1, 1.4]) {
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(15.5, 0.28, 0.24), beamMat);
+      beam.position.set(0, 5.55, bz);
+      this.scene.add(beam);
+    }
+    const pipeGeo = new THREE.CylinderGeometry(0.11, 0.11, 15.5, 8);
+    pipeGeo.rotateZ(Math.PI * 0.5);
+    const pipeMat = new THREE.MeshLambertMaterial({ color: 0x2c241b });
+    const pipe1 = new THREE.Mesh(pipeGeo, pipeMat);
+    pipe1.position.set(0, 5.18, -2.4);
+    const pipe2 = new THREE.Mesh(pipeGeo, pipeMat);
+    pipe2.position.set(0, 5.26, -0.2);
+    this.scene.add(pipe1, pipe2);
+
+    // 3. Качающаяся индустриальная лампа-клетка над бочками (отбрасывает живой свет в темноте)
+    const pivot = new THREE.Group();
+    pivot.position.set(0, 5.55, 0.35);
+    const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 1.15, 6), beamMat);
+    cord.position.y = -0.58;
+    pivot.add(cord);
+
+    const shade = new THREE.Mesh(
+      new THREE.ConeGeometry(0.42, 0.26, 18, 1, true),
+      new THREE.MeshStandardMaterial({ color: 0x1b2026, metalness: 0.82, roughness: 0.42, side: THREE.DoubleSide })
+    );
+    shade.position.y = -1.24;
+    pivot.add(shade);
+
+    const bulbMat = new THREE.MeshStandardMaterial({
+      color: 0xfff3cc,
+      emissive: 0xffc864,
+      emissiveIntensity: 3.4,
+      roughness: 0.2,
+    });
+    this.lampBulbMat = bulbMat;
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.095, 10, 10), bulbMat);
+    bulb.position.y = -1.32;
+    pivot.add(bulb);
+
+    const cageRing = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.01, 6, 16), beamMat);
+    cageRing.rotation.x = Math.PI * 0.5;
+    cageRing.position.y = -1.38;
+    pivot.add(cageRing);
+
+    this.swingLampGroup = pivot;
+    this.scene.add(pivot);
   }
 
   _buildTwoTierBarredWindows() {
@@ -610,39 +789,29 @@ export class WorkshopScene {
   _buildTiledColumnsAndChains() {
     const tileMaps = this._createPeelingTileColumnTextures();
     const colGeo = new THREE.BoxGeometry(0.92, 6.6, 0.92);
-    const colMat = new THREE.MeshStandardMaterial({
+    const colMat = new THREE.MeshLambertMaterial({
       map: tileMaps.color,
-      roughnessMap: tileMaps.roughness,
-      bumpMap: tileMaps.bump,
-      bumpScale: 0.032,
-      metalness: 0.08,
-      roughness: 0.55,
+      color: 0xd0d4c8,
     });
+    this._colMat = colMat;
 
     const plinthGeo = new THREE.BoxGeometry(1.04, 0.42, 1.04);
-    const plinthMat = new THREE.MeshStandardMaterial({
-      color: 0x181b1e,
-      roughness: 0.88,
-      metalness: 0.12,
-    });
+    const plinthMat = new THREE.MeshLambertMaterial({ color: 0x1a1d1b });
 
     const createColumnWithChains = (side) => {
       const wrap = new THREE.Group();
       const shaft = new THREE.Mesh(colGeo, colMat);
       shaft.position.y = 3.3;
-      shaft.castShadow = true;
-      shaft.receiveShadow = true;
       wrap.add(shaft);
 
       const plinth = new THREE.Mesh(plinthGeo, plinthMat);
       plinth.position.y = 0.21;
-      plinth.receiveShadow = true;
       wrap.add(plinth);
 
       // Стальной хомут на колонне + две свисающие ржавые цепи разной длины
       const collar = new THREE.Mesh(
         new THREE.BoxGeometry(0.98, 0.12, 0.98),
-        new THREE.MeshStandardMaterial({ color: 0x3b2314, metalness: 0.78, roughness: 0.58 })
+        new THREE.MeshLambertMaterial({ color: 0x3b2618 })
       );
       collar.position.y = 3.55;
       wrap.add(collar);
@@ -664,24 +833,24 @@ export class WorkshopScene {
     const pivot = new THREE.Group();
     pivot.position.set(offsetX, topY, offsetZ);
 
-    const rustMat = new THREE.MeshStandardMaterial({
-      color: 0x4b2815,
-      metalness: 0.76,
-      roughness: 0.62,
-    });
+    const rustMat = new THREE.MeshLambertMaterial({ color: 0x4b2a17 });
 
-    const linkGeo = new THREE.TorusGeometry(0.052, 0.015, 6, 12);
+    // 1 InstancedMesh вместо 13 отдельных draw calls на цепь (минус 44 draw calls на сцене!)
+    const linkGeo = new THREE.TorusGeometry(0.052, 0.015, 5, 10);
     linkGeo.scale(0.72, 1.35, 1.0);
-
+    const linksInst = new THREE.InstancedMesh(linkGeo, rustMat, linksCount);
+    const dObj = new THREE.Object3D();
     for (let i = 0; i < linksCount; i++) {
-      const link = new THREE.Mesh(linkGeo, rustMat);
-      link.position.y = -0.09 - i * 0.115;
-      link.rotation.y = (i % 2) * (Math.PI * 0.5);
-      pivot.add(link);
+      dObj.position.set(0, -0.09 - i * 0.115, 0);
+      dObj.rotation.set(0, (i % 2) * (Math.PI * 0.5), 0);
+      dObj.updateMatrix();
+      linksInst.setMatrixAt(i, dObj.matrix);
     }
+    linksInst.instanceMatrix.needsUpdate = true;
+    pivot.add(linksInst);
 
     // Тяжёлый стальной крюк на конце цепи
-    const hook = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.018, 6, 12, Math.PI * 1.45), rustMat);
+    const hook = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.018, 5, 10, Math.PI * 1.45), rustMat);
     hook.position.y = -0.12 - linksCount * 0.115;
     hook.rotation.z = Math.PI * 0.85;
     pivot.add(hook);
@@ -719,13 +888,22 @@ export class WorkshopScene {
     const posAttr = sharedBodyGeo.attributes.position;
     const uvAttr = sharedBodyGeo.attributes.uv;
     for (let k = 0; k < posAttr.count; k++) {
-      const rx = Math.hypot(posAttr.getX(k), posAttr.getZ(k));
       const py = posAttr.getY(k);
-      const vLinear = rx > 0.40 ? THREE.MathUtils.clamp(py / 1.38, 0, 1) : 0.02;
+      const vLinear = THREE.MathUtils.clamp(py / 1.38, 0, 1);
       uvAttr.setY(k, vLinear);
     }
     uvAttr.needsUpdate = true;
     sharedBodyGeo.computeVertexNormals();
+
+    // v11.0: Реалистичная внутренняя стальная обечайка бочки (тёмные ржавые рёбра внутри, 0 растянутых лучей!)
+    const sharedInnerWallGeo = new THREE.CylinderGeometry(0.386, 0.383, 1.12, 28, 1, true);
+    const sharedInnerWallTex = this._createInnerBarrelWallTexture();
+    const sharedInnerWallMat = new THREE.MeshStandardMaterial({
+      map: sharedInnerWallTex,
+      side: THREE.BackSide,
+      roughness: 0.92,
+      metalness: 0.25,
+    });
 
     const lidPlateGeo = new THREE.CylinderGeometry(0.402, 0.402, 0.022, 24);
     const lidRimGeo = new THREE.TorusGeometry(0.408, 0.014, 8, 24);
@@ -752,6 +930,20 @@ export class WorkshopScene {
     this.cachedPortraitTex = defaultPortraitTex;
     const steamVeilGeo = new THREE.CylinderGeometry(0.452, 0.452, 0.56, 20, 1, true);
     const sharedSmokeTex = this._createSoftSmokeSpriteTexture();
+    // Контактная тень AO под основанием каждой бочки, чтобы бочки ощущались тяжёлыми на мокром полу
+    const aoCanvas = document.createElement('canvas');
+    aoCanvas.width = 128; aoCanvas.height = 128;
+    const aoCtx = aoCanvas.getContext('2d');
+    const aoGrad = aoCtx.createRadialGradient(64, 64, 18, 64, 64, 62);
+    aoGrad.addColorStop(0, 'rgba(0,0,0,0.88)');
+    aoGrad.addColorStop(0.62, 'rgba(0,0,0,0.52)');
+    aoGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    aoCtx.fillStyle = aoGrad;
+    aoCtx.fillRect(0, 0, 128, 128);
+    const aoTex = new THREE.CanvasTexture(aoCanvas);
+    const aoGeo = new THREE.PlaneGeometry(1.38, 1.38);
+    aoGeo.rotateX(-Math.PI * 0.5);
+    const aoMat = new THREE.MeshBasicMaterial({ map: aoTex, transparent: true, depthWrite: false, opacity: 0.92 });
     const sharedSurfaceMaps = this._createSharedBarrelSurfaceMaps();
     const sharedLidMat = new THREE.MeshStandardMaterial({
       color: 0x26292e,
@@ -759,7 +951,9 @@ export class WorkshopScene {
       roughness: 0.48,
       bumpMap: sharedSurfaceMaps.bump,
       bumpScale: 0.012,
+      envMapIntensity: 1.15,
     });
+    this._sharedLidMat = sharedLidMat;
 
     for (let i = 0; i < 12; i++) {
       const group = new THREE.Group();
@@ -769,22 +963,23 @@ export class WorkshopScene {
       const dentUniforms = {
         uDentPos: { value: new THREE.Vector3(0, 0.8, 0.42) },
         uDentDepth: { value: 0.0 },
+        uDentHeat: { value: 0.0 },
       };
 
       const bodyMat = new THREE.MeshStandardMaterial({
         map: maps.color,
         roughnessMap: maps.roughness,
         bumpMap: maps.bump,
-        bumpScale: 0.026,
-        metalness: 0.72,
-        roughness: 0.46,
-        envMapIntensity: 0.95,
+        bumpScale: 0.024,
+        metalness: 0.32,
+        roughness: 0.66,
       });
-      bodyMat.customProgramCacheKey = () => 'barrel-dent-v1';
+      bodyMat.customProgramCacheKey = () => 'barrel-dent-v2';
 
       bodyMat.onBeforeCompile = (shader) => {
         shader.uniforms.uDentPos = dentUniforms.uDentPos;
         shader.uniforms.uDentDepth = dentUniforms.uDentDepth;
+        shader.uniforms.uDentHeat = dentUniforms.uDentHeat;
 
         shader.vertexShader =
           `uniform vec3 uDentPos;\nuniform float uDentDepth;\nvarying float vDentMask;\n` +
@@ -799,10 +994,11 @@ export class WorkshopScene {
           );
 
         shader.fragmentShader =
-          `varying float vDentMask;\n` +
+          `uniform float uDentHeat;\nvarying float vDentMask;\n` +
           shader.fragmentShader.replace(
             '#include <dithering_fragment>',
             `gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.75, 0.62, 0.42), vDentMask * 0.38);
+             gl_FragColor.rgb += vec3(1.55, 0.56, 0.08) * vDentMask * uDentHeat;
              #include <dithering_fragment>`
           );
       };
@@ -812,6 +1008,10 @@ export class WorkshopScene {
       bodyMesh.receiveShadow = true;
       bodyMesh.userData.barrelIndex = i;
       group.add(bodyMesh);
+
+      const innerWallMesh = new THREE.Mesh(sharedInnerWallGeo, sharedInnerWallMat);
+      innerWallMesh.position.set(0, 0.79, 0);
+      group.add(innerWallMesh);
 
       const lidGroup = new THREE.Group();
       lidGroup.position.set(0, 1.355, 0);
@@ -832,6 +1032,13 @@ export class WorkshopScene {
       lidGroup.add(lidPlate, lidRim, bung1, bung2);
       group.add(lidGroup);
 
+      const emptyBottomMat = new THREE.MeshBasicMaterial({
+        color: 0x1a1510,
+      });
+      const emptyBottomMesh = new THREE.Mesh(portraitGeo, emptyBottomMat);
+      emptyBottomMesh.position.set(0, 0.595, 0);
+      group.add(emptyBottomMesh);
+
       const portraitMat = new THREE.MeshBasicMaterial({
         map: defaultPortraitTex,
         toneMapped: false,
@@ -850,6 +1057,10 @@ export class WorkshopScene {
       const ringMesh = new THREE.Mesh(ringGeo, ringMat);
       ringMesh.position.y = 0.012;
       group.add(ringMesh);
+
+      const aoDisc = new THREE.Mesh(aoGeo, aoMat);
+      aoDisc.position.y = 0.008;
+      group.add(aoDisc);
 
       const proxyMesh = new THREE.Mesh(proxyHitGeo, proxyHitMat);
       proxyMesh.position.y = 0.72;
@@ -874,6 +1085,12 @@ export class WorkshopScene {
 
       this.barrels.push({
         index: i,
+        batchCode,
+        paintedName: '',
+        nameTilt: ((i % 3) - 1) * 0.04,
+        colorCanvas: maps.canvas,
+        colorCtx: maps.ctx,
+        colorTex: maps.color,
         group,
         bodyMesh,
         bodyMat,
@@ -883,6 +1100,7 @@ export class WorkshopScene {
         steamVeilMesh,
         steamVeilMat,
         portraitMat,
+        emptyBottomMat,
         dentUniforms,
         dentTarget: 0,
         struck: false,
@@ -891,6 +1109,7 @@ export class WorkshopScene {
         lidSpin: new THREE.Vector3(),
       });
     }
+    this.randomizeBarrelNames();
   }
 
   _buildParticles() {
@@ -914,14 +1133,104 @@ export class WorkshopScene {
     this.dustPoints = new THREE.Points(dustGeo, dustMat);
     this.scene.add(this.dustPoints);
 
-    // 2. Пул искр удара
-    const sparkGeo = new THREE.SphereGeometry(0.018, 4, 4);
-    const sparkMat = new THREE.MeshBasicMaterial({ color: 0xffc83d });
-    for (let i = 0; i < 36; i++) {
-      const m = new THREE.Mesh(sparkGeo, sparkMat);
-      m.visible = false;
-      this.scene.add(m);
-      this.sparks.push({ mesh: m, vel: new THREE.Vector3(), life: 0 });
+    // 2. v8.1: 1-draw-call GPU-шейдер раскалённых искр удара ломом (96 вытянутых полос с остыванием)
+    const SPARK_COUNT = 96;
+    const planeA = new THREE.PlaneGeometry(0.028, 0.24);
+    const planeB = new THREE.PlaneGeometry(0.028, 0.24);
+    planeB.rotateY(Math.PI * 0.5);
+    const posA = planeA.attributes.position.array;
+    const posB = planeB.attributes.position.array;
+    const uvA = planeA.attributes.uv.array;
+    const uvB = planeB.attributes.uv.array;
+    const idxA = planeA.index.array;
+    const idxB = planeB.index.array;
+    const mergedPos = new Float32Array(posA.length + posB.length);
+    mergedPos.set(posA, 0);
+    mergedPos.set(posB, posA.length);
+    const mergedUv = new Float32Array(uvA.length + uvB.length);
+    mergedUv.set(uvA, 0);
+    mergedUv.set(uvB, uvA.length);
+    const vCountA = posA.length / 3;
+    const mergedIdx = new Uint16Array(idxA.length + idxB.length);
+    mergedIdx.set(idxA, 0);
+    for (let k = 0; k < idxB.length; k++) mergedIdx[idxA.length + k] = idxB[k] + vCountA;
+    planeA.dispose();
+    planeB.dispose();
+
+    const sparkGeo = new THREE.BufferGeometry();
+    sparkGeo.setAttribute('position', new THREE.BufferAttribute(mergedPos, 3));
+    sparkGeo.setAttribute('uv', new THREE.BufferAttribute(mergedUv, 2));
+    sparkGeo.setIndex(new THREE.BufferAttribute(mergedIdx, 1));
+    const sparkColors = new Float32Array(SPARK_COUNT * 3);
+    this.sparkColorAttr = new THREE.InstancedBufferAttribute(sparkColors, 3);
+    sparkGeo.setAttribute('aSparkColor', this.sparkColorAttr);
+
+    const sparkMat = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      vertexShader: `
+        attribute vec3 aSparkColor;
+        varying vec2 vUv;
+        varying vec3 vCol;
+        void main() {
+          vUv = uv;
+          vCol = aSparkColor;
+          vec4 mvPos = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+          gl_Position = projectionMatrix * mvPos;
+        }
+      `,
+      fragmentShader: `
+        varying vec2 vUv;
+        varying vec3 vCol;
+        void main() {
+          float x = abs(vUv.x - 0.5) * 2.0;
+          float y = vUv.y;
+          float widthMask = smoothstep(1.0, 0.0, x);
+          float tailMask = smoothstep(0.0, 0.28, y) * smoothstep(1.0, 0.52, y);
+          float glow = pow(widthMask, 1.65) * tailMask;
+          float core = pow(widthMask, 4.2) * smoothstep(0.42, 0.94, y) * smoothstep(1.0, 0.86, y);
+          vec3 rgb = vCol * (1.35 + glow * 1.3) + vec3(1.0, 0.97, 0.86) * core * 2.1;
+          float alpha = clamp(glow * 1.45, 0.0, 1.0);
+          if (alpha < 0.02) discard;
+          gl_FragColor = vec4(rgb, alpha);
+        }
+      `,
+    });
+
+    this.sparkInstanced = new THREE.InstancedMesh(sparkGeo, sparkMat, SPARK_COUNT);
+    this.sparkInstanced.frustumCulled = false;
+    this._sparkDummy.scale.set(0, 0, 0);
+    this._sparkDummy.updateMatrix();
+    for (let i = 0; i < SPARK_COUNT; i++) {
+      this.sparkInstanced.setMatrixAt(i, this._sparkDummy.matrix);
+      this.sparks.push({
+        pos: new THREE.Vector3(),
+        vel: new THREE.Vector3(),
+        life: 0,
+        maxLife: 0.45,
+        lengthScale: 1.0,
+      });
+    }
+    this.sparkInstanced.instanceMatrix.needsUpdate = true;
+    this.scene.add(this.sparkInstanced);
+
+    // 2б. Расходящиеся кольца дуговой вспышки при ударе ломом
+    const shockGeo = new THREE.RingGeometry(0.05, 0.11, 24);
+    for (let i = 0; i < 4; i++) {
+      const shockMat = new THREE.MeshBasicMaterial({
+        color: 0xffd166,
+        transparent: true,
+        opacity: 0,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const rm = new THREE.Mesh(shockGeo, shockMat);
+      rm.visible = false;
+      this.scene.add(rm);
+      this.shockRings.push({ mesh: rm, age: 0, duration: 0.28, active: false });
     }
 
     // 3. Пул клубов ржавой пыли при вскрытии пустой бочки
@@ -941,9 +1250,9 @@ export class WorkshopScene {
       this.rustPuffs.push({ mesh: m, vel: new THREE.Vector3(), life: 0, maxLife: 1 });
     }
 
-    // 3б. Пул клубов горячего БЕЛОГО пара (шипение из-под крышки бочки и пшик при промахе)
-    const steamGeo = new THREE.PlaneGeometry(0.34, 0.34);
-    for (let i = 0; i < 28; i++) {
+    // 3б. Пул клубов горячего БЕЛОГО пара (выброс при промахе по пустой бочке)
+    const steamGeo = new THREE.PlaneGeometry(0.42, 0.42);
+    for (let i = 0; i < 42; i++) {
       const sMat = new THREE.MeshBasicMaterial({
         map: rustTex,
         color: 0xf4f7fb,
@@ -955,6 +1264,22 @@ export class WorkshopScene {
       m.visible = false;
       this.scene.add(m);
       this.steamPuffs.push({ mesh: m, vel: new THREE.Vector3(), life: 0, maxLife: 1 });
+    }
+
+    // 3в. Пул густого ТЁМНОГО масляного дыма из вскрытой пустой бочки
+    const darkSmokeGeo = new THREE.PlaneGeometry(0.48, 0.48);
+    for (let i = 0; i < 36; i++) {
+      const dMat = new THREE.MeshBasicMaterial({
+        map: rustTex,
+        color: 0x1a1715,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+      });
+      const m = new THREE.Mesh(darkSmokeGeo, dMat);
+      m.visible = false;
+      this.scene.add(m);
+      this.darkSmokePuffs.push({ mesh: m, vel: new THREE.Vector3(), life: 0, maxLife: 1.5 });
     }
 
     // 4. Капли воды с потолка + расходящиеся круги по лужам на мокром бетоне
@@ -988,35 +1313,71 @@ export class WorkshopScene {
     }
   }
 
-  _spawnSparks(origin, amount = 22) {
+  _spawnSparks(origin, amount = 28) {
     let spawned = 0;
-    for (const s of this.sparks) {
+    for (let i = 0; i < this.sparks.length; i++) {
+      const s = this.sparks[i];
       if (s.life > 0) continue;
-      s.life = 0.28 + Math.random() * 0.24;
-      s.mesh.visible = true;
-      s.mesh.position.copy(origin);
+      s.maxLife = 0.28 + Math.random() * 0.42;
+      s.life = s.maxLife;
+      s.pos.copy(origin);
+      const speed = 2.4 + Math.random() * 5.6;
+      const theta = Math.random() * Math.PI * 2;
+      const up = 0.25 + Math.random() * 0.95;
       s.vel.set(
-        (Math.random() - 0.5) * 5.2,
-        1.4 + Math.random() * 3.4,
-        0.6 + (Math.random() - 0.3) * 4.2
+        Math.cos(theta) * speed * 0.72,
+        up * speed * 0.78 + 0.8,
+        Math.sin(theta) * speed * 0.65 + 1.15
       );
+      s.lengthScale = 0.65 + Math.random() * 1.1;
       spawned++;
       if (spawned >= amount) break;
     }
+  }
+
+  _spawnShockRing(origin, colorHex = 0xffc84d) {
+    const ring = this.shockRings.find((r) => !r.active) || this.shockRings[0];
+    if (!ring) return;
+    ring.active = true;
+    ring.age = 0;
+    ring.duration = 0.26;
+    ring.mesh.material.color.setHex(colorHex);
+    ring.mesh.material.opacity = 0.92;
+    ring.mesh.position.copy(origin).add(new THREE.Vector3(0, 0.02, 0.08));
+    ring.mesh.scale.setScalar(0.35);
+    ring.mesh.lookAt(this.camera.position);
+    ring.mesh.visible = true;
   }
 
   _spawnSteamPuff(origin, amount = 6) {
     let spawned = 0;
     for (const p of this.steamPuffs) {
       if (p.life > 0) continue;
-      p.maxLife = 0.8 + Math.random() * 0.5;
+      p.maxLife = 1.05 + Math.random() * 0.65;
       p.life = p.maxLife;
       p.mesh.visible = true;
       p.mesh.position.copy(origin).add(
-        new THREE.Vector3((Math.random() - 0.5) * 0.22, 0.02, (Math.random() - 0.5) * 0.22)
+        new THREE.Vector3((Math.random() - 0.5) * 0.28, 0.02 + Math.random() * 0.14, (Math.random() - 0.5) * 0.28)
       );
-      p.mesh.scale.setScalar(0.55 + Math.random() * 0.45);
-      p.vel.set((Math.random() - 0.5) * 0.9, 1.1 + Math.random() * 1.2, 0.35 + Math.random() * 0.7);
+      p.mesh.scale.setScalar(0.65 + Math.random() * 0.55);
+      p.vel.set((Math.random() - 0.5) * 1.1, 1.35 + Math.random() * 1.65, 0.25 + (Math.random() - 0.5) * 0.85);
+      spawned++;
+      if (spawned >= amount) break;
+    }
+  }
+
+  _spawnDarkSmoke(origin, amount = 22) {
+    let spawned = 0;
+    for (const p of this.darkSmokePuffs) {
+      if (p.life > 0) continue;
+      p.maxLife = 1.35 + Math.random() * 0.85;
+      p.life = p.maxLife;
+      p.mesh.visible = true;
+      p.mesh.position.copy(origin).add(
+        new THREE.Vector3((Math.random() - 0.5) * 0.34, 0.02 + Math.random() * 0.16, (Math.random() - 0.5) * 0.34)
+      );
+      p.mesh.scale.setScalar(0.75 + Math.random() * 0.65);
+      p.vel.set((Math.random() - 0.5) * 1.25, 0.9 + Math.random() * 1.35, (Math.random() - 0.5) * 1.1);
       spawned++;
       if (spawned >= amount) break;
     }
@@ -1063,14 +1424,14 @@ export class WorkshopScene {
     rip.duration = 1.15 + Math.random() * 0.35;
     rip.mesh.position.set(x, yPos, z);
     rip.mesh.scale.setScalar(0.45);
-    rip.mesh.material.opacity = 0.62;
+    rip.mesh.material.opacity = 0.24;
     rip.mesh.visible = true;
   }
 
   _applyResponsiveCameraAndLayout() {
     const aspect = this.width / Math.max(1, this.height);
     this.isPortrait = aspect < 0.88;
-    const n = Math.max(2, Math.min(this.barrels.length || 12, this.activeBarrelCount || 6));
+    const n = Math.max(1, Math.min(this.barrels.length || 12, this.activeBarrelCount || 6));
 
     this.barrels.forEach((b, idx) => {
       b.group.visible = idx < n;
@@ -1081,8 +1442,10 @@ export class WorkshopScene {
       let bScale = 1.0;
 
       if (n <= 3) {
-        bScale = 1.04;
-        if (n === 2) {
+        bScale = n === 1 ? 1.14 : 1.04;
+        if (n === 1) {
+          coords.push([0.0, -0.52]);
+        } else if (n === 2) {
           coords.push([-0.82, -0.45], [0.82, -0.45]);
         } else {
           coords.push([-1.14, -0.58], [0.0, -1.04], [1.14, -0.58]);
@@ -1140,13 +1503,13 @@ export class WorkshopScene {
         b.bodyMesh.rotation.y = Math.PI - x * 0.22;
       }
 
-      if (this.leftColumn) this.leftColumn.position.set(-2.22, 0, -2.35);
-      if (this.rightColumn) this.rightColumn.position.set(2.22, 0, -2.35);
+      if (this.leftColumn) this.leftColumn.position.set(-2.35, 0, -2.55);
+      if (this.rightColumn) this.rightColumn.position.set(2.35, 0, -2.55);
       if (this.flywheelGroup) this.flywheelGroup.scale.setScalar(0.82);
       this._isPortraitLayout = true;
       if (this.wallClockGroup) {
-        this.wallClockGroup.position.set(0.94, 2.04, -2.72);
-        this.wallClockGroup.scale.setScalar(0.95);
+        this.wallClockGroup.position.set(0, 1.92, 0.49);
+        this.wallClockGroup.scale.setScalar(0.76);
       }
       if (this.wallQuoteMesh) {
         this.wallQuoteMesh.position.set(0, 2.52, -3.55);
@@ -1155,19 +1518,51 @@ export class WorkshopScene {
 
       this.camera.fov = 50;
       const crowdPull = n >= 11 ? 1.22 : n >= 9 ? 1.15 : n >= 7 ? 1.09 : 1.0;
-      const distScale = Math.max(1, 0.52 / Math.max(0.36, aspect)) * crowdPull;
-      // Камера выше и под углом ~35° сверху вниз: задний ряд и номера видны полностью
-      const elev = (35 * Math.PI) / 180;
+      const distScale = Math.max(1, 0.52 / Math.max(0.32, aspect)) * crowdPull;
+      // Кино-угол ~27°: видны и задние бочки с номерами, и высокие светящиеся окна цеха из фильма!
+      const elev = (27 * Math.PI) / 180;
       const fieldZ = n <= 4 ? -0.62 : -0.9;
-      const camR = (n === 6 ? 7.6 : 7.0) * distScale;
-      this.baseLookAt.set(0, 0.55, fieldZ);
-      this.baseCamPos.set(0, 0.55 + camR * Math.sin(elev), fieldZ + camR * Math.cos(elev));
+      const lookY = 0.78;
+      let camR = (n === 6 ? 7.6 : 7.0) * distScale;
+
+      // Точный расчёт фрустума: ни одна бочка не выходит за левый/правый край или под HUD/подсказку
+      const tanHalfV = Math.tan(((this.camera.fov * Math.PI) / 180) * 0.5);
+      const tanHalfH = tanHalfV * Math.max(0.25, aspect);
+      const sinE = Math.sin(elev);
+      const cosE = Math.cos(elev);
+      const maxNdcX = 0.88;
+      const maxNdcTop = 0.72;
+      const maxNdcBot = 0.82;
+      for (let idx = 0; idx < n; idx++) {
+        const b = this.barrels[idx];
+        const s = b.group.scale.x || 1;
+        const rad = 0.46 * s;
+        const hTop = 1.40 * s;
+        const bx = Math.abs(b.group.position.x) + rad;
+        const bzFront = b.group.position.z + rad;
+        const bzBack = b.group.position.z - rad;
+        for (const [yy, zz] of [[0, bzFront], [hTop, bzFront], [hTop, bzBack]]) {
+          const depthOffset = (yy - lookY) * sinE + (zz - fieldZ) * cosE;
+          const reqX = bx / (maxNdcX * tanHalfH) + depthOffset;
+          if (reqX > camR) camR = reqX;
+          const upCoord = (yy - lookY) * cosE - (zz - fieldZ) * sinE;
+          if (upCoord > 0) {
+            const reqTop = upCoord / (maxNdcTop * tanHalfV) + depthOffset;
+            if (reqTop > camR) camR = reqTop;
+          } else if (upCoord < 0) {
+            const reqBot = (-upCoord) / (maxNdcBot * tanHalfV) + depthOffset;
+            if (reqBot > camR) camR = reqBot;
+          }
+        }
+      }
+      this.baseLookAt.set(0, lookY, fieldZ);
+      this.baseCamPos.set(0, lookY + camR * sinE, fieldZ + camR * cosE);
     } else {
       if (n <= 6) {
-        const maxAng = n === 2 ? 0.32 : n === 3 ? 0.62 : n === 4 ? 0.84 : n === 5 ? 1.02 : 1.16;
-        const radius = n <= 3 ? 2.65 : 3.08;
+        const maxAng = n === 1 ? 0 : n === 2 ? 0.34 : n === 3 ? 0.62 : n === 4 ? 0.84 : n === 5 ? 1.02 : 1.16;
+        const radius = n === 1 ? 2.45 : n <= 3 ? 2.65 : 3.08;
         const centerZ = 1.38;
-        const bScale = n <= 3 ? 1.04 : 1.0;
+        const bScale = n === 1 ? 1.16 : n <= 3 ? 1.04 : 1.0;
         for (let idx = 0; idx < n; idx++) {
           const t = n === 1 ? 0 : (idx / (n - 1)) * 2 - 1;
           const a = t * maxAng;
@@ -1206,13 +1601,15 @@ export class WorkshopScene {
         }
       }
 
-      if (this.leftColumn) this.leftColumn.position.set(-4.05, 0, -1.78);
-      if (this.rightColumn) this.rightColumn.position.set(4.05, 0, -1.78);
+      // v9.1: Адаптивная позиция колонн и заводских часов из фильма — часы ВСЕГДА в кадре даже в узком окне (split-screen 900px)!
+      const colX = Math.min(4.15, Math.max(2.95, aspect * 2.45));
+      if (this.leftColumn) this.leftColumn.position.set(-colX, 0, -2.25);
+      if (this.rightColumn) this.rightColumn.position.set(colX, 0, -2.25);
       if (this.flywheelGroup) this.flywheelGroup.scale.setScalar(1.0);
       this._isPortraitLayout = false;
       if (this.wallClockGroup) {
-        this.wallClockGroup.position.set(2.10, 2.18, -2.72);
-        this.wallClockGroup.scale.setScalar(1.12);
+        this.wallClockGroup.position.set(0, 1.88, 0.49);
+        this.wallClockGroup.scale.setScalar(aspect < 1.35 ? 0.78 : 0.88);
       }
       if (this.wallQuoteMesh) {
         this.wallQuoteMesh.position.set(0, 2.68, -3.55);
@@ -1222,10 +1619,43 @@ export class WorkshopScene {
       this.camera.fov = 42;
       const crowdAdjust = n >= 11 ? 1.18 : n >= 7 ? 1.12 : 1.0;
       const wideAdjust = (aspect < 1.35 ? 1.14 : 1.0) * crowdAdjust;
-      const elevD = (32 * Math.PI) / 180;
-      const camRd = (n >= 7 ? 7.6 : 7.1) * wideAdjust;
-      this.baseLookAt.set(0, 0.6, -0.55);
-      this.baseCamPos.set(0, 0.6 + camRd * Math.sin(elevD), -0.55 + camRd * Math.cos(elevD));
+      // Кино-угол 20° как в кадре factory_hall.jpg: бочки стоят на переднем плане, за ними огромные светящиеся окна и мостик цеха!
+      const elevD = (20 * Math.PI) / 180;
+      const lookYD = 0.96;
+      const fieldZD = -0.55;
+      let camRd = (n >= 7 ? 7.5 : 7.0) * wideAdjust;
+
+      const tanHalfVD = Math.tan(((this.camera.fov * Math.PI) / 180) * 0.5);
+      const tanHalfHD = tanHalfVD * Math.max(0.5, aspect);
+      const sinED = Math.sin(elevD);
+      const cosED = Math.cos(elevD);
+      const maxNdcXD = 0.90;
+      const maxNdcTopD = this.height <= 440 ? 0.60 : 0.72;
+      const maxNdcBotD = this.height <= 440 ? 0.80 : 0.84;
+      for (let idx = 0; idx < n; idx++) {
+        const b = this.barrels[idx];
+        const s = b.group.scale.x || 1;
+        const rad = 0.46 * s;
+        const hTop = 1.40 * s;
+        const bx = Math.abs(b.group.position.x) + rad;
+        const bzFront = b.group.position.z + rad;
+        const bzBack = b.group.position.z - rad;
+        for (const [yy, zz] of [[0, bzFront], [hTop, bzFront], [hTop, bzBack]]) {
+          const depthOffset = (yy - lookYD) * sinED + (zz - fieldZD) * cosED;
+          const reqX = bx / (maxNdcXD * tanHalfHD) + depthOffset;
+          if (reqX > camRd) camRd = reqX;
+          const upCoord = (yy - lookYD) * cosED - (zz - fieldZD) * sinED;
+          if (upCoord > 0) {
+            const reqTop = upCoord / (maxNdcTopD * tanHalfVD) + depthOffset;
+            if (reqTop > camRd) camRd = reqTop;
+          } else if (upCoord < 0) {
+            const reqBot = (-upCoord) / (maxNdcBotD * tanHalfVD) + depthOffset;
+            if (reqBot > camRd) camRd = reqBot;
+          }
+        }
+      }
+      this.baseLookAt.set(0, lookYD, fieldZD);
+      this.baseCamPos.set(0, lookYD + camRd * sinED, fieldZD + camRd * cosED);
     }
 
     if (this.steamPipeGroup) {
@@ -1247,15 +1677,39 @@ export class WorkshopScene {
       this.currentLookAt.copy(this.baseLookAt);
       this.camera.lookAt(this.currentLookAt);
     }
+    if (this.renderer?.shadowMap) this.renderer.shadowMap.needsUpdate = true;
+  }
+
+  _syncViewportSize() {
+    const w = Math.max(1, Math.round(this.canvas.clientWidth || window.innerWidth));
+    const h = Math.max(1, Math.round(this.canvas.clientHeight || window.innerHeight));
+    if (w === this.width && h === this.height) return;
+    this.width = w;
+    this.height = h;
+    const isMob = w / Math.max(1, h) < 0.88 || w <= 540;
+    this._isMobileScreen = isMob;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this._adaptiveDprCap || 1.05));
+    this.renderer.setSize(this.width, this.height, false);
+    this._applyResponsiveCameraAndLayout();
   }
 
   _bindEvents() {
-    window.addEventListener('resize', () => {
-      this.width = window.innerWidth;
-      this.height = window.innerHeight;
-      this.renderer.setSize(this.width, this.height);
-      this._applyResponsiveCameraAndLayout();
+    const onViewportChange = () => this._syncViewportSize();
+    window.addEventListener('resize', onViewportChange);
+    window.addEventListener('orientationchange', () => {
+      onViewportChange();
+      window.setTimeout(onViewportChange, 160);
     });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', onViewportChange);
+    }
+    if (typeof ResizeObserver !== 'undefined') {
+      this._resizeObserver = new ResizeObserver(onViewportChange);
+      this._resizeObserver.observe(document.documentElement);
+    }
+
+    // Блокируем системное контекстное меню на Android/iOS при долгом удержании пальца на бочке
+    this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     window.addEventListener('deviceorientation', (e) => {
       if (e.gamma == null || e.beta == null) return;
@@ -1264,30 +1718,41 @@ export class WorkshopScene {
       this.swayTarget.set(gx * 0.28, -gy * 0.16);
     });
 
+    const getCanvasNDC = (e) => {
+      const rect = this.canvas.getBoundingClientRect();
+      const rw = Math.max(1, rect.width || this.width);
+      const rh = Math.max(1, rect.height || this.height);
+      const nx = ((e.clientX - rect.left) / rw) * 2 - 1;
+      const ny = -((e.clientY - rect.top) / rh) * 2 + 1;
+      return [nx, ny];
+    };
+
     this.canvas.addEventListener('pointermove', (e) => {
-      const nx = (e.clientX / Math.max(1, this.width)) * 2 - 1;
-      const ny = -(e.clientY / Math.max(1, this.height)) * 2 + 1;
+      const [nx, ny] = getCanvasNDC(e);
       this.pointerNDC.set(nx, ny);
       this.swayTarget.set(nx * 0.34, ny * 0.18);
 
       if (this.pointerDownInfo) {
         const dx = e.clientX - this.pointerDownInfo.x;
         const dy = e.clientY - this.pointerDownInfo.y;
-        if (Math.hypot(dx, dy) > 14) {
+        if (Math.hypot(dx, dy) > 16) {
           this.pointerDownInfo.dragged = true;
         }
       }
 
       if (this.interactive && (e.pointerType !== 'touch' || this.pointerDownInfo?.listening)) {
-        this._raycastHover();
-        if (this.pointerDownInfo?.listening) this.listeningIndex = this.hoveredIndex;
+        const nowMs = performance.now();
+        if (!this._lastHoverRayMs || nowMs - this._lastHoverRayMs >= 45) {
+          this._lastHoverRayMs = nowMs;
+          this._raycastHover();
+          if (this.pointerDownInfo?.listening) this.listeningIndex = this.hoveredIndex;
+        }
       }
     });
 
     this.canvas.addEventListener('pointerdown', (e) => {
       if (!this.interactive) return;
-      const nx = (e.clientX / Math.max(1, this.width)) * 2 - 1;
-      const ny = -(e.clientY / Math.max(1, this.height)) * 2 + 1;
+      const [nx, ny] = getCanvasNDC(e);
       this.pointerNDC.set(nx, ny);
 
       const hit = this._pickBarrel();
@@ -1295,17 +1760,20 @@ export class WorkshopScene {
         clearTimeout(this._listenHoldTimer);
         this._listenHoldTimer = null;
       }
+      const holdMs = e.pointerType === 'touch' ? 280 : 380;
       this.pointerDownInfo = {
         x: e.clientX,
         y: e.clientY,
         time: performance.now(),
+        holdMs,
+        pointerType: e.pointerType,
         dragged: false,
         listening: false,
         barrelIndex: hit ? hit.index : -1,
         point: hit ? hit.point : null,
       };
 
-      // v8.0: удержание пальца > 220 мс -> живая прослушка бочки + 3D-вибрация; короткий тап -> удар ломом
+      // v8.1: удержание пальца > 280 мс (тач) / 380 мс (мышь) -> живая прослушка бочки; тап/клик -> удар ломом
       if (hit && !this.barrels[hit.index]?.struck) {
         const downX = e.clientX;
         const downY = e.clientY;
@@ -1316,11 +1784,11 @@ export class WorkshopScene {
           this.pointerDownInfo.listening = true;
           this.listeningIndex = idx;
           this._setHovered(idx, downX, downY);
-        }, 220);
+        }, holdMs);
       }
     });
 
-    this.canvas.addEventListener('pointerup', (e) => {
+    this.canvas.addEventListener('pointerup', () => {
       if (this._listenHoldTimer) {
         clearTimeout(this._listenHoldTimer);
         this._listenHoldTimer = null;
@@ -1330,7 +1798,7 @@ export class WorkshopScene {
       this.pointerDownInfo = null;
 
       const elapsed = performance.now() - info.time;
-      const isListenHold = Boolean(info.listening) || info.dragged || elapsed >= 220;
+      const isListenHold = Boolean(info.listening) || info.dragged || elapsed >= (info.holdMs || 280);
 
       if (isListenHold) {
         this.listeningIndex = -1;
@@ -1370,8 +1838,8 @@ export class WorkshopScene {
 
     this.canvas.addEventListener('webglcontextrestored', () => {
       this.contextLost = false;
-      this.renderer.setSize(this.width, this.height);
-      this._applyResponsiveCameraAndLayout();
+      this.width = 0;
+      this._syncViewportSize();
     });
   }
 
@@ -1454,6 +1922,19 @@ export class WorkshopScene {
     this.rafId = requestAnimationFrame(() => this._animate());
     const dt = Math.min(0.05, this.clock.getDelta());
     if (this.contextLost || document.hidden) return;
+    // Авто-адаптация DPR: если на слабом/нагруженном устройстве кадр > 28мс, мягко снижаем DPR до 0.85 для 60 FPS!
+    if (this._perfFrames < 36) {
+      this._perfFrames += 1;
+      this._perfDtAccum += dt;
+      if (this._perfFrames === 36) {
+        const avgDt = this._perfDtAccum / 36;
+        if (avgDt > 0.028 && this._adaptiveDprCap > 0.85) {
+          this._adaptiveDprCap = 0.85;
+          this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 0.85));
+          this.renderer.setSize(this.width, this.height, false);
+        }
+      }
+    }
     const elapsed = this.clock.elapsedTime;
 
     // 1. Камера или нырок в горловину
@@ -1464,8 +1945,8 @@ export class WorkshopScene {
       const bPos = diveBarrel.group.position;
       const s = diveBarrel.group.scale.y || 1;
 
-      const endCam = new THREE.Vector3(bPos.x, 1.92 * s, bPos.z + 0.18 * s);
-      const endLook = new THREE.Vector3(bPos.x, 0.52 * s, bPos.z);
+      const endCam = new THREE.Vector3(bPos.x, 2.38 * s, bPos.z + 0.78 * s);
+      const endLook = new THREE.Vector3(bPos.x, 0.86 * s, bPos.z);
 
       this.camera.position.lerpVectors(this.diveStartPos, endCam, ease);
       this.currentLookAt.lerpVectors(this.diveStartLook, endLook, ease);
@@ -1490,13 +1971,32 @@ export class WorkshopScene {
       );
       this.currentLookAt.copy(this.baseLookAt);
       this.camera.lookAt(this.currentLookAt);
+      if (Math.abs(this.cameraRoll) > 0.0005) {
+        this.camera.rotation.z += this.cameraRoll;
+        this.cameraRoll *= Math.pow(0.03, dt);
+      } else {
+        this.cameraRoll = 0;
+      }
     }
 
     this.onCameraMove(this.camera.position);
 
-    // 2. Медленное тяжёлое вращение гигантского чугунного колеса-маховика
+    // 2. Медленное тяжёлое вращение гигантского чугунного колеса-маховика + качающаяся заводская лампа
     if (this.flywheelGroup) {
       this.flywheelGroup.rotation.z -= dt * 0.16;
+    }
+    if (this.swingLampGroup) {
+      const swing = Math.sin(elapsed * 0.85) * 0.068;
+      this.swingLampGroup.rotation.z = swing;
+      if (this.mainSpot) {
+        const flicker = Math.sin(elapsed * 26.0) * Math.sin(elapsed * 13.3) > 0.89 ? 0.78 : 1.0;
+        if (!this._baseSpotIntensity) this._baseSpotIntensity = this.mainSpot.intensity || 90;
+        this.mainSpot.intensity = this._baseSpotIntensity * flicker;
+        if (this.lampBulbMat) this.lampBulbMat.emissiveIntensity = 2.8 * flicker;
+      }
+      if (this.lightConeMesh) {
+        this.lightConeMesh.rotation.z = -0.22 + swing * 0.35;
+      }
     }
 
     // 2б. Кино-часы на задней стене цеха (тикание / ускорение на таймере / Блиц)
@@ -1691,8 +2191,44 @@ export class WorkshopScene {
       r.mesh.material.opacity = (1 - tNorm) * 0.45;
     }
 
-    // 5. Вспышка удара
-    if (this.flashIntensity > 0.01) {
+    // 4б. v8.1: Живые «странные» бочки — случайная нетронутая бочка шевелится и издаёт пугающий звук изнутри
+    if (this.interactive && !this.diving && this.activeBarrelCount > 0) {
+      this.nextEerieCountdown -= dt;
+      if (this.nextEerieCountdown <= 0) {
+        this.nextEerieCountdown = 4.2 + Math.random() * 4.4;
+        const candidates = [];
+        for (let idx = 0; idx < this.activeBarrelCount && idx < this.barrels.length; idx++) {
+          const b = this.barrels[idx];
+          if (b && b.group.visible && !b.struck && idx !== this.listeningIndex) {
+            candidates.push(idx);
+          }
+        }
+        if (candidates.length > 0) {
+          const picked = candidates[Math.floor(Math.random() * candidates.length)];
+          const kinds = [
+            'knock_urgent',
+            'creak_metal',
+            'nails_scrape',
+            'wet_slosh',
+            'latch_rattle',
+            'whisper_groan',
+            'ominous_bell',
+          ];
+          const kind = kinds[Math.floor(Math.random() * kinds.length)];
+          this.triggerBarrelEerieFX(picked, kind);
+          try { this.onBarrelEerie?.(picked, kind); } catch { /* ignore */ }
+        }
+      }
+    }
+
+    // 5. Вспышка удара и аварийный стробоскоп скримера
+    if (this.screamerStrobe > 0.01) {
+      this.screamerStrobe = Math.max(0, this.screamerStrobe - dt * 1.9);
+      const strobeOn = Math.sin(elapsed * 58) > 0;
+      this.strikeLight.color.setHex(strobeOn ? this.screamerStrobeColor : 0xffffff);
+      this.strikeLight.position.set(0, 2.2, 2.4);
+      this.strikeLight.intensity = strobeOn ? 24 * this.screamerStrobe : 5 * this.screamerStrobe;
+    } else if (this.flashIntensity > 0.01) {
       this.flashIntensity = Math.max(0, this.flashIntensity - dt * 42);
       this.strikeLight.intensity = this.flashIntensity;
     } else {
@@ -1704,6 +2240,9 @@ export class WorkshopScene {
       const curDent = b.dentUniforms.uDentDepth.value;
       if (curDent < b.dentTarget) {
         b.dentUniforms.uDentDepth.value = Math.min(b.dentTarget, curDent + dt * 9.0);
+      }
+      if (b.dentUniforms.uDentHeat && b.dentUniforms.uDentHeat.value > 0.002) {
+        b.dentUniforms.uDentHeat.value = Math.max(0, b.dentUniforms.uDentHeat.value - dt * 1.15);
       }
 
       const targetRingOp = b.index === this.hoveredIndex && this.interactive ? 0.68 : 0.0;
@@ -1722,20 +2261,66 @@ export class WorkshopScene {
       }
     }
 
-    // 7. Частицы искр и ржавой пыли
-    for (const s of this.sparks) {
+    // 7. v8.1: 1-draw-call GPU-искры удара ломом + ударные кольца вспышки
+    let sparksDirty = false;
+    for (let i = 0; i < this.sparks.length; i++) {
+      const s = this.sparks[i];
       if (s.life <= 0) continue;
+      sparksDirty = true;
       s.life -= dt;
       if (s.life <= 0) {
-        s.mesh.visible = false;
+        this._sparkDummy.position.set(0, -10, 0);
+        this._sparkDummy.scale.set(0, 0, 0);
+        this._sparkDummy.updateMatrix();
+        this.sparkInstanced.setMatrixAt(i, this._sparkDummy.matrix);
         continue;
       }
-      s.mesh.position.addScaledVector(s.vel, dt);
-      s.vel.y -= 12.0 * dt;
-      if (s.mesh.position.y < 0.02) {
-        s.mesh.position.y = 0.02;
-        s.vel.y *= -0.42;
+      s.pos.addScaledVector(s.vel, dt);
+      s.vel.y -= 13.5 * dt;
+      s.vel.x *= Math.pow(0.88, dt * 10);
+      s.vel.z *= Math.pow(0.88, dt * 10);
+      if (s.pos.y < 0.025) {
+        s.pos.y = 0.025;
+        s.vel.y = Math.abs(s.vel.y) * 0.48;
+        s.vel.x *= 0.76;
+        s.vel.z *= 0.76;
       }
+      const heat = THREE.MathUtils.clamp(s.life / s.maxLife, 0, 1);
+      const spd = s.vel.length();
+      if (spd > 0.05) {
+        this._sparkDir.copy(s.vel).divideScalar(spd);
+        this._sparkQuat.setFromUnitVectors(this._sparkUp, this._sparkDir);
+      }
+      const streakLen = THREE.MathUtils.clamp(spd * 0.24 * s.lengthScale, 0.35, 2.35) * (0.4 + heat * 0.6);
+      const thick = 0.55 + heat * 0.75;
+      this._sparkDummy.position.copy(s.pos);
+      this._sparkDummy.quaternion.copy(this._sparkQuat);
+      this._sparkDummy.scale.set(thick, streakLen, thick);
+      this._sparkDummy.updateMatrix();
+      this.sparkInstanced.setMatrixAt(i, this._sparkDummy.matrix);
+      // Белый-жёлтый накал -> раскалённый оранжевый -> тёмный уголёк
+      const r = 1.0;
+      const g = 0.22 + heat * 0.72;
+      const bl = heat > 0.65 ? (heat - 0.65) * 2.4 : 0.03;
+      this.sparkColorAttr.setXYZ(i, r, g, bl);
+    }
+    if (sparksDirty && this.sparkInstanced) {
+      this.sparkInstanced.instanceMatrix.needsUpdate = true;
+      this.sparkColorAttr.needsUpdate = true;
+    }
+
+    for (const r of this.shockRings) {
+      if (!r.active) continue;
+      r.age += dt;
+      const tn = r.age / r.duration;
+      if (tn >= 1) {
+        r.active = false;
+        r.mesh.visible = false;
+        continue;
+      }
+      r.mesh.scale.setScalar(0.45 + tn * 5.4);
+      r.mesh.material.opacity = (1 - tn) * (1 - tn) * 0.85;
+      r.mesh.lookAt(this.camera.position);
     }
 
     for (const p of this.rustPuffs) {
@@ -1764,7 +2349,22 @@ export class WorkshopScene {
       p.mesh.position.addScaledVector(p.vel, dt);
       p.vel.multiplyScalar(0.96);
       p.mesh.scale.addScalar(dt * 2.1);
-      p.mesh.material.opacity = Math.sin(norm * Math.PI) * 0.62;
+      p.mesh.material.opacity = Math.sin(norm * Math.PI) * 0.66;
+      p.mesh.lookAt(this.camera.position);
+    }
+
+    for (const p of this.darkSmokePuffs) {
+      if (p.life <= 0) continue;
+      p.life -= dt;
+      if (p.life <= 0) {
+        p.mesh.visible = false;
+        continue;
+      }
+      const norm = 1 - p.life / p.maxLife;
+      p.mesh.position.addScaledVector(p.vel, dt);
+      p.vel.multiplyScalar(0.955);
+      p.mesh.scale.addScalar(dt * 2.35);
+      p.mesh.material.opacity = Math.sin(norm * Math.PI) * 0.82;
       p.mesh.lookAt(this.camera.position);
     }
 
@@ -1965,50 +2565,231 @@ export class WorkshopScene {
     };
   }
 
-  _createBarrelPBRTextures(batchCode, num = 1, sharedMaps = null) {
+  _createInnerBarrelWallTexture() {
     const W = 256;
     const H = 256;
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const ctx = c.getContext('2d');
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#2a241e');
+    g.addColorStop(0.25, '#191410');
+    g.addColorStop(0.65, '#100d0a');
+    g.addColorStop(1, '#070605');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    // Горизонтальные рёбра жёсткости и ржавые подтёки внутри стальной 200-литровой бочки
+    for (const ry of [0.22, 0.46, 0.72]) {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+      ctx.fillRect(0, H * ry, W, 6);
+      ctx.fillStyle = 'rgba(130, 82, 42, 0.16)';
+      ctx.fillRect(0, H * ry + 6, W, 4);
+    }
+    for (let i = 0; i < 36; i++) {
+      const rx = (i * 47) % W;
+      const rw = 4 + (i % 4) * 3;
+      const rg = ctx.createLinearGradient(rx, 0, rx, H * 0.85);
+      rg.addColorStop(0, 'rgba(92, 46, 20, 0.22)');
+      rg.addColorStop(1, 'rgba(12, 8, 6, 0)');
+      ctx.fillStyle = rg;
+      ctx.fillRect(rx, 0, rw, H * 0.85);
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = THREE.RepeatWrapping;
+    return tex;
+  }
+
+  _drawSprayNameOnBarrel(ctx, W, H, name, tilt = 0) {
+    if (!name) return;
+    ctx.save();
+    ctx.translate(W * 0.5, H * 0.232);
+    ctx.rotate(tilt || 0);
+    // Грубый мазок кистью/баллончиком — как настоящая надпись краской на ржавой бочке в цеху
+    const len = name.length;
+    const fontSize = len >= 7 ? 38 : len >= 5 ? 44 : 50;
+    ctx.font = `900 ${fontSize}px Impact, "Arial Black", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Подложка-тень от неровной стальной поверхности
+    ctx.fillStyle = 'rgba(8, 10, 8, 0.72)';
+    ctx.fillText(name, 2.5, 3);
+
+    // Основная слегка потёртая меловая/белая краска (как на ржавой бочке Тиля)
+    ctx.fillStyle = 'rgba(246, 240, 218, 0.90)';
+    ctx.fillText(name, 0, 0);
+
+    // Лёгкий «подтёк» и царапины, чтобы текст выглядел живой краской, а не наклейкой
+    ctx.strokeStyle = 'rgba(30, 34, 28, 0.42)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-62, -2);
+    ctx.lineTo(58, 4);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  _paintBarrelCanvas(b) {
+    if (!b?.colorCanvas || !b?.colorCtx || !b?.colorTex || this.contextLost) return;
+    const ctx = b.colorCtx;
+    const W = b.colorCanvas.width;
+    const H = b.colorCanvas.height;
+    const i = b.index || 0;
+
+    if (this._rustBaseCanvas) {
+      ctx.save();
+      const flipX = i % 2 === 1 ? -1 : 1;
+      const offX = ((i * 67) % W) * 0.5;
+      ctx.fillStyle = '#242b26';
+      ctx.fillRect(0, 0, W, H);
+      ctx.translate(flipX < 0 ? W : 0, 0);
+      ctx.scale(flipX, 1);
+      ctx.globalAlpha = 0.78;
+      ctx.drawImage(this._rustBaseCanvas, -offX, 0, W * 1.5, H);
+      ctx.restore();
+
+      ctx.fillStyle = 'rgba(40, 50, 42, 0.46)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = 'rgba(182, 190, 172, 0.20)';
+      ctx.fillRect(0, H * 0.32, W, 3);
+      ctx.fillRect(0, H * 0.66, W, 3);
+    } else {
+      ctx.fillStyle = '#20252b';
+      ctx.fillRect(0, 0, W, H);
+      for (let k = 0; k < 28; k++) {
+        const rx = ((k * 89 + (i + 1) * 53) % W);
+        const ry = ((k * 71 + (i + 1) * 37) % H);
+        const rw = 22 + (k % 5) * 16;
+        const rh = 34 + (k % 7) * 22;
+        ctx.fillStyle = k % 2 === 0 ? 'rgba(138, 62, 24, 0.44)' : 'rgba(78, 36, 15, 0.38)';
+        ctx.beginPath();
+        ctx.ellipse(rx, ry, rw, rh, 0.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(175, 185, 195, 0.18)';
+      ctx.fillRect(0, H * 0.32, W, 6);
+      ctx.fillRect(0, H * 0.66, W, 6);
+    }
+
+    // Если активна 3D-бочка выбора в меню-цеху — рисуем крупную трафаретную надпись строго в передней дуге (34% ширины, без обрезки по бокам!)
+    if (b.menuLabel) {
+      const ml = b.menuLabel;
+      const isGold = Boolean(ml.gold);
+      ctx.save();
+      const boxW = W * 0.36;
+      const boxX = (W - boxW) * 0.5;
+      ctx.fillStyle = isGold ? 'rgba(42, 30, 6, 0.88)' : 'rgba(12, 15, 12, 0.84)';
+      ctx.fillRect(boxX, H * 0.24, boxW, H * 0.42);
+      ctx.strokeStyle = isGold ? 'rgba(250, 204, 21, 0.96)' : 'rgba(234, 179, 8, 0.82)';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(boxX, H * 0.24, boxW, H * 0.42);
+
+      const maxTxtW = boxW - 18;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = isGold ? '#fef08a' : '#f8f5e8';
+      ctx.font = '900 32px Impact, "Arial Black", sans-serif';
+      ctx.fillText(String(ml.line1 || ''), W * 0.5, H * 0.35, maxTxtW);
+
+      ctx.fillStyle = '#facc15';
+      ctx.font = '900 36px Impact, "Arial Black", sans-serif';
+      ctx.fillText(String(ml.line2 || ''), W * 0.5, H * 0.47, maxTxtW);
+
+      if (ml.sub) {
+        ctx.fillStyle = 'rgba(254, 240, 138, 0.95)';
+        ctx.font = '700 18px monospace';
+        ctx.fillText(String(ml.sub), W * 0.5, H * 0.585, maxTxtW);
+      }
+      ctx.restore();
+    } else {
+      // Случайное имя краской поверх ржавой стали (меняется в каждом раунде!)
+      this._drawSprayNameOnBarrel(ctx, W, H, b.paintedName, b.nameTilt);
+
+      // Чёткий заводской трафарет номера партии (01..99)
+      ctx.save();
+      ctx.fillStyle = 'rgba(14, 17, 14, 0.62)';
+      ctx.fillRect(W * 0.33, H * 0.365, W * 0.34, H * 0.22);
+      ctx.strokeStyle = 'rgba(222, 184, 72, 0.56)';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(W * 0.33, H * 0.365, W * 0.34, H * 0.22);
+
+      ctx.fillStyle = 'rgba(232, 196, 86, 0.94)';
+      ctx.font = '900 72px Impact, "Arial Black", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(String(b.batchCode), W * 0.5, H * 0.505);
+
+      ctx.fillStyle = 'rgba(18, 22, 18, 0.84)';
+      ctx.fillRect(W * 0.36, H * 0.448, W * 0.28, 4);
+
+      ctx.font = '700 16px monospace';
+      ctx.fillStyle = 'rgba(218, 206, 168, 0.80)';
+      ctx.fillText(`ПАРТИЯ // ${b.batchCode}`, W * 0.5, H * 0.556);
+      ctx.restore();
+    }
+
+    for (let d = 0; d < 5; d++) {
+      const dx = ((d * 97 + i * 43) % (W - 24)) + 12;
+      const dh = 60 + ((d * 53 + i * 29) % 140);
+      const gOil = ctx.createLinearGradient(dx, 0, dx, dh);
+      gOil.addColorStop(0, 'rgba(10, 12, 10, 0.68)');
+      gOil.addColorStop(1, 'rgba(10, 12, 10, 0)');
+      ctx.fillStyle = gOil;
+      ctx.fillRect(dx, 0, 8 + (d % 3) * 5, dh);
+    }
+
+    if (b.bodyMat) {
+      b.bodyMat.roughness = 0.66;
+      b.bodyMat.metalness = 0.32;
+    }
+    b.colorTex.needsUpdate = true;
+  }
+
+  _createBarrelPBRTextures(batchCode, num = 1, sharedMaps = null) {
+    const W = 512;
+    const H = 512;
     const cCol = document.createElement('canvas');
     cCol.width = W; cCol.height = H;
     const ctx = cCol.getContext('2d');
 
-    ctx.fillStyle = '#262b31';
+    ctx.fillStyle = '#20252b';
     ctx.fillRect(0, 0, W, H);
 
-    for (let i = 0; i < 22; i++) {
-      const rx = ((i * 47 + num * 31) % W);
-      const ry = ((i * 37 + num * 19) % H);
-      const rw = 11 + (i % 5) * 8;
-      const rh = 18 + (i % 7) * 12;
+    for (let i = 0; i < 28; i++) {
+      const rx = ((i * 89 + num * 53) % W);
+      const ry = ((i * 71 + num * 37) % H);
+      const rw = 22 + (i % 5) * 16;
+      const rh = 34 + (i % 7) * 22;
 
-      ctx.fillStyle = i % 2 === 0 ? 'rgba(138, 62, 24, 0.42)' : 'rgba(84, 41, 18, 0.36)';
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(138, 62, 24, 0.44)' : 'rgba(78, 36, 15, 0.38)';
       ctx.beginPath();
       ctx.ellipse(rx, ry, rw, rh, 0.2, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    ctx.fillStyle = 'rgba(165, 175, 185, 0.16)';
-    ctx.fillRect(0, H * 0.32, W, 3);
-    ctx.fillRect(0, H * 0.66, W, 3);
+    ctx.fillStyle = 'rgba(175, 185, 195, 0.18)';
+    ctx.fillRect(0, H * 0.32, W, 6);
+    ctx.fillRect(0, H * 0.66, W, 6);
 
     // Потёртый заводской трафарет номера партии (01, 12, 17, 19, 26, 97)
     ctx.save();
-    ctx.fillStyle = 'rgba(15, 18, 22, 0.42)';
+    ctx.fillStyle = 'rgba(12, 15, 19, 0.52)';
     ctx.fillRect(W * 0.34, H * 0.37, W * 0.32, H * 0.21);
-    ctx.strokeStyle = 'rgba(234, 179, 8, 0.34)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(234, 179, 8, 0.42)';
+    ctx.lineWidth = 4;
     ctx.strokeRect(W * 0.34, H * 0.37, W * 0.32, H * 0.21);
 
-    ctx.fillStyle = 'rgba(234, 179, 8, 0.86)';
-    ctx.font = '900 36px Impact, "Arial Black", monospace';
+    ctx.fillStyle = 'rgba(234, 179, 8, 0.9)';
+    ctx.font = '900 72px Impact, "Arial Black", monospace';
     ctx.textAlign = 'center';
     ctx.fillText(String(batchCode), W * 0.5, H * 0.505);
 
-    ctx.fillStyle = '#262b31';
-    ctx.fillRect(W * 0.36, H * 0.448, W * 0.28, 2);
+    ctx.fillStyle = '#1e2228';
+    ctx.fillRect(W * 0.36, H * 0.448, W * 0.28, 4);
 
-    ctx.font = '700 8px monospace';
-    ctx.fillStyle = 'rgba(214, 185, 130, 0.56)';
+    ctx.font = '700 16px monospace';
+    ctx.fillStyle = 'rgba(220, 192, 138, 0.68)';
     ctx.fillText(`ПАРТИЯ // ${batchCode}`, W * 0.5, H * 0.556);
     ctx.restore();
 
@@ -2016,7 +2797,121 @@ export class WorkshopScene {
     color.colorSpace = THREE.SRGBColorSpace;
     const surf = sharedMaps || this._createSharedBarrelSurfaceMaps();
 
-    return { color, roughness: surf.roughness, bump: surf.bump };
+    return { color, roughness: surf.roughness, bump: surf.bump, canvas: cCol, ctx };
+  }
+
+  /**
+   * v8.1: Асинхронная подгрузка бесплатных CC0 PBR-карт ржавчины (Poly Haven rusty_metal_04)
+   * и тёмной HDRI-карты литейного цеха (industrial_workshop_foundry) из Patch.gg.
+   * Нулевая задержка первого кадра: до загрузки работают мгновенные процедурные карты.
+   */
+  _loadPatchAssetsAsync() {
+    const loader = new THREE.TextureLoader();
+
+    // 1. Реальный кино-фон цеха фильма «БОЧКА» (25 KB WebP, 0 перекомпиляций PBR-шейдеров!)
+    loader.load(
+      './public/textures/film_hall_bg.webp',
+      (bgTex) => {
+        if (this.contextLost) {
+          bgTex.dispose();
+          return;
+        }
+        bgTex.colorSpace = THREE.SRGBColorSpace;
+        this._patchTextures.push(bgTex);
+        if (this._backWallMat) {
+          this._backWallMat.map = bgTex;
+          this._backWallMat.needsUpdate = true;
+        }
+      },
+      undefined,
+      () => {}
+    );
+
+    // 1б. Реалистичное фото-дно пустой ржавой 200-литровой бочки (для всех вскрытых бочек!)
+    loader.load(
+      './public/sprites/empty_barrel_interior.webp',
+      (emptyTex) => {
+        if (this.contextLost) {
+          emptyTex.dispose();
+          return;
+        }
+        emptyTex.colorSpace = THREE.SRGBColorSpace;
+        this._patchTextures.push(emptyTex);
+        for (const b of this.barrels) {
+          if (b.emptyBottomMat) {
+            b.emptyBottomMat.map = emptyTex;
+            b.emptyBottomMat.color.setHex(0xffffff);
+            b.emptyBottomMat.needsUpdate = true;
+          }
+        }
+      },
+      undefined,
+      () => {}
+    );
+
+    // 2. Пыльный матовый бетонный пол (как в кадре 00:01:37:22 из фильма — без глянцевых синих луж и тормозов!)
+    loader.load(
+      './public/textures/patch/floor_albedo.webp',
+      (floorTex) => {
+        if (this.contextLost) {
+          floorTex.dispose();
+          return;
+        }
+        floorTex.wrapS = THREE.RepeatWrapping;
+        floorTex.wrapT = THREE.RepeatWrapping;
+        floorTex.repeat.set(5, 4);
+        floorTex.colorSpace = THREE.SRGBColorSpace;
+        this._patchTextures.push(floorTex);
+        if (this._floorMat) {
+          this._floorMat.map = floorTex;
+          this._floorMat.color.setHex(0x888672);
+          this._floorMat.needsUpdate = true;
+        }
+      },
+      undefined,
+      () => {}
+    );
+
+    // 3. Реальная ржавая фактура бочек (1 лёгкая загрузка, тонировка в облупившуюся оливково-стальную краску как в фильме!)
+    loader.load(
+      './public/textures/patch/rust_albedo.webp',
+      (albedoTex) => {
+        if (this.contextLost || !albedoTex.image) {
+          albedoTex.dispose();
+          return;
+        }
+        const img = albedoTex.image;
+        // Кэшируем лёгкий offscreen canvas ржавчины, чтобы randomizeBarrelNames() на каждом раунде быстро перерисовывал имена поверх стали!
+        const rustCache = document.createElement('canvas');
+        rustCache.width = 512;
+        rustCache.height = 512;
+        const rCtx = rustCache.getContext('2d');
+        if (rCtx) rCtx.drawImage(img, 0, 0, 512, 512);
+        this._rustBaseCanvas = rustCache;
+
+        const paintOneBarrel = (i) => {
+          const b = this.barrels[i];
+          if (!b) return;
+          this._paintBarrelCanvas(b);
+        };
+
+        // Красим сначала видимые бочки, а остальные по 1 на тик — убирает микрофриз при старте!
+        const visCount = Math.min(this.barrels.length, Math.max(4, this.activeBarrelCount || 4));
+        for (let i = 0; i < visCount; i++) paintOneBarrel(i);
+        let restIdx = visCount;
+        const paintNext = () => {
+          if (restIdx >= this.barrels.length) {
+            albedoTex.dispose();
+            return;
+          }
+          paintOneBarrel(restIdx++);
+          window.setTimeout(paintNext, 85);
+        };
+        window.setTimeout(paintNext, 90);
+      },
+      undefined,
+      () => {}
+    );
   }
 
   _createWetConcreteTextures() {
@@ -2087,14 +2982,14 @@ export class WorkshopScene {
     const grp = new THREE.Group();
     grp.name = 'filmWallClock';
 
-    // Металлическая рама-кожух и консоль крепления к бетонной стене
-    const bracketMat = new THREE.MeshStandardMaterial({
-      color: 0x1c1e22,
-      roughness: 0.78,
-      metalness: 0.55,
-    });
-    const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.22, 0.28), bracketMat);
-    bracket.position.set(0, 0.02, -0.14);
+    // Металлическая рама-кожух, стальная опорная пластина и консоль крепления вплотную к колонне
+    const bracketMat = new THREE.MeshLambertMaterial({ color: 0x1c1e22 });
+    const mountPlate = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.32, 0.06), bracketMat);
+    mountPlate.position.set(0, 0, -0.07);
+    grp.add(mountPlate);
+
+    const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.24, 0.16), bracketMat);
+    bracket.position.set(0, 0.01, -0.09);
     grp.add(bracket);
 
     const caseMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.43, 0.11, 32), bracketMat);
@@ -2158,10 +3053,15 @@ export class WorkshopScene {
     centerPin.position.z = 0.062;
     grp.add(centerPin);
 
-    grp.position.set(2.10, 2.18, -2.72);
-    grp.scale.setScalar(1.12);
+    // Физически крепим заводские часы прямо на переднюю грань правой кафельной колонны (не висят в воздухе!)
+    grp.position.set(0, 2.38, 0.50);
+    grp.scale.setScalar(0.80);
     this.wallClockGroup = grp;
-    this.scene.add(grp);
+    if (this.rightColumn) {
+      this.rightColumn.add(grp);
+    } else {
+      this.scene.add(grp);
+    }
   }
 
   _buildFactoryZoneProps() {
@@ -2173,14 +3073,12 @@ export class WorkshopScene {
     this.steamPipeGroup = pipeGroup;
     this.scene.add(pipeGroup);
 
-    // 2. Уровень 3 (Затопленная котельная): темная вода у основания бочек + красная аварийная лампа (#c92a2a)
+    // 2. Уровень 3 (Затопленная котельная): лёгкая тёмная вода (без тяжёлых зеркальных PBR-отражений!) + маяк на левом столбе
     const waterGeo = new THREE.PlaneGeometry(18, 14);
-    const waterMat = new THREE.MeshStandardMaterial({
-      color: 0x071320,
-      metalness: 0.88,
-      roughness: 0.14,
+    const waterMat = new THREE.MeshLambertMaterial({
+      color: 0x0a1620,
       transparent: true,
-      opacity: 0.82,
+      opacity: 0.68,
     });
     const waterMesh = new THREE.Mesh(waterGeo, waterMat);
     waterMesh.rotation.x = -Math.PI * 0.5;
@@ -2196,10 +3094,15 @@ export class WorkshopScene {
       roughness: 0.3,
     });
     const alarmLamp = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 10), this.alarmLampMat);
-    alarmLamp.position.set(-1.8, 3.1, -1.9);
     alarmLamp.visible = false;
     this.alarmLampMesh = alarmLamp;
-    this.scene.add(alarmLamp);
+    if (this.leftColumn) {
+      alarmLamp.position.set(0, 2.75, 0.52);
+      this.leftColumn.add(alarmLamp);
+    } else {
+      alarmLamp.position.set(-1.8, 3.1, -1.9);
+      this.scene.add(alarmLamp);
+    }
 
     // 3. Уровень 4 (Пресс-цех): коротящая проводка и выведенная краской надпись на бетонной стене
     // «На небе только и разговоров, что о море», проступающая при вспышках проводки
@@ -2301,7 +3204,8 @@ export class WorkshopScene {
     if (b) {
       const s = b.group.scale.y || 1;
       const origin = b.group.position.clone().add(new THREE.Vector3(0, 1.38 * s, 0));
-      this._spawnSparks(origin, 34);
+      this._spawnSparks(origin, 48);
+      this._spawnShockRing(origin, 0xffe066);
       this._spawnRustDust(origin, 18);
     }
   }
@@ -2374,113 +3278,119 @@ export class WorkshopScene {
     if (this.wallQuoteMesh) this.wallQuoteMesh.visible = zoneId === 4;
 
     if (zoneId === 1) {
-      // Уровень 1 «Разгрузочный шлюз» (3 бочки): холодный утренний свет из пыльных окон (#8aa4b8)
-      this.scene.background.setHex(0x0d141c);
-      this.scene.fog.color.setHex(0x101923);
-      this.scene.fog.density = 0.048;
+      // Уровень 1 — аутентичный цех из фильма «БОЧКА» (оливково-бетонная дымка и свет из огромных окон)
+      this.scene.background.setHex(0x121612);
+      this.scene.fog.color.setHex(0x121612);
+      this.scene.fog.density = 0.036;
+      if (this._backWallMat) this._backWallMat.color.setHex(0xffffff);
       if (this.hemiLight) {
-        this.hemiLight.color.setHex(0x8aa4b8);
-        this.hemiLight.groundColor.setHex(0x182026);
-        this.hemiLight.intensity = 0.92;
-      }
-      if (this.mainSpot && !this.goldenMode) {
-        this.mainSpot.color.setHex(0x8aa4b8);
-        this.mainSpot.intensity = 76;
-      }
-      if (this.windowBacklight) {
-        this.windowBacklight.color.setHex(0x8aa4b8);
-        this.windowBacklight.intensity = 2.35;
-      }
-      if (this.warmFillLight) {
-        this.warmFillLight.color.setHex(0x8aa4b8);
-        this.warmFillLight.intensity = 2.1;
-      }
-      if (this.lightConeMesh) {
-        this.lightConeMesh.material.color.setHex(0x8aa4b8);
-        this.lightConeMesh.material.opacity = 0.032;
-      }
-    } else if (zoneId === 2) {
-      // Уровень 2 «Сборочный конвейер» (6 бочек): тусклый жёлтый натриевый свет ламп (#d99b26) + паровая труба
-      this.scene.background.setHex(0x120d06);
-      this.scene.fog.color.setHex(0x171007);
-      this.scene.fog.density = 0.066;
-      if (this.hemiLight) {
-        this.hemiLight.color.setHex(0xd99b26);
-        this.hemiLight.groundColor.setHex(0x211508);
-        this.hemiLight.intensity = 0.74;
-      }
-      if (this.mainSpot && !this.goldenMode) {
-        this.mainSpot.color.setHex(0xd99b26);
-        this.mainSpot.intensity = 82;
-      }
-      if (this.windowBacklight) {
-        this.windowBacklight.color.setHex(0xb47818);
-        this.windowBacklight.intensity = 1.15;
-      }
-      if (this.warmFillLight) {
-        this.warmFillLight.color.setHex(0xd99b26);
-        this.warmFillLight.intensity = 5.4;
-      }
-      if (this.lightConeMesh) {
-        this.lightConeMesh.material.color.setHex(0xd99b26);
-        this.lightConeMesh.material.opacity = 0.038;
-      }
-    } else if (zoneId === 3) {
-      // Уровень 3 «Затопленная котельная» (9 бочек): тёмно-синий полумрак + красная аварийная лампа (#c92a2a) + вода
-      this.scene.background.setHex(0x060d18);
-      this.scene.fog.color.setHex(0x081220);
-      this.scene.fog.density = 0.080;
-      if (this.hemiLight) {
-        this.hemiLight.color.setHex(0x1d3b5c);
-        this.hemiLight.groundColor.setHex(0x09101a);
+        this.hemiLight.color.setHex(0xc8d2b4);
+        this.hemiLight.groundColor.setHex(0x1b1d17);
         this.hemiLight.intensity = 0.62;
       }
       if (this.mainSpot && !this.goldenMode) {
-        this.mainSpot.color.setHex(0x3b6ea5);
-        this.mainSpot.intensity = 62;
+        this.mainSpot.color.setHex(0xe4e3cc);
+        this._baseSpotIntensity = 90;
+        this.mainSpot.intensity = 90;
       }
       if (this.windowBacklight) {
-        this.windowBacklight.color.setHex(0xc92a2a);
-        this.windowBacklight.intensity = 1.95;
-      }
-      if (this.warmFillLight) {
-        this.warmFillLight.color.setHex(0xc92a2a);
-        this.warmFillLight.intensity = 4.8;
-      }
-      if (this.lightConeMesh) {
-        this.lightConeMesh.material.color.setHex(0xc92a2a);
-        this.lightConeMesh.material.opacity = 0.028;
-      }
-    } else {
-      // Уровень 4 «Пресс-цех» (12 бочек): жёсткий контрастный свет + коротящая проводка + надпись о море на стене
-      this.scene.background.setHex(0x07080b);
-      this.scene.fog.color.setHex(0x090b10);
-      this.scene.fog.density = 0.072;
-      if (this.hemiLight) {
-        this.hemiLight.color.setHex(0x94a3b8);
-        this.hemiLight.groundColor.setHex(0x0f1318);
-        this.hemiLight.intensity = 0.58;
-      }
-      if (this.mainSpot && !this.goldenMode) {
-        this.mainSpot.color.setHex(0xe2e8f0);
-        this.mainSpot.intensity = 94;
-      }
-      if (this.windowBacklight) {
-        this.windowBacklight.color.setHex(0x60a5fa);
+        this.windowBacklight.color.setHex(0xdce6c4);
         this.windowBacklight.intensity = 1.85;
       }
       if (this.warmFillLight) {
-        this.warmFillLight.color.setHex(0x38bdf8);
-        this.warmFillLight.intensity = 3.2;
+        this.warmFillLight.intensity = 0;
       }
       if (this.lightConeMesh) {
-        this.lightConeMesh.material.color.setHex(0xe2e8f0);
-        this.lightConeMesh.material.opacity = 0.034;
+        this.lightConeMesh.material.color.setHex(0xdce6c6);
+        this.lightConeMesh.material.opacity = 0.038;
+      }
+    } else if (zoneId === 2) {
+      // Уровень 2 «Сборочный конвейер»: пыльный охристо-оливковый туман и пробитая паровая труба
+      this.scene.background.setHex(0x15140e);
+      this.scene.fog.color.setHex(0x15140e);
+      this.scene.fog.density = 0.042;
+      if (this._backWallMat) this._backWallMat.color.setHex(0xdfd3b4);
+      if (this.hemiLight) {
+        this.hemiLight.color.setHex(0xc8b88a);
+        this.hemiLight.groundColor.setHex(0x1b1810);
+        this.hemiLight.intensity = 0.52;
+      }
+      if (this.mainSpot && !this.goldenMode) {
+        this.mainSpot.color.setHex(0xe8cd92);
+        this._baseSpotIntensity = 98;
+        this.mainSpot.intensity = 98;
+      }
+      if (this.windowBacklight) {
+        this.windowBacklight.color.setHex(0xd8c48c);
+        this.windowBacklight.intensity = 1.65;
+      }
+      if (this.warmFillLight) {
+        this.warmFillLight.intensity = 0;
+      }
+      if (this.lightConeMesh) {
+        this.lightConeMesh.material.color.setHex(0xe8cf96);
+        this.lightConeMesh.material.opacity = 0.04;
+      }
+    } else if (zoneId === 3) {
+      // Уровень 3 «Затопленная котельная»: тёмный сырой цех + красная аварийная лампа + вода
+      this.scene.background.setHex(0x0b1113);
+      this.scene.fog.color.setHex(0x0b1113);
+      this.scene.fog.density = 0.048;
+      if (this._backWallMat) this._backWallMat.color.setHex(0x88a4a6);
+      if (this.hemiLight) {
+        this.hemiLight.color.setHex(0x6d8e94);
+        this.hemiLight.groundColor.setHex(0x0e1314);
+        this.hemiLight.intensity = 0.42;
+      }
+      if (this.mainSpot && !this.goldenMode) {
+        this.mainSpot.color.setHex(0x9fc2c8);
+        this._baseSpotIntensity = 86;
+        this.mainSpot.intensity = 86;
+      }
+      if (this.windowBacklight) {
+        this.windowBacklight.color.setHex(0xdc2626);
+        this.windowBacklight.intensity = 1.8;
+      }
+      if (this.warmFillLight) {
+        this.warmFillLight.color.setHex(0xdc2626);
+        this.warmFillLight.intensity = 5.4;
+      }
+      if (this.lightConeMesh) {
+        this.lightConeMesh.material.color.setHex(0xdc2626);
+        this.lightConeMesh.material.opacity = 0.032;
+      }
+    } else {
+      // Уровень 4 «Ночной коридор Пресс-цеха» (холодная стально-синяя гамма официального постера «БОЧКА»)
+      this.scene.background.setHex(0x091017);
+      this.scene.fog.color.setHex(0x091017);
+      this.scene.fog.density = 0.044;
+      if (this._backWallMat) this._backWallMat.color.setHex(0x8eb8cc);
+      if (this.hemiLight) {
+        this.hemiLight.color.setHex(0x7ca2b8);
+        this.hemiLight.groundColor.setHex(0x0c1116);
+        this.hemiLight.intensity = 0.48;
+      }
+      if (this.mainSpot && !this.goldenMode) {
+        this.mainSpot.color.setHex(0xcbe0ec);
+        this._baseSpotIntensity = 96;
+        this.mainSpot.intensity = 96;
+      }
+      if (this.windowBacklight) {
+        this.windowBacklight.color.setHex(0x8ec6d6);
+        this.windowBacklight.intensity = 1.9;
+      }
+      if (this.warmFillLight) {
+        this.warmFillLight.intensity = 0;
+      }
+      if (this.lightConeMesh) {
+        this.lightConeMesh.material.color.setHex(0xb8d8e8);
+        this.lightConeMesh.material.opacity = 0.036;
       }
       this.triggerWiringArcFlash(1.1);
     }
 
     this._applyResponsiveCameraAndLayout();
+    if (this.renderer?.shadowMap) this.renderer.shadowMap.needsUpdate = true;
   }
 
   getZoneState() {
