@@ -5595,7 +5595,7 @@ async function handleSealBarrelClick() {
     state.pendingLevelStartFly = { lives: wasProducerFirstPack ? 1 : 3, strikes: 3 };
     Haptics.success();
     applyProgressiveDisclosureUI({ skipPromoteFromSocial: true });
-    showSentScreen({ wasLifeRefill, wasBroadcastPack, broadcastRole: teamRole, prevRatingPct });
+    showSentScreen({ wasLifeRefill, wasBroadcastPack: isBroadcastPack, broadcastRole: teamRole, prevRatingPct });
     setHudVisualLivesDisplay(0);
     window.setTimeout(() => {
       flyRewardToHud({
