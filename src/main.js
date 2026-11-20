@@ -66,6 +66,7 @@ import {
   getPlayerRecoveryCode,
   restoreProfileByRecoveryCode,
   recordTrafficSource,
+  registerSeedAdmin,
   recordPlayerMeta,
   awardV8LevelProgress,
   checkFriendDuplicateConnection,
@@ -333,10 +334,117 @@ function parseSeedSourceMeta(rawSrc = '') {
   return { isSeed: false, kind: '', num: '', slugName: '', label: '', tag: clean };
 }
 
+function isSeedAdminSession() {
+  if (state.incomingParam || state.incomingPassId || state.tg?.duelRoomParam || state.tg?.watchBarrelParam) {
+    return false;
+  }
+  return Boolean(state.tg?.seedAdminMode || state.profile?.isSeedAdmin);
+}
+
+function getSeedHubState() {
+  if (!state.seedHub) {
+    state.seedHub = {
+      role: 'friends',
+      prodSlot: state.tg?.seedProducerPreset || 'src_prod1',
+      targetHandle: '',
+      targetTag: state.tg?.seedProducerPreset || 'src_prod1',
+      sentCount: 0,
+      lastCreatedForHandle: '',
+      lastCreatedForTag: '',
+    };
+  }
+  return state.seedHub;
+}
+
+function syncSeedHubUI() {
+  const sh = getSeedHubState();
+  const isBloggers = sh.role === 'bloggers';
+  document.getElementById('btn-seed-role-friends')?.classList.toggle('is-active', !isBloggers);
+  document.getElementById('btn-seed-role-bloggers')?.classList.toggle('is-active', isBloggers);
+  const fBox = document.getElementById('seed-role-friends-box');
+  const bBox = document.getElementById('seed-role-bloggers-box');
+  if (fBox) fBox.toggleAttribute('hidden', isBloggers);
+  if (bBox) bBox.toggleAttribute('hidden', !isBloggers);
+
+  const prodSel = document.getElementById('seed-hub-prod-select');
+  if (prodSel && !isBloggers) {
+    sh.prodSlot = prodSel.value || sh.prodSlot || 'src_prod1';
+  }
+  const bloggerRaw = (document.getElementById('input-seed-blogger-en')?.value || '').trim();
+  const bloggerSlug = bloggerRaw.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24);
+  const previewTag = isBloggers ? (bloggerSlug ? `src_blogger_${bloggerSlug}` : 'src_blogger_<имя>') : sh.prodSlot;
+
+  const prevEl = document.getElementById('seed-hub-tag-preview');
+  if (prevEl) {
+    prevEl.textContent = `🏷 Персональная метка цепочки: ${previewTag}`;
+  }
+  const playBtn = document.getElementById('btn-seed-hub-play-demo');
+  if (playBtn) {
+    const unlocked = sh.sentCount > 0 || Number(state.profile?.packedCount || 0) > 0 || Boolean(state.profile?.seedFirstPackDone);
+    playBtn.disabled = !unlocked;
+    playBtn.textContent = unlocked
+      ? '🎮 ПОИГРАТЬ В ЦЕХ (УРОВЕНЬ 1 · РЕЖИМ АДМИНА БЕЗ РОЗЫГРЫШЕЙ)'
+      : '🔒 ПОИГРАТЬ В ЦЕХ (ОТКРОЕТСЯ ПОСЛЕ 1-Й БОЧКИ · БЕЗ РОЗЫГРЫШЕЙ)';
+  }
+}
+
+function openSeedAdminHub() {
+  const sh = getSeedHubState();
+  const prodSel = document.getElementById('seed-hub-prod-select');
+  if (prodSel && state.tg?.seedProducerPreset && /^src_prod[1-6]$/.test(state.tg.seedProducerPreset)) {
+    prodSel.value = state.tg.seedProducerPreset;
+    sh.prodSlot = state.tg.seedProducerPreset;
+  }
+  document.getElementById('seed-hub-error')?.setAttribute('hidden', '');
+  syncSeedHubUI();
+  showScreen('seedHub');
+}
+
+function handleSeedHubGoPackClick() {
+  const sh = getSeedHubState();
+  const errEl = document.getElementById('seed-hub-error');
+  errEl?.setAttribute('hidden', '');
+
+  if (sh.role === 'bloggers') {
+    const raw = (document.getElementById('input-seed-blogger-en')?.value || '').trim();
+    if (!raw || !/^[a-zA-Z0-9_]{2,24}$/.test(raw)) {
+      if (errEl) {
+        errEl.textContent = 'Введи имя блогера строго на английском (латиницей: a-z, 0-9, _ от 2 символов), например: danya или masha_kino';
+        errEl.removeAttribute('hidden');
+      }
+      Haptics.error();
+      return;
+    }
+    const slug = raw.toLowerCase();
+    sh.targetHandle = slug;
+    sh.targetTag = `src_blogger_${slug}`;
+  } else {
+    const prodSlot = (document.getElementById('seed-hub-prod-select')?.value || 'src_prod1').trim();
+    const rawFriend = (document.getElementById('input-seed-friend-handle')?.value || '').trim();
+    if (rawFriend.length < 2) {
+      if (errEl) {
+        errEl.textContent = 'Введи @аккаунт или имя друга (минимум 2 символа), чтобы ссылка была персональной!';
+        errEl.removeAttribute('hidden');
+      }
+      Haptics.error();
+      return;
+    }
+    sh.prodSlot = prodSlot;
+    sh.targetHandle = rawFriend.slice(0, 36);
+    sh.targetTag = prodSlot;
+  }
+
+  applySeedPackModeUI(true);
+  showScreen('pack');
+}
+
 function isInitialSeedPackRequired() {
   // Только прямой стартовый вход продюсера/блогера (НЕ по чужой бочке pack_, билету gift_ или дуэли duel_)
   if (state.incomingParam || state.incomingPassId || state.tg?.duelRoomParam || state.tg?.watchBarrelParam) {
     return false;
+  }
+  if (isSeedAdminSession()) {
+    return !state.profile?.seedFirstPackDone && Number(state.profile?.packedCount || 0) <= 0;
   }
   const meta = parseSeedSourceMeta(state.tg?.trafficSource || state.profile?.trafficSource || '');
   if (!meta.isSeed) return false;
@@ -349,6 +457,21 @@ function refreshInitialSeedGateUI() {
   const banner = document.getElementById('gate-seed-banner');
   const teaser = document.getElementById('gate-teaser');
   const enterSoundSpan = document.querySelector('#btn-enter-sound span');
+  if (isSeedAdminSession()) {
+    if (banner) {
+      banner.textContent =
+        '🛡 БОТ-АДМИН ПОСЕВА · КОМАНДА — Розыгрыши билетов и Премьеры на тебя не действуют. Выбери, кому шлёшь (друзьям или блогерам), упакуй персональную бочку и отправь ссылку!';
+      banner.removeAttribute('hidden');
+    }
+    if (teaser) {
+      teaser.textContent =
+        'Ты — первый игрок команды (админ посева). Выбери «Рассылаю друзьям» или «Рассылаю блогерам», введи @аккаунт друга или имя блогера на английском и отправь персональную бочку!';
+    }
+    if (enterSoundSpan) {
+      enterSoundSpan.textContent = '🛡 ОТКРЫТЬ БОТ-АДМИН ПОСЕВА';
+    }
+    return;
+  }
   if (!isInitialSeedPackRequired()) {
     banner?.setAttribute('hidden', '');
     return;
@@ -376,6 +499,24 @@ function applySeedPackModeUI(active) {
   const titleEl = document.getElementById('pack-screen-title');
   const customDetails = document.getElementById('pack-custom-details');
   if (active) {
+    if (isSeedAdminSession() && state.seedHub?.targetTag) {
+      const sh = state.seedHub;
+      const isBlogger = sh.role === 'bloggers';
+      if (tagEl) tagEl.textContent = `🛡 БОТ-АДМИН ПОСЕВА · МЕТКА ${sh.targetTag.toUpperCase()}`;
+      if (titleEl) {
+        titleEl.textContent = isBlogger
+          ? `БОЧКА ДЛЯ БЛОГЕРА: ${sh.targetHandle.toUpperCase()}`
+          : `БОЧКА ДЛЯ ДРУГА: ${sh.targetHandle}`;
+      }
+      if (ban) {
+        ban.textContent = isBlogger
+          ? `🔥 Персональная бочка для блогера ${sh.targetHandle} (${sh.targetTag}): загрузи фото / голос или жми 1 касание — вся его волна привяжется к этой метке! Розыгрыши на админа не действуют.`
+          : `🎬 Персональная бочка другу ${sh.targetHandle} (${sh.targetTag}): упакуй и отправь ссылку — друг сразу попадёт в игру, а его цепочка пойдёт на ${sh.targetTag}!`;
+        ban.removeAttribute('hidden');
+      }
+      if (customDetails) customDetails.open = true;
+      return;
+    }
     const meta = parseSeedSourceMeta(state.tg?.trafficSource || state.profile?.trafficSource || '');
     if (tagEl) tagEl.textContent = `ШАГ 1 ИЗ 2 · ${meta.label || 'СТАРТ ПОСЕВА'} (${meta.tag || 'seed'})`;
     if (titleEl) {
@@ -1501,6 +1642,10 @@ async function bootstrap() {
     state.profile.trafficSource = state.tg.trafficSource;
     await recordTrafficSource(state.tg?.user, state.tg.trafficSource).catch(() => {});
   }
+  if (isSeedAdminSession()) {
+    state.profile.isSeedAdmin = true;
+    await registerSeedAdmin(state.tg?.user, state.tg?.seedProducerPreset || state.tg?.trafficSource || 'seed_admin').catch(() => {});
+  }
   refreshInitialSeedGateUI();
   recordPlayerMeta(state.tg?.user).catch(() => {});
   if (state.tg?.duelRoomParam) {
@@ -1767,6 +1912,7 @@ function showScreen(name) {
     gate: 'screen-gate',
     modeA: 'screen-mode-a',
     workshop: 'screen-workshop',
+    seedHub: 'screen-seed-hub',
     pack: 'screen-pack',
     finale: 'screen-finale',
     sent: 'screen-sent',
@@ -2039,6 +2185,9 @@ async function enterWorkshopGate(withSound) {
       return;
     }
     await startViralFriendRound(state.incomingPack);
+  } else if (isSeedAdminSession()) {
+    // v14.2: Единый Бот-Админ посева (startapp=seed_admin / src_prod1..6) — выбор роли (друзьям / блогерам), ввод получателя -> упаковка бочки!
+    openSeedAdminHub();
   } else if (isInitialSeedPackRequired()) {
     // v14.1: Начальный посев (src_prod1..6 / src_blogger_<имя>) — сначала упаковать первую бочку и отправить, и только потом играть!
     applySeedPackModeUI(true);
@@ -5218,6 +5367,10 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
           } else {
             addPendingCinemaTicket(1);
           }
+        } else if (tkRes?.reason === 'seed_admin_excluded') {
+          state.round.ticketGranted = false;
+          state.round.ticketDeniedReason = 'seed_admin_excluded';
+          showToast('🛡 Режим админа посева: билет из призового пула сохранён для реальных зрителей!');
         } else {
           state.round.ticketGranted = false;
           state.round.ticketDeniedReason = tkRes?.reason || 'cap_reached';
@@ -5462,6 +5615,8 @@ async function handleSealBarrelClick() {
     // Уровень бочки выбирается автоматически по прогрессу игрока
     const autoZone = Math.max(1, Math.min(4, Number(state.profile?.currentLevel || 1)));
 
+    const seedAdminActive = isSeedAdminSession();
+    const sh = seedAdminActive ? getSeedHubState() : null;
     const created = await createBarrelPack({
       mode: 'friend',
       message: phrase,
@@ -5473,6 +5628,8 @@ async function handleSealBarrelClick() {
       tgUser: state.tg.user,
       processedImage: state.pack.processed,
       recordedVoice: state.pack.voice,
+      seedTrafficSource: sh?.targetTag || '',
+      seedTargetHandle: sh?.targetHandle || '',
     });
 
     state.pack.lastShareUrl = created.shareUrl;
@@ -5483,7 +5640,13 @@ async function handleSealBarrelClick() {
     const prevRatingPct = computeSuperPrizeRatingPct(state.profile);
     const wasInitialSeedPack = isInitialSeedPackRequired();
     state.profile.packedCount = Math.max(1, Number(state.profile.packedCount || 0) + 1);
-    if (wasInitialSeedPack) {
+    if (seedAdminActive && sh) {
+      sh.sentCount = (sh.sentCount || 0) + 1;
+      sh.lastCreatedForHandle = sh.targetHandle || '';
+      sh.lastCreatedForTag = sh.targetTag || '';
+      state.profile.seedFirstPackDone = true;
+      applySeedPackModeUI(false);
+    } else if (wasInitialSeedPack) {
       state.profile.seedFirstPackDone = true;
       applySeedPackModeUI(false);
     }
@@ -5498,7 +5661,7 @@ async function handleSealBarrelClick() {
     const wasLifeRefill = Boolean(state.pack.forLifeRefill);
     state.pack.forLifeRefill = false;
     const prevRoundLvl = Math.max(1, Number(state.round?.workshopLevel || 2));
-    const targetNextLevel = wasInitialSeedPack
+    const targetNextLevel = (seedAdminActive || wasInitialSeedPack)
       ? 1
       : wasLifeRefill
         ? Math.max(2, prevRoundLvl)
@@ -5514,19 +5677,25 @@ async function handleSealBarrelClick() {
       pointsDelta: 0,
       livesDelta: Math.max(0, nextLives - prevLives),
     }).catch(() => {});
-    await syncUiStage(state.tg?.user, wasInitialSeedPack ? 1 : 3).catch(() => {});
+    await syncUiStage(state.tg?.user, (seedAdminActive || wasInitialSeedPack) ? 1 : 3).catch(() => {});
 
+    const personalPrefix =
+      seedAdminActive && sh?.targetHandle
+        ? sh.role === 'bloggers'
+          ? `🛢 Персональная бочка для ${sh.targetHandle}! Заварил тебя в 3D-цеху фильма «БОЧКА» — надень наушники и выберись за 3 удара`
+          : `🛢 ${sh.targetHandle}, я заварил тебя в цеху «БОЧКИ»! Надень наушники — найди нужную крышку за 3 удара`
+        : '🛢 Кто-то заварил тебя в цеху «БОЧКИ»! Надень наушники — найди нужную крышку за 3 удара';
     openTelegramShare(
       created.shareUrl,
-      `🛢 Кто-то заварил тебя в цеху «БОЧКИ»! Надень наушники — найди нужную крышку за 3 удара${phrase ? `: «${phrase}»` : ''}`
+      `${personalPrefix}${phrase ? `: «${phrase}»` : ''}`
     );
     updatePremiereBarsUI();
     refreshHudLevelLabel();
     // v12.5: На экране отправки сначала скрываем новые 3 ❤️ (показываем 0 ❤️), чтобы игрок ГЛАЗАМИ увидел прилёт 0→1→2→3 в шапку!
-    state.pendingLevelStartFly = { lives: wasInitialSeedPack ? 1 : 3, strikes: 3 };
+    state.pendingLevelStartFly = { lives: (seedAdminActive || wasInitialSeedPack) ? 1 : 3, strikes: 3 };
     Haptics.success();
     applyProgressiveDisclosureUI({ skipPromoteFromSocial: true });
-    showSentScreen({ wasLifeRefill, wasInitialSeedPack, prevRatingPct });
+    showSentScreen({ wasLifeRefill, wasInitialSeedPack, wasSeedAdminPack: seedAdminActive, prevRatingPct });
     setHudVisualLivesDisplay(0);
     window.setTimeout(() => {
       flyRewardToHud({
@@ -5545,13 +5714,15 @@ async function handleSealBarrelClick() {
   }
 }
 
-function showSentScreen({ wasLifeRefill = false, wasInitialSeedPack = false, prevRatingPct = null } = {}) {
-  const targetLvl = wasInitialSeedPack ? 1 : Math.max(3, Number(state.profile?.currentLevel || 3));
+function showSentScreen({ wasLifeRefill = false, wasInitialSeedPack = false, wasSeedAdminPack = false, prevRatingPct = null } = {}) {
+  const targetLvl = (wasInitialSeedPack || wasSeedAdminPack) ? 1 : Math.max(3, Number(state.profile?.currentLevel || 3));
   const spec = getWorkshopLevelSpec(targetLvl);
   const titleEl = document.getElementById('sent-title');
   const txt = document.getElementById('sent-text');
   const btnTxt = document.getElementById('btn-sent-play-text');
   const copyBtn = document.getElementById('btn-sent-copy-link');
+  const packAnotherBtn = document.getElementById('btn-sent-pack-another');
+  const seedMetaEl = document.getElementById('sent-seed-meta');
   const nextPct = computeSuperPrizeRatingPct(state.profile);
   const startPct = prevRatingPct !== null ? Math.min(nextPct, prevRatingPct) : Math.max(0, nextPct - 3);
   const sPct = document.getElementById('sent-rating-pct');
@@ -5568,15 +5739,34 @@ function showSentScreen({ wasLifeRefill = false, wasInitialSeedPack = false, pre
     }, 160);
   }
   if (sNote) {
-    sNote.textContent = wasInitialSeedPack
-      ? 'Твоя именная метка посева закреплена за этой бочкой! Все друзья, блогеры и их друзья по цепочке автоматически засчитаются тебе в аналитику.'
+    sNote.textContent = (wasInitialSeedPack || wasSeedAdminPack)
+      ? 'Твоя именная метка посева закреплена за этой бочкой! Все друзья, блогеры и их друзья по цепочке автоматически засчитаются в аналитику.'
       : 'За отправку шкала чуть сдвинулась (+3% аванс). Когда друг реально зайдёт играть по твоей ссылке — получишь +20% (+500 ⭐) к шкале Супер-приза!';
   }
   if (copyBtn) {
     if (state.pack?.lastShareUrl) copyBtn.removeAttribute('hidden');
     else copyBtn.setAttribute('hidden', '');
   }
-  if (wasInitialSeedPack) {
+  if (packAnotherBtn) {
+    if (wasSeedAdminPack || isSeedAdminSession()) packAnotherBtn.removeAttribute('hidden');
+    else packAnotherBtn.setAttribute('hidden', '');
+  }
+  if (seedMetaEl) {
+    if (wasSeedAdminPack && state.seedHub?.lastCreatedForTag) {
+      seedMetaEl.textContent = `🛡 Кому: ${state.seedHub.lastCreatedForHandle || 'получатель'} · Метка цепочки: ${state.seedHub.lastCreatedForTag} · Ссылка: ${state.pack?.lastShareUrl || ''}`;
+      seedMetaEl.removeAttribute('hidden');
+    } else {
+      seedMetaEl.setAttribute('hidden', '');
+    }
+  }
+  if (wasSeedAdminPack) {
+    const sh = state.seedHub || {};
+    if (titleEl) titleEl.textContent = '🛡 ПЕРСОНАЛЬНАЯ БОЧКА ГОТОВА И УЛЕТЕЛА!';
+    if (txt) {
+      txt.textContent = `Бочка для «${sh.lastCreatedForHandle || 'получателя'}» с меткой ${sh.lastCreatedForTag || 'src_prod1'} готова! Можешь сразу упаковать следующую для другого друга или блогера, либо протестировать игру (розыгрыши на админа не действуют).`;
+    }
+    if (btnTxt) btnTxt.textContent = '▶️ ПОИГРАТЬ В ЦЕХ — УРОВЕНЬ 1 (БЕЗ РОЗЫГРЫШЕЙ)';
+  } else if (wasInitialSeedPack) {
     const meta = parseSeedSourceMeta(state.tg?.trafficSource || state.profile?.trafficSource || '');
     if (titleEl) titleEl.textContent = '🎬 ПЕРВАЯ БОЧКА УЛЕТЕЛА! ВОЛНА ЗАПУЩЕНА!';
     if (txt) {
@@ -7942,7 +8132,12 @@ function bindUIEvents() {
   // Экран 4: Конструктор пранка (Фото + Голосовуха)
   document.getElementById('btn-close-pack')?.addEventListener('click', () => {
     if (voiceRecorder?.isRecording) voiceRecorder.stop();
-    // v14.1 + v9.0: Нельзя закрыть крестиком, пока не отправлена стартовая бочка посева (src_prod*/src_blogger*) или обязательная бочка Раунда 2!
+    // v14.2: В режиме Бот-Админа посева крестик возвращает в окно выбора роли/получателя
+    if (isSeedAdminSession()) {
+      openSeedAdminHub();
+      return;
+    }
+    // v14.1 + v9.0: Нельзя закрыть крестиком, пока не отправлена стартовая бочка посева (src_blogger*) или обязательная бочка Раунда 2!
     if (isInitialSeedPackRequired() || state.profile.mustSendFriendPack) {
       const ban = document.getElementById('pack-mandatory-banner');
       if (ban) {
@@ -8430,6 +8625,42 @@ function bindUIEvents() {
       return;
     }
     showScreen('pack');
+  });
+
+  // v14.2: События Бот-Админа посева (#screen-seed-hub)
+  document.getElementById('btn-seed-role-friends')?.addEventListener('click', () => {
+    getSeedHubState().role = 'friends';
+    document.getElementById('seed-hub-error')?.setAttribute('hidden', '');
+    syncSeedHubUI();
+    Haptics.light();
+  });
+  document.getElementById('btn-seed-role-bloggers')?.addEventListener('click', () => {
+    getSeedHubState().role = 'bloggers';
+    document.getElementById('seed-hub-error')?.setAttribute('hidden', '');
+    syncSeedHubUI();
+    Haptics.light();
+  });
+  document.getElementById('seed-hub-prod-select')?.addEventListener('change', () => syncSeedHubUI());
+  document.getElementById('input-seed-blogger-en')?.addEventListener('input', () => syncSeedHubUI());
+  document.getElementById('btn-seed-hub-go-pack')?.addEventListener('click', () => handleSeedHubGoPackClick());
+  document.getElementById('btn-seed-hub-play-demo')?.addEventListener('click', async () => {
+    const sh = getSeedHubState();
+    const unlocked = sh.sentCount > 0 || Number(state.profile?.packedCount || 0) > 0 || Boolean(state.profile?.seedFirstPackDone);
+    if (!unlocked) {
+      showToast('🔒 Сначала упакуй и отправь 1-ю персональную бочку — потом откроется игра!');
+      Haptics.error();
+      return;
+    }
+    if (!audio._userMuted) await audio.unlock(true);
+    await startNewbieOnboardingRound();
+  });
+
+  document.getElementById('btn-sent-pack-another')?.addEventListener('click', () => {
+    const friendIn = document.getElementById('input-seed-friend-handle');
+    const blogIn = document.getElementById('input-seed-blogger-en');
+    if (friendIn) friendIn.value = '';
+    if (blogIn) blogIn.value = '';
+    openSeedAdminHub();
   });
 
   document.getElementById('btn-sent-copy-link')?.addEventListener('click', async () => {

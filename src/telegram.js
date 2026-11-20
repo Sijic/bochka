@@ -63,11 +63,23 @@ export function initTelegram() {
       trailerRefUid: '',
       openGiftFork: false,
       trafficSource: '',
+      seedAdminMode: false,
+      seedProducerPreset: 'src_prod1',
     };
     const clean = String(raw || '').trim();
     if (!clean) return res;
     if (clean === 'giftfork') {
       res.openGiftFork = true;
+    } else if (clean.toLowerCase() === 'seed_admin' || clean.toLowerCase() === 'admin_seed') {
+      res.seedAdminMode = true;
+      res.seedProducerPreset = 'src_prod1';
+      res.trafficSource = 'seed_admin';
+    } else if (/^(?:seed_prod|seed_prd|src_prod|src_prd)(\d*)$/i.test(clean)) {
+      const m = clean.match(/^(?:seed_prod|seed_prd|src_prod|src_prd)(\d*)$/i);
+      const num = m?.[1] || '1';
+      res.seedAdminMode = true;
+      res.seedProducerPreset = `src_prod${num}`;
+      res.trafficSource = `src_prod${num}`;
     } else if (clean.startsWith('pack_')) {
       res.barrelParam = clean.slice(5);
       res.autoOpenPack = true;
@@ -127,6 +139,8 @@ export function initTelegram() {
       trailerRefUid: urlExtras.ref || parsed.trailerRefUid,
       openGiftFork: urlExtras.giftfork || parsed.openGiftFork,
       trafficSource,
+      seedAdminMode: Boolean(urlExtras.seedAdmin || parsed.seedAdminMode),
+      seedProducerPreset: parsed.seedProducerPreset || 'src_prod1',
     };
   }
 
@@ -192,6 +206,8 @@ export function initTelegram() {
     trailerRefUid: urlExtras.ref || parsed.trailerRefUid,
     openGiftFork: urlExtras.giftfork || parsed.openGiftFork,
     trafficSource,
+    seedAdminMode: Boolean(urlExtras.seedAdmin || parsed.seedAdminMode),
+    seedProducerPreset: parsed.seedProducerPreset || 'src_prod1',
   };
 }
 
@@ -206,9 +222,10 @@ function extractUrlExtraParams() {
       src: (sp.get('src') || '').trim(),
       utm: (sp.get('utm') || sp.get('utm_source') || sp.get('utm_campaign') || '').trim(),
       giftfork: sp.get('giftfork') === '1',
+      seedAdmin: sp.get('seed_admin') === '1' || sp.get('seed') === 'admin',
     };
   } catch {
-    return { duel: '', watch: '', trailer: false, ref: '', src: '', utm: '', giftfork: false };
+    return { duel: '', watch: '', trailer: false, ref: '', src: '', utm: '', giftfork: false, seedAdmin: false };
   }
 }
 

@@ -775,7 +775,7 @@ function bindAdminEvents() {
   });
   seedInput?.addEventListener('input', () => {
     const slug = translitSeedSlug(seedInput.value);
-    setSeedTag(slug ? `src_blogger_${slug}` : 'src_prod1');
+    setSeedTag(slug ? `src_blogger_${slug}` : 'seed_admin');
   });
   document.getElementById('btn-copy-seed-url')?.addEventListener('click', async () => {
     const val = seedUrlOut?.value || '';

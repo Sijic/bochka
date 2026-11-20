@@ -123,6 +123,8 @@ export async function createBarrelPack({
   tgUser = null,
   processedImage,
   recordedVoice = null,
+  seedTrafficSource = '',
+  seedTargetHandle = '',
 }) {
   const id = randomShortId(7);
   const cleanZone = Math.max(1, Math.min(4, Number(zoneId) || 1));
@@ -195,6 +197,8 @@ export async function createBarrelPack({
         p_photo_url: remotePhotoUrl,
         p_voice_url: remoteVoiceUrl,
         p_target_index: targetIndex,
+        p_seed_traffic_source: String(seedTrafficSource || '').trim() || null,
+        p_seed_target_handle: String(seedTargetHandle || '').trim() || null,
       });
 
       if (!rpcErr && rpcRes?.ok) {
@@ -2175,6 +2179,29 @@ export async function claimDuelPremiereBankReward(tgUser = null, { pointsBonus =
  * v13.0: Атомарный запрос бесплатного билета в кино через жёсткий серверный пул Supabase
  * (проверяет is_paused, дату 16.12.2026, max_total_tickets, max_daily_tickets, hourly_cap).
  */
+export async function registerSeedAdmin(tgUser = null, seedTag = 'seed_admin') {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  if (!db || isTestBogActive()) {
+    return { ok: true, isSeedAdmin: true, local: true };
+  }
+  try {
+    const { data, error } = await db.rpc('register_seed_admin_rpc', {
+      p_uid: uid,
+      p_tg_id: tgUser?.id || null,
+      p_tg_username: tgUser?.username || null,
+      p_display_name: tgUser?.name || '',
+      p_seed_tag: String(seedTag || 'seed_admin').trim() || 'seed_admin',
+    });
+    if (!error && data?.ok) {
+      return { ok: true, isSeedAdmin: Boolean(data.is_seed_admin) };
+    }
+    return { ok: false, isSeedAdmin: false };
+  } catch {
+    return { ok: false, isSeedAdmin: false };
+  }
+}
+
 export async function requestServerCinemaTicket(tgUser = null, source = 'level3') {
   const uid = getViewerUid(tgUser);
   const db = getCloudDb();
