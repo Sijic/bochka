@@ -79,6 +79,7 @@ import {
   sendDirectGiftTicketToFriend,
   notifyReferrerTicketWon,
   sendLevel1FriendReply,
+  syncTelegramWriteAccess,
   requestServerCinemaTicket,
   awardTicketShardServer,
   prepareNativeShareMessage,
@@ -1914,7 +1915,7 @@ async function bootstrap() {
     state.entered = true;
     applySeedPackModeUI(true);
     showScreen('pack');
-    requestTelegramWriteAccessIfNeeded().catch(() => {});
+    requestAndSyncWriteAccess();
     showToast('🎬 Запакуй СЕБЯ в бочку 1 раз — получишь ОДНУ общую ссылку для всех друзей и чатов!');
   }
 
@@ -2370,10 +2371,23 @@ async function triggerHubBarrelChoice(index, worldPoint = null) {
 /* ============================================================================
    ВХОДНОЙ ШЛЮЗ -> МАРШРУТИЗАТОР (ПРОПУСК / ДУЭЛЬ / ПОДГЛЯДЫВАНИЕ / БОЧКА / ХАБ)
    ============================================================================ */
+function requestAndSyncWriteAccess({ force = false } = {}) {
+  return requestTelegramWriteAccessIfNeeded({ force })
+    .then((res) => {
+      if (res && !res.skipped && !res.unsupported) {
+        const allowed = Boolean(res.allowed);
+        if (state.profile) state.profile.tgWriteAccess = allowed;
+        syncTelegramWriteAccess(state.tg?.user, allowed).catch(() => {});
+      }
+      return res;
+    })
+    .catch(() => ({ ok: false, allowed: false }));
+}
+
 async function enterWorkshopGate(withSound) {
   // v15.4.2: Не пугаем новичка запросом пушей до 1-й игры — запрашиваем только после 1-го раунда (или у вернувшихся игроков)
   if (state.profile?.hasPlayedSolo || Number(state.profile?.currentLevel || 1) >= 2) {
-    requestTelegramWriteAccessIfNeeded().catch(() => {});
+    requestAndSyncWriteAccess();
   }
   if (state.entered) {
     if (withSound) {
@@ -5956,7 +5970,7 @@ async function handleQuick1TapPrankClick() {
 }
 
 async function handleSealBarrelClick() {
-  requestTelegramWriteAccessIfNeeded().catch(() => {});
+  requestAndSyncWriteAccess();
   const sealBtn = document.getElementById('btn-seal-barrel');
   const sealTxt = document.getElementById('btn-seal-text');
   const quickBtn = document.getElementById('btn-pack-quick-1tap');
@@ -7678,7 +7692,7 @@ async function openDuelTable(roomId = '', { autoAddTestBots = false } = {}) {
   }
 
   state.entered = true;
-  requestTelegramWriteAccessIfNeeded().catch(() => {});
+  requestAndSyncWriteAccess();
   stopAirTimer();
   state.round.running = false;
   state.round.pausedForModal = false;
@@ -9160,7 +9174,7 @@ function bindUIEvents() {
   document.getElementById('btn-pack-revenge')?.addEventListener('click', async () => {
     if (state.finaleMode === 'l1_reply_yes') {
       // v15.4.2: Запрашиваем разрешение на пуши от бота сразу после 1-й игры (внутри живого тапа игрока!)
-      requestTelegramWriteAccessIfNeeded().catch(() => {});
+      requestAndSyncWriteAccess();
       // Уровень 1 Кнопка 1: мгновенно шлём ответ в фоне и без задержки запускаем Уровень 2 (6 бочек — найди пустую)!
       sendLevel1FriendReply({ pack: state.incomingPack, replyType: 'cinema_accept', viewerTgUser: state.tg?.user }).catch(() => {});
       showToast('🍿 Другу ушло: «Нашёл тебя! Идём в кино!» · Раунд 2 (6 бочек — найди пустую)!');

@@ -749,6 +749,7 @@ export async function fetchPlayerProfile(tgUser = null) {
           isBloggerSeed: Boolean(data.is_blogger_seed),
           seedPrefix: String(data.seed_prefix || ''),
           hasBroadcastBarrel: Boolean(data.has_broadcast_barrel),
+          tgWriteAccess: Boolean(data.tg_write_access),
           repeatLinkEntered: isFreshServer ? false : Boolean(localBefore?.repeatLinkEntered),
           uiStage: isFreshServer ? Math.min(2, Math.max(1, Number(data.ui_stage || 1))) : Number(data.ui_stage || 1),
           _isFreshServer: isFreshServer,
@@ -2255,10 +2256,22 @@ export async function notifyReferrerTicketWon({ tgUser, referrerTgId }) {
   });
 }
 
+export async function syncTelegramWriteAccess(tgUser = null, allowed = false) {
+  const prof = getLocalPreviewProfile();
+  prof.tgWriteAccess = Boolean(allowed);
+  saveLocalPreviewProfile(prof);
+  if (isTestBogActive()) return true;
+  if (!tgUser?.id && typeof window !== 'undefined' && !window.Telegram?.WebApp?.initData) return false;
+  return sendTelegramPing({
+    clientAction: 'record_write_access',
+    allowed: Boolean(allowed),
+  });
+}
+
 export async function sendLevel1FriendReply({ pack, replyType, viewerTgUser }) {
   const action = replyType === 'wait_ticket' ? 'wait_ticket' : 'cinema_accept';
   const senderTgId = pack?.senderTgId || '';
-  if (!senderTgId) return false;
+  if (!senderTgId && !pack?.id) return false;
   return sendTelegramPing({
     clientAction: action,
     senderTgId: String(senderTgId),

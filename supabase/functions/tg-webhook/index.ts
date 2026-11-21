@@ -431,6 +431,43 @@ Deno.serve(async (req: Request) => {
       return jsonResp({ ok: true });
     }
 
+    if (action === "record_write_access") {
+      if (!verifiedCallerTgId) {
+        return jsonResp({ ok: false, error: "telegram_auth_required" }, 401);
+      }
+      const callerTgId = String(verifiedCallerTgId);
+      const callerUid = `tg_${callerTgId}`;
+      const allowed = Boolean(body.allowed);
+      const nowIso = new Date().toISOString();
+      const patch: Record<string, unknown> = {
+        tg_write_access: allowed,
+        tg_write_access_at: nowIso,
+        updated_at: nowIso,
+      };
+      if (allowed) {
+        patch.tg_chat_id = callerTgId;
+      }
+      const { data: updatedRows } = await adminDb
+        .from("users")
+        .update(patch)
+        .eq("uid", callerUid)
+        .select("uid");
+      if (!updatedRows || updatedRows.length === 0) {
+        await adminDb.from("users").upsert(
+          {
+            uid: callerUid,
+            tg_user_id: callerTgId,
+            tg_chat_id: allowed ? callerTgId : null,
+            tg_write_access: allowed,
+            tg_write_access_at: nowIso,
+            updated_at: nowIso,
+          },
+          { onConflict: "uid" }
+        );
+      }
+      return jsonResp({ ok: true, uid: callerUid, tgWriteAccess: allowed, allowed });
+    }
+
     if ((action === "barrel_opened" || action === "opened") && body.senderTgId) {
       if (body.barrelId) {
         const { data: bCheck } = await adminDb

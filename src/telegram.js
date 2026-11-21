@@ -306,13 +306,23 @@ export function requestTelegramWriteAccessIfNeeded({ force = false } = {}) {
       return;
     }
     _tgWriteAccessPrompted = true;
+    let settled = false;
+    const finish = (payload) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(safetyTimer);
+      resolve(payload);
+    };
+    const safetyTimer = window.setTimeout(() => {
+      finish({ ok: false, allowed: false, timeout: true });
+    }, 8000);
     try {
       tg.requestWriteAccess((allowed) => {
         if (allowed) _tgWriteAccessGranted = true;
-        resolve({ ok: true, allowed: Boolean(allowed) });
+        finish({ ok: true, allowed: Boolean(allowed) });
       });
     } catch {
-      resolve({ ok: false, allowed: false });
+      finish({ ok: false, allowed: false });
     }
   });
 }
