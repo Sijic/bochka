@@ -412,6 +412,31 @@ async function createWatchChannelLazy(barrelId, opts) {
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
 
+let legalModCache = null;
+async function openLegalModal(tab = 'rules') {
+  const modal = document.getElementById('modal-legal');
+  const body = document.getElementById('legal-modal-body');
+  if (!modal || !body) return;
+
+  if (state.round.running) {
+    state.round.pausedForModal = true;
+    scene?.setInteractive(false);
+  }
+
+  modal.removeAttribute('hidden');
+  document.querySelectorAll('[data-legal-tab]').forEach((btn) => {
+    const active = (btn.getAttribute('data-legal-tab') || 'rules') === tab;
+    btn.classList.toggle('is-active', active);
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+
+  if (!legalModCache) {
+    body.textContent = 'Загрузка документов…';
+    legalModCache = await import('./legal.js?v=1545');
+  }
+  legalModCache.renderLegalSectionInto(body, tab);
+}
+
 const V9_PROGRESS_STORAGE_KEY = 'bochka_v9_progress';
 
 // v14.1: Распознавание начальных ссылок посева — продюсеры (src_prod1..6 / src_prd1..6) и блогеры с именем на конце (src_blogger_<имя>)
@@ -1711,6 +1736,9 @@ async function bootstrap() {
       const wantSound = window.__earlyGateAction === 'sound';
       window.__earlyGateAction = null;
       window.setTimeout(() => enterWorkshopGate(wantSound).catch(() => {}), 0);
+    } else if (window.__earlyGateAction === 'legal') {
+      window.__earlyGateAction = null;
+      window.setTimeout(() => openLegalModal('rules').catch(() => {}), 0);
     }
   }
 
@@ -2160,7 +2188,7 @@ function showScreen(name) {
   if (!document.getElementById('modal-trailer')?.hasAttribute('hidden')) {
     closeTrailerModal();
   }
-  for (const mid of ['modal-leaderboard', 'modal-share-hub', 'modal-prize', 'modal-rules']) {
+  for (const mid of ['modal-leaderboard', 'modal-share-hub', 'modal-prize', 'modal-rules', 'modal-legal']) {
     document.getElementById(mid)?.setAttribute('hidden', '');
   }
   document.getElementById('topbar')?.toggleAttribute('hidden', name === 'gate');
@@ -9481,7 +9509,7 @@ function bindUIEvents() {
   });
 
   // Закрытие информационных модалок по клику на тёмный фон (backdrop) и по клавише Escape
-  for (const modalId of ['modal-leaderboard', 'modal-share-hub', 'modal-prize', 'modal-rules', 'modal-repeat-duel']) {
+  for (const modalId of ['modal-leaderboard', 'modal-share-hub', 'modal-prize', 'modal-rules', 'modal-repeat-duel', 'modal-legal']) {
     const backdropEl = document.getElementById(modalId);
     backdropEl?.addEventListener('click', (e) => {
       if (e.target !== backdropEl) return;
@@ -9503,7 +9531,7 @@ function bindUIEvents() {
       closeLeaderboardModal({ startOrResumeGame: false });
       return;
     }
-    for (const modalId of ['modal-share-hub', 'modal-prize', 'modal-rules', 'modal-repeat-duel']) {
+    for (const modalId of ['modal-share-hub', 'modal-prize', 'modal-rules', 'modal-repeat-duel', 'modal-legal']) {
       const m = document.getElementById(modalId);
       if (m && !m.hasAttribute('hidden')) {
         m.setAttribute('hidden', '');
@@ -9514,6 +9542,33 @@ function bindUIEvents() {
       }
     }
   });
+
+  // Ленивое юридическое модальное окно #modal-legal (подгружает src/legal.js только по клику)
+  document.addEventListener('click', (e) => {
+    const trigger = e.target?.closest?.('[data-open-legal]');
+    if (!trigger) return;
+    e.preventDefault();
+    const tab = trigger.getAttribute('data-open-legal') || 'rules';
+    closeBurgerDrawer();
+    openLegalModal(tab).catch(() => {});
+  });
+
+  document.querySelectorAll('[data-legal-tab]').forEach((tabBtn) => {
+    tabBtn.addEventListener('click', () => {
+      const tab = tabBtn.getAttribute('data-legal-tab') || 'rules';
+      openLegalModal(tab).catch(() => {});
+    });
+  });
+
+  const closeLegalModal = () => {
+    document.getElementById('modal-legal')?.setAttribute('hidden', '');
+    state.round.pausedForModal = false;
+    if (state.activeScreen === 'workshop' && state.round.running) {
+      scene?.setInteractive(true);
+    }
+  };
+  document.getElementById('btn-close-legal')?.addEventListener('click', closeLegalModal);
+  document.getElementById('btn-legal-ok')?.addEventListener('click', closeLegalModal);
 
   // Модалка Мульти-Шеринга (Бочка + Трейлер во все соцсети)
   document.getElementById('btn-close-share-hub')?.addEventListener('click', () => {

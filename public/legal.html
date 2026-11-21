@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d0d0d" />
+  <title>БОЧКА — Правила акции, Соглашение и Политика конфиденциальности (152-ФЗ)</title>
+  <meta name="description" content="Официальные правила рекламной акции БОЧКА, Пользовательское соглашение и Политика обработки персональных данных ООО БИГСКРИНПРОДАКШН (152-ФЗ РФ)." />
+  <style>
+    :root {
+      --bg: #0d0d0d;
+      --panel: #141519;
+      --border: rgba(234, 179, 8, 0.28);
+      --accent: #eab308;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: radial-gradient(circle at 50% 0%, #1d1a11 0%, var(--bg) 52%);
+      color: var(--text);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+    .legal-shell { max-width: 760px; margin: 0 auto; padding: 16px 14px 48px; }
+    .legal-topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; background: rgba(20, 21, 25, 0.94); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; }
+    .legal-brand { display: flex; align-items: center; gap: 8px; font-weight: 800; letter-spacing: 0.08em; color: #fff; font-size: 16px; }
+    .legal-age { display: inline-flex; align-items: center; justify-content: center; padding: 2px 6px; border: 1px solid rgba(234, 179, 8, 0.7); border-radius: 4px; font-size: 11px; color: #fde047; }
+    .legal-back { display: inline-flex; align-items: center; padding: 7px 11px; border-radius: 6px; border: 1px solid rgba(234, 179, 8, 0.55); background: rgba(234, 179, 8, 0.12); color: #fef08a; text-decoration: none; font-size: 12px; font-weight: 700; white-space: nowrap; }
+    .legal-nav { position: sticky; top: 8px; z-index: 10; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 6px; background: rgba(13, 13, 13, 0.94); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 8px; margin-bottom: 14px; backdrop-filter: blur(8px); }
+    .legal-nav a { text-align: center; padding: 8px 6px; border-radius: 6px; background: rgba(255, 255, 255, 0.04); color: #e5e7eb; text-decoration: none; font-size: 11.5px; font-weight: 700; border: 1px solid transparent; }
+    .legal-nav a:hover, .legal-nav a.is-active { background: rgba(234, 179, 8, 0.16); border-color: rgba(234, 179, 8, 0.65); color: #fef08a; }
+    .legal-article { background: var(--panel); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 16px 14px; margin-bottom: 14px; scroll-margin-top: 64px; }
+    .legal-section-title { margin: 0 0 12px; font-size: 17px; line-height: 1.3; color: #fde047; border-bottom: 1px solid rgba(234, 179, 8, 0.22); padding-bottom: 8px; }
+    .legal-block-heading { margin: 14px 0 6px; font-size: 13.5px; color: #fff; }
+    .legal-p, .legal-list { margin: 0 0 8px; font-size: 13px; color: var(--text); }
+    .legal-list { padding-left: 18px; }
+    .legal-list li { margin-bottom: 6px; }
+    .legal-req-card { background: rgba(234, 179, 8, 0.07); border: 1px solid var(--border); border-radius: 10px; padding: 14px; font-size: 12.5px; color: #e5e7eb; }
+    .legal-req-card strong { display: block; margin-bottom: 6px; color: #fde047; font-size: 13px; }
+    .legal-req-card p { margin: 0 0 4px; }
+    .legal-req-card a { color: #facc15; }
+  </style>
+</head>
+<body>
+  <main class="legal-shell">
+    <header class="legal-topbar">
+      <div class="legal-brand"><span>БОЧКА</span><span class="legal-age">18+</span></div>
+      <a class="legal-back" href="../">← В игру</a>
+    </header>
+    <nav class="legal-nav" aria-label="Разделы юридической информации">
+      <a href="#rules" class="is-active" data-nav="rules">Правила акции</a>
+      <a href="#terms" data-nav="terms">Соглашение</a>
+      <a href="#privacy" data-nav="privacy">152-ФЗ РФ</a>
+    </nav>
+    <div id="legal-content"></div>
+  </main>
+  <script type="module">
+    import { renderAllLegalSectionsInto } from '../src/legal.js?v=1545';
+    renderAllLegalSectionsInto(document.getElementById('legal-content'));
+    const navLinks = Array.from(document.querySelectorAll('.legal-nav a'));
+    const syncActive = (hash) => {
+      const id = (hash || '#rules').replace('#', '');
+      for (const a of navLinks) a.classList.toggle('is-active', a.dataset.nav === id);
+    };
+    window.addEventListener('hashchange', () => syncActive(location.hash));
+    syncActive(location.hash);
+  </script>
+</body>
+</html>

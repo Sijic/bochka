@@ -5,6 +5,9 @@ import path from 'node:path';
 const RUNTIME_ASSETS = [
   'CNAME',
   '.nojekyll',
+  'legal.html',
+  'public/legal.html',
+  'src/legal.js',
   'og.jpg',
   'bochka_og_1280x720.jpg',
   'photo_2026-11-08_00-00-14.jpg',
