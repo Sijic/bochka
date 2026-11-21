@@ -276,6 +276,47 @@ export function extractUrlBarrelParam() {
   return '';
 }
 
+let _tgWriteAccessPrompted = false;
+let _tgWriteAccessGranted = false;
+
+/**
+ * v15.4.1: Запрос нативного разрешения Telegram WebApp.requestWriteAccess() (Bot API 6.9+),
+ * чтобы @bochka_film_bot мог слать игроку пуши в дуэль, ответы друзей и бесплатные билеты в ЛС
+ * БЕЗ необходимости выходить в чат с ботом и нажимать /start!
+ */
+export function requestTelegramWriteAccessIfNeeded({ force = false } = {}) {
+  return new Promise((resolve) => {
+    const tg = getWebApp();
+    if (!tg || !isTelegramMiniApp()) {
+      resolve({ ok: false, allowed: false, skipped: true });
+      return;
+    }
+    const alreadyPm = Boolean(tg.initDataUnsafe?.user?.allows_write_to_pm) || _tgWriteAccessGranted;
+    if (alreadyPm) {
+      _tgWriteAccessGranted = true;
+      resolve({ ok: true, allowed: true, alreadyAllowed: true });
+      return;
+    }
+    if (_tgWriteAccessPrompted && !force) {
+      resolve({ ok: true, allowed: false, skipped: true });
+      return;
+    }
+    if (typeof tg.requestWriteAccess !== 'function') {
+      resolve({ ok: false, allowed: false, unsupported: true });
+      return;
+    }
+    _tgWriteAccessPrompted = true;
+    try {
+      tg.requestWriteAccess((allowed) => {
+        if (allowed) _tgWriteAccessGranted = true;
+        resolve({ ok: true, allowed: Boolean(allowed) });
+      });
+    } catch {
+      resolve({ ok: false, allowed: false });
+    }
+  });
+}
+
 /**
  * Запрашивает верифицированный контакт игрока через системное окно Telegram `requestContact`.
  * В Telegram Mini App 6.9+ вызывает системный попап и автоматически доставляет контакт в @bochka_film_bot вебхук.

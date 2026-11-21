@@ -6,6 +6,7 @@ import {
   isTestBogRequested,
   isTestBogSessionActive,
   requestTelegramContact,
+  requestTelegramWriteAccessIfNeeded,
   openTelegramShare,
   openNativeTelegramShareCard,
   openWhatsAppShare,
@@ -1909,10 +1910,11 @@ async function bootstrap() {
     state.entered = true;
     await openDuelTable(state.tg.duelRoomParam);
   } else if (state.tg?.teamSeedRole === 'prod') {
-    // v15.3: Продюсер зашёл по ссылке team_prod — ВСЕГДА сразу открываем экран продюсерской бочки!
+    // v15.3 + v15.4.1: Продюсер зашёл по ссылке team_prod — сразу открываем упаковку и запрашиваем разрешение на пуши от бота!
     state.entered = true;
     applySeedPackModeUI(true);
     showScreen('pack');
+    requestTelegramWriteAccessIfNeeded().catch(() => {});
     showToast('🎬 Запакуй СЕБЯ в бочку 1 раз — получишь ОДНУ общую ссылку для всех друзей и чатов!');
   }
 
@@ -2369,6 +2371,7 @@ async function triggerHubBarrelChoice(index, worldPoint = null) {
    ВХОДНОЙ ШЛЮЗ -> МАРШРУТИЗАТОР (ПРОПУСК / ДУЭЛЬ / ПОДГЛЯДЫВАНИЕ / БОЧКА / ХАБ)
    ============================================================================ */
 async function enterWorkshopGate(withSound) {
+  requestTelegramWriteAccessIfNeeded().catch(() => {});
   if (state.entered) {
     if (withSound) {
       await audio.unlock(true);
@@ -7671,6 +7674,7 @@ async function openDuelTable(roomId = '', { autoAddTestBots = false } = {}) {
   }
 
   state.entered = true;
+  requestTelegramWriteAccessIfNeeded().catch(() => {});
   stopAirTimer();
   state.round.running = false;
   state.round.pausedForModal = false;
