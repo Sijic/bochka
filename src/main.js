@@ -5793,7 +5793,7 @@ async function handleSealBarrelClick() {
       tgUser: state.tg?.user,
       barrelId: created.id,
       linkType,
-      senderName: senderName || state.tg?.user?.name || '',
+      senderName: state.tg?.user?.name || document.getElementById('input-sender-name')?.value || '',
       phrase,
       shareUrl: created.shareUrl,
     }).catch(() => ({ ok: false, fallback: true, preparedMessageId: '', shareUrl: created.shareUrl }));
