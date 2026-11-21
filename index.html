@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0d0d'/%3E%3Crect x='8' y='4' width='16' height='24' rx='2' fill='none' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='11' x2='25' y2='11' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='21' x2='25' y2='21' stroke='%23eab308' stroke-width='2'/%3E%3C/svg%3E" />
   <title>БОЧКА — Заводской триллер | Вызволи друга за 3 удара ломом</title>
-  <meta name="bochka-build" content="v15.0-shards-premiere" />
+  <meta name="bochka-build" content="v15.0.2-instant-gate" />
   <meta name="description" content="Четыре цеха завода, заваренные 200-литровые бочки и 30 секунд кислорода. Запиши фото и голос друга на дно бочки, проверь его слух и забери допуск на закрытую Премьеру 17 декабря." />
 
   <!-- Open Graph / Telegram / WhatsApp Link Preview -->
@@ -54,6 +54,23 @@
   }
   </script>
 
+  <link rel="modulepreload" href="./src/main.js" />
+  <link rel="modulepreload" href="./src/backend.js" />
+  <link rel="modulepreload" href="./src/env.js" />
+  <link rel="modulepreload" href="./vendor/supabase.esm.js" />
+
+  <style id="critical-gate-css">
+    html,body{margin:0;padding:0;background:#0d0d0d;color:#f4f4f5;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overflow:hidden;height:100%}
+    [hidden]{display:none!important}
+    #screen-gate{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:12px;background:radial-gradient(circle at 50% 25%,#1e1b12 0%,#0d0d0d 72%)}
+    .gate-frame{width:min(94vw,430px);padding:18px 16px;background:rgba(15,15,17,.94);border:1px solid rgba(234,179,8,.42);border-radius:10px;text-align:center}
+    .metal-logo{margin:6px 0 2px;font-size:38px;line-height:1;letter-spacing:.08em;color:#f8fafc}
+    .gate-subtitle{margin:0 0 8px;font-size:12px;letter-spacing:.1em;color:#facc15;font-weight:700}
+    .premiere-hero-banner{width:100%;margin:6px 0 10px;padding:10px 12px;border-radius:8px;border:1.5px solid rgba(250,204,21,.85);background:linear-gradient(135deg,rgba(113,63,18,.42),rgba(234,179,8,.18),rgba(24,24,27,.92));color:#fef08a;display:flex;flex-direction:column;gap:4px;cursor:pointer}
+    .gate-actions{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+    .btn-primary{width:100%;padding:12px 14px;border:0;border-radius:6px;background:#eab308;color:#0d0d0d;font-weight:800;font-size:13px;cursor:pointer}
+    .btn-ghost{width:100%;padding:10px 14px;border:1px solid rgba(255,255,255,.22);border-radius:6px;background:transparent;color:#e4e4e7;font-weight:700;font-size:12px;cursor:pointer}
+  </style>
   <link rel="stylesheet" href="./src/styles.css" />
 </head>
 <body data-ui-stage="1" data-blitz-unlocked="0">
@@ -240,6 +257,17 @@
       </div>
     </div>
   </section>
+  <script>
+    (function(){
+      window.__bochkaGateInteractiveAt = performance.now();
+      var sBtn = document.getElementById('btn-enter-sound');
+      var mBtn = document.getElementById('btn-enter-mute');
+      var pBtn = document.getElementById('gate-premiere-banner');
+      if (sBtn) sBtn.addEventListener('click', function(){ if (!window.__bochkaMainBound) window.__earlyGateAction = 'sound'; });
+      if (mBtn) mBtn.addEventListener('click', function(){ if (!window.__bochkaMainBound) window.__earlyGateAction = 'mute'; });
+      if (pBtn) pBtn.addEventListener('click', function(){ if (!window.__bochkaMainBound) { var mp = document.getElementById('modal-prize'); if (mp) mp.removeAttribute('hidden'); } });
+    })();
+  </script>
 
   <!-- ====================================================================
        ЭКРАН 2 (РЕЖИМ А v11.5): ВЫБОР ПРЯМО ПО СТОЯЩИМ 3D-БОЧКАМ В ЦЕХУ!
@@ -355,7 +383,7 @@
   <!-- v8.1: Полноэкранный живой анимированный кино-хоррор скример (60fps canvas + 2-кадровая анимация глаз/фонаря/рта/рук) -->
   <div class="screamer-overlay" id="screamer-overlay" data-variant="hand" hidden aria-hidden="true">
     <canvas class="screamer-canvas" id="screamer-canvas"></canvas>
-    <img class="screamer-img" id="screamer-img" src="./public/sprites/horror_barrel_face.webp" alt="" hidden />
+    <img class="screamer-img" id="screamer-img" src="./public/sprites/horror_barrel_face.webp" alt="" loading="lazy" decoding="async" hidden />
     <div class="screamer-fx-layer" id="screamer-fx-layer"></div>
     <div class="screamer-glitch-bars" aria-hidden="true"></div>
     <div class="screamer-caption" id="screamer-caption" hidden></div>
@@ -738,7 +766,7 @@
       <!-- v11.0: Экран Уровня 3+ — найден настоящий билет в кино (всё 100% на одном экране!) -->
       <div class="golden-winner-box" id="finale-ticket-win-box" hidden>
         <span class="mono-tag accent-tag" id="finale-ticket-badge">🎟 БИЛЕТ В КИНО НА «БОЧКУ» ДЛЯ ДРУГА</span>
-        <img src="./public/sprites/cinema_ticket_card.webp" class="cinema-ticket-visual" alt="Кинобилет на фильм БОЧКА — 17 декабря" />
+        <img src="./public/sprites/cinema_ticket_card.webp" class="cinema-ticket-visual" alt="Кинобилет на фильм БОЧКА — 17 декабря" loading="lazy" decoding="async" />
         <p class="golden-winner-contact" style="margin:3px 0 6px;">
           Отправь билет другу из списка или новому другу (+ещё больше к шкале Супер-приза!), либо прибереги билет и играй дальше.
         </p>
@@ -834,7 +862,7 @@
         <button type="button" class="icon-close" id="btn-close-golden-fork" aria-label="Отложить">✕</button>
       </div>
 
-      <img src="./public/sprites/cinema_ticket_card.webp" class="cinema-ticket-visual" alt="Кинобилет на фильм БОЧКА — 17 декабря" />
+      <img src="./public/sprites/cinema_ticket_card.webp" class="cinema-ticket-visual" alt="Кинобилет на фильм БОЧКА — 17 декабря" loading="lazy" decoding="async" />
 
       <h3 class="section-title rescue-title" id="golden-fork-title">
         ВНУТРИ БИЛЕТ В КИНО ДЛЯ ТВОЕГО ДРУГА!
@@ -1065,7 +1093,7 @@
       <div class="video-aspect" id="trailer-video-wrap">
         <video
           id="trailer-video"
-          poster="./photo_2026-11-08_00-00-14.jpg"
+          data-poster="./photo_2026-11-08_00-00-14.jpg"
           hidden
           playsinline
           preload="none"
@@ -1351,7 +1379,7 @@
 
       <!-- Правило супер-приза за неделю до показа (10 декабря) -->
       <div class="premiere-final-rule-box">
-        <img src="./public/sprites/points_token_barrel.webp" class="premiere-token-thumb" alt="Баллы в бочке" />
+        <img src="./public/sprites/points_token_barrel.webp" class="premiere-token-thumb" alt="Баллы в бочке" loading="lazy" decoding="async" />
         <div>
           <strong>🏆 ЗАКРЫТАЯ ПРЕМЬЕРА В МОСКВЕ (17 ДЕКАБРЯ) · ФИНАЛ 10 ДЕКАБРЯ</strong>
           <small>Собирай <strong>⭐ баллы из бочек</strong> и <strong>🛢 закатывай друзей</strong> — лидеры сразятся за пригласительные на закрытый показ в Москве. <strong>Для других городов РФ и СНГ:</strong> если победитель живёт за пределами Москвы и МО (включая регионы РФ и города Казахстана/СНГ), проходка автоматически заменяется на <strong>2 билета на фильм «БОЧКА» в любой кинотеатр его города</strong>!</small>

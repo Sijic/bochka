@@ -1525,11 +1525,19 @@ async function bootstrap() {
   loadLocalV9Flags();
   syncTicketShardsUI();
   bindUIEvents();
+  if (typeof window !== 'undefined') window.__bochkaMainBound = true;
   refreshInitialSeedGateUI();
   document.getElementById('btn-enter-sound')?.removeAttribute('disabled');
   document.getElementById('btn-enter-mute')?.removeAttribute('disabled');
   applyProgressiveDisclosureUI({ forceStage: state.uiStage });
-  if (typeof window !== 'undefined') window.__bochkaGateReadyAt = performance.now();
+  if (typeof window !== 'undefined') {
+    window.__bochkaGateReadyAt = performance.now();
+    if (window.__earlyGateAction === 'sound' || window.__earlyGateAction === 'mute') {
+      const wantSound = window.__earlyGateAction === 'sound';
+      window.__earlyGateAction = null;
+      window.setTimeout(() => enterWorkshopGate(wantSound).catch(() => {}), 0);
+    }
+  }
 
   const canvas = document.getElementById('workshop-canvas');
   const screamerCanvasEl = document.getElementById('screamer-canvas');
