@@ -3588,20 +3588,6 @@ async function finishOceanTapperGame() {
   if (countEl) countEl.textContent = '100';
   if (fillEl) fillEl.style.width = '100%';
   if (subEl) subEl.textContent = '⚡ 100% ПРОБИТО! ТИЛЬ ЗАРЯДИЛ 6 ❤️ НА ДУЭЛЬ И +3 ❤️ В ЦЕХ!';
-
-  const reward = await claimOceanTapperReward(state.tg?.user, Math.max(1, taps)).catch(() => ({ livesAwarded: 3 }));
-  const v8Refill = await awardV8LevelProgress(state.tg?.user, { level: state.profile.currentLevel || 6, pointsDelta: 0, livesDelta: 3 }).catch(() => null);
-  state.profile.easterEggClaimed = true;
-  state.profile.lives = capEarlyLivesIfNoRealFriends(Math.max(3, Number(v8Refill?.lives ?? reward?.lives ?? state.profile.lives ?? 3)));
-  if (duelCtrl) {
-    duelCtrl.refillFromTil?.();
-  }
-  if (reward?.hasPendingTicket || reward?.giftAwarded) state.profile.hasPendingTicket = true;
-  updatePremiereBarsUI();
-  refreshHudLevelLabel();
-  flyRewardToHud({ type: 'lives', count: 3, label: '+3 ❤️' });
-  Haptics.success();
-
   if (pill) {
     pill.removeAttribute('hidden');
     pill.textContent = '⚡ ТИЛЬ ЗАРЯДИЛ 100% ПУЛЬСА И 6 ❤️ НА ДУЭЛЬ! Поделись открыткой с рейтингом или жми «← В ЦЕХ»!';
@@ -3614,6 +3600,19 @@ async function finishOceanTapperGame() {
     backBtn.textContent = state.oceanTapper.returnDuel ? '⚡ В ДУЭЛЬ (6 ❤️)' : '← В ЦЕХ (+3 ❤️)';
     backBtn.removeAttribute('hidden');
   }
+  Haptics.success();
+
+  const reward = await claimOceanTapperReward(state.tg?.user, Math.max(1, taps)).catch(() => ({ livesAwarded: 3 }));
+  const v8Refill = await awardV8LevelProgress(state.tg?.user, { level: state.profile.currentLevel || 6, pointsDelta: 0, livesDelta: 3 }).catch(() => null);
+  state.profile.easterEggClaimed = true;
+  state.profile.lives = capEarlyLivesIfNoRealFriends(Math.max(3, Number(v8Refill?.lives ?? reward?.lives ?? state.profile.lives ?? 3)));
+  if (duelCtrl) {
+    duelCtrl.refillFromTil?.();
+  }
+  if (reward?.hasPendingTicket || reward?.giftAwarded) state.profile.hasPendingTicket = true;
+  updatePremiereBarsUI();
+  refreshHudLevelLabel();
+  flyRewardToHud({ type: 'lives', count: 3, label: '+3 ❤️' });
   showToast('⚡ Достучался до Тиля (100%)! Получено 6 ❤️ на дуэль и +3 ❤️ в цех!');
 
   if (state.oceanTapper.returnDuel) {
