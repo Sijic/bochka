@@ -445,7 +445,7 @@ async function openHallOfFameModal() {
     onOpenChipDuel: () => {
       modal.setAttribute('hidden', '');
       state.round.pausedForModal = false;
-      openDuelTable('', { initialMode: 'chips' }).catch(() => {});
+      openDuelTable('', { initialMode: 'chips', prefetchedHof: data }).catch(() => {});
     },
   });
 }
@@ -7819,7 +7819,7 @@ function escapeHtmlSafe(str) {
     .replace(/"/g, '&quot;');
 }
 
-async function openDuelTable(roomId = '', { autoAddTestBots = false, initialMode = 'classic' } = {}) {
+async function openDuelTable(roomId = '', { autoAddTestBots = false, initialMode = 'classic', prefetchedHof = null } = {}) {
   state.entered = true;
   requestAndSyncWriteAccess();
   stopAirTimer();
@@ -7827,14 +7827,14 @@ async function openDuelTable(roomId = '', { autoAddTestBots = false, initialMode
   state.round.pausedForModal = false;
   document.querySelectorAll('.modal-backdrop').forEach((m) => m.setAttribute('hidden', ''));
   closeBurgerDrawer();
-  await syncUiStage(state.tg?.user, 4);
+  syncUiStage(state.tg?.user, 4).catch(() => {});
   applyProgressiveDisclosureUI({ forceStage: 4 });
 
   await Promise.all([audio.unlock(audio.enabled !== false), ensureDuelReady()]);
   refreshSoundButtonLabel();
 
   const cleanRoom = roomId || `d_${Math.random().toString(36).slice(2, 8)}`;
-  await duelCtrl?.openRoom(cleanRoom, { autoAddTestBots, initialMode });
+  await duelCtrl?.openRoom(cleanRoom, { autoAddTestBots, initialMode, prefetchedHof });
   showScreen('duel');
 }
 

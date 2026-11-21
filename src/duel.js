@@ -225,8 +225,11 @@ export class WorkshopDuelController {
     this.renderLobbyUI();
   }
 
-  async openRoom(roomId, { autoAddTestBots = false, initialMode = 'classic' } = {}) {
+  async openRoom(roomId, { autoAddTestBots = false, initialMode = 'classic', prefetchedHof = null } = {}) {
     this.leaveRoom(false);
+    if (prefetchedHof?.ok) {
+      this.hofCache = prefetchedHof;
+    }
 
     const tgUser = this.getTgUser?.() || null;
     this.myUid = getViewerUid(tgUser);
@@ -300,7 +303,7 @@ export class WorkshopDuelController {
     this.startBadgeProjectionLoop();
 
     if (initialMode === 'chips') {
-      await this.setDuelMode('chips', { forceRefresh: true });
+      await this.setDuelMode('chips', { forceRefresh: !prefetchedHof?.ok });
     } else {
       // Фоново обновляем статус замка на вкладке «Дуэль на фишки» (строго лениво, после входа в Дуэль)
       this.loadTrophiesMod()
