@@ -313,28 +313,33 @@ async function ensureSceneReady() {
   if (scene) return scene;
   if (sceneInitPromise) return sceneInitPromise;
   sceneInitPromise = (async () => {
-    const { WorkshopScene } = await import('./scene.js');
-    if (scene) return scene;
-    const canvas = document.getElementById('workshop-canvas');
-    scene = new WorkshopScene(canvas, {
-      onHoverBarrel: handleBarrelHover,
-      onStrikeBarrel: handleBarrelStrike,
-      onCameraMove: (camPos) => audio.updateListenerCamera(camPos),
-      onCeilingDrip: (x, z) => audio.playSpatialCeilingDrip(x, z),
-      onBarrelEerie: (idx, kind) => {
-        if (state.activeScreen === 'workshop' && !state.round?.pausedForModal) {
-          audio.playBarrelEerieSound?.(idx, kind);
-        }
-      },
-    });
-    scene.onEmptyBarrelHit = (idx) => audio.playEmptyBarrelClang?.(idx);
-    scene.onSteamBurst = () => audio.playSteamWarningHiss?.();
-    audio.setBarrelLayout(scene.getBarrelWorldPositions(), state.round?.targetIndex || 0);
-    if (!screamersPreloaded) {
-      screamersPreloaded = true;
-      window.setTimeout(() => preloadScreamerFrames(SCREAMER_META), 250);
+    try {
+      const { WorkshopScene } = await import('./scene.js');
+      if (scene) return scene;
+      const canvas = document.getElementById('workshop-canvas');
+      scene = new WorkshopScene(canvas, {
+        onHoverBarrel: handleBarrelHover,
+        onStrikeBarrel: handleBarrelStrike,
+        onCameraMove: (camPos) => audio.updateListenerCamera(camPos),
+        onCeilingDrip: (x, z) => audio.playSpatialCeilingDrip(x, z),
+        onBarrelEerie: (idx, kind) => {
+          if (state.activeScreen === 'workshop' && !state.round?.pausedForModal) {
+            audio.playBarrelEerieSound?.(idx, kind);
+          }
+        },
+      });
+      scene.onEmptyBarrelHit = (idx) => audio.playEmptyBarrelClang?.(idx);
+      scene.onSteamBurst = () => audio.playSteamWarningHiss?.();
+      audio.setBarrelLayout(scene.getBarrelWorldPositions(), state.round?.targetIndex || 0);
+      if (!screamersPreloaded) {
+        screamersPreloaded = true;
+        window.setTimeout(() => preloadScreamerFrames(SCREAMER_META), 250);
+      }
+      return scene;
+    } catch (err) {
+      sceneInitPromise = null;
+      throw err;
     }
-    return scene;
   })();
   return sceneInitPromise;
 }
@@ -2397,7 +2402,13 @@ async function enterWorkshopGate(withSound) {
     return;
   }
   state.entered = true;
-  await Promise.all([audio.unlock(withSound), ensureSceneReady()]);
+  try {
+    await Promise.all([audio.unlock(withSound), ensureSceneReady()]);
+  } catch (err) {
+    state.entered = false;
+    showToast('⏳ Загружаем 3D-цех — нажми кнопку входа ещё раз');
+    return;
+  }
   refreshSoundButtonLabel();
 
   if (state.incomingPassId) {
