@@ -25,7 +25,7 @@ export function isTestBogActive() {
  * В режиме ТЕСТ-БОГА (песочница `/testbog/`) жёстко отключает клиент Supabase:
  * ни один тестовый удар, скриншот, фото, голос или билет не попадает в базу и бакеты!
  */
-function getCloudDb() {
+export function getCloudDb() {
   if (isTestBogActive()) return null;
   return supabase;
 }
@@ -1705,8 +1705,10 @@ export async function fetchMyWorkshopFriends(tgUser = null) {
   return [];
 }
 
-export async function startDuelAnte(tgUser = null, roomId = '', roundKey = '') {
+export async function startDuelAnte(tgUser = null, roomId = '', roundKey = '', opts = {}) {
   const uid = getViewerUid(tgUser);
+  const duelMode = opts?.duelMode === 'chips' ? 'chips' : 'classic';
+  const anteTrophyId = duelMode === 'chips' && opts?.anteTrophyId ? String(opts.anteTrophyId) : null;
   const db = getCloudDb();
   if (db) {
     try {
@@ -1714,6 +1716,8 @@ export async function startDuelAnte(tgUser = null, roomId = '', roundKey = '') {
         p_uid: uid,
         p_room_id: roomId,
         p_round_key: roundKey,
+        p_duel_mode: duelMode,
+        p_ante_trophy_id: anteTrophyId,
       });
       if (!error && data) {
         const prof = getLocalPreviewProfile();
@@ -1723,6 +1727,10 @@ export async function startDuelAnte(tgUser = null, roomId = '', roundKey = '') {
         return {
           ok: Boolean(data.ok),
           reason: data.reason || 'ok',
+          duelMode: data.duel_mode || duelMode,
+          anteTrophyId: data.ante_trophy_id || anteTrophyId,
+          requiredLevel: Number(data.required_level || 3),
+          invitesRemaining: Number(data.invites_remaining ?? 0),
           lives: Number(data.lives ?? prof.lives),
           premierePoints: Number(data.premiere_points ?? prof.premierePoints),
         };
@@ -1730,6 +1738,9 @@ export async function startDuelAnte(tgUser = null, roomId = '', roundKey = '') {
     } catch { /* fallback below */ }
   }
 
+  if (duelMode === 'chips') {
+    return { ok: false, reason: 'level_required', duelMode, requiredLevel: 3, invitesRemaining: 3, lives: 0, premierePoints: 0 };
+  }
   const prof = getLocalPreviewProfile();
   if (prof.lives <= 0) {
     return { ok: false, reason: 'no_lives', lives: 0, premierePoints: prof.premierePoints || 0 };
@@ -1738,7 +1749,7 @@ export async function startDuelAnte(tgUser = null, roomId = '', roundKey = '') {
   prof.duelsPlayed = (prof.duelsPlayed || 0) + 1;
   prof.premierePoints = (prof.premierePoints || 0) + 80;
   saveLocalPreviewProfile(prof);
-  return { ok: true, lives: prof.lives, premierePoints: prof.premierePoints };
+  return { ok: true, duelMode: 'classic', lives: prof.lives, premierePoints: prof.premierePoints };
 }
 
 export async function settleDuelRound({ roomId, roundKey, winnerUid, playerUids = [], tgUser = null }) {
@@ -1752,6 +1763,14 @@ export async function settleDuelRound({ roomId, roundKey, winnerUid, playerUids 
         p_winner_uid: winnerUid,
         p_player_uids: playerUids,
       });
+      if (!error && data && data.ok === false && data.reason === 'level_required') {
+        return {
+          ok: false,
+          reason: 'level_required',
+          duelMode: 'chips',
+          transferredTrophies: [],
+        };
+      }
       if (!error && data?.ok) {
         if (winnerUid === myUid) {
           const prof = getLocalPreviewProfile();
@@ -1763,6 +1782,7 @@ export async function settleDuelRound({ roomId, roundKey, winnerUid, playerUids 
         }
         return {
           ok: true,
+          duelMode: data.duel_mode || 'classic',
           potLives: Number(data.pot_lives || playerUids.length || 2),
           scoreBonus: Number(data.score_bonus || 0),
           pointsBonus: Number(data.points_bonus || 200),
@@ -1771,6 +1791,7 @@ export async function settleDuelRound({ roomId, roundKey, winnerUid, playerUids 
           winnerScore: Number(data.winner_score || 0),
           winnerPoints: Number(data.winner_points || 0),
           hasPendingTicket: Boolean(data.has_pending_ticket),
+          transferredTrophies: Array.isArray(data.transferred_trophies) ? data.transferred_trophies : [],
         };
       }
     } catch { /* fallback below */ }

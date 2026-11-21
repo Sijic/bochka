@@ -20,7 +20,7 @@ const TIL_AVATAR_URL = './public/sprites/til_avatar.webp?v=1543';
  * Все промежуточные клики, таймеры и «Погреметь цепями» идут строго через WebSocket в оперативной памяти (0 записей в БД).
  */
 export class WorkshopDuelController {
-  constructor({ scene, audio, getTgUser, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels }) {
+  constructor({ scene, audio, getTgUser, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels, onOpenHallOfFame }) {
     this.scene = scene;
     this.audio = audio;
     this.getTgUser = getTgUser;
@@ -33,7 +33,14 @@ export class WorkshopDuelController {
     this.onFlyRating = onFlyRating;
     this.onFlyLife = onFlyLife;
     this.onReturnToLevels = onReturnToLevels;
+    this.onOpenHallOfFame = onOpenHallOfFame;
     this.soloMode = false;
+    this.duelMode = 'classic'; // 'classic' | 'chips'
+    this.selectedAnteTrophyId = null;
+    this.selectedAnteTrophyMeta = null;
+    this.opponentChips = {};
+    this.hofCache = null;
+    this._trophiesMod = null;
     this.energy = 100;
     this.duelLives = 6; // v12.0: Минимум 6 жизней именно на Дуэль (Тиль всегда пополняет минимум до 6 ❤️!)
     this.duelRoundsWithoutTicket = 0; // Если не нашёл билет за 3 раунда -> возврат на уровни искать пацана!
@@ -95,7 +102,130 @@ export class WorkshopDuelController {
     }
   }
 
-  async openRoom(roomId, { autoAddTestBots = false } = {}) {
+  async loadTrophiesMod() {
+    if (!this._trophiesMod) {
+      this._trophiesMod = await import('./trophies.js?v=155');
+    }
+    return this._trophiesMod;
+  }
+
+  bindModeTabsOnce() {
+    const tabClassic = document.getElementById('btn-duel-tab-classic');
+    const tabChips = document.getElementById('btn-duel-tab-chips');
+    if (tabClassic && !tabClassic.dataset.bound) {
+      tabClassic.dataset.bound = '1';
+      tabClassic.addEventListener('click', () => {
+        if (this.phase !== 'lobby' && this.phase !== 'finished') return;
+        this.setDuelMode('classic');
+      });
+    }
+    if (tabChips && !tabChips.dataset.bound) {
+      tabChips.dataset.bound = '1';
+      tabChips.addEventListener('click', () => {
+        if (this.phase !== 'lobby' && this.phase !== 'finished') return;
+        this.setDuelMode('chips', { forceRefresh: true });
+      });
+    }
+  }
+
+  updateModeTabsUI() {
+    const tabClassic = document.getElementById('btn-duel-tab-classic');
+    const tabChips = document.getElementById('btn-duel-tab-chips');
+    const panel = document.getElementById('duel-chips-panel');
+    const unlocked = Boolean(this.hofCache?.chipDuelUnlocked);
+    if (tabClassic) {
+      tabClassic.classList.toggle('is-active', this.duelMode === 'classic');
+      tabClassic.setAttribute('aria-selected', this.duelMode === 'classic' ? 'true' : 'false');
+    }
+    if (tabChips) {
+      tabChips.classList.toggle('is-active', this.duelMode === 'chips');
+      tabChips.classList.toggle('is-locked-tab', !unlocked);
+      tabChips.setAttribute('aria-selected', this.duelMode === 'chips' ? 'true' : 'false');
+      tabChips.textContent = unlocked ? '🪙 ДУЭЛЬ НА ФИШКИ' : '🔒 ДУЭЛЬ НА ФИШКИ';
+    }
+    if (panel) {
+      if (this.duelMode === 'chips' && this.phase === 'lobby') {
+        panel.removeAttribute('hidden');
+      } else {
+        panel.setAttribute('hidden', '');
+      }
+    }
+  }
+
+  async setDuelMode(mode = 'classic', { forceRefresh = false } = {}) {
+    this.duelMode = mode === 'chips' ? 'chips' : 'classic';
+    if (this.duelMode === 'classic') {
+      this.updateModeTabsUI();
+      this.renderLobbyUI();
+      return;
+    }
+
+    const panel = document.getElementById('duel-chips-panel');
+    if (panel) {
+      panel.removeAttribute('hidden');
+      panel.textContent = 'Загрузка Зала славы…';
+    }
+    this.updateModeTabsUI();
+
+    const mod = await this.loadTrophiesMod();
+    if (forceRefresh || !this.hofCache) {
+      this.hofCache = await mod.fetchHallOfFame(this.getTgUser?.());
+    }
+    const freeChips = (this.hofCache?.trophies || []).filter((t) => !t.locked_in_duel_id);
+    if (this.hofCache?.chipDuelUnlocked) {
+      const stillValid = freeChips.some((t) => String(t.id) === String(this.selectedAnteTrophyId));
+      if (!stillValid) {
+        const first = freeChips[0] || null;
+        this.selectedAnteTrophyId = first ? first.id : null;
+        this.selectedAnteTrophyMeta = first;
+      }
+    } else {
+      this.selectedAnteTrophyId = null;
+      this.selectedAnteTrophyMeta = null;
+    }
+
+    const renderPicker = () => {
+      mod.renderDuelChipPicker(panel, this.hofCache, {
+        selectedTrophyId: this.selectedAnteTrophyId,
+        onSelect: (tr) => {
+          this.selectedAnteTrophyId = tr.id;
+          this.selectedAnteTrophyMeta = tr;
+          this.broadcast('duel_chip_select', {
+            uid: this.myUid,
+            name: this.myName,
+            trophy: { id: tr.id, label: tr.label, rarity: tr.rarity, image_url: tr.image_url },
+          });
+          renderPicker();
+          this.renderLobbyUI();
+        },
+        onInviteFriend: () => {
+          this.leaveRoom(false);
+          this.onOpenInviteShare?.();
+        },
+        onSwitchClassic: () => {
+          this.setDuelMode('classic');
+        },
+      });
+    };
+
+    renderPicker();
+    if (this.selectedAnteTrophyMeta) {
+      this.broadcast('duel_chip_select', {
+        uid: this.myUid,
+        name: this.myName,
+        trophy: {
+          id: this.selectedAnteTrophyMeta.id,
+          label: this.selectedAnteTrophyMeta.label,
+          rarity: this.selectedAnteTrophyMeta.rarity,
+          image_url: this.selectedAnteTrophyMeta.image_url,
+        },
+      });
+    }
+    this.updateModeTabsUI();
+    this.renderLobbyUI();
+  }
+
+  async openRoom(roomId, { autoAddTestBots = false, initialMode = 'classic' } = {}) {
     this.leaveRoom(false);
 
     const tgUser = this.getTgUser?.() || null;
@@ -105,6 +235,10 @@ export class WorkshopDuelController {
     this.roomId = String(roomId || `d_${Math.random().toString(36).slice(2, 8)}`).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 28);
     this.active = true;
     this.phase = 'lobby';
+    this.duelMode = 'classic';
+    this.selectedAnteTrophyId = null;
+    this.selectedAnteTrophyMeta = null;
+    this.opponentChips = {};
     this.roundKey = '';
     this.antePaidForRound = '';
     this.roundParticipants = [];
@@ -137,6 +271,11 @@ export class WorkshopDuelController {
     document.body.classList.add('is-duel-active');
     document.getElementById('duel-live-mini-bar')?.setAttribute('hidden', '');
     document.getElementById('duel-result-box')?.setAttribute('hidden', '');
+    const resTrophy = document.getElementById('duel-result-trophy');
+    if (resTrophy) {
+      resTrophy.textContent = '';
+      resTrophy.setAttribute('hidden', '');
+    }
     document.getElementById('duel-spectator-bar')?.setAttribute('hidden', '');
     document.getElementById('duel-countdown-banner')?.setAttribute('hidden', '');
 
@@ -154,12 +293,35 @@ export class WorkshopDuelController {
     });
     this.scene.setInteractive(false);
 
+    this.bindModeTabsOnce();
     this.connectRealtimeChannel();
+    this.updateModeTabsUI();
     this.renderLobbyUI();
     this.startBadgeProjectionLoop();
+
+    if (initialMode === 'chips') {
+      await this.setDuelMode('chips', { forceRefresh: true });
+    } else {
+      // Фоново обновляем статус замка на вкладке «Дуэль на фишки» (строго лениво, после входа в Дуэль)
+      this.loadTrophiesMod()
+        .then((mod) => mod.fetchHallOfFame(this.getTgUser?.()))
+        .then((hof) => {
+          if (!this.active) return;
+          this.hofCache = hof;
+          this.updateModeTabsUI();
+        })
+        .catch(() => {});
+    }
   }
 
   leaveRoom(triggerCallback = true) {
+    if (this.duelMode === 'chips' && this.roundKey && this.phase !== 'finished' && this.phase !== 'idle') {
+      const rk = this.roundKey;
+      const tg = this.getTgUser?.();
+      this.loadTrophiesMod()
+        .then((mod) => mod.cancelDuelChips(tg, rk))
+        .catch(() => {});
+    }
     this.active = false;
     this.phase = 'idle';
     this.clearAllTimers();
@@ -280,8 +442,19 @@ export class WorkshopDuelController {
       this.applyBarrelClaim(payload, false);
     });
 
+    ch.on('broadcast', { event: 'duel_chip_select' }, ({ payload }) => {
+      if (!this.active || !payload?.uid) return;
+      this.opponentChips[payload.uid] = payload.trophy || null;
+      this.renderLobbyUI();
+    });
+
     ch.on('broadcast', { event: 'duel_ante_failed' }, ({ payload }) => {
       if (!this.active || !payload || payload.roundKey !== this.roundKey) return;
+      if (this.duelMode === 'chips' && this.roundKey) {
+        const rk = this.roundKey;
+        const tg = this.getTgUser?.();
+        this.loadTrophiesMod().then((m) => m.cancelDuelChips(tg, rk)).catch(() => {});
+      }
       this.contenderUids = this.contenderUids.filter((u) => u !== payload.uid);
       this.roundParticipants = this.roundParticipants.filter((u) => u !== payload.uid);
       if (this.contenderUids.length < 2) {
@@ -289,7 +462,11 @@ export class WorkshopDuelController {
         this.phase = 'lobby';
         this.antePaidForRound = null;
         this.scene.setInteractive(false);
-        this.onToast?.(`⚠️ У ${payload.name || 'игрока'} закончились ❤️ для ставки — раунд остановлен.`);
+        const msg =
+          payload.reason === 'level_required'
+            ? `🔒 У ${payload.name || 'игрока'} пока нет 3 уровня для «Дуэли на фишки» — фишки разблокированы.`
+            : `⚠️ У ${payload.name || 'игрока'} закончились ❤️ для ставки — раунд остановлен.`;
+        this.onToast?.(msg);
         this.renderLobbyUI();
       } else if (this.isHost() && this.phase === 'claim') {
         const allLeftClaimed = this.contenderUids.every((u) => Boolean(this.claims[u]));
@@ -352,8 +529,16 @@ export class WorkshopDuelController {
     if (roomTag) roomTag.textContent = `СТОЛ #${this.roomId.toUpperCase()}`;
 
     const count = this.players.length;
+    const isChipsMode = this.duelMode === 'chips';
+    const chipsUnlocked = Boolean(this.hofCache?.chipDuelUnlocked);
+    this.updateModeTabsUI();
     if (potEl) {
-      if (count >= 3) {
+      if (isChipsMode) {
+        potEl.textContent = chipsUnlocked
+          ? '🪙 ДУЭЛЬ НА ФИШКИ (УР. 3+): оба ставят по фишке из Зала славы — победитель забирает карточку проигравшего!'
+          : '🔒 ДУЭЛЬ НА ФИШКИ: откроется на 3 уровне (пригласи 3 друзей). Обычная дуэль доступна сразу!';
+        potEl.classList.toggle('is-triple-bonus', chipsUnlocked);
+      } else if (count >= 3) {
         potEl.innerHTML =
           '🔥 <strong>БАНК НА ТРОИХ: 3 ❤️</strong> + БОНУС ЦЕХА: <strong>+450 ⭐ ОЧКОВ · +0.25 ШКАЛЫ · 8% ЗОЛОТАЯ БОЧКА 🎟</strong>';
         potEl.classList.add('is-triple-bonus');
@@ -455,7 +640,7 @@ export class WorkshopDuelController {
 
     const soloBtn = document.getElementById('btn-duel-play-solo');
     if (soloBtn) {
-      if (this.phase === 'lobby') soloBtn.removeAttribute('hidden');
+      if (this.phase === 'lobby' && !isChipsMode) soloBtn.removeAttribute('hidden');
       else soloBtn.setAttribute('hidden', '');
     }
 
@@ -464,15 +649,25 @@ export class WorkshopDuelController {
         startBtn.setAttribute('hidden', '');
       } else {
         startBtn.removeAttribute('hidden');
-        if (count < 2) {
+        if (isChipsMode && !chipsUnlocked) {
           startBtn.disabled = true;
-          startBtn.textContent = '⏳ ЖДЁМ ДРУЗЕЙ (ИЛИ СЫГРАЙ ПРОТИВ ТИЛЯ ВЫШЕ)';
+          startBtn.textContent = '🔒 ОТКРОЕТСЯ НА 3 УРОВНЕ (НУЖНО 3 ДРУГА)';
+        } else if (isChipsMode && !this.selectedAnteTrophyId) {
+          startBtn.disabled = true;
+          startBtn.textContent = '🪙 ВЫБЕРИ ФИШКУ НА КОН ВЫШЕ';
+        } else if (count < 2) {
+          startBtn.disabled = true;
+          startBtn.textContent = isChipsMode
+            ? '⏳ ЖДЁМ СОПЕРНИКА (УР. 3+) С ФИШКОЙ'
+            : '⏳ ЖДЁМ ДРУЗЕЙ (ИЛИ СЫГРАЙ ПРОТИВ ТИЛЯ ВЫШЕ)';
         } else if (!this.isHost()) {
           startBtn.disabled = true;
           startBtn.textContent = '⏳ ЖДЁМ СТАРТА ОТ ХОСТА...';
         } else {
           startBtn.disabled = false;
-          startBtn.textContent = `🔥 НА СЧЁТ ТРИ! СТАРТ (${count} ИГРОКА · БАНК ×3)`;
+          startBtn.textContent = isChipsMode
+            ? `🪙 НА СЧЁТ ТРИ! БОЙ НА ФИШКИ (${count} ИГРОКА)`
+            : `🔥 НА СЧЁТ ТРИ! СТАРТ (${count} ИГРОКА · БАНК ×3)`;
         }
       }
     }
@@ -593,6 +788,7 @@ export class WorkshopDuelController {
 
     const payload = {
       roundKey,
+      duelMode: this.duelMode === 'chips' ? 'chips' : 'classic',
       isFreeRerack: Boolean(isFreeRerack),
       resetRack: needFreshRack,
       isSuddenDeath: Boolean(suddenDeathContenders),
@@ -615,6 +811,9 @@ export class WorkshopDuelController {
     this.clearBarrelClaimBadges();
 
     this.roundKey = payload.roundKey;
+    if (payload.duelMode === 'chips' || payload.duelMode === 'classic') {
+      this.duelMode = payload.duelMode;
+    }
     this.contenderUids = payload.contenderUids || this.players.map((p) => p.uid);
     if (!payload.isFreeRerack) {
       this.roundParticipants = Array.from(
@@ -642,15 +841,36 @@ export class WorkshopDuelController {
       else specBar.setAttribute('hidden', '');
     }
 
-    // Списываем ставку 1 ❤️ строго 1 раз за новую партию (НЕ при Ничьей и НЕ при Суперфинале 1х1)
+    // Списываем ставку 1 ❤️ (и блокируем выбранную фишку в режиме 'chips') строго 1 раз за новую партию
     if (!payload.isFreeRerack && !amISpectator && this.antePaidForRound !== this.roundKey) {
-      const ante = await startDuelAnte(this.getTgUser?.(), this.roomId, this.roundKey);
+      const ante = await startDuelAnte(this.getTgUser?.(), this.roomId, this.roundKey, {
+        duelMode: this.duelMode,
+        anteTrophyId: this.duelMode === 'chips' ? this.selectedAnteTrophyId : null,
+      });
       if (!ante.ok) {
         this.broadcast('duel_ante_failed', {
           uid: this.myUid,
           name: this.myName,
           roundKey: this.roundKey,
+          reason: ante.reason || 'no_lives',
         });
+        if (this.duelMode === 'chips') {
+          this.loadTrophiesMod()
+            .then((m) => m.cancelDuelChips(this.getTgUser?.(), this.roundKey))
+            .catch(() => {});
+          this.phase = 'lobby';
+          const msg =
+            ante.reason === 'level_required'
+              ? '🔒 Дуэль на фишки откроется на 3 уровне (пригласи 3 друзей)!'
+              : ante.reason === 'trophy_required' || ante.reason === 'trophy_not_found'
+                ? '🪙 Сначала выбери свободную фишку из Зала славы!'
+                : ante.reason === 'trophy_locked'
+                  ? '🔒 Эта фишка уже участвует в другом бою — выбери другую!'
+                  : '⚠️ Не удалось выставить ставку — возврат в лобби.';
+          this.onToast?.(msg);
+          this.renderLobbyUI();
+          return;
+        }
         this.phase = 'finished';
         this.showNoLivesPrompt();
         return;
@@ -1348,6 +1568,32 @@ export class WorkshopDuelController {
       inviteLivesBtn.textContent = '🛢 ЗАКАТАТЬ НОВОГО ДРУГА (+3 ❤️ · +20% К ШКАЛЕ)';
       inviteLivesBtn.removeAttribute('hidden');
     }
+
+    const resTrophyEl = document.getElementById('duel-result-trophy');
+    if (resTrophyEl) {
+      const captured = Array.isArray(settleRes?.transferredTrophies) ? settleRes.transferredTrophies : [];
+      if (captured.length > 0 && iFoundTicket) {
+        if (titleEl) titleEl.textContent = '🏆 ПОБЕДА В ДУЭЛИ НА ФИШКИ!';
+        this.loadTrophiesMod()
+          .then((mod) => {
+            mod.renderCapturedTrophyBanner(resTrophyEl, captured, {
+              onOpenHallOfFame: () => {
+                this.leaveRoom(false);
+                this.onOpenHallOfFame?.();
+              },
+            });
+            return mod.fetchHallOfFame(this.getTgUser?.());
+          })
+          .then((hof) => {
+            if (hof?.ok) this.hofCache = hof;
+          })
+          .catch(() => {});
+      } else {
+        resTrophyEl.textContent = '';
+        resTrophyEl.setAttribute('hidden', '');
+      }
+    }
+
     this.syncEnergyUI();
     this.renderLobbyUI();
   }

@@ -349,13 +349,14 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1543'));
+    const mod = duelModCache || (await import('./duel.js?v=155'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
       scene,
       audio,
       getTgUser: () => state.tg?.user || null,
+      onOpenHallOfFame: () => openHallOfFameModal().catch(() => {}),
       onProfileSync: (patch) => {
         state.profile = { ...state.profile, ...patch };
         if (patch && patch.ticketShards != null) {
@@ -407,9 +408,77 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=1543'));
+  const mod = duelModCache || (await import('./duel.js?v=155'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
+}
+
+let trophiesModCache = null;
+async function loadTrophiesMod() {
+  if (!trophiesModCache) {
+    trophiesModCache = await import('./trophies.js?v=155');
+  }
+  return trophiesModCache;
+}
+
+async function openHallOfFameModal() {
+  const modal = document.getElementById('modal-hall-of-fame');
+  const body = document.getElementById('hof-modal-body');
+  if (!modal || !body) return;
+
+  if (state.round.running) {
+    state.round.pausedForModal = true;
+    scene?.setInteractive(false);
+  }
+  closeBurgerDrawer();
+  modal.removeAttribute('hidden');
+  body.textContent = 'Загрузка Зала славы…';
+
+  const mod = await loadTrophiesMod();
+  const data = await mod.fetchHallOfFame(state.tg?.user || null);
+  mod.renderHallOfFameModal(body, data, {
+    onInviteFriend: () => {
+      modal.setAttribute('hidden', '');
+      state.round.pausedForModal = false;
+      showScreen('pack');
+    },
+    onOpenChipDuel: () => {
+      modal.setAttribute('hidden', '');
+      state.round.pausedForModal = false;
+      openDuelTable('', { initialMode: 'chips' }).catch(() => {});
+    },
+  });
+}
+
+async function collectBarrelTrophyLazy(barrelId) {
+  if (!barrelId) return null;
+  try {
+    const mod = await loadTrophiesMod();
+    const res = await mod.collectBarrelTrophy(state.tg?.user || null, barrelId);
+    if (res?.ok && res.collected && res.trophy) {
+      const tag = res.trophy.rarity === 'blogger' ? '🌟 Блогерская фишка' : '🪙 Фото-фишка';
+      showToast(`${tag} «${res.trophy.label}» добавлена в Зал славы!`);
+    }
+    return res;
+  } catch {
+    return null;
+  }
+}
+
+async function rollRareMovieCardLazy(source) {
+  try {
+    const mod = await loadTrophiesMod();
+    const res = await mod.mintRareMovieCard(state.tg?.user || null, source);
+    if (res?.ok && res.dropped && res.trophy) {
+      const num = res.trophy.serial_number
+        ? ` #${String(res.trophy.serial_number).padStart(3, '0')}/${res.trophy.max_supply || 100}`
+        : '';
+      showToast(`🃏 Карточка фильма «${res.trophy.label}»${num} в Зале славы!`);
+    }
+    return res;
+  } catch {
+    return null;
+  }
 }
 
 let legalModCache = null;
@@ -1615,12 +1684,12 @@ function syncBurgerMenuLocks() {
     else testTicketBtn.setAttribute('hidden', '');
   }
 
-  // v13.0: Дуэль открывается СТРОГО ПОСЛЕ прохождения Ур. 5 (lvl >= 6 или набрано >= 1500 ⭐)!
+  // v15.5: Обычная дуэль доступна сразу с Ур. 1; «Дуэль на фишки» открывается на Ур. 3 (3 приглашённых друга) внутри вкладок Дуэли!
   setLock(
     'btn-burger-duel',
-    pts < 1500 && lvl < 6,
-    '⚔️ ДУЭЛЬ ЗА БИЛЕТЫ «НА СЧЁТ ТРИ!»',
-    '🔒 ДУЭЛЬ (ОТКРОЕТСЯ ПОСЛЕ УР. 5 / 1500 ⭐)'
+    false,
+    '⚔️ ДУЭЛЬ «НА СЧЁТ ТРИ!» (ОБЫЧНАЯ / НА ФИШКИ)',
+    '⚔️ ДУЭЛЬ «НА СЧЁТ ТРИ!»'
   );
 }
 
@@ -1820,7 +1889,11 @@ async function bootstrap() {
       startPremiere: () => startPremiereRaceRound(),
       showScreen: (n) => showScreen(n),
       getDuel: () => duelCtrl,
-      openDuel: (code) => openDuelTable(code),
+      openDuel: (code, opts) => openDuelTable(code, opts || {}),
+      openHallOfFame: () => openHallOfFameModal(),
+      collectBarrelTrophy: (bid) => collectBarrelTrophyLazy(bid),
+      mintRareMovieCard: (src) => rollRareMovieCardLazy(src || 'level3'),
+      loadTrophiesMod: () => loadTrophiesMod(),
       triggerScreamer: (v) => triggerMiniScreamer(v),
       getBarrelNames: () => scene?.getAllBarrelPaintedNames?.() || [],
       setBarrelName: (idx, name) => scene?.setBarrelPaintedName?.(idx, name),
@@ -2852,8 +2925,14 @@ async function startViralFriendRound(pack) {
       }
       if (lockRes.isSelf) {
         showToast('📌 Это твоя собственная бочка — перешли её реальному другу в Telegram, чтобы получить +20% к Премьере и обрывок 3/4!');
+      } else if (pack?.id) {
+        // v15.5: При вскрытии чужой личной бочки кладём фото-фишку в Зал славы игрока (лениво)
+        collectBarrelTrophyLazy(pack.id).catch(() => {});
       }
     }
+  } else if (pack?.id && isIncomingBroadcast) {
+    // v15.5: При вскрытии блогерской / промо-бочки (bl_* / pr_*) тоже кладём фишку (для bl_* редкость 'blogger')
+    collectBarrelTrophyLazy(pack.id).catch(() => {});
   }
 
   let portraitDataUrl = pack?.photoUrl || DEMO_PORTRAITS[0];
@@ -3656,6 +3735,8 @@ async function finishOceanTapperGame() {
   refreshHudLevelLabel();
   flyRewardToHud({ type: 'lives', count: 3, label: '+3 ❤️' });
   showToast('⚡ Достучался до Тиля (100%)! Получено 6 ❤️ на дуэль и +3 ❤️ в цех!');
+  // v15.5: 50% шанс дропа официальной номерной карточки фильма после экрана Тиля (+10% на Ур. 4 Зала)
+  rollRareMovieCardLazy('til').catch(() => {});
 
   if (state.oceanTapper.returnDuel) {
     window.setTimeout(() => {
@@ -5803,6 +5884,10 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
         startY: pos?.visible ? pos.y : null,
       });
       syncSuperPrizeRatingBarUI();
+      // v15.5: Шанс дропа официальной номерной карточки фильма на Ур. 3 (15%) и Ур. 5 (35%)
+      if (completedLvl === 3 || completedLvl === 5) {
+        rollRareMovieCardLazy(`level${completedLvl}`).catch(() => {});
+      }
     }
 
     if (survived) {
@@ -7734,15 +7819,7 @@ function escapeHtmlSafe(str) {
     .replace(/"/g, '&quot;');
 }
 
-async function openDuelTable(roomId = '', { autoAddTestBots = false } = {}) {
-  const lvl = Math.max(1, Number(state.profile?.currentLevel || 1));
-  const pts = Math.max(0, Math.round(Number(state.profile?.premierePoints || 0)));
-  const isDirectInvite = Boolean(roomId || state.tg?.duelRoomParam || state.repeatRoutePending || isTestBogSessionActive());
-  if (!isDirectInvite && lvl < 6 && pts < 1500) {
-    showToast('🔒 Дуэли откроются после Уровня 5 (1 500 ⭐) — или по приглашению друга в дуэль!');
-    return;
-  }
-
+async function openDuelTable(roomId = '', { autoAddTestBots = false, initialMode = 'classic' } = {}) {
   state.entered = true;
   requestAndSyncWriteAccess();
   stopAirTimer();
@@ -7757,7 +7834,7 @@ async function openDuelTable(roomId = '', { autoAddTestBots = false } = {}) {
   refreshSoundButtonLabel();
 
   const cleanRoom = roomId || `d_${Math.random().toString(36).slice(2, 8)}`;
-  await duelCtrl?.openRoom(cleanRoom, { autoAddTestBots });
+  await duelCtrl?.openRoom(cleanRoom, { autoAddTestBots, initialMode });
   showScreen('duel');
 }
 
@@ -9569,6 +9646,29 @@ function bindUIEvents() {
   };
   document.getElementById('btn-close-legal')?.addEventListener('click', closeLegalModal);
   document.getElementById('btn-legal-ok')?.addEventListener('click', closeLegalModal);
+
+  // Ленивое модальное окно «Зал славы (Коллекционер)» (src/trophies.js грузится строго по клику)
+  const closeHallOfFameModal = () => {
+    const m = document.getElementById('modal-hall-of-fame');
+    m?.setAttribute('hidden', '');
+    m?.querySelector('#hof-detail-overlay')?.remove();
+    state.round.pausedForModal = false;
+    if (state.activeScreen === 'workshop' && state.round.running) {
+      scene?.setInteractive(true);
+    }
+  };
+  document.getElementById('btn-hub-hall-of-fame')?.addEventListener('click', () => {
+    Haptics.light();
+    openHallOfFameModal().catch(() => {});
+  });
+  document.getElementById('btn-burger-hall-of-fame')?.addEventListener('click', () => {
+    Haptics.light();
+    openHallOfFameModal().catch(() => {});
+  });
+  document.getElementById('btn-close-hall-of-fame')?.addEventListener('click', closeHallOfFameModal);
+  document.getElementById('modal-hall-of-fame')?.addEventListener('click', (e) => {
+    if (e.target?.id === 'modal-hall-of-fame') closeHallOfFameModal();
+  });
 
   // Модалка Мульти-Шеринга (Бочка + Трейлер во все соцсети)
   document.getElementById('btn-close-share-hub')?.addEventListener('click', () => {
