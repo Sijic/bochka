@@ -467,21 +467,32 @@ Deno.serve(async (req: Request) => {
       return jsonResp({ ok: true });
     }
 
-    if ((action === "reaction_cinema" || action === "cinema_accept" || action === "accepted_cinema") && body.senderTgId) {
+    if ((action === "reaction_cinema" || action === "cinema_accept" || action === "accepted_cinema") && (body.senderTgId || body.barrelId)) {
+      let targetSenderTgId = String(body.senderTgId || "").trim();
+      if (!targetSenderTgId && body.barrelId) {
+        const { data: bRow } = await adminDb
+          .from("barrels")
+          .select("sender_tg_id")
+          .eq("short_id", String(body.barrelId))
+          .maybeSingle();
+        if (bRow?.sender_tg_id) targetSenderTgId = String(bRow.sender_tg_id);
+      }
+      if (!targetSenderTgId) return jsonResp({ ok: true, skipped: true, tgSent: false });
+
       const { data: sUser } = await adminDb
         .from("users")
         .select("tg_user_id")
-        .eq("tg_user_id", String(body.senderTgId))
+        .eq("tg_user_id", targetSenderTgId)
         .limit(1)
         .maybeSingle();
-      if (!sUser) return jsonResp({ ok: true, skipped: true });
+      if (!sUser) return jsonResp({ ok: true, skipped: true, tgSent: false });
 
       const opener = escapeHtml(body.openerName || "Твой друг");
-      await tgApi("sendMessage", {
-        chat_id: body.senderTgId,
+      const sendRes = await tgApi("sendMessage", {
+        chat_id: targetSenderTgId,
         parse_mode: "HTML",
         text:
-          `🍿 <b>Твой друг ${opener} открыл твою бочку и согласен идти с тобой в кино 17 декабря!</b>\n` +
+          `🍿 <b>Твой друг ${opener} нашёл тебя в бочке и согласен идти с тобой в кино 17 декабря!</b>\n` +
           `Зови остальных в цех и занимайте соседние места на премьеру «БОЧКИ»!`,
         reply_markup: {
           inline_keyboard: [
@@ -490,7 +501,7 @@ Deno.serve(async (req: Request) => {
           ],
         },
       });
-      return jsonResp({ ok: true });
+      return jsonResp({ ok: true, tgSent: Boolean(sendRes?.ok), tgError: sendRes?.description || "" });
     }
 
     if ((action === "reaction_ask_ticket" || action === "wait_ticket") && body.senderTgId) {
@@ -521,19 +532,19 @@ Deno.serve(async (req: Request) => {
     if (action === "send_friend_ticket_dm" && body.recipientTgId && body.giftId) {
       const sender = escapeHtml(body.senderName || "Твой друг");
       const giftId = String(body.giftId);
-      await tgApi("sendMessage", {
+      const sendRes = await tgApi("sendMessage", {
         chat_id: body.recipientTgId,
         parse_mode: "HTML",
         text:
-          `🎟 <b>${sender} выиграл в «БОЧКЕ» бесплатный виртуальный билет в кино и отправил его ТЕБЕ!</b>\n` +
-          `Нажми кнопку ниже, чтобы забрать билет на премьеру 17 декабря:`,
+          `🎟 <b>${sender} собрал в «БОЧКЕ» бесплатный билет в кино (из 4 частей) и подарил его ТЕБЕ!</b>\n` +
+          `Нажми кнопку ниже, выбери город, кинотеатр и сеанс — без чеков и доплат!`,
         reply_markup: {
           inline_keyboard: [
-            [{ text: "🎟 ЗАБРАТЬ ВИРТУАЛЬНЫЙ БИЛЕТ", url: `${MINI_APP_LINK}?startapp=gift_${encodeURIComponent(giftId)}` }],
+            [{ text: "🎟 ЗАБРАТЬ БЕСПЛАТНЫЙ БИЛЕТ", web_app: { url: `${PUBLIC_WEB_URL}/?gift=${encodeURIComponent(giftId)}` } }],
           ],
         },
       });
-      return jsonResp({ ok: true });
+      return jsonResp({ ok: true, tgSent: Boolean(sendRes?.ok), tgError: sendRes?.description || "" });
     }
 
     if (action === "notify_referrer_ticket_won" && body.referrerTgId) {

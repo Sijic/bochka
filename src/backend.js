@@ -157,8 +157,19 @@ export async function createBarrelPack({
     Number.isInteger(targetBarrelIndex) && targetBarrelIndex >= 0 && targetBarrelIndex < maxIdx
       ? targetBarrelIndex
       : Math.floor(Math.random() * maxIdx);
-  const validScreamers = new Set(['weld', 'lunge', 'siren_cam', 'custom_scream']);
-  const cleanScreamer = validScreamers.has(screamerType) ? screamerType : 'weld';
+  const validScreamers = new Set([
+    'saw_scream',
+    'lid_blast',
+    'basement_shriek',
+    'tesla_siren',
+    'prank_rooster',
+    'prank_dog_alarm',
+    'custom_scream',
+    'weld',
+    'lunge',
+    'siren_cam',
+  ]);
+  const cleanScreamer = validScreamers.has(screamerType) ? screamerType : 'saw_scream';
   const encodedFrame = `${String(frameStyle || 'flashlight').split(':z')[0]}:z${cleanZone}:s_${cleanScreamer}`;
   const senderUid = getViewerUid(tgUser);
   const senderTgId = tgUser?.id || '';
@@ -2212,12 +2223,27 @@ export async function fetchMyGameFriends(tgUser = null) {
 }
 
 export async function sendDirectGiftTicketToFriend({ tgUser, friend, giftId }) {
-  return sendTelegramPing({
-    clientAction: 'send_friend_ticket_dm',
-    recipientTgId: friend?.receiver_tg_id || '',
-    senderName: tgUser?.name || 'Твой друг',
-    giftId,
-  });
+  if (isTestBogActive() || !ENV.tgNotifyWebhook) {
+    return { ok: true, tgSent: true };
+  }
+  const initData = typeof window !== 'undefined' ? String(window.Telegram?.WebApp?.initData || '') : '';
+  try {
+    const res = await fetch(ENV.tgNotifyWebhook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clientAction: 'send_friend_ticket_dm',
+        recipientTgId: friend?.receiver_tg_id || '',
+        senderName: tgUser?.name || 'Твой друг',
+        giftId,
+        initData,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    return { ok: Boolean(res.ok && data?.ok), tgSent: Boolean(data?.tgSent), tgError: data?.tgError || '' };
+  } catch {
+    return { ok: false, tgSent: false, tgError: 'network_error' };
+  }
 }
 
 export async function notifyReferrerTicketWon({ tgUser, referrerTgId }) {

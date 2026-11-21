@@ -2580,17 +2580,15 @@ async function startDemoRound({ resumeAttempts = null } = {}) {
     : { name: 'УЗНИК ЦЕХА', quote: 'Смотри «Бочку» в кино с 17 декабря.' };
 
   const spec = getWorkshopLevelSpec(state.profile.currentLevel || 1);
-  // v10.5: Ур.2 (пустая бочка) -> настоящее ржавое дно бочки с лежащими ❤️ жизнями! Ур.3 -> настоящий кинобилет! Ур.4+ -> живой пацан!
+  // v15.4: Ур.2 (пустая бочка) -> дно с ❤️ жизнями; Ур.3+ -> ВСЕГДА кинобилет (никакого пацана в бочке на Ур.4+!)
   const isEmptyLevel = spec.level === 2;
-  const isTicketLevel = spec.level === 3;
-  const isLiveBoyLevel = spec.level >= 4;
+  const isTicketLevel = spec.level >= 3;
+  const isLiveBoyLevel = false;
   const rawPortrait = isEmptyLevel
     ? './public/sprites/empty_barrel_hearts.webp'
     : isTicketLevel
       ? './public/sprites/cinema_ticket_barrel.webp'
-      : isLiveBoyLevel
-        ? './public/sprites/hero_boy_live.webp'
-        : DEMO_PORTRAITS[pickIdx] || DEMO_PORTRAITS[0];
+      : DEMO_PORTRAITS[pickIdx] || DEMO_PORTRAITS[0];
   // v9.2: Убран робо-голос! В демо/уровнях звучат только живые эффекты цеха; голос звучит только от реальных друзей.
   const boyVoiceUrl = '';
 
@@ -4542,7 +4540,7 @@ function renderSentTicketsLedgerInModal() {
   });
 }
 
-function finishTicketSendAndReturnToGame({ passId, recipientName, shareUrl }) {
+function finishTicketSendAndReturnToGame({ passId, recipientName, shareUrl, skipTelegramShare = false }) {
   recordSentTicketInLedger({ passId, recipientName, shareUrl });
   const remainingTickets = consumePendingCinemaTicketAndReward();
   state.giftPass.lastPassUrl = shareUrl;
@@ -4558,15 +4556,19 @@ function finishTicketSendAndReturnToGame({ passId, recipientName, shareUrl }) {
   syncPendingTicketsFloatingUI();
   syncBurgerMenuLocks();
 
-  openTelegramShare(
-    shareUrl,
-    `🎟 ${recipientName}, погнали в кино на «БОЧКУ» с 17 декабря! Я выбил нам второе кресло рядом за 0 ₽ (1+1) — открой за 24ч: `
-  );
+  if (!skipTelegramShare) {
+    openTelegramShare(
+      shareUrl,
+      `🎟 ${recipientName}, погнали в кино на «БОЧКУ» с 17 декабря! Я собрал для тебя бесплатный билет (без чеков!) — открой за 24ч: `
+    );
+  }
 
   showToast(
-    remainingTickets > 0
-      ? `🎟 Билет отправлен! Осталось ещё ${remainingTickets} шт. (если друг не зайдёт за 24ч — вернётся!)`
-      : '🎟 Билет отправлен другу! Если он не зайдёт за 24ч — билет вернётся к тебе. Продолжаем игру!'
+    skipTelegramShare
+      ? `🎟 Билет доставлен ${recipientName} прямо в @bochka_film_bot! Продолжаем игру!`
+      : remainingTickets > 0
+        ? `🎟 Билет отправлен! Осталось ещё ${remainingTickets} шт. (если друг не зайдёт за 24ч — вернётся!)`
+        : '🎟 Билет отправлен другу! Если он не зайдёт за 24ч — билет вернётся к тебе. Продолжаем игру!'
   );
   Haptics.success();
 
@@ -4658,7 +4660,7 @@ async function populateGoldenForkFriendsList() {
     const nameStr = fr.receiver_name || 'Друг';
     label.textContent = `👤 ${nameStr}${fr.receiver_username ? ' @' + fr.receiver_username : ''}`;
     const cta = document.createElement('strong');
-    cta.textContent = '🎟 ОТПРАВИТЬ В ИГРУ + TG';
+    cta.textContent = '🎟 ОТПРАВИТЬ В БОТ';
     row.append(label, cta);
     row.addEventListener('click', async () => {
       row.disabled = true;
@@ -4670,15 +4672,17 @@ async function populateGoldenForkFriendsList() {
         processedPassPhoto: state.giftPass.processedPhoto,
       });
       if (pass?.ok) {
-        await sendDirectGiftTicketToFriend({ tgUser: state.tg?.user, friend: fr, giftId: pass.giftId });
+        const dmRes = await sendDirectGiftTicketToFriend({ tgUser: state.tg?.user, friend: fr, giftId: pass.giftId });
+        // v15.4: Если выбрал друга из списка в игре и бот доставил билет в ЛС — НЕ выходим в окно «выбрать кому»!
         finishTicketSendAndReturnToGame({
           passId: pass.giftId || pass.passId,
           recipientName: nameStr,
           shareUrl: pass.shareUrl,
+          skipTelegramShare: Boolean(dmRes?.tgSent),
         });
       } else {
         row.disabled = false;
-        cta.textContent = '🎟 ОТПРАВИТЬ В ИГРУ + TG';
+        cta.textContent = '🎟 ОТПРАВИТЬ В БОТ';
       }
     });
     listEl.appendChild(row);
@@ -5583,12 +5587,19 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
     attemptsUsed: state.round.attemptsUsed || 1,
   });
 
-  if (didHitTarget && state.round.voiceUrl) {
-    window.setTimeout(() => {
-      audio.playCleanSenderVoice(state.round.voiceUrl, {
-        useBarrelFilter: state.round.useBarrelFilter !== false,
-      });
-    }, 360);
+  if (didHitTarget) {
+    if (state.round.voiceUrl) {
+      window.setTimeout(() => {
+        audio.playCleanSenderVoice(state.round.voiceUrl, {
+          useBarrelFilter: state.round.useBarrelFilter !== false,
+        });
+      }, 280);
+    } else if ((!state.round.isDemo || state.incomingPack) && state.round.screamerType) {
+      // v15.4: Если друг выбрал звук/скример (петух, собака, крик из подвала, циркулярка...) — обязательно проигрываем его при вскрытии бочки!
+      window.setTimeout(() => {
+        audio.playFullScreamer(state.round.screamerType, { preview: true });
+      }, 280);
+    }
   }
 
   const completedLvl = Math.max(1, Number(state.round.workshopLevel || 1));
@@ -5923,9 +5934,11 @@ async function handleQuick1TapPrankClick() {
   if (quickBtn) quickBtn.disabled = true;
   if (quickTxt) quickTxt.textContent = '⏳ Завариваем крышку…';
   try {
-    state.pack.screamerType = 'saw_scream';
+    if (!state.pack.screamerType) {
+      state.pack.screamerType = 'saw_scream';
+    }
     const inp = document.getElementById('input-custom-phrase');
-    if (inp) inp.value = 'Вытащи меня из цеха — с нас поход в кино!';
+    if (inp && !inp.value.trim()) inp.value = 'Вытащи меня из цеха — с нас поход в кино!';
     if (!state.pack.processed) {
       await initPackConstructorDefaults();
     }
@@ -6051,7 +6064,10 @@ async function handleSealBarrelClick() {
     // v15.0: Часть 1/4 билета выпадает сразу после отправки первой бочки другу на Уровне 2!
     let packShardRes = null;
     if (!isBroadcastPack && Number(state.profile?.ticketShards || 0) === 0 && Number(state.profile?.pendingTicketsCount || 0) === 0) {
-      packShardRes = await awardTicketShard('level2_pack', { silent: true }).catch(() => null);
+      packShardRes = await awardTicketShard('level2_pack', { silent: false }).catch(() => null);
+      if (packShardRes?.shards > 0) {
+        syncTicketShardsUI({ pulse: true, justEarned: packShardRes.shards });
+      }
     }
     // v12.5: На экране отправки сначала скрываем новые 3 ❤️ (показываем 0 ❤️), чтобы игрок ГЛАЗАМИ увидел прилёт 0→1→2→3 в шапку!
     state.pendingLevelStartFly = { lives: wasProducerFirstPack ? 1 : 3, strikes: 3 };
