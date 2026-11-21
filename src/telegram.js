@@ -259,9 +259,16 @@ export function extractUrlBarrelParam() {
     const sp = new URLSearchParams(window.location.search);
     const direct = sp.get('b') || sp.get('startapp') || sp.get('tgWebAppStartParam') || '';
     if (direct) return direct.trim();
-    if (window.location.hash && window.location.hash.includes('b=')) {
+    if (window.location.hash) {
       const hp = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-      return (hp.get('b') || '').trim();
+      const fromHash = hp.get('tgWebAppStartParam') || hp.get('startapp') || hp.get('b') || '';
+      if (fromHash) return fromHash.trim();
+      const rawData = hp.get('tgWebAppData') || '';
+      if (rawData) {
+        const dp = new URLSearchParams(rawData);
+        const fromData = dp.get('start_param') || '';
+        if (fromData) return fromData.trim();
+      }
     }
   } catch {
     /* ignore */
