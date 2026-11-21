@@ -349,7 +349,7 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js'));
+    const mod = duelModCache || (await import('./duel.js?v=1543'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -407,7 +407,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js'));
+  const mod = duelModCache || (await import('./duel.js?v=1543'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
@@ -3472,10 +3472,10 @@ function resetOceanTapperUI() {
   if (fillEl) fillEl.style.width = '0%';
   if (promptEl) {
     promptEl.removeAttribute('hidden');
-    promptEl.textContent = '👊 ДОСТУЧИСЬ ДО ТИЛЯ (100%), ЧТОБЫ ВЕРНУТЬСЯ!';
+    promptEl.textContent = '👊 СТУЧИ ДО НЕБЕС (100%) — ШКАЛА УХОДИТ ВНИЗ!';
   }
   if (subEl) {
-    subEl.textContent = '👊 Стучи быстрее — без ударов пульс уходит в ноль! Вернёшься в игру только на 100%!';
+    subEl.textContent = '⚡ Бей быстрее! Остановишься — пульс мигом слетит в ноль! Вернёшься в игру только на 100%!';
   }
   if (giftBtn) giftBtn.setAttribute('hidden', '');
   if (backBtn) backBtn.setAttribute('hidden', '');
@@ -3503,8 +3503,9 @@ function startOceanTapperCountdown() {
     const e = Number(state.oceanTapper.energy || 0);
     if (e <= 0) return;
 
-    // v15.4.2: Без таймера — если не стучишь, пульс Тиля уходит обратно в 0 (чем ближе к 100%, тем быстрее откат, но достижимо живым пальцем!)
-    const decayPerSec = e < 35 ? 6 : e < 65 ? 11 : e < 85 ? 16 : 21;
+    // v15.4.3: Бодрый откат «Стучи до небес» — без быстрых ударов шкала стремительно падает в ноль!
+    // При 3–5 тапах/сек шкала стопорится и сползает; при энергичных 6.5–8+ тапах/сек пробивается за ~4–7 сек.
+    const decayPerSec = e < 25 ? 14 : e < 50 ? 20 : e < 75 ? 26 : e < 90 ? 31 : 34;
     const nextE = Math.max(0, e - decayPerSec * dt);
     state.oceanTapper.energy = nextE;
 
@@ -3513,19 +3514,26 @@ function startOceanTapperCountdown() {
     const fillEl = document.getElementById('ocean-tap-fill');
     if (countEl) countEl.textContent = String(pct);
     if (fillEl) fillEl.style.width = `${nextE.toFixed(1)}%`;
+
+    if (now - (state.oceanTapper.lastTapAt || 0) > 450 && pct > 0 && pct < 85) {
+      const subEl = document.getElementById('ocean-pulse-sub');
+      if (subEl) {
+        subEl.textContent = '⚠️ ШКАЛА СЛЕТАЕТ В НОЛЬ — СТУЧИ БЫСТРЕЕ, ДОСТУЧИСЬ ДО НЕБЕС!';
+      }
+    }
   }, 50);
 }
 
 const TIL_TAP_QUOTES = [
+  '«Достучись до небес — бей быстрее!»',
   '«На небе только и разговоров, что о море…»',
+  '«Не останавливайся — пульс уходит в море!»',
   '«На небе только и разговоров, что о бочке…»',
-  '«Бей быстрее — пульс уходит в море!»',
-  '«Ты слышишь прибой за стальной стенкой?»',
 ];
 
 function handleOceanBarrelTap() {
   const now = performance.now();
-  if (now - state.oceanTapper.lastTapAt < 40) return;
+  if (now - state.oceanTapper.lastTapAt < 30) return;
   state.oceanTapper.lastTapAt = now;
 
   if (state.oceanTapper.finished) return;
@@ -3535,7 +3543,7 @@ function handleOceanBarrelTap() {
 
   state.oceanTapper.taps += 1;
   const taps = state.oceanTapper.taps;
-  const nextEnergy = Math.min(100, Number(state.oceanTapper.energy || 0) + 9.0);
+  const nextEnergy = Math.min(100, Number(state.oceanTapper.energy || 0) + 5.6);
   state.oceanTapper.energy = nextEnergy;
   const energyPct = Math.round(nextEnergy);
 
@@ -3549,11 +3557,17 @@ function handleOceanBarrelTap() {
   const subEl = document.getElementById('ocean-pulse-sub');
   if (countEl) countEl.textContent = String(energyPct);
   if (fillEl) fillEl.style.width = `${nextEnergy.toFixed(1)}%`;
-  if (promptEl && taps % 5 === 0) {
-    promptEl.textContent = TIL_TAP_QUOTES[(taps / 5) % TIL_TAP_QUOTES.length | 0];
+  if (promptEl && taps % 6 === 0) {
+    promptEl.textContent = TIL_TAP_QUOTES[(taps / 6) % TIL_TAP_QUOTES.length | 0];
   }
-  if (subEl && energyPct >= 70 && energyPct < 100) {
-    subEl.textContent = '🔥 ПОЧТИ ДОБИЛ! СТУЧИ БЫСТРЕЕ — ПУЛЬС СИЛЬНО ТЯНЕТ ВНИЗ!';
+  if (subEl && energyPct < 100) {
+    if (energyPct >= 75) {
+      subEl.textContent = '🔥 ДОСТУЧИСЬ ДО НЕБЕС! ДАВИ МАКСИМУМ — ШКАЛА ТЯНЕТ НАЗАД!';
+    } else if (energyPct >= 40) {
+      subEl.textContent = '⚡ БЫСТРЕЕ! НЕ СБАВЛЯЙ ТЕМП — ПУЛЬС БЫСТРО ПАДАЕТ ВНИЗ!';
+    } else {
+      subEl.textContent = '👊 СТУЧИ ПО БОЧКЕ «ТИЛЬ» ЧАЩЕ — РАЗГОНЯЙ ДО 100%!';
+    }
   }
 
   const targetBtn = document.getElementById('btn-ocean-tap-barrel');

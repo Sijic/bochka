@@ -61,6 +61,7 @@ const RUNTIME_ASSETS = [
   'public/sprites/cinema_ticket_card.webp',
   'public/sprites/ocean_sea_real.webp',
   'public/sprites/ocean_barrel_til_hand.webp',
+  'public/sprites/til_avatar.webp',
   'public/sprites/points_token_barrel.webp',
   'public/sprites/empty_barrel_interior.webp',
   'public/sprites/empty_barrel_hearts.webp',

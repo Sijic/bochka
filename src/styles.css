@@ -2951,7 +2951,7 @@ body[data-screen="ocean"] .toast {
   width: 0%;
   height: 100%;
   background: linear-gradient(90deg, #eab308 0%, #f59e0b 65%, #22c55e 100%);
-  transition: width 0.08s linear;
+  transition: width 0.05s linear;
 }
 
 .pass-claim-form {
@@ -7428,6 +7428,39 @@ body.is-duel-active .topbar {
   padding: 0 11px !important;
   font-size: 11px !important;
   white-space: nowrap !important;
+}
+
+.btn-duel-solo-til {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.duel-btn-til-ava {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: center 20%;
+  border: 1.5px solid #facc15;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px rgba(250, 204, 21, 0.55);
+}
+
+.duel-slot-card.is-til-player {
+  border-color: rgba(250, 204, 21, 0.85);
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.16), rgba(180, 83, 9, 0.12));
+}
+
+.duel-slot-card.is-til-player .duel-slot-avatar {
+  border-color: #fde047;
+  box-shadow: 0 0 10px rgba(250, 204, 21, 0.65);
+}
+
+.duel-slot-card.is-til-player .duel-slot-meta span {
+  color: #fde047;
+  font-weight: 700;
 }
 
 

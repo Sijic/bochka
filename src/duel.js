@@ -10,6 +10,9 @@ import {
 } from './backend.js';
 
 const BARREL_BATCH_CODES = ['01', '19', '97', '12', '17', '26', '33', '48', '71', '84', '92', '99'];
+const TIL_BOT_UID = 'bot_workshop_master';
+const TIL_BOT_NAME = 'Тиль Швайгер';
+const TIL_AVATAR_URL = './public/sprites/til_avatar.webp?v=1543';
 
 /**
  * Контроллер синхронного мультиплеера на 2–3 игроков «НА СЧЁТ ТРИ!» (Supabase Realtime Presence + Broadcast)
@@ -196,14 +199,16 @@ export class WorkshopDuelController {
       return;
     }
     this.botCounter += 1;
+    const isFirstTil = this.botCounter === 1 && !this.players.some((p) => p.uid === TIL_BOT_UID);
     const names = ['Макс (Кент 🤖)', 'Алина (Кент 🤖)', 'Дэн (Цех 🤖)'];
-    const botName = names[(this.botCounter - 1) % names.length];
+    const botName = isFirstTil ? TIL_BOT_NAME : names[(this.botCounter - 1) % names.length];
     this.players.push({
-      uid: `bot_${this.botCounter}_${Date.now().toString(36)}`,
+      uid: isFirstTil ? TIL_BOT_UID : `bot_${this.botCounter}_${Date.now().toString(36)}`,
       name: botName,
-      avatar: '',
+      avatar: isFirstTil ? TIL_AVATAR_URL : '',
       joinedAt: Date.now() + this.botCounter,
       isBot: true,
+      isTil: isFirstTil,
     });
     this.renderLobbyUI();
   }
@@ -370,12 +375,15 @@ export class WorkshopDuelController {
         liveMiniBar.removeAttribute('hidden');
         const miniStatus = document.getElementById('duel-live-mini-status');
         if (miniStatus) {
+          const vsTil = this.players.some((p) => p.isBot && (p.isTil || p.uid === TIL_BOT_UID));
           const vsBot = this.players.some((p) => p.isBot);
           miniStatus.textContent = isFinished
             ? '🏁 ИТОГ РАУНДА'
-            : vsBot
-              ? '🤖 БОЙ С БОТОМ (ПОКА ЖДЁМ ДРУЗЕЙ)'
-              : `⚔️ БОЙ · ${count} ИГРОКА`;
+            : vsTil
+              ? '🎬 ТИЛЬ ИГРАЕТ С ТОБОЙ (ПОКА ЖДЁМ ДРУЗЕЙ)'
+              : vsBot
+                ? '🤖 БОЙ С БОТОМ (ПОКА ЖДЁМ ДРУЗЕЙ)'
+                : `⚔️ БОЙ · ${count} ИГРОКА`;
         }
       } else {
         liveMiniBar.setAttribute('hidden', '');
@@ -409,16 +417,24 @@ export class WorkshopDuelController {
         const p = this.players[i];
         if (p) {
           const isKnockout = this.spectatorUids.includes(p.uid);
+          const isTil = Boolean(p.isTil || p.uid === TIL_BOT_UID);
           const initials = (p.name || '?').trim().slice(0, 2).toUpperCase();
           const avatarHtml = p.avatar
-            ? `<img src="${escapeAttr(p.avatar)}" alt="" class="duel-slot-avatar-img" />`
+            ? `<img src="${escapeAttr(p.avatar)}" alt="${escapeAttr(p.name || '')}" class="duel-slot-avatar-img" />`
             : `<span class="duel-slot-initials">${escapeHtml(initials)}</span>`;
+          const roleLine = isKnockout
+            ? '☠️ В НОКАУТЕ (ЗРИТЕЛЬ)'
+            : p.uid === this.myUid
+              ? 'ВЫ · В СТРОЮ'
+              : isTil
+                ? '🎬 ТИЛЬ ИГРАЕТ С ТОБОЙ'
+                : 'В СТРОЮ';
           cards.push(`
-            <div class="duel-slot-card is-filled ${isKnockout ? 'is-knockout' : ''}">
+            <div class="duel-slot-card is-filled ${isKnockout ? 'is-knockout' : ''} ${isTil ? 'is-til-player' : ''}">
               <div class="duel-slot-avatar">${avatarHtml}</div>
               <div class="duel-slot-meta">
                 <strong>${escapeHtml(p.name)}</strong>
-                <span>${isKnockout ? '☠️ В НОКАУТЕ (ЗРИТЕЛЬ)' : p.uid === this.myUid ? 'ВЫ · В СТРОЮ' : 'В СТРОЮ'}</span>
+                <span>${roleLine}</span>
               </div>
             </div>
           `);
@@ -450,7 +466,7 @@ export class WorkshopDuelController {
         startBtn.removeAttribute('hidden');
         if (count < 2) {
           startBtn.disabled = true;
-          startBtn.textContent = '⏳ ЖДЁМ ДРУЗЕЙ (ИЛИ ЖМИ «ИГРАТЬ В ОДНОГО» ВЫШЕ)';
+          startBtn.textContent = '⏳ ЖДЁМ ДРУЗЕЙ (ИЛИ СЫГРАЙ ПРОТИВ ТИЛЯ ВЫШЕ)';
         } else if (!this.isHost()) {
           startBtn.disabled = true;
           startBtn.textContent = '⏳ ЖДЁМ СТАРТА ОТ ХОСТА...';
@@ -475,11 +491,12 @@ export class WorkshopDuelController {
       const hasChallenger = this.players.some((p) => p.uid !== this.myUid);
       if (!hasChallenger) {
         this.players.push({
-          uid: 'bot_workshop_master',
-          name: 'Мастер Цеха [БОТ]',
-          avatar: '',
+          uid: TIL_BOT_UID,
+          name: TIL_BOT_NAME,
+          avatar: TIL_AVATAR_URL,
           joinedAt: Date.now() + 10,
           isBot: true,
+          isTil: true,
         });
       }
       this.renderLobbyUI();
@@ -1201,7 +1218,7 @@ export class WorkshopDuelController {
     box?.removeAttribute('hidden');
     const mySkipped = !detail.myEntry;
     const myLoot = detail.myEntry?.loot || { kind: 'skip', value: 0, label: '⏭ ПРОПУСТИЛ (⚡ СОХРАНЕНА)' };
-    const oppName = detail.oppEntry?.claim?.name || 'Мастер Цеха [БОТ]';
+    const oppName = detail.oppEntry?.claim?.name || TIL_BOT_NAME;
     const oppLoot = detail.oppEntry?.loot || { kind: 'empty', value: 0, label: '💨 ПУСТО' };
     const iFoundTicket = Boolean(ticketWinner && ticketWinner.uid === this.myUid);
     const oppFoundTicket = Boolean(ticketWinner && ticketWinner.uid !== this.myUid);
@@ -1391,7 +1408,11 @@ export class WorkshopDuelController {
         ? `<img src="${escapeAttr(claim.avatar)}" alt="" />`
         : `<span>${escapeHtml(initials)}</span>`;
       const lootTag = revealed ? `<b class="duel-badge-loot">${escapeHtml(loot.label)}</b>` : '';
-      const shortName = claim.uid === this.myUid ? 'ТЫ' : (claim.name || '').slice(0, 12);
+      const shortName = claim.uid === this.myUid
+        ? 'ТЫ'
+        : claim.uid === TIL_BOT_UID
+          ? 'ТИЛЬ'
+          : (claim.name || '').slice(0, 12);
       badge.innerHTML = `
         <div class="duel-badge-ava">${ava}</div>
         <small>${escapeHtml(shortName)}</small>
