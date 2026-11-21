@@ -7,6 +7,7 @@ import {
   isTestBogSessionActive,
   requestTelegramContact,
   openTelegramShare,
+  openNativeTelegramShareCard,
   openWhatsAppShare,
   openVkShare,
   openInstagramShareFlow,
@@ -78,6 +79,8 @@ import {
   sendLevel1FriendReply,
   requestServerCinemaTicket,
   awardTicketShardServer,
+  prepareNativeShareMessage,
+  claimPersonalBarrelOpen,
   reconcileServerTicketPasses,
   reclaimServerTicketPass,
   fetchTicketPoolStatus,
@@ -598,6 +601,12 @@ async function awardTicketShard(source = 'level', { silent = false } = {}) {
   if (res.reason === 'seed_admin_excluded') {
     if (!silent) showToast('🛡 Режим команды посева: билет из призового пула сохранён для реальных зрителей!');
     return { merged: false, granted: false, seedExcluded: true, shards: Number(state.profile?.ticketShards || 0), res };
+  }
+  if (res.duplicateBlocked) {
+    const keepSh = Math.max(0, Math.min(3, Number(res.shards ?? state.profile?.ticketShards ?? 0)));
+    state.profile.ticketShards = keepSh;
+    syncTicketShardsUI();
+    return { merged: false, granted: false, duplicateBlocked: true, shards: keepSh, res };
   }
   if (res.mergedTicket && res.granted) {
     syncTicketShardsUI({ pulse: true, showFullFlash: true });
@@ -2587,6 +2596,34 @@ async function startDailyShiftRound() {
 
 async function startViralFriendRound(pack) {
   await ensureSceneReady();
+
+  // v15.1: Одноразовый замок на чужие личные бочки pack_* (is_broadcast = false) + серверная проверка входа!
+  // Многоразовые ссылки продюсеров (pr_*) и блогеров (bl_*) остаются бесконечными 1..N.
+  const isIncomingBroadcast = Boolean(
+    pack?.isBroadcast || state.tg?.broadcastLinkType === 'pr' || state.tg?.broadcastLinkType === 'bl'
+  );
+  if (pack?.id && !isIncomingBroadcast) {
+    const lockRes = await claimPersonalBarrelOpen(pack.id, state.tg?.user).catch(() => null);
+    if (lockRes?.ok) {
+      state.lastPersonalLockEvent = lockRes;
+      if (lockRes.inheritedRootCode) {
+        state.profile.rootTrackingCode = lockRes.inheritedRootCode;
+      }
+      if (lockRes.inheritedSeedPrefix) {
+        state.profile.seedPrefix = lockRes.inheritedSeedPrefix;
+      }
+      if (lockRes.locked) {
+        state.incomingPack = null;
+        await startNewbieOnboardingRound();
+        showToast('🔒 Эту бочку уже открыли до тебя — держи свежий цех!');
+        return;
+      }
+      if (lockRes.isSelf) {
+        showToast('📌 Это твоя собственная бочка — перешли её реальному другу в Telegram, чтобы получить +20% к Премьере и обрывок 3/4!');
+      }
+    }
+  }
+
   let portraitDataUrl = pack?.photoUrl || DEMO_PORTRAITS[0];
 
   const voiceUrl = pack?.voiceUrl || '';
@@ -5748,12 +5785,29 @@ async function handleSealBarrelClick() {
 
     const sharePrefix =
       teamRole === 'blog'
-        ? '🛢 Я заварил себя в 3D-цеху фильма «БОЧКА»! Надень наушники — вытащи меня за 3 удара и забирай парный билет 1+1 в кино'
-        : '🛢 Кто-то заварил тебя в цеху «БОЧКИ»! Надень наушники — найди нужную крышку за 3 удара';
-    openTelegramShare(
-      created.shareUrl,
-      `${sharePrefix}${phrase ? `: «${phrase}»` : ''}`
-    );
+        ? '🛢 Я заварил себя в 3D-цеху фильма «БОЧКА»! Надень наушники — вытащи меня за 3 удара, собери 4 части бесплатного билета другу и попади в ТОП-20 на Закрытый показ в Москве 17 декабря'
+        : '🛢 Кто-то заварил тебя в цеху «БОЧКИ»! Надень наушники — найди нужную крышку за 3 удара и собери билет в кино';
+    const fullShareText = `${sharePrefix}${phrase ? `: «${phrase}»` : ''}`;
+    const linkType = isBroadcastPack ? (teamRole === 'blog' ? 'bl' : 'pr') : 'pack';
+    const prepShare = await prepareNativeShareMessage({
+      tgUser: state.tg?.user,
+      barrelId: created.id,
+      linkType,
+      senderName: senderName || state.tg?.user?.name || '',
+      phrase,
+      shareUrl: created.shareUrl,
+    }).catch(() => ({ ok: false, fallback: true, preparedMessageId: '', shareUrl: created.shareUrl }));
+    const shareOutcome = openNativeTelegramShareCard({
+      preparedMessageId: prepShare?.preparedMessageId || '',
+      shareUrl: prepShare?.shareUrl || created.shareUrl,
+      shareText: fullShareText,
+    });
+    state.pack.lastShareMeta = {
+      ...shareOutcome,
+      linkType,
+      startParam: prepShare?.startParam || `${linkType}_${created.id}`,
+      prepareCalled: true,
+    };
     updatePremiereBarsUI();
     refreshHudLevelLabel();
     // v15.0: Часть 1/4 билета выпадает сразу после отправки первой бочки другу на Уровне 2!

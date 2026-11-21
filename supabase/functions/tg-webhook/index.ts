@@ -281,6 +281,78 @@ Deno.serve(async (req: Request) => {
 
     const action = body.clientAction || body.event;
 
+    // v15.1: Нативная отправка карточки через Telegram WebApp.shareMessage (Bot API savePreparedInlineMessage)
+    if (action === "prepare_share_message") {
+      const tgUserId = Number(body.tgUserId || 0);
+      const rawBarrelId = String(body.barrelId || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32);
+      const linkType = String(body.linkType || "pack").toLowerCase();
+      const senderName = escapeHtml(String(body.senderName || "Твой друг").slice(0, 48));
+      const phrase = escapeHtml(String(body.phrase || "").slice(0, 140));
+      const startParam =
+        linkType === "pr"
+          ? `pr_${rawBarrelId}`
+          : linkType === "bl"
+            ? `bl_${rawBarrelId}`
+            : `pack_${rawBarrelId}`;
+      const botName = (Deno.env.get("TG_BOT_USERNAME") || "bochka_film_bot").replace(/^@/, "");
+      const targetMiniAppUrl = rawBarrelId
+        ? `https://t.me/${botName}?startapp=${startParam}`
+        : MINI_APP_LINK;
+
+      if (!tgUserId || !rawBarrelId) {
+        return jsonResp({ ok: false, fallback: true, reason: "missing_params", shareUrl: targetMiniAppUrl, startParam });
+      }
+
+      const cardTitle =
+        linkType === "bl"
+          ? "🛢 Вытащи меня из бочки — и собери билет в кино!"
+          : "🛢 Кто-то заварил тебя в 3D-цеху «БОЧКИ»!";
+      const cardText =
+        linkType === "bl"
+          ? `🛢 <b>${senderName}</b> заварил себя в 3D-цеху триллера «БОЧКА»!\n\n` +
+            `Надень наушники, найди нужную крышку за 3 удара и собери 4 обрывка бесплатного билета другу + шанс попасть в ТОП-20 на Закрытый показ в Москве 17 декабря!${phrase ? `\n\n💬 «${phrase}»` : ""}`
+          : `🛢 <b>${senderName}</b> заварил тебя в цеху триллера «БОЧКА»!\n\n` +
+            `У тебя 30 секунд воздуха и 3 удара ломом — прислушайся, откуда идёт стук, и забери билет в кино!${phrase ? `\n\n💬 «${phrase}»` : ""}`;
+
+      const preparedRes = await tgApi("savePreparedInlineMessage", {
+        user_id: tgUserId,
+        allow_user_chats: true,
+        allow_group_chats: true,
+        allow_channel_chats: true,
+        result: {
+          type: "article",
+          id: `bochka_${startParam}_${Date.now()}`,
+          title: cardTitle,
+          description: "Вскрой бочку за 3 удара и собери 4 части бесплатного билета на триллер «БОЧКА» (17 декабря)",
+          thumbnail_url: `${PUBLIC_WEB_URL}/bochka_og_1280x720.jpg`,
+          input_message_content: {
+            message_text: cardText,
+            parse_mode: "HTML",
+            disable_web_page_preview: false,
+          },
+          reply_markup: {
+            inline_keyboard: [[{ text: "🛢 ВСКРЫТЬ БОЧКУ", url: targetMiniAppUrl }]],
+          },
+        },
+      });
+
+      if (preparedRes?.ok && preparedRes?.result?.id) {
+        return jsonResp({
+          ok: true,
+          preparedMessageId: String(preparedRes.result.id),
+          shareUrl: targetMiniAppUrl,
+          startParam,
+        });
+      }
+      return jsonResp({
+        ok: false,
+        fallback: true,
+        reason: preparedRes?.description || "bot_api_fallback",
+        shareUrl: targetMiniAppUrl,
+        startParam,
+      });
+    }
+
     // v14.3: Сводный пуш создателю многоразовой бочки ТОЛЬКО на круглых отметках (1, 10, 50, 100, 500, 1000, 5000)
     if (action === "broadcast_milestone" && body.senderTgId && body.barrelId) {
       const { data: bRow } = await adminDb

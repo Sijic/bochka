@@ -2321,6 +2321,91 @@ export async function registerSeedAdmin(tgUser = null, seedTag = 'seed_admin') {
 }
 
 /**
+ * v15.1: Подготовка интерактивной карточки Telegram shareMessage (Bot API savePreparedInlineMessage)
+ * с кнопкой «🛢 ВСКРЫТЬ БОЧКУ» и строго личной ссылкой отправителя (pack_ / pr_ / bl_).
+ */
+export async function prepareNativeShareMessage({
+  tgUser = null,
+  barrelId = '',
+  linkType = 'pack',
+  senderName = '',
+  phrase = '',
+  shareUrl = '',
+} = {}) {
+  if (isTestBogActive() || !ENV.tgNotifyWebhook || !barrelId) {
+    return { ok: false, fallback: true, preparedMessageId: '', shareUrl };
+  }
+  const initData = typeof window !== 'undefined' ? String(window.Telegram?.WebApp?.initData || '') : '';
+  try {
+    const res = await fetch(ENV.tgNotifyWebhook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clientAction: 'prepare_share_message',
+        tgUserId: tgUser?.id || 0,
+        barrelId,
+        linkType,
+        senderName: senderName || tgUser?.name || '',
+        phrase,
+        shareUrl,
+        initData,
+      }),
+    });
+    if (!res.ok) return { ok: false, fallback: true, preparedMessageId: '', shareUrl, status: res.status };
+    const data = await res.json().catch(() => ({}));
+    return {
+      ok: Boolean(data?.ok),
+      fallback: !data?.preparedMessageId,
+      preparedMessageId: String(data?.preparedMessageId || ''),
+      shareUrl: data?.shareUrl || shareUrl,
+      startParam: data?.startParam || '',
+      reason: data?.reason || '',
+    };
+  } catch {
+    return { ok: false, fallback: true, preparedMessageId: '', shareUrl };
+  }
+}
+
+/**
+ * v15.1: Одноразовый замок личных бочек pack_* (is_broadcast = false).
+ * - Для чужой уже открытой pack_*: locked = true (0 повторных наград автору, но наследуются seed_prefix/root_tracking_code).
+ * - Для самооткрытия ("Избранное"): isSelf = true (0 жирных наград).
+ * - Для первого чужого друга: атомарно ставит замок и начисляет автору +20% (+500 ⭐), +3 ❤️ и бонусный обрывок 3/4.
+ */
+export async function claimPersonalBarrelOpen(barrelId, viewerTgUser = null) {
+  if (!barrelId) return { ok: false, locked: false };
+  const viewerUid = getViewerUid(viewerTgUser);
+  const db = getCloudDb();
+  if (!db || isTestBogActive()) {
+    return { ok: true, isBroadcast: false, isSelf: false, locked: false, firstOpen: false, senderRewarded: false };
+  }
+  try {
+    const { data, error } = await db.rpc('claim_personal_barrel_open_rpc', {
+      p_barrel_id: String(barrelId).trim(),
+      p_viewer_uid: viewerUid,
+      p_viewer_tg_id: viewerTgUser?.id ? String(viewerTgUser.id) : '',
+      p_viewer_username: viewerTgUser?.username || '',
+      p_viewer_name: viewerTgUser?.name || '',
+    });
+    if (!error && data?.ok) {
+      return {
+        ok: true,
+        isBroadcast: Boolean(data.is_broadcast),
+        isSelf: Boolean(data.is_self),
+        locked: Boolean(data.locked),
+        firstOpen: Boolean(data.first_open),
+        senderRewarded: Boolean(data.sender_rewarded),
+        senderShardRes: data.sender_shard_res || null,
+        inheritedSeedPrefix: data.inherited_seed_prefix || '',
+        inheritedRootCode: data.inherited_root_code || '',
+        reason: data.reason || '',
+      };
+    }
+  } catch { /* ignore */ }
+  return { ok: false, locked: false };
+}
+
+/**
  * v15.0: Серверная выдача 1 части билета (1/4 -> 2/4 -> 3/4 -> 4/4 склейка в целый билет для друга).
  * На 4-й части сервер атомарно проверяет лимит global_stats (MAX_TOTAL=100, MAX_DAILY=6 МСК).
  */
@@ -2341,6 +2426,7 @@ export async function awardTicketShardServer(tgUser = null, source = 'level') {
           prevShards: Number(data.prev_shards || 0),
           mergedTicket: Boolean(data.merged_ticket),
           granted: Boolean(data.granted),
+          duplicateBlocked: Boolean(data.duplicate_blocked),
           reason: data.reason || '',
           fallbackPoints: Number(data.fallback_points || 0),
           premierePoints: data.premiere_points != null ? Number(data.premiere_points) : null,

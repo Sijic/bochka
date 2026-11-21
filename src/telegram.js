@@ -509,6 +509,28 @@ export function openTelegramShare(shareUrl, shareText) {
   window.open(tgShare, '_blank', 'noopener,noreferrer');
 }
 
+/**
+ * v15.1: Нативная отправка карточки через Telegram WebApp.shareMessage(preparedId)
+ * с автоматическим фоллбэком на Telegram.WebApp.openTelegramLink('https://t.me/share/url?...')
+ */
+export function openNativeTelegramShareCard({ preparedMessageId = '', shareUrl = '', shareText = '' } = {}) {
+  const tg = getWebApp();
+  if (preparedMessageId && tg && isTelegramMiniApp() && typeof tg.shareMessage === 'function') {
+    try {
+      tg.shareMessage(String(preparedMessageId), (sent) => {
+        if (sent === false) {
+          // Пользователь закрыл окно — никаких наград за отмену не выдаётся!
+        }
+      });
+      return { mode: 'native_share_message', preparedMessageId: String(preparedMessageId) };
+    } catch {
+      // Фоллбэк на классическую ссылку для старых клиентов Telegram
+    }
+  }
+  openTelegramShare(shareUrl, shareText);
+  return { mode: 'share_url_fallback', preparedMessageId: '' };
+}
+
 export function openWhatsAppShare(shareUrl, shareText) {
   const full = `${shareText}\n${shareUrl}`;
   openExternalLink(`https://api.whatsapp.com/send?text=${encodeURIComponent(full)}`);
