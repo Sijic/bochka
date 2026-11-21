@@ -28,8 +28,8 @@
   <meta name="twitter:description" content="Индустриальный триллер в браузере и Telegram: 4 цеха завода, упаковка друга с голосом из бочки и дуэль «На счёт три!»." />
   <meta name="twitter:image" content="https://bochka.quest/bochka_og_1280x720.jpg" />
 
-  <!-- Telegram Mini App SDK (синхронно, чтобы start_param и user.id были доступны до main.js) -->
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- Telegram Mini App SDK (defer: не блокирует первый рендер #screen-gate, но гарантированно выполняется до ESM main.js) -->
+  <script defer src="https://telegram.org/js/telegram-web-app.js"></script>
 
   <!-- Industrial Typography (неблокирующая подгрузка шрифтов для старта <1.2 сек) -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -54,7 +54,7 @@
   }
   </script>
 
-  <link rel="modulepreload" href="./src/main.js?v=1545" />
+  <link rel="modulepreload" href="./src/main.js?v=1545-r2" />
   <link rel="modulepreload" href="./src/backend.js" />
   <link rel="modulepreload" href="./src/env.js" />
   <link rel="modulepreload" href="./vendor/supabase.esm.js" />
@@ -1599,6 +1599,6 @@
   <!-- Toast уведомления -->
   <div class="toast" id="toast" hidden></div>
 
-  <script type="module" src="./src/main.js?v=1545"></script>
+  <script type="module" src="./src/main.js?v=1545-r2"></script>
 </body>
 </html>
