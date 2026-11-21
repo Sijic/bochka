@@ -4713,12 +4713,8 @@ async function openIncomingPassScreen(passId) {
       (passData.senderTgId && state.tg?.user?.id && String(passData.senderTgId) === String(state.tg.user.id))
   );
 
-  const isAlreadyFighter = Boolean(
-    passData.isExistingPlayer ||
-      Number(state.profile?.premierePoints || 0) > 0 ||
-      Number(state.profile?.packedCount || 0) > 0 ||
-      Number(state.profile?.currentLevel || 1) > 1
-  );
+  // v15.1: Любой реальный друг (кроме самого отправителя) может принять бесплатный билет 1 раз на свой телефон!
+  const isAlreadyFighter = false;
 
   if (passData.expiredReturned || passData.status === 'expired_returned') {
     selfWarn?.setAttribute('hidden', '');
