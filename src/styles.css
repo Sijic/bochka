@@ -6995,3 +6995,365 @@ body.is-duel-active .topbar {
     height: 12px;
   }
 }
+
+/* ==========================================================================
+   v15.2: МОБИЛЬНЫЙ FIT 360px (0 ОБРЕЗАНИЯ, 0 НАСЛОЕНИЯ HUD) + АНИМАЦИЯ 1/4..4/4 БИЛЕТА
+   ========================================================================== */
+
+/* 1. Игровой HUD (.hud-slim): flex в одну чистую строку вместо 3-колоночного grid на 4 элемента */
+.hud-slim {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 6px !important;
+  height: auto !important;
+  min-height: 44px;
+  padding: calc(max(4px, var(--safe-top, env(safe-area-inset-top, 0px)))) 8px 6px !important;
+  box-sizing: border-box;
+}
+.hud-slim-level {
+  flex: 0 0 auto !important;
+  max-width: none !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  font-size: 12px !important;
+  letter-spacing: 0.03em !important;
+}
+.hud-slim-center {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 5px !important;
+}
+.hud-slim-o2 {
+  flex: 0 0 auto !important;
+  font-size: 14px !important;
+  margin-left: auto;
+}
+.hud-slim-menu-btn {
+  flex: 0 0 auto !important;
+  margin-left: 2px !important;
+  width: 28px !important;
+  height: 26px !important;
+  min-width: 28px !important;
+  font-size: 14px !important;
+}
+
+/* Единый вертикальный стек для баннера задачи и полоски пула — физически не могут наслоиться! */
+.hud-top-stack {
+  position: fixed;
+  top: calc(max(4px, var(--safe-top, env(safe-area-inset-top, 0px))) + 46px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(94vw, 440px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  z-index: 25;
+  pointer-events: none;
+}
+.hud-top-stack .hud-task-banner {
+  position: static !important;
+  transform: none !important;
+  top: auto !important;
+  left: auto !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 5px 10px !important;
+  font-size: 11px !important;
+  line-height: 1.25 !important;
+}
+.hud-top-stack .hud-ticket-pool-bar {
+  position: static !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 4px 10px !important;
+  font-size: 10px !important;
+  line-height: 1.22 !important;
+}
+
+/* 2. Мобильный .topbar и #screen-gate (320px..430px): бургер ☰ всегда внутри экрана, весь гейт влезает без наезда! */
+@media (max-width: 440px) {
+  .topbar {
+    padding: calc(max(4px, var(--safe-top, env(safe-area-inset-top, 0px)))) 6px 5px !important;
+    gap: 4px !important;
+    height: auto !important;
+    min-height: 44px;
+  }
+  .topbar-brand {
+    gap: 4px !important;
+    flex-shrink: 0;
+  }
+  .topbar-brand .brand-word {
+    font-size: 12px !important;
+    letter-spacing: 0.04em !important;
+  }
+  .topbar-right {
+    gap: 3px !important;
+    flex-shrink: 1;
+    min-width: 0;
+    justify-content: flex-end;
+  }
+  .topbar-right .nav-link {
+    padding: 4px 5px !important;
+    font-size: 10px !important;
+    gap: 3px !important;
+  }
+  .top-rating-track,
+  .hud-rating-track {
+    display: none !important;
+  }
+  .nav-leaders .points-badge {
+    display: none !important;
+  }
+  .burger-btn {
+    width: 30px !important;
+    height: 28px !important;
+    padding: 5px !important;
+    gap: 3px !important;
+  }
+
+  /* Внутри HUD на узких экранах (360px Samsung / 375px iPhone) всё ровно в одну линию */
+  .hud-slim {
+    gap: 4px !important;
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+  }
+  .hud-slim-level {
+    font-size: 11px !important;
+  }
+  .hud-slim-center {
+    gap: 4px !important;
+  }
+  .hud-slim-center .attempts-squares {
+    gap: 3px !important;
+  }
+  .hud-slim-center .attempt-sq {
+    width: 11px !important;
+    height: 11px !important;
+  }
+  .hud-lives-pill {
+    font-size: 10px !important;
+    margin-right: 0 !important;
+    gap: 2px !important;
+  }
+  .hud-rating-pill {
+    padding: 2px 5px !important;
+    gap: 2px !important;
+  }
+  .hud-rating-label {
+    font-size: 10px !important;
+  }
+  .hud-slim-o2 {
+    font-size: 12.5px !important;
+  }
+  .hud-slim-o2 small {
+    font-size: 8.5px !important;
+  }
+  .hud-shards-pill {
+    padding: 2px 4px !important;
+    font-size: 9.5px !important;
+    gap: 3px !important;
+  }
+  .hud-shards-pill .ticket-stub-mini {
+    width: 20px !important;
+    height: 10px !important;
+    gap: 1.5px !important;
+    padding: 1.5px !important;
+  }
+
+  /* #screen-gate чётко ниже .topbar и компактно влазит целиком на 360x700 */
+  #screen-gate {
+    align-items: flex-start !important;
+    overflow-y: auto !important;
+    padding: calc(max(4px, var(--safe-top, env(safe-area-inset-top, 0px))) + 48px) 8px calc(max(8px, var(--safe-bottom, env(safe-area-inset-bottom, 0px))) + 6px) !important;
+  }
+  #screen-gate .gate-frame {
+    margin: auto 0 !important;
+    padding: 10px 12px !important;
+    width: min(96vw, 400px) !important;
+  }
+  #screen-gate .gate-top-meta {
+    margin-bottom: 4px !important;
+  }
+  #screen-gate .gate-top-meta .mono-tag {
+    font-size: 9.5px !important;
+  }
+  #screen-gate .age-ring {
+    width: 30px !important;
+    height: 30px !important;
+    font-size: 10px !important;
+  }
+  #screen-gate .metal-logo {
+    font-size: clamp(30px, 10vw, 42px) !important;
+    margin: 2px 0 2px !important;
+  }
+  #screen-gate .gate-subtitle {
+    font-size: 10.5px !important;
+    margin-bottom: 6px !important;
+  }
+  #screen-gate .premiere-hero-banner {
+    padding: 7px 9px !important;
+    margin: 4px 0 6px !important;
+  }
+  #screen-gate .premiere-hero-title {
+    font-size: 10.5px !important;
+  }
+  #screen-gate .premiere-hero-sub {
+    font-size: 9.5px !important;
+  }
+  #screen-gate .gate-teaser {
+    font-size: 12px !important;
+    line-height: 1.3 !important;
+    margin: 4px 0 6px !important;
+  }
+  #screen-gate .gate-mute-radar-tip {
+    padding: 6px 8px !important;
+    font-size: 10.5px !important;
+    margin: 4px 0 6px !important;
+  }
+  #screen-gate .gate-actions {
+    gap: 6px !important;
+    margin-top: 6px !important;
+    margin-bottom: 4px !important;
+  }
+  #screen-gate .gate-actions button {
+    padding: 10px 12px !important;
+    font-size: 12.5px !important;
+    min-height: 40px !important;
+  }
+  #screen-gate .gate-footer {
+    margin-top: 6px !important;
+    gap: 4px !important;
+  }
+  #screen-gate .cast-line {
+    font-size: 9px !important;
+  }
+}
+
+/* 3. Яркая анимация зажигания нового осколка в шапке + 4-сегментный кинобилет на экране победы! */
+@keyframes shardCellPop {
+  0% { transform: scale(0.35); background: #ffffff; box-shadow: 0 0 16px #ffffff; }
+  55% { transform: scale(1.6); background: #fef08a; box-shadow: 0 0 18px #facc15; }
+  100% { transform: scale(1.06); background: linear-gradient(180deg, #fef08a 0%, #eab308 100%); box-shadow: 0 0 8px rgba(250, 204, 21, 0.9); }
+}
+.ticket-stub-mini .shard-q.is-just-earned {
+  animation: shardCellPop 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.finale-shard-ticket {
+  width: min(100%, 340px);
+  margin: 4px auto 8px;
+  padding: 12px 12px 10px;
+  border-radius: 10px;
+  background: radial-gradient(circle at 50% 0%, rgba(250, 204, 21, 0.22), rgba(15, 18, 24, 0.96) 72%);
+  border: 1.5px solid rgba(250, 204, 21, 0.78);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55), 0 0 22px rgba(234, 179, 8, 0.24);
+  position: relative;
+  overflow: hidden;
+}
+.finale-shard-ticket.is-merged {
+  border-color: #fef08a;
+  box-shadow: 0 0 34px rgba(250, 204, 21, 0.65);
+  animation: ticketMergedPulse 1.1s ease-in-out 2;
+}
+@keyframes ticketMergedPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.035); }
+}
+.fst-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 9px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed rgba(250, 204, 21, 0.38);
+}
+.fst-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #fde047;
+}
+.fst-counter {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 900;
+  color: #0d0d0d;
+  background: linear-gradient(135deg, #fef08a, #eab308);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.fst-pieces {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.fst-piece {
+  height: 68px;
+  border-radius: 6px;
+  border: 1.5px dashed rgba(148, 163, 184, 0.42);
+  background: rgba(15, 23, 42, 0.72);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  position: relative;
+  color: #64748b;
+  font-family: var(--font-mono);
+  transition: all 0.25s ease;
+}
+.fst-piece::before,
+.fst-piece::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 12px;
+  transform: translateY(-50%);
+  background: #0d0f14;
+  border-radius: 99px;
+}
+.fst-piece::before { left: -4px; }
+.fst-piece::after { right: -4px; }
+.fst-p-num {
+  font-size: 13px;
+  font-weight: 900;
+}
+.fst-p-lbl {
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  opacity: 0.85;
+}
+.fst-piece.is-collected {
+  border-style: solid;
+  border-color: #facc15;
+  background: linear-gradient(160deg, #fef08a 0%, #eab308 55%, #b45309 100%);
+  color: #111827;
+  box-shadow: 0 4px 14px rgba(234, 179, 8, 0.45);
+}
+@keyframes shardSnapIn {
+  0% { opacity: 0; transform: translateY(-28px) scale(1.45) rotate(-11deg); filter: brightness(2); }
+  58% { opacity: 1; transform: translateY(3px) scale(1.1) rotate(2deg); filter: brightness(1.35); }
+  100% { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); filter: brightness(1); }
+}
+.fst-piece.is-just-earned {
+  animation: shardSnapIn 0.72s cubic-bezier(0.22, 1, 0.36, 1) both;
+  box-shadow: 0 0 22px rgba(254, 240, 138, 0.95);
+  border-color: #ffffff;
+}
+.fst-footer {
+  font-size: 10.5px;
+  line-height: 1.32;
+  color: #cbd5e1;
+  text-align: center;
+}
+

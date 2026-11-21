@@ -58,6 +58,7 @@ import {
   notifyBarrelSearchStarted,
   sendPostRescueReaction,
   sendDuelChallengePush,
+  sendDuelBroadcastPushToFriends,
   fetchMyWorkshopFriends,
   completeWorkshopLevel,
   claimSocialOrPromoBonus,
@@ -358,7 +359,7 @@ async function ensureDuelReady() {
         refreshHudLevelLabel();
       },
       onToast: (msg) => showToast(msg),
-      onOpenInviteShare: () => shareCurrentDuelRoom(),
+      onOpenInviteShare: () => pushDuelToFriends(),
       onOpenGoldenFork: () => openGoldenTicketForkModal(),
       onExitToHub: () => showScreen('modeA'),
       onDuelDefeatToTil: ({ roomId, solo } = {}) => {
@@ -454,7 +455,12 @@ function isProducerPackFirstRequired() {
   if (state.incomingParam || state.incomingPassId || state.tg?.duelRoomParam || state.tg?.watchBarrelParam) {
     return false;
   }
-  return getTeamSeedRole() === 'prod' && !state.profile?.seedFirstPackDone && Number(state.profile?.packedCount || 0) <= 0;
+  return (
+    getTeamSeedRole() === 'prod' &&
+    !state.profile?.hasBroadcastBarrel &&
+    !state.profile?.seedFirstPackDone &&
+    Number(state.profile?.packedCount || 0) <= 0
+  );
 }
 
 function isInitialSeedPackRequired() {
@@ -532,6 +538,53 @@ function applySeedPackModeUI(active) {
   if (customDetails) customDetails.open = false;
 }
 
+const ACTIVE_TG_ACCOUNT_KEY = 'bochka_active_tg_account';
+
+/**
+ * v15.2: Изоляция localStorage между разными Telegram-аккаунтами на одном телефоне!
+ * В Telegram WebView localStorage общий на весь origin — при переключении аккаунта
+ * полностью чистим старый локальный прогресс, чтобы новый аккаунт стартовал с чистого Ур. 1.
+ */
+function enforceTelegramAccountIsolation(tgUser) {
+  try {
+    const tgId = tgUser?.id ? String(tgUser.id).trim() : '';
+    if (!tgId) return false;
+    const nextAcc = `tg_${tgId}`;
+    const prevAcc = localStorage.getItem(ACTIVE_TG_ACCOUNT_KEY) || '';
+    if (prevAcc === nextAcc) return false;
+
+    const toRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && /bochka|tbog/i.test(k) && k !== 'bochka_lang' && k !== ACTIVE_TG_ACCOUNT_KEY) {
+        toRemove.push(k);
+      }
+    }
+    toRemove.forEach((k) => localStorage.removeItem(k));
+    const sRemove = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (k && /bochka|tbog/i.test(k)) sRemove.push(k);
+    }
+    sRemove.forEach((k) => sessionStorage.removeItem(k));
+    localStorage.setItem(ACTIVE_TG_ACCOUNT_KEY, nextAcc);
+    state.uiStage = 1;
+    state.profile.currentLevel = 1;
+    state.profile.premierePoints = 0;
+    state.profile.ticketShards = 0;
+    state.profile.pendingTicketsCount = 0;
+    state.profile.hasPendingTicket = false;
+    state.profile.seedFirstPackDone = false;
+    state.profile.hasBroadcastBarrel = false;
+    state.profile.mustSendFriendPack = false;
+    state.profile.packedCount = 0;
+    state.profile.hasPlayedSolo = false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function loadLocalV9Flags() {
   try {
     const raw = JSON.parse(localStorage.getItem(V9_PROGRESS_STORAGE_KEY) || '{}');
@@ -570,7 +623,7 @@ function saveLocalV9Flags() {
   } catch { /* ignore */ }
 }
 
-function syncTicketShardsUI({ pulse = false, showFullFlash = false } = {}) {
+function syncTicketShardsUI({ pulse = false, showFullFlash = false, justEarned = 0 } = {}) {
   const shards = showFullFlash ? 4 : Math.max(0, Math.min(3, Math.round(Number(state.profile?.ticketShards || 0))));
   const label = `${shards}/4`;
   for (const id of ['top-shards-count', 'hud-shards-count', 'burger-shards-count']) {
@@ -583,14 +636,79 @@ function syncTicketShardsUI({ pulse = false, showFullFlash = false } = {}) {
     pill.querySelectorAll('.shard-q').forEach((qEl) => {
       const idx = Number(qEl.getAttribute('data-shard') || 0);
       qEl.classList.toggle('is-filled', idx <= shards);
+      qEl.classList.remove('is-just-earned');
+      if ((justEarned > 0 && idx === justEarned) || (showFullFlash && idx <= 4)) {
+        void qEl.offsetWidth;
+        qEl.classList.add('is-just-earned');
+      }
     });
     if (pulse) {
       pill.classList.remove('is-merging');
       void pill.offsetWidth;
       pill.classList.add('is-merging');
-      window.setTimeout(() => pill.classList.remove('is-merging'), 900);
+      window.setTimeout(() => pill.classList.remove('is-merging'), 1000);
     }
   }
+}
+
+/**
+ * v15.2: SVG-картинка выбитой четвертинки кинобилета «БОЧКА» для анимации вылета из бочки (вместо пацана!)
+ */
+function createTicketShardDataUrl(shards = 1, merged = false) {
+  const count = merged ? 4 : Math.max(1, Math.min(4, Number(shards || 1)));
+  const cells = [1, 2, 3, 4]
+    .map((i) => {
+      const x = 18 + (i - 1) * 56;
+      const filled = i <= count;
+      const isNew = i === count;
+      const fill = filled ? 'url(#goldG)' : '#1e293b';
+      const stroke = isNew ? '#ffffff' : filled ? '#facc15' : '#475569';
+      const textCol = filled ? '#111827' : '#64748b';
+      return (
+        `<rect x="${x}" y="52" width="48" height="62" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="${isNew ? 3 : 1.5}" ${filled ? '' : 'stroke-dasharray="4 3"'}/>` +
+        `<text x="${x + 24}" y="82" text-anchor="middle" font-family="monospace" font-size="14" font-weight="900" fill="${textCol}">${i}/4</text>` +
+        `<text x="${x + 24}" y="99" text-anchor="middle" font-family="monospace" font-size="9" font-weight="700" fill="${textCol}">${i * 25}%</text>`
+      );
+    })
+    .join('');
+  const title = merged ? '4/4 БИЛЕТ СКЛЕЕН!' : `ЧАСТЬ БИЛЕТА ${count}/4`;
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="260" height="160" viewBox="0 0 260 160">` +
+    `<defs><linearGradient id="goldG" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#fef08a"/><stop offset="55%" stop-color="#eab308"/><stop offset="100%" stop-color="#b45309"/></linearGradient></defs>` +
+    `<rect x="4" y="4" width="252" height="152" rx="14" fill="#0f141d" stroke="#facc15" stroke-width="2.5"/>` +
+    `<text x="130" y="34" text-anchor="middle" font-family="monospace" font-size="14" font-weight="900" fill="#fef08a">${title}</text>` +
+    `${cells}` +
+    `<text x="130" y="139" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="700" fill="#e2e8f0">КИНОБИЛЕТ «БОЧКА» · 17 ДЕКАБРЯ</text>` +
+    `</svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+/**
+ * v15.2: Анимированный 4-сегментный кинобилет на экране победы #screen-finale
+ */
+function renderFinaleShardVisual({ shards = 1, merged = false } = {}) {
+  const box = document.getElementById('finale-shard-visual');
+  const cntEl = document.getElementById('finale-shard-counter');
+  const footEl = document.getElementById('finale-shard-footer');
+  if (!box) return;
+  const filledCount = merged ? 4 : Math.max(1, Math.min(4, Number(shards || 1)));
+  box.removeAttribute('hidden');
+  box.classList.toggle('is-merged', Boolean(merged || filledCount >= 4));
+  if (cntEl) cntEl.textContent = `${filledCount} / 4`;
+  if (footEl) {
+    footEl.textContent = merged
+      ? '🎉 Все 4 части склеились в целый бесплатный билет в кино для друга (без чеков)!'
+      : `Осталось ещё ${4 - filledCount} из 4 — собери целый бесплатный билет другу (без чеков)!`;
+  }
+  box.querySelectorAll('.fst-piece').forEach((pEl) => {
+    const idx = Number(pEl.getAttribute('data-piece') || 0);
+    pEl.classList.toggle('is-collected', idx <= filledCount);
+    pEl.classList.remove('is-just-earned');
+    if (idx === filledCount || (merged && idx <= 4)) {
+      void pEl.offsetWidth;
+      pEl.classList.add('is-just-earned');
+    }
+  });
 }
 
 async function awardTicketShard(source = 'level', { silent = false } = {}) {
@@ -646,7 +764,7 @@ async function awardTicketShard(source = 'level', { silent = false } = {}) {
   const nextShards = Math.max(0, Math.min(3, Number(res.shards || 0)));
   state.profile.ticketShards = nextShards;
   saveLocalV9Flags();
-  syncTicketShardsUI({ pulse: true });
+  syncTicketShardsUI({ pulse: true, justEarned: nextShards });
   if (!silent) {
     showToast(`🎟 Собрана часть билета ${nextShards}/4 (${nextShards * 25}%)! Собери 4/4 и подари другу бесплатный билет!`);
   }
@@ -656,6 +774,34 @@ async function awardTicketShard(source = 'level', { silent = false } = {}) {
 function mergeFreshProfile(freshProfile, { preserveProgress = true } = {}) {
   if (!freshProfile || typeof freshProfile !== 'object') return;
   const prev = state.profile || {};
+  const isFreshSrv = Boolean(freshProfile._isFreshServer);
+  if (isFreshSrv) {
+    // Сервер подтвердил чистого нового игрока (или база обнулена) — чистим устаревший localStorage!
+    try {
+      localStorage.removeItem(SESSION_RESUME_STORAGE_KEY);
+    } catch { /* ignore */ }
+    const cleanMerged = {
+      ...prev,
+      ...freshProfile,
+      currentLevel: 1,
+      premierePoints: 0,
+      hasPlayedSolo: false,
+      packedCount: 0,
+      pendingTicketsCount: Math.max(0, Number(freshProfile.pendingTicketsCount || 0)),
+      hasPendingTicket: Boolean(freshProfile.hasPendingTicket),
+      ticketShards: Math.max(0, Math.min(3, Number(freshProfile.ticketShards || 0))),
+      mustSendFriendPack: false,
+      seedFirstPackDone: Boolean(freshProfile.hasBroadcastBarrel),
+      hasBroadcastBarrel: Boolean(freshProfile.hasBroadcastBarrel),
+      repeatLinkEntered: false,
+    };
+    state.profile = cleanMerged;
+    state.uiStage = Math.min(2, Math.max(1, Number(freshProfile.uiStage || 1)));
+    saveLocalV9Flags();
+    syncTicketShardsUI();
+    return;
+  }
+
   const keptPending = Math.max(0, Math.round(Number(prev.pendingTicketsCount || 0)));
   const keptExpire = Number(prev.ticketsExpireAt || 0);
   const keptMustSend = Boolean(prev.mustSendFriendPack);
@@ -670,12 +816,20 @@ function mergeFreshProfile(freshProfile, { preserveProgress = true } = {}) {
   merged.ticketsExpireAt = keptExpire;
   merged.mustSendFriendPack = keptMustSend;
   merged.hasPendingTicket = merged.pendingTicketsCount > 0;
-  merged.ticketShards = freshProfile.ticketShards != null ? Math.max(0, Math.min(3, Number(freshProfile.ticketShards))) : keptShards;
+  merged.ticketShards =
+    freshProfile.ticketShards != null
+      ? Math.max(0, Math.min(3, Number(freshProfile.ticketShards)))
+      : keptShards;
+  merged.hasBroadcastBarrel = Boolean(freshProfile.hasBroadcastBarrel || prev.hasBroadcastBarrel);
+  if (!merged.hasBroadcastBarrel && Number(merged.packedCount || 0) <= 0) {
+    merged.seedFirstPackDone = false;
+  }
   merged.friendsShardAwardedCount = keptFriendsAwarded;
   if (typeof merged.lives === 'number') {
     merged.lives = capEarlyLivesIfNoRealFriends(merged.lives);
   }
   state.profile = merged;
+  saveLocalV9Flags();
   syncTicketShardsUI();
 }
 
@@ -1293,10 +1447,11 @@ function getWorkshopLevelSpec(rawLevel = 1) {
 function hudLevelLabelText() {
   const r = state.round || {};
   const n = Number(r.barrelCount || 4);
-  if (r.modeType === 'premiere') return `ПРЕМЬЕРА · ${n} ${formatBarrelWord(n)}`;
-  if (r.isDailyShift) return `СМЕНА ДНЯ · ${n} ${formatBarrelWord(n)}`;
-  if (r.isBlitz) return `БЛИЦ · ${n} ${formatBarrelWord(n)}`;
-  return `УР. ${Number(r.workshopLevel || 1)} · ${n} ${formatBarrelWord(n)}`;
+  const compact = typeof window !== 'undefined' && window.innerWidth <= 440;
+  if (r.modeType === 'premiere') return compact ? 'ПРЕМЬЕРА' : `ПРЕМЬЕРА · ${n} ${formatBarrelWord(n)}`;
+  if (r.isDailyShift) return compact ? 'СМЕНА' : `СМЕНА ДНЯ · ${n} ${formatBarrelWord(n)}`;
+  if (r.isBlitz) return compact ? 'БЛИЦ' : `БЛИЦ · ${n} ${formatBarrelWord(n)}`;
+  return compact ? `УР. ${Number(r.workshopLevel || 1)}` : `УР. ${Number(r.workshopLevel || 1)} · ${n} ${formatBarrelWord(n)}`;
 }
 
 function refreshHudLevelLabel() {
@@ -1504,6 +1659,8 @@ async function bootstrap() {
   state.tg = initTelegram();
   state.incomingParam = state.tg.startParam || '';
   state.incomingPassId = state.tg.passParam || '';
+  // v15.2: При смене Telegram-аккаунта на том же телефоне сразу изолируем localStorage от прошлого аккаунта!
+  enforceTelegramAccountIsolation(state.tg?.user);
 
   // v10.5: Параметр ?reset=1 ПОЛНОСТЬЮ чистит ВСЕ ключи localStorage/sessionStorage (включая bochka_v3_profile и bochka_v2_uid!)
   // чтобы даже облачный профиль в Supabase стартовал с нуля: Ур. 1 (4 бочки, ❤️ 1, 0% шкалы)!
@@ -1731,12 +1888,18 @@ async function bootstrap() {
     openTrailerModal({ forRescue: false });
   }
 
-  // Единый разбор входящего трафика (Deep Links: gift_ / duel_ / pack_)
+  // Единый разбор входящего трафика (Deep Links: gift_ / duel_ / pack_ / team_prod)
   if (state.incomingPassId) {
     await openIncomingPassScreen(state.incomingPassId);
   } else if (state.tg?.duelRoomParam) {
     state.entered = true;
     await openDuelTable(state.tg.duelRoomParam);
+  } else if (state.tg?.teamSeedRole === 'prod' && isProducerPackFirstRequired()) {
+    // v15.2: Продюсер зашёл по ссылке team_prod — сразу просим запаковать СВОЮ бочку 1 раз и получить общую ссылку!
+    state.entered = true;
+    applySeedPackModeUI(true);
+    showScreen('pack');
+    showToast('🎬 Запакуй СЕБЯ в бочку 1 раз — получишь ОДНУ общую ссылку для всех друзей и чатов!');
   } else if (state.tg?.autoOpenPack && state.incomingParam) {
     await enterWorkshopGate(false);
   }
@@ -5290,7 +5453,7 @@ function playFullScreenScreamer(durationMs = 1800) {
   });
 }
 
-function playRevealAvatar(durationMs = 1500, { barrelIndex = -1, isBoy = false, caption = '' } = {}) {
+function playRevealAvatar(durationMs = 1500, { barrelIndex = -1, isBoy = false, caption = '', customImgSrc = '' } = {}) {
   return new Promise((resolve) => {
     const el = document.getElementById('fx-reveal');
     if (!el) {
@@ -5299,7 +5462,9 @@ function playRevealAvatar(durationMs = 1500, { barrelIndex = -1, isBoy = false, 
     }
     const img = document.getElementById('fx-reveal-img');
     const txt = document.getElementById('fx-reveal-text');
-    const src = isBoy ? './public/sprites/hero_boy_live.webp' : (state.round?.portraitDataUrl || DEMO_PORTRAITS[0]);
+    const src =
+      customImgSrc ||
+      (isBoy ? './public/sprites/hero_boy_live.webp' : (state.round?.portraitDataUrl || DEMO_PORTRAITS[0]));
     if (img) img.src = src;
     if (txt) {
       txt.textContent = caption || (isBoy ? 'ВЫБИРАЮСЬ ИЗ БОЧКИ! СПАСИБО, ЧТО СПАС!' : 'ДЫШУ! СПАСИБО, ЧТО НАШЁЛ МЕНЯ!');
@@ -5401,9 +5566,11 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
   }
 
   if (!state.round.isDemo && state.incomingPack) {
-    state.uiStage = Math.max(Number(state.uiStage || 1), 4);
-    applyProgressiveDisclosureUI({ forceStage: 4 });
-    syncUiStage(state.tg?.user, 4).catch(() => {});
+    // v15.2: После 1-й бочки друга поднимаем только до Стадии 2 (НЕ открываем Дуэли раньше Ур. 5!)
+    const nextStage = Math.max(Number(state.uiStage || 1), 2);
+    state.uiStage = nextStage;
+    applyProgressiveDisclosureUI({ forceStage: nextStage });
+    syncUiStage(state.tg?.user, nextStage).catch(() => {});
     const elapsedSec = Math.max(
       1,
       Math.min(30, Math.round(AIR_DURATION_SEC - Number(state.round.airLeft || 0)))
@@ -5469,7 +5636,7 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
     // - Часть 4/4: Ур. 5+ (ИЛИ победа в Дуэли) -> атомарная проверка пула 100 шт. / 6 в сутки МСК!
     let shardAward = null;
     if (survived && completedLvl >= 3) {
-      const shardSrc = completedLvl === 3 ? 'level3' : completedLvl === 4 ? 'level4' : 'level5';
+      const shardSrc = `level${completedLvl}`;
       shardAward = await awardTicketShard(shardSrc, { silent: true });
       state.round.lastShardAward = shardAward;
       state.round.ticketGranted = Boolean(shardAward?.merged && shardAward?.granted);
@@ -5498,6 +5665,7 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
     }
 
     if (survived) {
+      const gotShard = Boolean((shardAward?.merged && shardAward?.granted) || (!shardAward?.duplicateBlocked && shardAward?.shards > 0));
       let revealCaption = '🎉 ПАЦАН ВЫЛЕЗ ИЗ БОЧКИ! СПАСИБО!';
       if (shardAward?.merged && shardAward?.granted) {
         revealCaption = '🎟 4/4 — БИЛЕТ СКЛЕЕН! ПОДАРИ ДРУГУ В TELEGRAM!';
@@ -5508,7 +5676,8 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
       }
       await playRevealAvatar(2200, {
         barrelIndex: revIdx,
-        isBoy: isBoyRescue,
+        isBoy: gotShard ? false : isBoyRescue,
+        customImgSrc: gotShard ? createTicketShardDataUrl(shardAward.shards || 4, Boolean(shardAward?.merged)) : '',
         caption: revealCaption,
       });
     } else {
@@ -5516,6 +5685,15 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
     }
     await populateFinaleScreen({ premiereResult: null });
     showScreen('finale');
+    if (shardAward && ((shardAward.merged && shardAward.granted) || shardAward.shards > 0)) {
+      window.setTimeout(() => {
+        syncTicketShardsUI({
+          pulse: true,
+          showFullFlash: Boolean(shardAward.merged && shardAward.granted),
+          justEarned: shardAward.merged ? 4 : Number(shardAward.shards || 0),
+        });
+      }, 140);
+    }
   }, survived ? 1050 : 550);
 }
 
@@ -5749,6 +5927,7 @@ async function handleSealBarrelClick() {
     state.profile.packedCount = Math.max(1, Number(state.profile.packedCount || 0) + 1);
     if (isBroadcastPack) {
       state.profile.seedFirstPackDone = true;
+      if (isBroadcastPack) state.profile.hasBroadcastBarrel = true;
       applySeedPackModeUI(false);
     }
 
@@ -6074,12 +6253,27 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
 
   if (subtag) subtag.textContent = premiereResult ? t('premiereRaceTag') : r.isDemo ? `УРОВЕНЬ ${completedLvl} · ⭐ ${totalPts} / 1 500` : r.senderLabel || t('revealFromFriend');
 
-  // Аватарка: при реальном спасении — живой пацан вылезает из бочки (или фото друга); при проигрыше — мрачный кадр цеха/жертвы (НЕ улыбающийся пацан!)
-  let avatarSrc = r.portraitDataUrl || './public/sprites/hero_boy_live.webp';
-  if (premiereResult) avatarSrc = r.portraitDataUrl || createGoldenTicketPortraitDataUrl('');
-  else if (lost) avatarSrc = './public/sprites/horror_barrel_face.webp';
-  if (portraitImg) portraitImg.src = avatarSrc;
-  ring?.classList.toggle('is-victim', Boolean(lost && !premiereResult));
+  // v15.2: Если найдена часть билета (1/4..4/4) — показываем анимированный 4-сегментный кинобилет вместо фото пацана!
+  const shardVisualEl = $('finale-shard-visual');
+  const isShardWin =
+    !lost &&
+    !premiereResult &&
+    Boolean((r.lastShardAward?.merged && r.lastShardAward?.granted) || Number(r.lastShardAward?.shards || 0) > 0);
+  if (isShardWin && shardVisualEl) {
+    ring?.setAttribute('hidden', '');
+    renderFinaleShardVisual({
+      shards: Number(r.lastShardAward?.shards || 4),
+      merged: Boolean(r.lastShardAward?.merged && r.lastShardAward?.granted),
+    });
+  } else {
+    shardVisualEl?.setAttribute('hidden', '');
+    ring?.removeAttribute('hidden');
+    let avatarSrc = r.portraitDataUrl || './public/sprites/hero_boy_live.webp';
+    if (premiereResult) avatarSrc = r.portraitDataUrl || createGoldenTicketPortraitDataUrl('');
+    else if (lost) avatarSrc = './public/sprites/horror_barrel_face.webp';
+    if (portraitImg) portraitImg.src = avatarSrc;
+    ring?.classList.toggle('is-victim', Boolean(lost && !premiereResult));
+  }
 
   if (stampEl) {
     stampEl.classList.toggle('is-failed', lost);
@@ -6119,6 +6313,12 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
       msgEl.textContent = '«Он остался в темноте цеха. Слушай стук внимательнее и попробуй ещё раз!»';
     } else if (completedLvl === 1) {
       msgEl.textContent = r.message || '«Идём со мной в кино 17 декабря?»';
+    } else if (isShardWin) {
+      const shN = Number(r.lastShardAward?.shards || 4);
+      msgEl.textContent =
+        r.lastShardAward?.merged && r.lastShardAward?.granted
+          ? '«Все 4 части билета собраны и склеены! Отправь целый бесплатный билет другу в Telegram — и пойдёте в кино вместе!»'
+          : `«Ты выбил кусок кинобилета (${shN} из 4)! Собери ещё ${Math.max(1, 4 - shN)} — они склеятся в целый бесплатный билет другу (без чеков)!»`;
     } else if (completedLvl >= 4) {
       msgEl.textContent = `«${r.message || 'Спасибо, что вытащил меня из бочки! Встретимся на премьере 17 декабря!'}»`;
     } else {
@@ -7365,6 +7565,14 @@ function escapeHtmlSafe(str) {
 }
 
 async function openDuelTable(roomId = '', { autoAddTestBots = false } = {}) {
+  const lvl = Math.max(1, Number(state.profile?.currentLevel || 1));
+  const pts = Math.max(0, Math.round(Number(state.profile?.premierePoints || 0)));
+  const isDirectInvite = Boolean(roomId || state.tg?.duelRoomParam || state.repeatRoutePending || isTestBogSessionActive());
+  if (!isDirectInvite && lvl < 6 && pts < 1500) {
+    showToast('🔒 Дуэли откроются после Уровня 5 (1 500 ⭐) — или по приглашению друга в дуэль!');
+    return;
+  }
+
   state.entered = true;
   stopAirTimer();
   state.round.running = false;
@@ -7382,60 +7590,130 @@ async function openDuelTable(roomId = '', { autoAddTestBots = false } = {}) {
   showScreen('duel');
 }
 
+/**
+ * v15.2: Автоматический пуш через бота ВСЕМ друзьям, кто играл в «БОЧКУ»,
+ * чтобы они залетели прямо в эту дуэль (БЕЗ открытия ручного окна «Кому отправить»!).
+ */
+async function pushDuelToFriends() {
+  const roomId = duelCtrl?.roomId || `d_${Math.random().toString(36).slice(2, 8)}`;
+  const count = duelCtrl?.players?.length || 1;
+  const need = Math.max(1, 3 - count);
+  const btn = document.getElementById('btn-duel-invite-third');
+
+  if (btn?.dataset?.pushCooldown === '1') {
+    showToast('⏳ Пуш уже отправлен друзьям — ждём их за столом!');
+    return;
+  }
+
+  const prevLabel = btn?.textContent || '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '📡 РАССЫЛАЕМ ПУШ ДРУЗЬЯМ В БОЧКЕ...';
+  }
+
+  let sentCount = 0;
+  let throttledCount = 0;
+  let totalCandidates = 0;
+
+  try {
+    const pushRes = await sendDuelBroadcastPushToFriends({
+      roomId,
+      challengerName: state.tg?.user?.name || 'Друг из цеха',
+      needCount: need,
+    });
+    sentCount = Number(pushRes?.sentCount || 0);
+    throttledCount = Number(pushRes?.throttledCount || 0);
+    totalCandidates = Number(pushRes?.totalCandidates || 0);
+  } catch { /* ignore */ }
+
+  // Фоллбэк для веба/не-TG клиентов: шлём по соцграфу индивидуально
+  if (sentCount === 0 && totalCandidates === 0 && !state.tg?.inTelegram) {
+    try {
+      const [gameFriends, wsFriends] = await Promise.all([
+        fetchMyGameFriends(state.tg?.user).catch(() => []),
+        fetchMyWorkshopFriends(state.tg?.user).catch(() => []),
+      ]);
+      const myTgId = String(state.tg?.user?.id || '');
+      const uniqueTargets = new Set();
+      for (const f of [...(gameFriends || []), ...(wsFriends || [])]) {
+        const tid = String(f?.receiver_tg_id || f?.tg_id || f?.friend_tg_id || '').trim();
+        if (tid && tid !== myTgId) uniqueTargets.add(tid);
+      }
+      if (uniqueTargets.size > 0) {
+        await Promise.allSettled(
+          Array.from(uniqueTargets).map((targetTgId) =>
+            sendDuelChallengePush({
+              targetTgId,
+              challengerName: state.tg?.user?.name || 'Друг из цеха',
+              roomId,
+            })
+          )
+        );
+        sentCount = uniqueTargets.size;
+        totalCandidates = uniqueTargets.size;
+      }
+    } catch { /* ignore */ }
+  }
+
+  if (btn) btn.disabled = false;
+
+  if (sentCount > 0) {
+    Haptics.success();
+    showToast(`📣 Пуш-вызов отправлен ${sentCount} друзьям через @bochka_film_bot! Они зайдут прямо за твой стол!`);
+    if (btn) {
+      btn.dataset.pushCooldown = '1';
+      btn.textContent = `✅ ПУШ ОТПРАВЛЕН (${sentCount}) · ЖДЁМ ДРУЗЕЙ`;
+      window.setTimeout(() => {
+        if (!btn) return;
+        delete btn.dataset.pushCooldown;
+        btn.textContent = prevLabel || `📣 ПУШ ВСЕМ ДРУЗЬЯМ В БОЧКЕ (НУЖНО ЕЩЁ ${need})`;
+      }, 15000);
+    }
+    return;
+  }
+
+  if (btn) btn.textContent = prevLabel || `📣 ПУШ ВСЕМ ДРУЗЬЯМ В БОЧКЕ (НУЖНО ЕЩЁ ${need})`;
+
+  if (throttledCount > 0) {
+    showToast('⏳ Пуш этим друзьям уже ушёл минуту назад — ждём их за столом или нажми «Скинуть ссылку» ниже!');
+    return;
+  }
+
+  showToast('ℹ️ Пока никто из твоих друзей не запускал бота — нажми «🔗 Скинуть ссылку на стол» ниже!');
+}
+
 async function shareCurrentDuelRoom() {
   const roomId = duelCtrl?.roomId || `d_${Math.random().toString(36).slice(2, 8)}`;
   const links = buildDuelShareLinks(roomId);
   const count = duelCtrl?.players?.length || 1;
-  const need = Math.max(1, 3 - count);
-
-  // v9.0: Рассылаем пуш-вызов ВСЕМ зарегистрированным друзьям из базы (social_connections + workshop_friends), чтобы подключились ещё 2!
-  let pushedCount = 0;
-  try {
-    const [gameFriends, wsFriends] = await Promise.all([
-      fetchMyGameFriends(state.tg?.user).catch(() => []),
-      fetchMyWorkshopFriends(state.tg?.user).catch(() => []),
-    ]);
-    const myTgId = String(state.tg?.user?.id || '');
-    const uniqueTargets = new Set();
-    for (const f of [...(gameFriends || []), ...(wsFriends || [])]) {
-      const tid = String(f?.receiver_tg_id || f?.tg_id || f?.friend_tg_id || '').trim();
-      if (tid && tid !== myTgId) uniqueTargets.add(tid);
-    }
-    if (uniqueTargets.size > 0) {
-      await Promise.allSettled(
-        Array.from(uniqueTargets).map((targetTgId) =>
-          sendDuelChallengePush({
-            targetTgId,
-            challengerName: state.tg?.user?.name || 'Друг из цеха',
-            roomId,
-          })
-        )
-      );
-      pushedCount = uniqueTargets.size;
-    }
-  } catch { /* ignore */ }
-
-  if (pushedCount > 0) {
-    showToast(`📣 Пуш-вызов улетел ${pushedCount} друзьям из базы! Ждём ещё ${need} — пока можно играть с ботом или к Тилю!`);
-    Haptics.success();
-  }
-
   const text =
     count >= 2
-      ? '⚔️ Нас уже двое за столом «БОЧКИ»! Залетай 3-м на счёт три — цех досыплет +450 ⭐ очков ТОП-10 и шанс Золотой бочки с билетом!'
-      : '⚔️ Залетай за стол «НА СЧЁТ ТРИ!» в цеху «БОЧКИ»! Нужно ещё 2 игрока — хватаем живые бочки синхронно:';
+      ? '⚔️ Нас уже двое за столом «БОЧКИ»! Залетай 3-м на счёт три — цех досыплет +450 ⭐ очков ТОП-20 и шанс билета!'
+      : '⚔️ Залетай за стол «НА СЧЁТ ТРИ!» в цеху «БОЧКИ»! Хватаем живые бочки синхронно за билет в кино:';
 
   if (state.tg?.inTelegram) {
-    openTelegramShare(links.tgUrl, text);
+    const prep = await prepareNativeShareMessage({
+      tgUser: state.tg?.user,
+      barrelId: roomId,
+      linkType: 'duel',
+      senderName: state.tg?.user?.name || 'Друг из цеха',
+      phrase: 'Залетай за стол дуэли в цеху «БОЧКИ»!',
+      shareUrl: links.tgMiniAppUrl,
+    }).catch(() => ({ ok: false, fallback: true, preparedMessageId: '' }));
+    openNativeTelegramShareCard({
+      preparedMessageId: prep?.preparedMessageId || '',
+      shareUrl: links.tgMiniAppUrl,
+      shareText: text,
+    });
     return;
   }
   const res = await shareNativeOrFallback({
     title: 'БОЧКА — Стол «На счёт три!»',
     text,
-    url: links.tgUrl || links.webUrl,
+    url: links.tgMiniAppUrl || links.webUrl,
   });
-  if (res === 'copied' && pushedCount === 0) {
-    showToast('📣 Ссылка-вызов скопирована! Пока ждёшь друзей — продолжай с ботом или стучи по бочке с Тилем!');
+  if (res === 'copied') {
+    showToast('🔗 Ссылка на стол дуэли скопирована — скинь другу в Telegram!');
   }
 }
 
@@ -8969,7 +9247,8 @@ function bindUIEvents() {
   document.getElementById('btn-duel-close')?.addEventListener('click', () => duelCtrl?.leaveRoom(true));
   document.getElementById('btn-duel-add-bot')?.addEventListener('click', () => duelCtrl?.addSandboxBot());
   document.getElementById('btn-duel-play-solo')?.addEventListener('click', () => duelCtrl?.startSoloDuel());
-  document.getElementById('btn-duel-invite-third')?.addEventListener('click', () => shareCurrentDuelRoom());
+  document.getElementById('btn-duel-invite-third')?.addEventListener('click', () => pushDuelToFriends());
+  document.getElementById('btn-duel-share-link')?.addEventListener('click', () => shareCurrentDuelRoom());
   document.getElementById('btn-duel-start-go')?.addEventListener('click', () => {
     duelCtrl?.hostInitiateRound({ isFreeRerack: false });
   });

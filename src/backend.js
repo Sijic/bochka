@@ -629,23 +629,27 @@ export function getStoredUiStage() {
 
 export function computeEffectiveUiStage(profile = null, questState = getQuestState(), opts = {}) {
   const prof = profile || getLocalPreviewProfile();
-  const stored = getStoredUiStage();
+  const isFreshServer = Boolean(opts?.fromServerFresh);
+  const stored = isFreshServer ? 1 : getStoredUiStage();
   const profStage = Math.min(4, Math.max(1, Number(prof?.uiStage || 1)));
   let stage = Math.max(stored, profStage);
 
-  const packedCount = Math.max(Number(questState?.packedCount || 0), Number(prof?.packedCount || 0));
+  const packedCount = Math.max(isFreshServer ? 0 : Number(questState?.packedCount || 0), Number(prof?.packedCount || 0));
   const surged = Boolean(prof?.temuSurgeClaimed) || Number(prof?.premiereScore || 0) >= 88;
   const duelsCount = Math.max(Number(prof?.duelsPlayed || 0), Number(prof?.duelsWon || 0));
-  const friendsBrought = Math.max(Number(prof?.friendsBrought || 0), Number(questState?.friendsOpened || 0));
-  const hasSocial = Boolean(prof?.hasSocialConnection);
+  const curLevel = Math.max(1, Number(prof?.currentLevel || 1));
+  const pts = Math.max(0, Number(prof?.premierePoints || 0));
   const directDuel = Boolean(opts?.hasDuelParam || opts?.routing?.shouldRouteToDuel || prof?.repeatLinkEntered);
 
-  if (directDuel || duelsCount > 0 || friendsBrought > 0) {
-    stage = Math.max(stage, 4);
-  } else if ((packedCount >= 1 || surged) && hasSocial && stage >= 3) {
+  // v15.2: Стадия 4 (Дуэли) открывается СТРОГО после Ур. 5 (curLevel >= 6 / 1500+ ⭐) или по прямой ссылке в дуэль!
+  if (directDuel || duelsCount > 0 || curLevel >= 6 || pts >= 1500) {
     stage = Math.max(stage, 4);
   } else if (packedCount >= 1 || surged) {
-    stage = Math.max(stage, 3);
+    stage = Math.min(3, Math.max(stage, 3));
+  } else if (curLevel >= 2 || Boolean(prof?.hasPlayedSolo)) {
+    stage = Math.min(3, Math.max(stage, 2));
+  } else if (isFreshServer) {
+    stage = 1;
   }
 
   return Math.min(4, Math.max(1, stage));
@@ -695,14 +699,19 @@ export async function fetchPlayerProfile(tgUser = null) {
       });
       if (!error && data?.ok) {
         const localBefore = getLocalPreviewProfile();
+        const srvLevel = Math.max(1, Number(data.current_level || 1));
+        const srvPts = Number(data.premiere_points || 0);
+        const srvPacked = Number(data.packed_count || 0);
+        const srvDuels = Number(data.duels_played || 0);
+        const isFreshServer = srvLevel <= 1 && srvPts <= 0 && srvPacked <= 0 && !data.has_played_solo && srvDuels <= 0;
         const mapped = {
           premiereScore: Number(data.premiere_score || 0),
-          premierePoints: Number(data.premiere_points || 0),
-          currentLevel: Math.max(1, Number(data.current_level || 1)),
+          premierePoints: srvPts,
+          currentLevel: srvLevel,
           hasPlayedSolo: Boolean(data.has_played_solo),
           ticketsGifted: Number(data.tickets_gifted || 0),
           duelsWon: Number(data.duels_won || 0),
-          duelsPlayed: Number(data.duels_played || 0),
+          duelsPlayed: srvDuels,
           trailerRewarded: Boolean(data.trailer_rewarded),
           kpClickRewarded: Boolean(data.kp_click_rewarded),
           dailySocialMask: String(data.daily_social_mask || ''),
@@ -721,14 +730,19 @@ export async function fetchPlayerProfile(tgUser = null) {
             data.has_pending_ticket ? 1 : 0
           ),
           kpVerified: Boolean(data.kp_verified),
-          packedCount: Number(data.packed_count || 0),
+          packedCount: srvPacked,
           friendsBrought: Number(data.friends_brought || 0),
           temuSurgeClaimed: Boolean(data.temu_surge_claimed),
           hasSocialConnection: Boolean(data.has_social_connection),
-          repeatLinkEntered: Boolean(localBefore?.repeatLinkEntered),
-          uiStage: Math.max(getStoredUiStage(), Number(data.ui_stage || 1)),
+          isSeedAdmin: Boolean(data.is_seed_admin),
+          isBloggerSeed: Boolean(data.is_blogger_seed),
+          seedPrefix: String(data.seed_prefix || ''),
+          hasBroadcastBarrel: Boolean(data.has_broadcast_barrel),
+          repeatLinkEntered: isFreshServer ? false : Boolean(localBefore?.repeatLinkEntered),
+          uiStage: isFreshServer ? Math.min(2, Math.max(1, Number(data.ui_stage || 1))) : Number(data.ui_stage || 1),
+          _isFreshServer: isFreshServer,
         };
-        mapped.uiStage = computeEffectiveUiStage(mapped);
+        mapped.uiStage = computeEffectiveUiStage(mapped, getQuestState(), { fromServerFresh: isFreshServer });
         safeWrite(UI_STAGE_STORAGE_KEY, String(mapped.uiStage));
         if (mapped.kpVerified) markKpScreenshotVerified();
         if (mapped.packedCount > 0) {
@@ -737,7 +751,7 @@ export async function fetchPlayerProfile(tgUser = null) {
           q.friendsOpened = Math.max(q.friendsOpened || 0, mapped.friendsBrought);
           saveQuestState(q);
         }
-        saveLocalPreviewProfile({ ...localBefore, ...mapped });
+        saveLocalPreviewProfile(isFreshServer ? { ...mapped } : { ...localBefore, ...mapped });
         return mapped;
       }
     } catch { /* fallback below */ }
@@ -1601,6 +1615,43 @@ export async function sendDuelChallengePush({ targetTgId, challengerName = '', r
     challengerName: challengerName || 'Друг из Цеха',
     roomId,
   });
+}
+
+/**
+ * v15.2: Серверный пуш от бота ВСЕМ друзьям, кто играл в «БОЧКУ»,
+ * чтобы они залетели прямо за стол дуэли (?duel=<roomId>) без ручного окна пересылки!
+ */
+export async function sendDuelBroadcastPushToFriends({ roomId = '', challengerName = '', needCount = 2 } = {}) {
+  if (isTestBogActive() || !ENV.tgNotifyWebhook || !roomId) {
+    return { ok: false, sentCount: 0, totalCandidates: 0, reason: 'unavailable' };
+  }
+  const initData = typeof window !== 'undefined' ? String(window.Telegram?.WebApp?.initData || '') : '';
+  if (!initData) {
+    return { ok: false, sentCount: 0, totalCandidates: 0, reason: 'no_telegram_init_data' };
+  }
+  try {
+    const res = await fetch(ENV.tgNotifyWebhook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clientAction: 'duel_push_all_friends',
+        roomId,
+        challengerName: challengerName || 'Друг из Цеха',
+        needCount,
+        initData,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    return {
+      ok: Boolean(res.ok && data?.ok),
+      sentCount: Number(data?.sentCount || 0),
+      throttledCount: Number(data?.throttledCount || 0),
+      totalCandidates: Number(data?.totalCandidates || 0),
+      reason: data?.error || '',
+    };
+  } catch {
+    return { ok: false, sentCount: 0, totalCandidates: 0, reason: 'network_error' };
+  }
 }
 
 export async function fetchMyWorkshopFriends(tgUser = null) {

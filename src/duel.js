@@ -382,16 +382,21 @@ export class WorkshopDuelController {
       }
     }
 
+    const shareLinkBtn = document.getElementById('btn-duel-share-link');
     if (invite3Btn) {
       if (count < 3 && (this.phase === 'lobby' || this.phase === 'finished')) {
         invite3Btn.removeAttribute('hidden');
+        shareLinkBtn?.removeAttribute('hidden');
         const need = Math.max(1, 3 - count);
-        invite3Btn.textContent =
-          count === 1
-            ? `📣 ПОЗВАТЬ ДРУЗЕЙ (ПУШ ВСЕМ В БАЗЕ · НУЖНО ЕЩЁ ${need})`
-            : '📣 ПОЗВАТЬ 3-ГО ДРУГА (ПУШ ВСЕМ · +450 ⭐ И БИЛЕТ!)';
+        if (!invite3Btn.dataset.pushCooldown) {
+          invite3Btn.textContent =
+            count === 1
+              ? `📣 ПУШ ВСЕМ ДРУЗЬЯМ В БОЧКЕ (НУЖНО ЕЩЁ ${need})`
+              : '📣 ПУШ ДРУЗЬЯМ В БОЧКЕ (+450 ⭐ И БИЛЕТ!)';
+        }
       } else {
         invite3Btn.setAttribute('hidden', '');
+        shareLinkBtn?.setAttribute('hidden', '');
       }
     }
 

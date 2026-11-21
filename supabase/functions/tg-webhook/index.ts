@@ -22,6 +22,7 @@ const adminDb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 });
 
 const encoder = new TextEncoder();
+const duelPushThrottle = new Map<string, number>();
 
 async function tgApi(method: string, payload: Record<string, unknown>) {
   if (!BOT_TOKEN) return { ok: false, description: "missing_bot_token" };
@@ -272,28 +273,32 @@ Deno.serve(async (req: Request) => {
   // 2. ЛЁГКИЕ СОЦИАЛЬНЫЕ ПУШИ МЕЖДУ ДРУЗЬЯМИ ИЗ ВЕБ-ИГРЫ / MINI APP
   // =========================================================================
   if (body.clientAction || body.event) {
+    let verifiedCallerTgId: string | null = null;
     if (body.initData) {
       const check = await verifyTelegramInitData(String(body.initData), BOT_TOKEN);
       if (!check.valid) {
         return jsonResp({ ok: false, error: "invalid_telegram_init_data" }, 401);
       }
+      verifiedCallerTgId = check.userId;
     }
 
     const action = body.clientAction || body.event;
 
-    // v15.1: Нативная отправка карточки через Telegram WebApp.shareMessage (Bot API savePreparedInlineMessage)
+    // v15.1 + v15.2: Нативная отправка карточки через Telegram WebApp.shareMessage (Bot API savePreparedInlineMessage)
     if (action === "prepare_share_message") {
-      const tgUserId = Number(body.tgUserId || 0);
+      const tgUserId = Number(verifiedCallerTgId || body.tgUserId || 0);
       const rawBarrelId = String(body.barrelId || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32);
       const linkType = String(body.linkType || "pack").toLowerCase();
       const senderName = escapeHtml(String(body.senderName || "Твой друг").slice(0, 48));
       const phrase = escapeHtml(String(body.phrase || "").slice(0, 140));
       const startParam =
-        linkType === "pr"
-          ? `pr_${rawBarrelId}`
-          : linkType === "bl"
-            ? `bl_${rawBarrelId}`
-            : `pack_${rawBarrelId}`;
+        linkType === "duel"
+          ? `duel_${rawBarrelId}`
+          : linkType === "pr"
+            ? `pr_${rawBarrelId}`
+            : linkType === "bl"
+              ? `bl_${rawBarrelId}`
+              : `pack_${rawBarrelId}`;
       const botName = (Deno.env.get("TG_BOT_USERNAME") || "bochka_film_bot").replace(/^@/, "");
       const targetMiniAppUrl = rawBarrelId
         ? `https://t.me/${botName}?startapp=${startParam}`
@@ -304,15 +309,21 @@ Deno.serve(async (req: Request) => {
       }
 
       const cardTitle =
-        linkType === "bl"
-          ? "🛢 Вытащи меня из бочки — и собери билет в кино!"
-          : "🛢 Кто-то заварил тебя в 3D-цеху «БОЧКИ»!";
+        linkType === "duel"
+          ? "⚔️ Залетай в Дуэль «НА СЧЁТ ТРИ!» в цеху «БОЧКИ»!"
+          : linkType === "bl"
+            ? "🛢 Вытащи меня из бочки — и собери билет в кино!"
+            : "🛢 Кто-то заварил тебя в 3D-цеху «БОЧКИ»!";
       const cardText =
-        linkType === "bl"
-          ? `🛢 <b>${senderName}</b> заварил себя в 3D-цеху триллера «БОЧКА»!\n\n` +
-            `Надень наушники, найди нужную крышку за 3 удара и собери 4 обрывка бесплатного билета другу + шанс попасть в ТОП-20 на Закрытый показ в Москве 17 декабря!${phrase ? `\n\n💬 «${phrase}»` : ""}`
-          : `🛢 <b>${senderName}</b> заварил тебя в цеху триллера «БОЧКА»!\n\n` +
-            `У тебя 30 секунд воздуха и 3 удара ломом — прислушайся, откуда идёт стук, и забери билет в кино!${phrase ? `\n\n💬 «${phrase}»` : ""}`;
+        linkType === "duel"
+          ? `⚔️ <b>${senderName}</b> вызывает тебя за стол «НА СЧЁТ ТРИ!» в цеху триллера «БОЧКА»!\n\n` +
+            `Залетай прямо в эту комнату — хватаем живые бочки синхронно за бесплатный билет и очки ТОП-20 на Закрытый показ в Москве 17 декабря!${phrase ? `\n\n💬 «${phrase}»` : ""}`
+          : linkType === "bl"
+            ? `🛢 <b>${senderName}</b> заварил себя в 3D-цеху триллера «БОЧКА»!\n\n` +
+              `Надень наушники, найди нужную крышку за 3 удара и собери 4 обрывка бесплатного билета другу + шанс попасть в ТОП-20 на Закрытый показ в Москве 17 декабря!${phrase ? `\n\n💬 «${phrase}»` : ""}`
+            : `🛢 <b>${senderName}</b> заварил тебя в цеху триллера «БОЧКА»!\n\n` +
+              `У тебя 30 секунд воздуха и 3 удара ломом — прислушайся, откуда идёт стук, и забери билет в кино!${phrase ? `\n\n💬 «${phrase}»` : ""}`;
+      const btnText = linkType === "duel" ? "⚔️ ЗАЛЕТЕТЬ В ДУЭЛЬ" : "🛢 ВСКРЫТЬ БОЧКУ";
 
       const preparedRes = await tgApi("savePreparedInlineMessage", {
         user_id: tgUserId,
@@ -331,7 +342,7 @@ Deno.serve(async (req: Request) => {
             disable_web_page_preview: false,
           },
           reply_markup: {
-            inline_keyboard: [[{ text: "🛢 ВСКРЫТЬ БОЧКУ", url: targetMiniAppUrl }]],
+            inline_keyboard: [[{ text: btnText, url: targetMiniAppUrl }]],
           },
         },
       });
@@ -595,11 +606,151 @@ Deno.serve(async (req: Request) => {
           `<b>${challenger}</b> ждёт тебя за столом «НА СЧЁТ ТРИ!» (2–3 игрока). Кто быстрее займёт безопасную бочку — забирает весь банк жизней и очки ТОП-10 Премьеры!`,
         reply_markup: {
           inline_keyboard: [
-            [{ text: "⚔️ ПРИНЯТЬ ВЫЗОВ «НА СЧЁТ ТРИ!»", url: `${MINI_APP_LINK}?startapp=duel_${encodeURIComponent(roomId)}` }],
+            [{ text: "⚔️ ПРИНЯТЬ ВЫЗОВ «НА СЧЁТ ТРИ!»", web_app: { url: `${PUBLIC_WEB_URL}/?duel=${encodeURIComponent(roomId)}` } }],
           ],
         },
       });
       return jsonResp({ ok: true });
+    }
+
+    // v15.2: Массовый пуш от бота ВСЕМ друзьям, кто играл в «БОЧКУ», с прямым входом за стол дуэли
+    if (action === "duel_push_all_friends") {
+      if (!verifiedCallerTgId) {
+        return jsonResp({ ok: false, error: "telegram_auth_required" }, 401);
+      }
+      const callerTgId = String(verifiedCallerTgId);
+      const callerUid = `tg_${callerTgId}`;
+      const roomId = String(body.roomId || "duel").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32) || "duel";
+      const challenger = escapeHtml(String(body.challengerName || "Друг из цеха").slice(0, 48));
+      const needCount = Math.max(1, Math.min(2, Number(body.needCount || 2)));
+
+      const candidateTgIds = new Set<string>();
+      const candidateUids = new Set<string>();
+
+      // 1. Все прямые связи из social_connections
+      const { data: scRows } = await adminDb
+        .from("social_connections")
+        .select("sender_uid, receiver_uid, sender_tg_id, receiver_tg_id")
+        .or(`sender_uid.eq.${callerUid},receiver_uid.eq.${callerUid},sender_tg_id.eq.${callerTgId},receiver_tg_id.eq.${callerTgId}`)
+        .limit(60);
+      for (const r of scRows || []) {
+        if (r.sender_tg_id && String(r.sender_tg_id) !== callerTgId) candidateTgIds.add(String(r.sender_tg_id));
+        if (r.receiver_tg_id && String(r.receiver_tg_id) !== callerTgId) candidateTgIds.add(String(r.receiver_tg_id));
+        if (r.sender_uid && r.sender_uid !== callerUid) candidateUids.add(String(r.sender_uid));
+        if (r.receiver_uid && r.receiver_uid !== callerUid) candidateUids.add(String(r.receiver_uid));
+      }
+
+      // 2. Кто открывал мои бочки (barrel_opens_ledger + barrels)
+      const { data: myBarrels } = await adminDb
+        .from("barrels")
+        .select("short_id")
+        .eq("sender_uid", callerUid)
+        .limit(30);
+      const myBarrelIds = (myBarrels || []).map((b: { short_id: string }) => b.short_id).filter(Boolean);
+      if (myBarrelIds.length > 0) {
+        const { data: opens } = await adminDb
+          .from("barrel_opens_ledger")
+          .select("opener_uid")
+          .in("barrel_id", myBarrelIds)
+          .limit(60);
+        for (const o of opens || []) {
+          if (o.opener_uid && o.opener_uid !== callerUid) candidateUids.add(String(o.opener_uid));
+        }
+      }
+
+      // 3. Чьи бочки открывал я
+      const { data: openedByMe } = await adminDb
+        .from("barrel_opens_ledger")
+        .select("barrel_id")
+        .eq("opener_uid", callerUid)
+        .limit(40);
+      const openedIds = (openedByMe || []).map((o: { barrel_id: string }) => o.barrel_id).filter(Boolean);
+      if (openedIds.length > 0) {
+        const { data: srcBarrels } = await adminDb
+          .from("barrels")
+          .select("sender_uid, sender_tg_id")
+          .in("short_id", openedIds)
+          .limit(40);
+        for (const sb of srcBarrels || []) {
+          if (sb.sender_tg_id && String(sb.sender_tg_id) !== callerTgId) candidateTgIds.add(String(sb.sender_tg_id));
+          if (sb.sender_uid && sb.sender_uid !== callerUid) candidateUids.add(String(sb.sender_uid));
+        }
+      }
+
+      // 4. Резолвим tg_user_id для собранных uid
+      if (candidateUids.size > 0) {
+        const { data: uRows } = await adminDb
+          .from("users")
+          .select("uid, tg_user_id")
+          .in("uid", Array.from(candidateUids).slice(0, 60));
+        for (const u of uRows || []) {
+          if (u.tg_user_id && String(u.tg_user_id) !== callerTgId) candidateTgIds.add(String(u.tg_user_id));
+        }
+      }
+
+      // 5. Игроки из той же ветки/компании + недавно активные игроки «БОЧКИ» (если прямых друзей < 15)
+      if (candidateTgIds.size < 15) {
+        const { data: recentUsers } = await adminDb
+          .from("users")
+          .select("tg_user_id, display_name")
+          .not("tg_user_id", "is", null)
+          .neq("tg_user_id", callerTgId)
+          .order("updated_at", { ascending: false })
+          .limit(25);
+        for (const ru of recentUsers || []) {
+          const tid = String(ru.tg_user_id || "").trim();
+          const dname = String(ru.display_name || "");
+          if (tid && /^\d+$/.test(tid) && tid !== callerTgId && !dname.startsWith("QA_TEST_")) {
+            candidateTgIds.add(tid);
+          }
+          if (candidateTgIds.size >= 20) break;
+        }
+      }
+
+      const nowMs = Date.now();
+      const targets = Array.from(candidateTgIds)
+        .filter((tid) => /^\d+$/.test(tid) && tid !== callerTgId)
+        .slice(0, 20);
+
+      let sentCount = 0;
+      let throttledCount = 0;
+      const duelWebUrl = `${PUBLIC_WEB_URL}/?duel=${encodeURIComponent(roomId)}`;
+
+      await Promise.allSettled(
+        targets.map(async (targetTgId) => {
+          const key = `${roomId}:${targetTgId}`;
+          const lastAt = duelPushThrottle.get(key) || 0;
+          if (nowMs - lastAt < 45000) {
+            throttledCount += 1;
+            return;
+          }
+          const res = await tgApi("sendMessage", {
+            chat_id: targetTgId,
+            parse_mode: "HTML",
+            text:
+              `⚔️ <b>ВЫЗОВ В ДУЭЛЬ «НА СЧЁТ ТРИ!»</b>\n\n` +
+              `<b>${challenger}</b> уже ждёт за столом в цеху «БОЧКИ» (нужно ещё ${needCount})!\n` +
+              `Залетай прямо сейчас — хватаем живые бочки синхронно за бесплатный билет и очки ТОП-20 на Закрытый показ в Москве 17 декабря!`,
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: "⚔️ ЗАЛЕТЕТЬ В ДУЭЛЬ", web_app: { url: duelWebUrl } }],
+              ],
+            },
+          });
+          if (res?.ok) {
+            duelPushThrottle.set(key, nowMs);
+            sentCount += 1;
+          }
+        })
+      );
+
+      return jsonResp({
+        ok: true,
+        sentCount,
+        throttledCount,
+        totalCandidates: targets.length,
+        roomId,
+      });
     }
 
     if (action === "gift_order_created") {
