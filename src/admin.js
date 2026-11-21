@@ -704,6 +704,7 @@ function renderLimitsForm() {
   const premIn = document.getElementById('cfg-max-premiere');
   const pairIn = document.getElementById('cfg-require-pair-receipt');
   const pauseIn = document.getElementById('cfg-is-paused');
+  const notifyIn = document.getElementById('cfg-admin-notify-chats');
 
   if (winIn) winIn.value = String(s.win_every_n_hits ?? 100);
   if (dailyIn) dailyIn.value = String(s.max_daily_tickets ?? 6);
@@ -711,6 +712,7 @@ function renderLimitsForm() {
   if (premIn) premIn.value = String(s.max_premiere_winners ?? 20);
   if (pairIn) pairIn.checked = Boolean(s.require_pair_receipt);
   if (pauseIn) pauseIn.checked = Boolean(s.is_paused);
+  if (notifyIn) notifyIn.value = String(s.admin_notify_chat_ids || '');
 }
 
 async function handleSaveLimitsSubmit(e) {
@@ -729,6 +731,7 @@ async function handleSaveLimitsSubmit(e) {
     const p_max_premiere_winners = Math.max(0, Number(rawPrem !== '' && rawPrem != null ? rawPrem : 20));
     const p_require_pair_receipt = Boolean(document.getElementById('cfg-require-pair-receipt')?.checked);
     const p_is_paused = Boolean(document.getElementById('cfg-is-paused')?.checked);
+    const p_admin_notify_chat_ids = String(document.getElementById('cfg-admin-notify-chats')?.value || '').trim();
 
     const { data, error } = await adminSupabase.rpc('admin_update_config', {
       p_win_every_n_hits,
@@ -737,6 +740,7 @@ async function handleSaveLimitsSubmit(e) {
       p_is_paused,
       p_max_total_tickets,
       p_require_pair_receipt,
+      p_admin_notify_chat_ids,
     });
 
     if (error || !data?.ok) {
@@ -745,9 +749,31 @@ async function handleSaveLimitsSubmit(e) {
     }
 
     admState.stats = data.stats || admState.stats;
+    renderLimitsForm();
     renderAnalyticsPane();
     renderLeadersPane();
-    showAdmToast('✓ Новые лимиты экономики мгновенно вступили в силу!');
+    showAdmToast('✓ Новые лимиты экономики и чаты уведомлений сохранены!');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function handleTestAdminNotify() {
+  const btn = document.getElementById('btn-test-admin-notify');
+  if (btn) btn.disabled = true;
+  try {
+    const chatIds = String(document.getElementById('cfg-admin-notify-chats')?.value || '').trim();
+    const res = await callAdminWebhook({
+      adminAction: 'test_admin_notify',
+      chatIds,
+    });
+    if (res?.ok && Number(res.sentCount || 0) > 0) {
+      showAdmToast(`✓ Тестовый пуш отправлен (${res.sentCount}/${res.totalTargets || res.sentCount} чат.)!`);
+    } else if (res?.error === 'no_chat_ids_configured') {
+      showAdmToast('Список чатов пуст — отправьте боту /bind_notify <код> или впишите ID чата.');
+    } else {
+      showAdmToast(`Не удалось отправить пуш (${res?.error || 'проверьте ID и права бота в чате'}).`);
+    }
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -777,6 +803,7 @@ async function callAdminWebhook(payload) {
 function bindAdminEvents() {
   document.getElementById('admin-login-form')?.addEventListener('submit', handleLoginSubmit);
   document.getElementById('limits-form')?.addEventListener('submit', handleSaveLimitsSubmit);
+  document.getElementById('btn-test-admin-notify')?.addEventListener('click', handleTestAdminNotify);
 
   document.getElementById('btn-adm-refresh')?.addEventListener('click', async () => {
     const ok = await refreshDashboardData();

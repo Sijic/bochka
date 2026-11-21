@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0d0d'/%3E%3Crect x='8' y='4' width='16' height='24' rx='2' fill='none' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='11' x2='25' y2='11' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='21' x2='25' y2='21' stroke='%23eab308' stroke-width='2'/%3E%3C/svg%3E" />
   <title>БОЧКА — Заводской триллер | Вызволи друга за 3 удара ломом</title>
-  <meta name="bochka-build" content="v15.4.3-til-duel-hard-pulse" />
+  <meta name="bochka-build" content="v15.4.4-presale-urls-admin-notify" />
   <meta name="description" content="Четыре цеха завода, заваренные 200-литровые бочки и 30 секунд кислорода. Запиши фото и голос друга на дно бочки, проверь его слух и забери допуск на закрытую Премьеру 17 декабря." />
 
   <!-- Open Graph / Telegram / WhatsApp Link Preview -->
@@ -54,7 +54,7 @@
   }
   </script>
 
-  <link rel="modulepreload" href="./src/main.js?v=1543" />
+  <link rel="modulepreload" href="./src/main.js?v=1544" />
   <link rel="modulepreload" href="./src/backend.js" />
   <link rel="modulepreload" href="./src/env.js" />
   <link rel="modulepreload" href="./vendor/supabase.esm.js" />
@@ -71,8 +71,8 @@
     #screen-gate .btn-primary{width:100%;padding:11px 12px;border:0;border-radius:6px;background:#eab308;color:#0d0d0d;font-weight:800;font-size:13px;cursor:pointer}
     #screen-gate .btn-ghost{width:100%;padding:9px 12px;border:1px solid rgba(255,255,255,.22);border-radius:6px;background:transparent;color:#e4e4e7;font-weight:700;font-size:12px;cursor:pointer}
   </style>
-  <link rel="stylesheet" href="./src/styles.css?v=1543" media="print" onload="this.media='all'" />
-  <noscript><link rel="stylesheet" href="./src/styles.css?v=1543" /></noscript>
+  <link rel="stylesheet" href="./src/styles.css?v=1544" media="print" onload="this.media='all'" />
+  <noscript><link rel="stylesheet" href="./src/styles.css?v=1544" /></noscript>
 </head>
 <body data-ui-stage="1" data-blitz-unlocked="0">
   <!-- 3D Three.js Industrial Workshop Canvas -->
@@ -93,7 +93,6 @@
       <button type="button" class="nav-link nav-prize" id="nav-prize" title="Допуск на Премьеру" hidden>
         <span class="topbar-meter-ico" aria-hidden="true">🔥</span>
         <span class="topbar-meter-text" id="top-premiere-pct">0%</span>
-        <span class="cap-badge" id="top-caps-count" hidden>0</span>
       </button>
 
       <button type="button" class="nav-link top-shards-pill" id="top-ticket-shards" title="Сборка билета другу из 4 частей (25% × 4 = 1 целый бесплатный билет)">
@@ -150,6 +149,8 @@
       <button type="button" class="burger-item is-active" id="nav-workshop" data-i18n="navWorkshop">ЦЕХ</button>
       <button type="button" class="burger-item" id="btn-burger-duel">⚔️ ДУЭЛЬ «НА СЧЁТ ТРИ!»</button>
       <button type="button" class="burger-item" id="nav-trailer" data-i18n="navTrailer">🎬 ТРЕЙЛЕР</button>
+      <button type="button" class="burger-item" id="btn-burger-kinopoisk">🎬 БУДУ СМОТРЕТЬ (КИНОПОИСК) ↗</button>
+      <button type="button" class="burger-item" id="btn-burger-afisha">🎟 КУПИТЬ БИЛЕТ / АФИША.РУ ↗</button>
       <button type="button" class="burger-item" id="btn-burger-rules" data-i18n="burgerRules">📜 ПРАВИЛА СУПЕР-ПРИЗА</button>
       <button type="button" class="burger-item" id="btn-burger-sound">🔊 ЗВУК: ВКЛ</button>
       <button type="button" class="burger-item" id="btn-burger-test-ticket" hidden>🎟 ТЕСТ: ВЫБИТЬ БИЛЕТ (УР. 3)</button>
@@ -533,15 +534,15 @@
         </div>
       </div>
 
-      <!-- Форма активации бесплатного билета (собран другом из 4 частей, БЕЗ чеков!) -->
+      <!-- Форма предзаказа бесплатного билета (собран другом из 4 частей, БЕЗ чеков!) -->
       <div class="pass-claim-form" id="pass-claim-form" hidden>
         <p class="modal-hint pass-claim-desc" id="pass-claim-desc">
-          <strong>Друг собрал для тебя из 4 частей бесплатный билет на триллер «БОЧКА»!</strong> Выбирай город, кинотеатр и удобный сеанс — никаких чеков и подвохов, продюсеры выпишут готовый билет и пришлют QR-код в <strong>@bochka_film_bot</strong>!
+          <strong>Друг собрал для тебя из 4 частей бесплатный билет на триллер «БОЧКА» (в кино с 17 декабря)!</strong> Оставь предзаказ на удобный город и кинотеатр — никаких чеков и доплат. Как только откроются продажи (обычно за 4–7 дней до премьеры), мы выкупим билет и пришлём готовый QR-код прямо в <strong>@bochka_film_bot</strong>!
         </p>
 
         <div class="input-row" style="margin-bottom:8px;">
-          <input type="text" id="input-pass-city-cinema" maxlength="120" class="industrial-input"
-                 placeholder="Город, кинотеатр, дата и время сеанса (напр. Москва, КАРО Октябрь, 17.12 20:00)" />
+          <input type="text" id="input-pass-city-cinema" maxlength="160" class="industrial-input"
+                 placeholder="Город, удобный кинотеатр и желаемый день (например: Москва, Октябрь, 17 или 18 декабря — или просто напишите: любой удобный)" />
         </div>
 
         <input type="hidden" id="input-pair-seat-pref" value="" />
@@ -571,26 +572,25 @@
         <p class="rescue-error-box" id="pass-claim-error" hidden></p>
 
         <button type="button" class="btn-primary btn-full" id="btn-accept-gift-pass">
-          <span>🎟 ЗАБРАТЬ БЕСПЛАТНЫЙ БИЛЕТ В КИНО</span>
+          <span>🎟 ЗАБРОНИРОВАТЬ БЕСПЛАТНЫЙ БИЛЕТ</span>
         </button>
       </div>
 
-      <!-- Статус принятого / активированного бесплатного билета + нативный триггер соседнего кресла -->
+      <!-- Статус брони / выписанного бесплатного билета + старт продаж -->
       <div class="golden-winner-box pass-code-box" id="pass-ticket-code-box" hidden>
-        <span class="mono-tag accent-tag" id="pass-order-status-tag">🎟 БЕСПЛАТНЫЙ БИЛЕТ ОФОРМЛЕН</span>
+        <span class="mono-tag accent-tag" id="pass-order-status-tag">🎟 БРОНЬ ЗАКРЕПЛЕНА // @BOCHKA_FILM_BOT</span>
         <p class="golden-winner-contact" id="pass-ticket-contact">
-          Заявка принята! Продюсер выпишет твой бесплатный билет и пришлёт QR-код прямо в @bochka_film_bot.
+          Бронь закреплена за твоим номером! Как только кинотеатры откроют продажи на 17 декабря (обычно за 4–7 дней до премьеры), мы выкупим билет и пришлём готовый QR-код прямо сюда в бот @bochka_film_bot.
         </p>
 
         <div class="pass-native-pair-box" id="pass-native-pair-box">
-          <strong class="pass-native-pair-title">🍿 ИДИТЕ ВМЕСТЕ! ВОЗЬМИТЕ СОСЕДНЕЕ КРЕСЛО РЯДОМ В 1 КЛИК</strong>
+          <strong class="pass-native-pair-title">🍿 ИДИТЕ ВМЕСТЕ 17 ДЕКАБРЯ! ПОДПИШИТЕСЬ НА СТАРТ ПРОДАЖ</strong>
           <p class="pass-native-pair-sub" id="pass-native-pair-sub">
-            Мы уже отправили твоему другу уведомление с сеансом — он может взять кресло рядом на Кинопоиске или Афише, чтобы сидеть вместе!
+            Мы уже отправили твоему другу уведомление о брони — жмите «Буду смотреть» на Кинопоиске или подпишитесь на старт продаж на Афише, чтобы взять соседнее место рядом!
           </p>
           <div class="pair-buy-links">
-            <a href="https://www.kinopoisk.ru/afisha/new/" target="_blank" rel="noopener noreferrer">🎬 Кинопоиск (соседнее место) ↗</a>
-            <a href="https://www.afisha.ru/schedule_cinema/" target="_blank" rel="noopener noreferrer">🎟 Афиша ↗</a>
-            <a href="https://ticketon.kz/cinema" target="_blank" rel="noopener noreferrer">🍿 Тикетон (СНГ) ↗</a>
+            <a href="https://www.kinopoisk.ru/film/11226275/" target="_blank" rel="noopener noreferrer">🎬 Буду смотреть (Кинопоиск) ↗</a>
+            <a href="https://www.afisha.ru/movie/bochka-1005119/" target="_blank" rel="noopener noreferrer">🎟 Купить билет / Афиша.ру ↗</a>
           </div>
         </div>
 
@@ -1166,8 +1166,8 @@
         <button type="button" class="btn-kp-orange" id="btn-modal-kinopoisk" data-i18n="btnKinopoiskGo">
           БУДУ СМОТРЕТЬ НА КИНОПОИСКЕ ↗
         </button>
-        <button type="button" class="btn-secondary" id="btn-open-kp-trailer" data-i18n="btnOpenKpTrailer">
-          ТРЕЙЛЕР НА КП ↗
+        <button type="button" class="btn-secondary" id="btn-modal-afisha">
+          🎟 КУПИТЬ БИЛЕТ / АФИША.РУ ↗
         </button>
         <button type="button" class="btn-ghost" id="btn-modal-calendar" data-i18n="btnCalendarAdd">
           НАПОМНИТЬ 17 ДЕКАБРЯ (.ICS)
@@ -1247,10 +1247,6 @@
         </div>
       </div>
 
-      <div class="prize-summary-big">
-        <strong id="modal-caps-count">0</strong>
-        <span>КРЫШЕК ЦЕХА НА СЧЕТУ</span>
-      </div>
       <div class="modal-cta-row">
         <button type="button" class="btn-primary" id="btn-prize-golden" data-i18n="btnStartPremiereRace">🏆 ГОНКА ЗА ПРЕМЬЕРОЙ</button>
         <button type="button" class="btn-secondary" id="btn-prize-pack" data-i18n="btnPackFriendMain">УПАКОВАТЬ ДРУГА В БОЧКУ</button>
@@ -1559,6 +1555,6 @@
   <!-- Toast уведомления -->
   <div class="toast" id="toast" hidden></div>
 
-  <script type="module" src="./src/main.js?v=1543"></script>
+  <script type="module" src="./src/main.js?v=1544"></script>
 </body>
 </html>

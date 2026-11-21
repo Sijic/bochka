@@ -10,12 +10,15 @@ const CORS_HEADERS = {
 const BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN") || "";
 const WEBHOOK_SECRET = Deno.env.get("TELEGRAM_WEBHOOK_SECRET") || "";
 const ADMIN_CHAT_ID = Deno.env.get("ADMIN_TG_CHAT_ID") || "";
+const ADMIN_NOTIFY_BIND_CODE = (Deno.env.get("ADMIN_NOTIFY_BIND_CODE") || "").trim();
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
 
 const MINI_APP_LINK = "https://t.me/bochka_film_bot/play";
 const PUBLIC_WEB_URL = "https://bochka.quest";
+const KINOPOISK_URL = "https://www.kinopoisk.ru/film/11226275/";
+const AFISHA_URL = "https://www.afisha.ru/movie/bochka-1005119/";
 
 const adminDb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
@@ -134,6 +137,26 @@ async function verifyAdminCaller(req: Request): Promise<boolean> {
 function normalizePhone(raw: string): string {
   const digits = String(raw || "").replace(/[^0-9]/g, "");
   return digits ? `+${digits}` : "";
+}
+
+function parseNotifyChatIds(raw: string): string[] {
+  const parts = String(raw || "")
+    .split(/[\s,;]+/)
+    .map((s) => s.trim())
+    .filter((s) => /^-?\d{5,20}$/.test(s));
+  return Array.from(new Set(parts));
+}
+
+async function getConfiguredAdminNotifyChatIds(extraRaw = ""): Promise<string[]> {
+  const { data: gs } = await adminDb
+    .from("global_stats")
+    .select("admin_notify_chat_ids")
+    .eq("id", 1)
+    .maybeSingle();
+  const fromDb = parseNotifyChatIds(String(gs?.admin_notify_chat_ids || ""));
+  const fromExtra = parseNotifyChatIds(extraRaw);
+  const fromEnv = parseNotifyChatIds(ADMIN_CHAT_ID);
+  return Array.from(new Set([...fromExtra, ...fromDb, ...fromEnv]));
 }
 
 Deno.serve(async (req: Request) => {
@@ -264,6 +287,38 @@ Deno.serve(async (req: Request) => {
         });
       }
       return jsonResp({ ok: Boolean(tgRes?.ok), tgSent: Boolean(tgRes?.ok) });
+    }
+
+    if (body.adminAction === "test_admin_notify") {
+      const rawOverride = typeof body.chatIds === "string" ? body.chatIds.trim() : "";
+      const targets = rawOverride
+        ? parseNotifyChatIds(rawOverride)
+        : await getConfiguredAdminNotifyChatIds();
+      if (!targets.length) {
+        return jsonResp({ ok: false, error: "no_chat_ids_configured", sentCount: 0, totalTargets: 0 });
+      }
+      let sentCount = 0;
+      const errors: string[] = [];
+      for (const cid of targets) {
+        const res = await tgApi("sendMessage", {
+          chat_id: cid,
+          parse_mode: "HTML",
+          text:
+            `🔔 <b>Тест уведомлений «БОЧКА» — связь работает!</b>\n\n` +
+            `Сюда мгновенно будут приходить все новые брони бесплатных билетов с контактами зрителей и остатком пула.`,
+          reply_markup: {
+            inline_keyboard: [[{ text: "🖥 Открыть пульт выписки", url: `${PUBLIC_WEB_URL}/admin/` }]],
+          },
+        });
+        if (res?.ok) sentCount += 1;
+        else errors.push(`${cid}: ${res?.description || "send_failed"}`);
+      }
+      return jsonResp({
+        ok: sentCount > 0,
+        sentCount,
+        totalTargets: targets.length,
+        error: sentCount === 0 ? (errors[0] || "send_failed") : "",
+      });
     }
 
     return jsonResp({ ok: false, error: "unknown_admin_action" }, 400);
@@ -533,7 +588,10 @@ Deno.serve(async (req: Request) => {
           `Зови остальных в цех и занимайте соседние места на премьеру «БОЧКИ»!`,
         reply_markup: {
           inline_keyboard: [
-            [{ text: "🎬 «Буду смотреть» на Кинопоиске", url: "https://www.kinopoisk.ru/film/11226275/" }],
+            [
+              { text: "🎬 Буду смотреть (Кинопоиск)", url: KINOPOISK_URL },
+              { text: "🎟 Афиша.ру", url: AFISHA_URL },
+            ],
             [{ text: "🛢 Войти в цех", web_app: { url: `${PUBLIC_WEB_URL}/` } }],
           ],
         },
@@ -574,10 +632,10 @@ Deno.serve(async (req: Request) => {
         parse_mode: "HTML",
         text:
           `🎟 <b>${sender} собрал в «БОЧКЕ» бесплатный билет в кино (из 4 частей) и подарил его ТЕБЕ!</b>\n` +
-          `Нажми кнопку ниже, выбери город, кинотеатр и сеанс — без чеков и доплат!`,
+          `Нажми кнопку ниже, оставь бронь на удобный город и кинотеатр (без чеков и доплат) — как только откроются продажи на 17 декабря, пришлём готовый QR-код прямо сюда!`,
         reply_markup: {
           inline_keyboard: [
-            [{ text: "🎟 ЗАБРАТЬ БЕСПЛАТНЫЙ БИЛЕТ", web_app: { url: `${PUBLIC_WEB_URL}/?gift=${encodeURIComponent(giftId)}` } }],
+            [{ text: "🎟 ЗАБРОНИРОВАТЬ БЕСПЛАТНЫЙ БИЛЕТ", web_app: { url: `${PUBLIC_WEB_URL}/?gift=${encodeURIComponent(giftId)}` } }],
           ],
         },
       });
@@ -805,7 +863,7 @@ Deno.serve(async (req: Request) => {
       const { senderTgId, receiverTgId, receiverName = "", receiverUsername = "", phone = "", cityCinema = "" } = body;
       const { data: ordRow } = await adminDb
         .from("ticket_orders")
-        .select("id")
+        .select("id, sender_uid, receiver_name, receiver_username, verified_phone, city_cinema")
         .eq("receiver_tg_id", String(receiverTgId || ""))
         .order("created_at", { ascending: false })
         .limit(1)
@@ -815,41 +873,60 @@ Deno.serve(async (req: Request) => {
         return jsonResp({ ok: true, skipped: true });
       }
 
+      const finalCity = String(cityCinema || ordRow.city_cinema || "любой удобный").trim();
+      const finalPhone = normalizePhone(String(phone || ordRow.verified_phone || ""));
+      const finalReceiverName = String(receiverName || ordRow.receiver_name || "Игрок").trim();
+      const finalReceiverUser = String(receiverUsername || ordRow.receiver_username || "").replace(/^@/, "").trim();
+
+      // Получаем данные отправителя и статистику пула
+      let senderRow: Record<string, any> | null = null;
       if (senderTgId) {
-        const sessionLabel = cityCinema ? escapeHtml(cityCinema) : "выбранный кинотеатр и время";
+        const { data } = await adminDb
+          .from("users")
+          .select("display_name, tg_username, referred_by_uid")
+          .eq("tg_user_id", String(senderTgId))
+          .limit(1)
+          .maybeSingle();
+        senderRow = data || null;
+      } else if (ordRow.sender_uid) {
+        const { data } = await adminDb
+          .from("users")
+          .select("display_name, tg_username, referred_by_uid")
+          .eq("uid", String(ordRow.sender_uid))
+          .limit(1)
+          .maybeSingle();
+        senderRow = data || null;
+      }
+
+      const { data: gsRow } = await adminDb
+        .from("global_stats")
+        .select("tickets_won, max_total_tickets, daily_tickets_issued, max_daily_tickets, admin_notify_chat_ids")
+        .eq("id", 1)
+        .maybeSingle();
+
+      if (senderTgId) {
+        const sessionLabel = escapeHtml(finalCity);
         await tgApi("sendMessage", {
           chat_id: senderTgId,
           parse_mode: "HTML",
           text:
-            `🎟 <b>Друг забрал бесплатное место на «БОЧКУ»!</b>\n` +
-            `📍 Сеанс: <b>${sessionLabel}</b>\n\n` +
-            `Возьми себе соседнее кресло рядом в 1 клик, чтобы пойти вместе — на триллеры поодиночке не ходят!\n` +
+            `🎟 <b>Твой друг забронировал бесплатный билет в ${sessionLabel}!</b>\n\n` +
+            `Как только откроются продажи на 17 декабря, бери соседнее место рядом — жми «Буду смотреть» на Кинопоиске или подпишись на старт продаж на Афише!\n\n` +
             `+ Тебе начислено <b>+3 ❤️ жизней и +300 ⭐</b> в рейтинг Закрытого показа в Москве 17 декабря!`,
           reply_markup: {
             inline_keyboard: [
-              [
-                { text: "🎬 ВЗЯТЬ СОСЕДНЕЕ КРЕСЛО (КИНОПОИСК)", url: "https://www.kinopoisk.ru/afisha/new/" },
-              ],
-              [
-                { text: "🎟 АФИША / БИЛЕТЫ РЯДОМ", url: "https://www.afisha.ru/schedule_cinema/" },
-                { text: "🏆 В ТОП-20 МОСКВЫ", url: MINI_APP_LINK },
-              ],
+              [{ text: "🎬 Буду смотреть (Кинопоиск)", url: KINOPOISK_URL }],
+              [{ text: "🎟 Купить билет / Афиша.ру", url: AFISHA_URL }],
             ],
           },
         });
 
         // Перекрёстное уведомление рефереру отправителя
-        const { data: sRow } = await adminDb
-          .from("users")
-          .select("display_name, referred_by_uid")
-          .eq("tg_user_id", String(senderTgId))
-          .limit(1)
-          .maybeSingle();
-        if (sRow?.referred_by_uid) {
+        if (senderRow?.referred_by_uid) {
           const { data: refRow } = await adminDb
             .from("users")
             .select("tg_user_id")
-            .eq("uid", sRow.referred_by_uid)
+            .eq("uid", senderRow.referred_by_uid)
             .limit(1)
             .maybeSingle();
           if (refRow?.tg_user_id && String(refRow.tg_user_id) !== String(senderTgId)) {
@@ -857,7 +934,7 @@ Deno.serve(async (req: Request) => {
               chat_id: refRow.tg_user_id,
               parse_mode: "HTML",
               text:
-                `🎟 <b>Твой друг ${escapeHtml(sRow.display_name || "Игрок")} только что выиграл билет в кино в БОЧКЕ!</b>\n` +
+                `🎟 <b>Твой друг ${escapeHtml(senderRow.display_name || "Игрок")} только что подарил билет в кино в БОЧКЕ!</b>\n` +
                 `Заходи в цех — там ещё остались билеты!`,
               reply_markup: {
                 inline_keyboard: [[{ text: "🛢 ЗАЙТИ В ЦЕХ ЗА БИЛЕТОМ", url: MINI_APP_LINK }]],
@@ -872,24 +949,56 @@ Deno.serve(async (req: Request) => {
           chat_id: receiverTgId,
           parse_mode: "HTML",
           text:
-            `🎟 <b>Твой бесплатный билет на триллер «БОЧКА» (17 декабря) принят!</b>\n\n` +
-            `📍 Сеанс: <b>${escapeHtml(cityCinema || "уточняется")}</b>\n` +
-            `📱 Подтверждённый номер: <code>${escapeHtml(normalizePhone(phone))}</code>\n\n` +
-            `Продюсер выпишет билет и пришлёт его прямо сюда в @bochka_film_bot! Перешли дарителю номер места, чтобы сесть рядом.`,
+            `🎟 <b>Бронь закреплена за твоим номером!</b>\n\n` +
+            `📍 Пожелание: <b>${escapeHtml(finalCity)}</b>\n` +
+            `📱 Номер: <code>${escapeHtml(finalPhone)}</code>\n\n` +
+            `Как только кинотеатры откроют продажи на 17 декабря (обычно за 4–7 дней до премьеры), мы выкупим билет и пришлём готовый QR-код прямо сюда в бот @bochka_film_bot.`,
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🎬 Буду смотреть (Кинопоиск)", url: KINOPOISK_URL }],
+              [{ text: "🎟 Купить билет / Афиша.ру", url: AFISHA_URL }],
+            ],
+          },
         });
       }
 
-      if (ADMIN_CHAT_ID) {
-        await tgApi("sendMessage", {
-          chat_id: ADMIN_CHAT_ID,
-          parse_mode: "HTML",
-          text:
-            `🆕 <b>НОВАЯ ЗАЯВКА НА БИЛЕТ В «БОЧКУ»</b>\n` +
-            `👤 Получатель: ${escapeHtml(receiverName)} ${receiverUsername ? `(@${escapeHtml(receiverUsername)})` : ""}\n` +
-            `📱 Телефон: <code>${escapeHtml(normalizePhone(phone))}</code>\n` +
-            `📍 Город/зал: <b>${escapeHtml(cityCinema)}</b>\n` +
-            `🔗 Кабинет продюсера: ${PUBLIC_WEB_URL}/admin/`,
-        });
+      const notifyChats = Array.from(
+        new Set([
+          ...parseNotifyChatIds(String(gsRow?.admin_notify_chat_ids || "")),
+          ...parseNotifyChatIds(ADMIN_CHAT_ID),
+        ])
+      );
+
+      if (notifyChats.length > 0) {
+        const whoLabel = finalReceiverUser
+          ? `${escapeHtml(finalReceiverName)} (@${escapeHtml(finalReceiverUser)})`
+          : escapeHtml(finalReceiverName);
+        const senderUsername = String(senderRow?.tg_username || "").replace(/^@/, "").trim();
+        const senderLabel = senderUsername
+          ? `@${escapeHtml(senderUsername)}`
+          : escapeHtml(senderRow?.display_name || (senderTgId ? `tg_${senderTgId}` : "игрок"));
+        const poolUsed = Number(gsRow?.tickets_won || 0);
+        const poolMax = Number(gsRow?.max_total_tickets ?? 100);
+        const dailyUsed = Number(gsRow?.daily_tickets_issued || 0);
+        const dailyMax = Number(gsRow?.max_daily_tickets ?? 6);
+
+        const adminCardText =
+          `🎟 <b>Новая бронь билета «БОЧКА»</b>\n\n` +
+          `👤 <b>Кому:</b> ${whoLabel}${finalPhone ? `, <code>${escapeHtml(finalPhone)}</code>` : ""}\n` +
+          `📍 <b>Куда хочет:</b> <b>${escapeHtml(finalCity)}</b>\n` +
+          `🎁 <b>Подарил:</b> ${senderLabel}\n` +
+          `📊 <b>Пул:</b> ${poolUsed}/${poolMax} (сегодня ${dailyUsed}/${dailyMax})`;
+
+        for (const cid of notifyChats) {
+          await tgApi("sendMessage", {
+            chat_id: cid,
+            parse_mode: "HTML",
+            text: adminCardText,
+            reply_markup: {
+              inline_keyboard: [[{ text: "🖥 Открыть пульт выписки", url: `${PUBLIC_WEB_URL}/admin/` }]],
+            },
+          });
+        }
       }
 
       return jsonResp({ ok: true });
@@ -938,7 +1047,7 @@ Deno.serve(async (req: Request) => {
         parse_mode: "HTML",
         text:
           `✅ <b>Номер ${escapeHtml(cleanPhone)} успешно подтверждён!</b>\n` +
-          `Вернись в открытое окно игры и отправь свой город/кинотеатр для получения электронного билета.`,
+          `Вернись в открытое окно игры и укажи город, удобный кинотеатр и желаемый день для брони билета на «БОЧКУ» (17 декабря).`,
         reply_markup: { remove_keyboard: true },
       });
     } else {
@@ -950,12 +1059,74 @@ Deno.serve(async (req: Request) => {
     return jsonResp({ ok: true });
   }
 
-  // 3B. Вспомогательная команда /admin_id для привязки закрытого чата продюсеров
-  if (text === "/admin_id") {
+  // 3B. Простая привязка/отвязка админ-пушей о новых заявках (/bind_notify <код>, /unbind_notify <код>)
+  const bindMatch = text.match(/^\/bind_notify(?:@\w+)?(?:\s+(.*))?$/i);
+  if (bindMatch) {
+    const suppliedCode = String(bindMatch[1] || "").trim();
+    if (!ADMIN_NOTIFY_BIND_CODE || !suppliedCode || !timingSafeEq(suppliedCode, ADMIN_NOTIFY_BIND_CODE)) {
+      await tgApi("sendMessage", {
+        chat_id: chatId,
+        text: "⛔ Неверный секретный код. Формат: /bind_notify <секретный_код>",
+      });
+      return jsonResp({ ok: true });
+    }
+    const { data: gs } = await adminDb
+      .from("global_stats")
+      .select("admin_notify_chat_ids")
+      .eq("id", 1)
+      .maybeSingle();
+    const list = parseNotifyChatIds(String(gs?.admin_notify_chat_ids || ""));
+    const cidStr = String(chatId);
+    if (!list.includes(cidStr)) list.push(cidStr);
+    await adminDb
+      .from("global_stats")
+      .update({ admin_notify_chat_ids: list.join(", "), updated_at: new Date().toISOString() })
+      .eq("id", 1);
+
     await tgApi("sendMessage", {
       chat_id: chatId,
       parse_mode: "HTML",
-      text: `ID этого чата для <code>ADMIN_TG_CHAT_ID</code>: <code>${chatId}</code>`,
+      text: `✅ <b>Готово, заявки на билеты теперь приходят сюда.</b>\nID чата: <code>${escapeHtml(cidStr)}</code>`,
+    });
+    return jsonResp({ ok: true });
+  }
+
+  const unbindMatch = text.match(/^\/unbind_notify(?:@\w+)?(?:\s+(.*))?$/i);
+  if (unbindMatch) {
+    const suppliedCode = String(unbindMatch[1] || "").trim();
+    if (!ADMIN_NOTIFY_BIND_CODE || !suppliedCode || !timingSafeEq(suppliedCode, ADMIN_NOTIFY_BIND_CODE)) {
+      await tgApi("sendMessage", {
+        chat_id: chatId,
+        text: "⛔ Неверный секретный код. Формат: /unbind_notify <секретный_код>",
+      });
+      return jsonResp({ ok: true });
+    }
+    const { data: gs } = await adminDb
+      .from("global_stats")
+      .select("admin_notify_chat_ids")
+      .eq("id", 1)
+      .maybeSingle();
+    const cidStr = String(chatId);
+    const nextList = parseNotifyChatIds(String(gs?.admin_notify_chat_ids || "")).filter((id) => id !== cidStr);
+    await adminDb
+      .from("global_stats")
+      .update({ admin_notify_chat_ids: nextList.join(", "), updated_at: new Date().toISOString() })
+      .eq("id", 1);
+
+    await tgApi("sendMessage", {
+      chat_id: chatId,
+      parse_mode: "HTML",
+      text: `🔕 Готово, этот чат (<code>${escapeHtml(cidStr)}</code>) убран из рассылки заявок на билеты.`,
+    });
+    return jsonResp({ ok: true });
+  }
+
+  // 3B-2. Вспомогательная команда /admin_id (показать ID текущего чата)
+  if (text === "/admin_id" || text.startsWith("/admin_id@")) {
+    await tgApi("sendMessage", {
+      chat_id: chatId,
+      parse_mode: "HTML",
+      text: `ID этого чата: <code>${chatId}</code>`,
     });
     return jsonResp({ ok: true });
   }
@@ -1046,7 +1217,10 @@ Deno.serve(async (req: Request) => {
       reply_markup: {
         inline_keyboard: [
           [{ text: primaryBtnText, web_app: { url: webAppUrl } }],
-          [{ text: "🎬 «Буду смотреть» на Кинопоиске", url: "https://www.kinopoisk.ru/film/11226275/" }],
+          [
+            { text: "🎬 Буду смотреть (Кинопоиск)", url: KINOPOISK_URL },
+            { text: "🎟 Афиша.ру", url: AFISHA_URL },
+          ],
         ],
       },
     });

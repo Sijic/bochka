@@ -5044,19 +5044,19 @@ function renderPassOrderStatusBox(passData) {
   const ticketNum = `№ BOCHKA-${String(passData.id || '1712').toUpperCase()}`;
   if (statusTag) {
     statusTag.textContent = isSent
-      ? '🎟 ВИРТУАЛЬНЫЙ БИЛЕТ ВЫПИСАН // @BOCHKA_FILM_BOT'
-      : '🎟 ВИРТУАЛЬНЫЙ БИЛЕТ АКТИВИРОВАН // @BOCHKA_FILM_BOT';
+      ? '🎟 БИЛЕТ ВЫПИСАН // @BOCHKA_FILM_BOT'
+      : '🎟 БРОНЬ ЗАКРЕПЛЕНА // @BOCHKA_FILM_BOT';
   }
 
   if (contactEl) {
     contactEl.textContent = isSent
       ? `Бесплатный билет ${ticketNum} выписан и отправлен прямо в чат @bochka_film_bot!`
-      : `Заявка на бесплатный билет ${ticketNum} (${passData.cityCinema || 'выбранный сеанс'}) принята! Продюсер пришлёт билет в @bochka_film_bot.`;
+      : 'Бронь закреплена за твоим номером! Как только кинотеатры откроют продажи на 17 декабря (обычно за 4–7 дней до премьеры), мы выкупим билет и пришлём готовый QR-код прямо сюда в бот @bochka_film_bot.';
   }
   const nativeSub = document.getElementById('pass-native-pair-sub');
   if (nativeSub) {
     const sess = passData.cityCinema ? ` (${passData.cityCinema})` : '';
-    nativeSub.textContent = `Мы уже отправили твоему другу пуш с сеансом${sess} — возьмите соседнее кресло рядом в 1 клик, чтобы пойти вместе!`;
+    nativeSub.textContent = `Мы уже сообщили твоему другу о брони${sess} — жмите «Буду смотреть» на Кинопоиске или подпишитесь на старт продаж на Афише, чтобы взять соседнее место рядом!`;
   }
 
   if (passData.bookingCode && bookingRow && codeIn) {
@@ -5172,7 +5172,7 @@ async function handleAcceptIncomingPass() {
 
   if (cityCinema.length < 3) {
     if (errEl) {
-      errEl.textContent = 'Укажи город, кинотеатр и время сеанса (например: Москва, КАРО Октябрь, 17.12 20:00).';
+      errEl.textContent = 'Укажи город, удобный кинотеатр и желаемый день (например: Москва, Октябрь, 17 или 18 декабря — или просто напишите: любой удобный).';
       errEl.removeAttribute('hidden');
     }
     Haptics.error();
@@ -9332,6 +9332,20 @@ function bindUIEvents() {
   };
   document.getElementById('quest-btn-kp')?.addEventListener('click', goKinopoiskAction);
   document.getElementById('btn-modal-kinopoisk')?.addEventListener('click', goKinopoiskAction);
+  document.getElementById('btn-burger-kinopoisk')?.addEventListener('click', () => {
+    closeBurgerDrawer();
+    goKinopoiskAction();
+  });
+  const goAfishaAction = () => {
+    pauseActiveTrailerPlayback();
+    recordFunnelEvent('cinema_intent_clicks', state.tg?.user).catch(() => {});
+    openExternalLink(ENV.afishaUrl);
+  };
+  document.getElementById('btn-modal-afisha')?.addEventListener('click', goAfishaAction);
+  document.getElementById('btn-burger-afisha')?.addEventListener('click', () => {
+    closeBurgerDrawer();
+    goAfishaAction();
+  });
 
   document.getElementById('btn-close-trailer')?.addEventListener('click', () => closeTrailerModal());
   document.getElementById('btn-trailer-like-yt')?.addEventListener('click', () => handleExternalTrailerLike('yt'));

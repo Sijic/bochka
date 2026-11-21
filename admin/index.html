@@ -413,6 +413,27 @@
                 </div>
               </label>
 
+              <div class="field-group">
+                <label for="cfg-admin-notify-chats">
+                  ЧАТЫ ДЛЯ УВЕДОМЛЕНИЙ О НОВЫХ БИЛЕТАХ (<code>admin_notify_chat_ids</code>)
+                </label>
+                <input
+                  type="text"
+                  id="cfg-admin-notify-chats"
+                  maxlength="500"
+                  class="adm-input"
+                  placeholder="Напр.: 123456789, -1001234567890 (или привяжите через /bind_notify в боте)"
+                />
+                <span class="field-hint">
+                  Telegram chat_id через запятую. Проще всего привязать без поиска ID: напишите боту <code>@bochka_film_bot</code> команду <code>/bind_notify &lt;код&gt;</code> в личку или в чат продюсеров.
+                </span>
+                <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+                  <button type="button" class="adm-btn" id="btn-test-admin-notify">
+                    🔔 ПРОВЕРИТЬ ПУШ
+                  </button>
+                </div>
+              </div>
+
               <button type="submit" class="adm-btn adm-btn-gold adm-btn-full" id="btn-save-limits">
                 💾 СОХРАНИТЬ ЛИМИТЫ ЭКОНОМИКИ
               </button>
@@ -426,10 +447,11 @@
             </div>
             <div class="bot-guide-list">
               <div class="bot-guide-item">
-                <strong>1. Автоматические пуши в чат продюсеров</strong>
+                <strong>1. Простые пуши в личку или чат продюсеров</strong>
                 <p>
-                  Чтобы новые заявки с номерами телефонов мгновенно дублировались в рабочий чат продюсеров, добавьте бота
-                  <code>@bochka_film_bot</code> в группу или откройте личку и отправьте команду <code>/admin_id</code> — бот пришлёт ID чата для секрета <code>ADMIN_TG_CHAT_ID</code>.
+                  Напишите боту <code>@bochka_film_bot</code> в личку или в закрытый чат продюсеров команду
+                  <code>/bind_notify &lt;секретный_код&gt;</code> — бот сам добавит чат в рассылку новых броней билетов.
+                  Чтобы убрать чат из рассылки, отправьте <code>/unbind_notify &lt;секретный_код&gt;</code>.
                 </p>
               </div>
               <div class="bot-guide-item">
@@ -455,6 +477,6 @@
 
   <div class="adm-toast" id="adm-toast" hidden></div>
 
-  <script type="module" src="../src/admin.js"></script>
+  <script type="module" src="../src/admin.js?v=1544"></script>
 </body>
 </html>
