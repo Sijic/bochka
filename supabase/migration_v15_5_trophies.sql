@@ -31,12 +31,15 @@ CREATE POLICY "admin_write_rare_card_templates"
 
 INSERT INTO public.rare_card_templates (id, title, rarity, image_url, max_supply)
 VALUES
-  ('card_workshop_hall', 'Цех «Корпус Б» · Смена №1', 'rare', './public/cards/card_workshop_hall.webp', 100),
-  ('card_boy_escape', 'Побег из 200-литровой бочки', 'rare', './public/cards/card_boy_escape.webp', 100),
-  ('card_father_shadow', 'Отец у стальной колонны', 'rare', './public/cards/card_father_shadow.webp', 100),
-  ('card_pastor_vigil', 'Пастор · Последнее слово', 'epic', './public/cards/card_pastor_vigil.webp', 50),
-  ('card_barrel_eye', 'Взгляд сквозь крышку', 'epic', './public/cards/card_barrel_eye.webp', 50),
-  ('card_til_north_sea', 'Тиль Швайгер · Северное море', 'legendary', './public/cards/card_til_north_sea.webp', 20)
+  ('card_workshop_hall', 'Цех «Корпус Б» · Смена №1', 'rare', './public/cards/card_workshop_hall.webp?v=1553', 100),
+  ('card_boy_escape', 'Побег из 200-литровой бочки', 'rare', './public/cards/card_boy_escape.webp?v=1553', 100),
+  ('card_father_shadow', 'Отец в цеху', 'rare', './public/cards/card_father_shadow.webp?v=1553', 100),
+  ('card_chain_grip', 'Стальная цепь цеха', 'rare', './public/cards/card_chain_grip.webp?v=1553', 100),
+  ('card_barrel_eye', 'Взгляд сквозь крышку', 'epic', './public/cards/card_barrel_eye.webp?v=1553', 50),
+  ('card_fire_dog', 'Овчарка и пламя бочки', 'epic', './public/cards/card_fire_dog.webp?v=1553', 50),
+  ('card_pastor_vigil', 'Пастор · Последнее слово', 'epic', './public/cards/card_pastor_vigil.webp?v=1553', 50),
+  ('card_til_glasses', 'Тиль Швайгер · Холодный расчёт', 'legendary', './public/cards/card_til_glasses.webp?v=1553', 20),
+  ('card_til_north_sea', 'Тиль Швайгер · Легенда «Бочки»', 'legendary', './public/cards/card_til_north_sea.webp?v=1553', 20)
 ON CONFLICT (id) DO UPDATE SET
   title = EXCLUDED.title,
   rarity = EXCLUDED.rarity,

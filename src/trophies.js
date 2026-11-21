@@ -16,6 +16,7 @@ export const RARITY_META = Object.freeze({
 });
 
 const FALLBACK_IMG = './public/sprites/hero_boy_live.webp';
+const CARD_ART_VERSION = 'v=1553';
 
 function safeImgUrl(url) {
   const s = String(url || '').trim();
@@ -27,6 +28,9 @@ function safeImgUrl(url) {
     s.startsWith('http://') ||
     s.startsWith('data:image/')
   ) {
+    if (s.includes('/public/cards/') && !s.includes('?')) {
+      return `${s}?${CARD_ART_VERSION}`;
+    }
     return s;
   }
   return FALLBACK_IMG;
