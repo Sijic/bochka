@@ -715,6 +715,7 @@ export async function fetchPlayerProfile(tgUser = null) {
           premiereConfirmed: Boolean(data.premiere_confirmed),
           premiereCode: data.premiere_code || '',
           hasPendingTicket: Boolean(data.has_pending_ticket),
+          ticketShards: Math.max(0, Math.min(3, Number(data.ticket_shards || 0))),
           pendingTicketsCount: Math.max(
             Number(data.pending_tickets_count || 0),
             data.has_pending_ticket ? 1 : 0
@@ -1229,13 +1230,13 @@ export async function fetchTicketPoolStatus() {
     return {
       ok: true,
       dailyIssued: 0,
-      maxDaily: 8,
-      dailyRemaining: 8,
+      maxDaily: 6,
+      dailyRemaining: 6,
       totalIssued: 0,
       maxTotal: 100,
       totalRemaining: 100,
       isPaused: false,
-      requirePairReceipt: true,
+      requirePairReceipt: false,
     };
   }
   try {
@@ -1244,17 +1245,17 @@ export async function fetchTicketPoolStatus() {
       return {
         ok: true,
         dailyIssued: Number(data.daily_issued || 0),
-        maxDaily: Number(data.max_daily ?? 8),
+        maxDaily: Number(data.max_daily ?? 6),
         dailyRemaining: Number(data.daily_remaining ?? 0),
         totalIssued: Number(data.total_issued || 0),
         maxTotal: Number(data.max_total ?? 100),
         totalRemaining: Number(data.total_remaining ?? 0),
         isPaused: Boolean(data.is_paused),
-        requirePairReceipt: data.require_pair_receipt !== false,
+        requirePairReceipt: Boolean(data.require_pair_receipt),
       };
     }
   } catch { /* ignore */ }
-  return { ok: false, dailyRemaining: 8, maxDaily: 8, maxTotal: 100, requirePairReceipt: true };
+  return { ok: false, dailyRemaining: 6, maxDaily: 6, maxTotal: 100, requirePairReceipt: false };
 }
 
 export async function uploadPairTicketReceipt(giftId, blob) {
@@ -2319,7 +2320,85 @@ export async function registerSeedAdmin(tgUser = null, seedTag = 'seed_admin') {
   }
 }
 
-export async function requestServerCinemaTicket(tgUser = null, source = 'level3') {
+/**
+ * v15.0: Серверная выдача 1 части билета (1/4 -> 2/4 -> 3/4 -> 4/4 склейка в целый билет для друга).
+ * На 4-й части сервер атомарно проверяет лимит global_stats (MAX_TOTAL=100, MAX_DAILY=6 МСК).
+ */
+export async function awardTicketShardServer(tgUser = null, source = 'level') {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  if (db && !isTestBogActive()) {
+    try {
+      const { data, error } = await db.rpc('award_ticket_shard_rpc', {
+        p_uid: uid,
+        p_source: source,
+      });
+      if (!error && data?.ok) {
+        return {
+          ok: true,
+          source: data.source || source,
+          shards: Math.max(0, Math.min(3, Number(data.shards || 0))),
+          prevShards: Number(data.prev_shards || 0),
+          mergedTicket: Boolean(data.merged_ticket),
+          granted: Boolean(data.granted),
+          reason: data.reason || '',
+          fallbackPoints: Number(data.fallback_points || 0),
+          premierePoints: data.premiere_points != null ? Number(data.premiere_points) : null,
+          pendingTicketsCount: Number(data.pending_tickets_count || 0),
+          dailyIssued: Number(data.daily_tickets_issued || 0),
+          maxDaily: Number(data.max_daily_tickets || 6),
+          ticketsWon: Number(data.tickets_won || 0),
+          maxTotal: Number(data.max_total_tickets || 100),
+        };
+      }
+      return {
+        ok: false,
+        shards: 0,
+        mergedTicket: false,
+        granted: false,
+        reason: data?.reason || error?.message || 'rpc_error',
+        fallbackPoints: 500,
+      };
+    } catch (err) {
+      return { ok: false, shards: 0, mergedTicket: false, granted: false, reason: err?.message || 'network_error', fallbackPoints: 500 };
+    }
+  }
+  const prof = getLocalPreviewProfile();
+  const prev = Math.max(0, Math.min(3, Number(prof.ticketShards || 0)));
+  const next = prev + 1;
+  if (next >= 4) {
+    prof.ticketShards = 0;
+    prof.pendingTicketsCount = Number(prof.pendingTicketsCount || 0) + 1;
+    prof.hasPendingTicket = true;
+    saveLocalPreviewProfile(prof);
+    return {
+      ok: true,
+      source,
+      shards: 0,
+      prevShards: 4,
+      mergedTicket: true,
+      granted: true,
+      reason: 'local_preview',
+      fallbackPoints: 0,
+      pendingTicketsCount: prof.pendingTicketsCount,
+    };
+  }
+  prof.ticketShards = next;
+  saveLocalPreviewProfile(prof);
+  return {
+    ok: true,
+    source,
+    shards: next,
+    prevShards: prev,
+    mergedTicket: false,
+    granted: false,
+    reason: '',
+    fallbackPoints: 0,
+    pendingTicketsCount: Number(prof.pendingTicketsCount || 0),
+  };
+}
+
+export async function requestServerCinemaTicket(tgUser = null, source = 'shard4') {
   const uid = getViewerUid(tgUser);
   const db = getCloudDb();
   if (db && !isTestBogActive()) {

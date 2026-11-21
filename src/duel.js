@@ -1,5 +1,4 @@
 import { isTestBogSessionActive, Haptics } from './telegram.js';
-import { BARREL_BATCH_CODES } from './scene.js';
 import {
   getActiveRealtimeClient,
   getViewerUid,
@@ -7,8 +6,10 @@ import {
   startDuelAnte,
   settleDuelRound,
   claimDuelPremiereBankReward,
-  requestServerCinemaTicket,
+  awardTicketShardServer,
 } from './backend.js';
+
+const BARREL_BATCH_CODES = ['01', '19', '97', '12', '17', '26', '33', '48', '71', '84', '92', '99'];
 
 /**
  * Контроллер синхронного мультиплеера на 2–3 игроков «НА СЧЁТ ТРИ!» (Supabase Realtime Presence + Broadcast)
@@ -1156,8 +1157,10 @@ export class WorkshopDuelController {
 
     let serverTicketRes = null;
     if (ticketEntry && ticketEntry.claim.uid === this.myUid) {
-      serverTicketRes = await requestServerCinemaTicket(this.getTgUser?.(), 'duel').catch(() => ({
+      serverTicketRes = await awardTicketShardServer(this.getTgUser?.(), 'duel').catch(() => ({
         ok: false,
+        shards: 0,
+        mergedTicket: false,
         granted: false,
         reason: 'network_error',
         fallbackPoints: 500,
@@ -1210,7 +1213,10 @@ export class WorkshopDuelController {
               premiereScore: settleRes?.winnerScore,
               premierePoints: bankRes.premierePoints ?? settleRes?.winnerPoints,
             };
-            if (serverTicketGranted || bankRes.ticketDropped) {
+            if (detail.serverTicketRes && detail.serverTicketRes.ok) {
+              patch.ticketShards = Number(detail.serverTicketRes.shards || 0);
+            }
+            if (serverTicketGranted) {
               patch.hasPendingTicket = true;
               if (detail.serverTicketRes?.pendingTicketsCount != null) {
                 patch.pendingTicketsCount = Number(detail.serverTicketRes.pendingTicketsCount);
@@ -1235,16 +1241,28 @@ export class WorkshopDuelController {
 
     if (iFoundTicket) {
       Haptics.success();
+      const sRes = detail.serverTicketRes || {};
       if (serverTicketGranted) {
-        if (titleEl) titleEl.textContent = '🎟 ПОБЕДА! ТЫ НАШЁЛ БИЛЕТ В КИНО! (+500 ⭐)';
+        if (titleEl) titleEl.textContent = '🎟 4/4 — БИЛЕТ СКЛЕЕН В ДУЭЛИ! (+500 ⭐)';
         if (subEl) {
-          subEl.textContent = `Вскрыл билет раньше ${oppName} (${oppLoot.label})! Отправь билет другу и продолжай набирать шкалу Закрытого показа!`;
+          subEl.textContent = `Вскрыл призовую бочку раньше ${oppName} (${oppLoot.label})! 4 части склеились в целый бесплатный билет — подари его другу в Telegram!`;
         }
         this.scheduleTimeout(() => this.onOpenGoldenFork?.(), 900);
-      } else {
-        if (titleEl) titleEl.textContent = '🏆 ПОБЕДА В ДУЭЛИ! СУПЕР-БОНУС +500 ⭐!';
+      } else if (sRes.ok && !sRes.reason && Number(sRes.shards || 0) > 0) {
+        const sh = Number(sRes.shards || 1);
+        if (titleEl) titleEl.textContent = `🎟 ПОБЕДА! СОБРАНА ЧАСТЬ БИЛЕТА ${sh}/4 (+500 ⭐)`;
         if (subEl) {
-          subEl.textContent = `Вскрыл призовую бочку раньше ${oppName}! Суточный пул билетов уже разобран — вместо билета тебе зачислено +500 ⭐ в шкалу Закрытой Премьеры!`;
+          subEl.textContent = `Вскрыл призовую бочку раньше ${oppName}! У тебя уже ${sh} из 4 частей (${sh * 25}%) — собери 4/4 и подари другу бесплатный билет в кино!`;
+        }
+      } else if (sRes.reason === 'seed_admin_excluded') {
+        if (titleEl) titleEl.textContent = '🛡 ПОБЕДА В ДУЭЛИ (РЕЖИМ КОМАНДЫ ПОСЕВА)';
+        if (subEl) {
+          subEl.textContent = `Победа над ${oppName}! Призовой пул билетов сохранён для реальных зрителей.`;
+        }
+      } else {
+        if (titleEl) titleEl.textContent = '🏆 ПОБЕДА В ДУЭЛИ! БОНУС +500 ⭐ В ТОП-20 МОСКВЫ!';
+        if (subEl) {
+          subEl.textContent = `Вскрыл призовую бочку раньше ${oppName}! Дневная партия билетов на сегодня разобрана (новая откроется в 00:00 МСК) — вместо 4-й части зачислено +500 ⭐ в рейтинг Закрытого показа в Москве!`;
         }
       }
     } else if (outOfRounds) {

@@ -17,7 +17,7 @@ import {
 } from './telegram.js';
 import { audio } from './audio.js';
 import { BarrelVoiceRecorder } from './voice.js';
-import { WorkshopScene, BARREL_BATCH_CODES } from './scene.js';
+const BARREL_BATCH_CODES = ['01', '19', '97', '12', '17', '26', '33', '48', '71', '84', '92', '99'];
 import {
   DEMO_PORTRAITS,
   processPortraitToWebP,
@@ -77,13 +77,12 @@ import {
   notifyReferrerTicketWon,
   sendLevel1FriendReply,
   requestServerCinemaTicket,
+  awardTicketShardServer,
   reconcileServerTicketPasses,
   reclaimServerTicketPass,
   fetchTicketPoolStatus,
   uploadPairTicketReceipt,
 } from './backend.js';
-import { WorkshopDuelController, createBarrelWatchChannel } from './duel.js';
-import { mountTestBogHUD } from './testbog.js';
 import { HorrorScreamerPlayer, preloadScreamerFrames } from './screamer-fx.js';
 
 const AIR_DURATION_SEC = 30.0;
@@ -297,8 +296,110 @@ const state = {
 };
 
 let scene = null;
+let sceneInitPromise = null;
 let voiceRecorder = null;
 let duelCtrl = null;
+let duelInitPromise = null;
+let duelModCache = null;
+let screamersPreloaded = false;
+
+async function ensureSceneReady() {
+  if (scene) return scene;
+  if (sceneInitPromise) return sceneInitPromise;
+  sceneInitPromise = (async () => {
+    const { WorkshopScene } = await import('./scene.js');
+    if (scene) return scene;
+    const canvas = document.getElementById('workshop-canvas');
+    scene = new WorkshopScene(canvas, {
+      onHoverBarrel: handleBarrelHover,
+      onStrikeBarrel: handleBarrelStrike,
+      onCameraMove: (camPos) => audio.updateListenerCamera(camPos),
+      onCeilingDrip: (x, z) => audio.playSpatialCeilingDrip(x, z),
+      onBarrelEerie: (idx, kind) => {
+        if (state.activeScreen === 'workshop' && !state.round?.pausedForModal) {
+          audio.playBarrelEerieSound?.(idx, kind);
+        }
+      },
+    });
+    scene.onEmptyBarrelHit = (idx) => audio.playEmptyBarrelClang?.(idx);
+    scene.onSteamBurst = () => audio.playSteamWarningHiss?.();
+    audio.setBarrelLayout(scene.getBarrelWorldPositions(), state.round?.targetIndex || 0);
+    if (!screamersPreloaded) {
+      screamersPreloaded = true;
+      window.setTimeout(() => preloadScreamerFrames(SCREAMER_META), 250);
+    }
+    return scene;
+  })();
+  return sceneInitPromise;
+}
+
+async function ensureDuelReady() {
+  if (duelCtrl) return duelCtrl;
+  if (duelInitPromise) return duelInitPromise;
+  duelInitPromise = (async () => {
+    await ensureSceneReady();
+    const mod = duelModCache || (await import('./duel.js'));
+    duelModCache = mod;
+    if (duelCtrl) return duelCtrl;
+    duelCtrl = new mod.WorkshopDuelController({
+      scene,
+      audio,
+      getTgUser: () => state.tg?.user || null,
+      onProfileSync: (patch) => {
+        state.profile = { ...state.profile, ...patch };
+        if (patch && patch.ticketShards != null) {
+          saveLocalV9Flags();
+          syncTicketShardsUI({ pulse: true });
+        }
+        updatePremiereBarsUI();
+        refreshHudLevelLabel();
+      },
+      onToast: (msg) => showToast(msg),
+      onOpenInviteShare: () => shareCurrentDuelRoom(),
+      onOpenGoldenFork: () => openGoldenTicketForkModal(),
+      onExitToHub: () => showScreen('modeA'),
+      onDuelDefeatToTil: ({ roomId, solo } = {}) => {
+        state.oceanTapper.returnDuel = { roomId: roomId || '', solo: Boolean(solo) };
+        duelCtrl?.leaveRoom(false);
+        triggerOceanEasterEggScene();
+      },
+      onFlyRating: ({ count = 3, label = '⭐ +БАЛЛЫ', barrelIndex = -1 } = {}) => {
+        const pos = barrelIndex >= 0 ? scene?.projectBarrelScreenPos?.(barrelIndex, 1.05) : null;
+        flyRewardToHud({
+          type: 'rating',
+          count,
+          label,
+          startX: pos?.visible ? pos.x : null,
+          startY: pos?.visible ? pos.y : null,
+        });
+        syncSuperPrizeRatingBarUI();
+      },
+      onFlyLife: ({ count = 1, label = '+1 ❤️', barrelIndex = -1 } = {}) => {
+        const pos = barrelIndex >= 0 ? scene?.projectBarrelScreenPos?.(barrelIndex, 1.05) : null;
+        flyRewardToHud({
+          type: 'lives',
+          count,
+          label,
+          startX: pos?.visible ? pos.x : null,
+          startY: pos?.visible ? pos.y : null,
+        });
+      },
+      onReturnToLevels: () => {
+        duelCtrl?.leaveRoom(false);
+        showToast('🔄 3 раунда дуэли без части билета — возвращаемся в цех спасать пацана и набивать ⭐!');
+        startDemoRound();
+      },
+    });
+    return duelCtrl;
+  })();
+  return duelInitPromise;
+}
+
+async function createWatchChannelLazy(barrelId, opts) {
+  const mod = duelModCache || (await import('./duel.js'));
+  duelModCache = mod;
+  return mod.createBarrelWatchChannel(barrelId, opts);
+}
 
 const V9_PROGRESS_STORAGE_KEY = 'bochka_v9_progress';
 
@@ -434,6 +535,8 @@ function loadLocalV9Flags() {
     if (raw && typeof raw === 'object') {
       state.profile.mustSendFriendPack = Boolean(raw.mustSendFriendPack);
       state.profile.seedFirstPackDone = Boolean(raw.seedFirstPackDone);
+      state.profile.ticketShards = Math.max(0, Math.min(3, Math.round(Number(raw.ticketShards || 0))));
+      state.profile.friendsShardAwardedCount = Math.max(0, Math.round(Number(raw.friendsShardAwardedCount || 0)));
       const cnt = Math.max(0, Math.round(Number(raw.pendingTicketsCount || 0)));
       const exp = Number(raw.ticketsExpireAt || 0);
       if (cnt > 0 && exp > Date.now()) {
@@ -455,11 +558,90 @@ function saveLocalV9Flags() {
       JSON.stringify({
         mustSendFriendPack: Boolean(state.profile.mustSendFriendPack),
         seedFirstPackDone: Boolean(state.profile.seedFirstPackDone),
+        ticketShards: Math.max(0, Math.min(3, Math.round(Number(state.profile.ticketShards || 0)))),
+        friendsShardAwardedCount: Math.max(0, Math.round(Number(state.profile.friendsShardAwardedCount || 0))),
         pendingTicketsCount: Math.max(0, Math.round(Number(state.profile.pendingTicketsCount || 0))),
         ticketsExpireAt: Number(state.profile.ticketsExpireAt || 0),
       })
     );
   } catch { /* ignore */ }
+}
+
+function syncTicketShardsUI({ pulse = false, showFullFlash = false } = {}) {
+  const shards = showFullFlash ? 4 : Math.max(0, Math.min(3, Math.round(Number(state.profile?.ticketShards || 0))));
+  const label = `${shards}/4`;
+  for (const id of ['top-shards-count', 'hud-shards-count', 'burger-shards-count']) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = label;
+  }
+  for (const pillId of ['top-ticket-shards', 'hud-ticket-shards']) {
+    const pill = document.getElementById(pillId);
+    if (!pill) continue;
+    pill.querySelectorAll('.shard-q').forEach((qEl) => {
+      const idx = Number(qEl.getAttribute('data-shard') || 0);
+      qEl.classList.toggle('is-filled', idx <= shards);
+    });
+    if (pulse) {
+      pill.classList.remove('is-merging');
+      void pill.offsetWidth;
+      pill.classList.add('is-merging');
+      window.setTimeout(() => pill.classList.remove('is-merging'), 900);
+    }
+  }
+}
+
+async function awardTicketShard(source = 'level', { silent = false } = {}) {
+  const res = await awardTicketShardServer(state.tg?.user, source);
+  if (!res || !res.ok) {
+    return { merged: false, granted: false, capReached: false, shards: Number(state.profile?.ticketShards || 0), res };
+  }
+  if (res.reason === 'seed_admin_excluded') {
+    if (!silent) showToast('🛡 Режим команды посева: билет из призового пула сохранён для реальных зрителей!');
+    return { merged: false, granted: false, seedExcluded: true, shards: Number(state.profile?.ticketShards || 0), res };
+  }
+  if (res.mergedTicket && res.granted) {
+    syncTicketShardsUI({ pulse: true, showFullFlash: true });
+    state.profile.ticketShards = 0;
+    state.profile.pendingTicketsCount = Math.max(
+      Number(res.pendingTicketsCount || 0),
+      Number(state.profile.pendingTicketsCount || 0) + 1
+    );
+    state.profile.hasPendingTicket = true;
+    state.profile.ticketsExpireAt = Date.now() + 24 * 3600 * 1000;
+    saveLocalV9Flags();
+    syncPendingTicketsFloatingUI();
+    updatePremiereBarsUI();
+    window.setTimeout(() => syncTicketShardsUI({ pulse: false }), 1100);
+    if (!silent) {
+      showToast('🎟 4/4! Четыре части склеились в ЦЕЛЫЙ БЕСПЛАТНЫЙ БИЛЕТ для друга! Отправь его в Telegram!');
+    }
+    return { merged: true, granted: true, shards: 0, res };
+  }
+  if (res.reason && res.reason !== 'local_preview') {
+    const bonusFallback = Number(res.fallbackPoints || 500);
+    state.profile.ticketShards = 0;
+    state.profile.premierePoints = Math.max(
+      Number(res.premierePoints || 0),
+      Number(state.profile.premierePoints || 0) + bonusFallback
+    );
+    saveLocalV9Flags();
+    syncTicketShardsUI({ pulse: true });
+    updatePremiereBarsUI();
+    if (!silent) {
+      showToast(
+        `⭐ Дневная партия билетов (6 шт.) сегодня разобрана — новая откроется в 00:00 МСК! Держи +${bonusFallback} ⭐ в рейтинг Закрытого показа в Москве!`
+      );
+    }
+    return { merged: false, granted: false, capReached: true, fallbackPoints: bonusFallback, shards: 0, res };
+  }
+  const nextShards = Math.max(0, Math.min(3, Number(res.shards || 0)));
+  state.profile.ticketShards = nextShards;
+  saveLocalV9Flags();
+  syncTicketShardsUI({ pulse: true });
+  if (!silent) {
+    showToast(`🎟 Собрана часть билета ${nextShards}/4 (${nextShards * 25}%)! Собери 4/4 и подари другу бесплатный билет!`);
+  }
+  return { merged: false, granted: false, capReached: false, shards: nextShards, res };
 }
 
 function mergeFreshProfile(freshProfile, { preserveProgress = true } = {}) {
@@ -468,19 +650,24 @@ function mergeFreshProfile(freshProfile, { preserveProgress = true } = {}) {
   const keptPending = Math.max(0, Math.round(Number(prev.pendingTicketsCount || 0)));
   const keptExpire = Number(prev.ticketsExpireAt || 0);
   const keptMustSend = Boolean(prev.mustSendFriendPack);
+  const keptShards = Math.max(0, Math.min(3, Math.round(Number(prev.ticketShards || 0))));
+  const keptFriendsAwarded = Math.max(0, Math.round(Number(prev.friendsShardAwardedCount || 0)));
   const merged = { ...prev, ...freshProfile };
   if (preserveProgress) {
     merged.currentLevel = Math.max(Number(prev.currentLevel || 1), Number(freshProfile.currentLevel || 1));
     merged.premierePoints = Math.max(Number(prev.premierePoints || 0), Number(freshProfile.premierePoints || 0));
   }
-  merged.pendingTicketsCount = keptPending;
+  merged.pendingTicketsCount = Math.max(keptPending, Number(freshProfile.pendingTicketsCount || 0));
   merged.ticketsExpireAt = keptExpire;
   merged.mustSendFriendPack = keptMustSend;
-  merged.hasPendingTicket = keptPending > 0;
+  merged.hasPendingTicket = merged.pendingTicketsCount > 0;
+  merged.ticketShards = freshProfile.ticketShards != null ? Math.max(0, Math.min(3, Number(freshProfile.ticketShards))) : keptShards;
+  merged.friendsShardAwardedCount = keptFriendsAwarded;
   if (typeof merged.lives === 'number') {
     merged.lives = capEarlyLivesIfNoRealFriends(merged.lives);
   }
   state.profile = merged;
+  syncTicketShardsUI();
 }
 
 /* ============================================================================
@@ -1333,35 +1520,24 @@ async function bootstrap() {
     }
   } catch { /* ignore */ }
 
-  await initI18n(state.tg.user?.lang || '');
-  applyDomTranslations();
+  // v15.0: МГНОВЕННЫЙ СТАРТ (<1.2 сек): #screen-gate кликабелен СРАЗУ, до загрузки Three.js, текстур и сетевых запросов!
   state.uiStage = getStoredUiStage();
+  loadLocalV9Flags();
+  syncTicketShardsUI();
+  bindUIEvents();
+  refreshInitialSeedGateUI();
+  document.getElementById('btn-enter-sound')?.removeAttribute('disabled');
+  document.getElementById('btn-enter-mute')?.removeAttribute('disabled');
   applyProgressiveDisclosureUI({ forceStage: state.uiStage });
+  if (typeof window !== 'undefined') window.__bochkaGateReadyAt = performance.now();
 
   const canvas = document.getElementById('workshop-canvas');
-  scene = new WorkshopScene(canvas, {
-    onHoverBarrel: handleBarrelHover,
-    onStrikeBarrel: handleBarrelStrike,
-    onCameraMove: (camPos) => audio.updateListenerCamera(camPos),
-    onCeilingDrip: (x, z) => audio.playSpatialCeilingDrip(x, z),
-    onBarrelEerie: (idx, kind) => {
-      if (state.activeScreen === 'workshop' && !state.round?.pausedForModal) {
-        audio.playBarrelEerieSound?.(idx, kind);
-      }
-    },
-  });
-
-  scene.onEmptyBarrelHit = (idx) => audio.playEmptyBarrelClang?.(idx);
-  scene.onSteamBurst = () => audio.playSteamWarningHiss?.();
-
-  // Предзагрузка всех 7 анимированных 2-кадровых хоррор-скримеров (глаза/фонарик/рука/рот)
-  preloadScreamerFrames(SCREAMER_META);
   const screamerCanvasEl = document.getElementById('screamer-canvas');
   if (screamerCanvasEl) {
     screamerPlayer = new HorrorScreamerPlayer(screamerCanvasEl);
   }
 
-  // Авторазблокировка WebAudio на первый тап/клик по 3D-цеху, чтобы крики и звуки бочек всегда играли с 1-го удара
+  // Авторазблокировка WebAudio на первый тап/клик по 3D-цеху
   canvas?.addEventListener(
     'pointerdown',
     () => {
@@ -1372,56 +1548,23 @@ async function bootstrap() {
     { passive: true }
   );
 
-  duelCtrl = new WorkshopDuelController({
-    scene,
-    audio,
-    getTgUser: () => state.tg?.user || null,
-    onProfileSync: (patch) => {
-      state.profile = { ...state.profile, ...patch };
-      updatePremiereBarsUI();
-      refreshHudLevelLabel();
-    },
-    onToast: (msg) => showToast(msg),
-    onOpenInviteShare: () => shareCurrentDuelRoom(),
-    onOpenGoldenFork: () => openGoldenTicketForkModal(),
-    onExitToHub: () => showScreen('modeA'),
-    onDuelDefeatToTil: ({ roomId, solo } = {}) => {
-      state.oceanTapper.returnDuel = { roomId: roomId || '', solo: Boolean(solo) };
-      duelCtrl?.leaveRoom(false);
-      triggerOceanEasterEggScene();
-    },
-    onFlyRating: ({ count = 3, label = '⭐ +БАЛЛЫ', barrelIndex = -1 } = {}) => {
-      const pos = barrelIndex >= 0 ? scene?.projectBarrelScreenPos?.(barrelIndex, 1.05) : null;
-      flyRewardToHud({
-        type: 'rating',
-        count,
-        label,
-        startX: pos?.visible ? pos.x : null,
-        startY: pos?.visible ? pos.y : null,
-      });
-      syncSuperPrizeRatingBarUI();
-    },
-    onFlyLife: ({ count = 1, label = '+1 ❤️', barrelIndex = -1 } = {}) => {
-      const pos = barrelIndex >= 0 ? scene?.projectBarrelScreenPos?.(barrelIndex, 1.05) : null;
-      flyRewardToHud({
-        type: 'lives',
-        count,
-        label,
-        startX: pos?.visible ? pos.x : null,
-        startY: pos?.visible ? pos.y : null,
-      });
-    },
-    onReturnToLevels: () => {
-      duelCtrl?.leaveRoom(false);
-      showToast('🔄 3 раунда дуэли без билета — возвращаемся в цех искать пацана и набивать ⭐!');
-      startDemoRound();
-    },
+  // Асинхронная фоновая подгрузка Three.js и 3D-цеха после первого кадра шлюза!
+  window.requestAnimationFrame(() => {
+    window.setTimeout(() => {
+      ensureSceneReady().catch(() => {});
+    }, 0);
   });
 
-  audio.setBarrelLayout(scene.getBarrelWorldPositions(), 0);
   window.addEventListener('resize', () => {
-    audio.setBarrelLayout(scene.getBarrelWorldPositions(), state.round.targetIndex);
+    if (scene) audio.setBarrelLayout(scene.getBarrelWorldPositions(), state.round.targetIndex);
   });
+
+  initI18n(state.tg.user?.lang || '')
+    .then(() => {
+      applyDomTranslations();
+      updateControlHintText();
+    })
+    .catch(() => {});
 
   updateControlHintText();
   onLangChange(() => {
@@ -1439,8 +1582,11 @@ async function bootstrap() {
     window.__bochkaDebug = {
       getState: () => state,
       getScene: () => scene,
+      ensureSceneReady: () => ensureSceneReady(),
+      ensureDuelReady: () => ensureDuelReady(),
       getZoneState: () => scene?.getZoneState?.() || null,
       setZoneLevel: async (lvl) => {
+        await ensureSceneReady();
         state.entered = true;
         state.profile.currentLevel = lvl;
         await startDemoRound();
@@ -1450,10 +1596,12 @@ async function bootstrap() {
       startDailyShift: () => startDailyShiftRound(),
       getSpoilerReport: () => buildSpoilerFreeReport(),
       setLang: (l) => setLang(l),
-      strikeBarrel: (idx) => {
+      strikeBarrel: async (idx) => {
+        await ensureSceneReady();
         const b = scene?.barrels?.[idx];
         return handleBarrelStrike(idx, b ? b.group.position.clone() : null);
       },
+      awardTicketShard: (src) => awardTicketShard(src || 'level'),
       getRecoveryCode: () => getPlayerRecoveryCode(state.tg?.user),
       restoreByCode: (code) => restoreProfileByRecoveryCode(code, state.tg?.user),
       hoverBarrel: (idx) => handleBarrelHover(idx, 200, 200, false),
@@ -1516,10 +1664,9 @@ async function bootstrap() {
 
   initVoiceRecorderInstance();
   initVisibilityAndAntiSeekGuards();
-  prewarmYouTubeTrailerPlayer();
-  bindUIEvents();
-  loadLocalV9Flags();
-  // v14.3: Сразу в первые 150 мс регистрируем роль команды (team_prod/team_blog) ИЛИ атомарно нумеруем входящего по pr_/bl_!
+  // Отложенный прогрев YouTube-трейлера — не мешает мгновенному старту <1.2 сек
+  window.setTimeout(() => prewarmYouTubeTrailerPlayer(), 1800);
+  // v14.3: Регистрируем роль команды (team_prod/team_blog) ИЛИ атомарно нумеруем входящего по pr_/bl_!
   const earlyRole = state.tg?.teamSeedRole || '';
   const earlyTeamPromise = earlyRole
     ? ((state.profile.isSeedAdmin = true),
@@ -1542,10 +1689,7 @@ async function bootstrap() {
     ? ((state.profile.trafficSource = state.tg.trafficSource),
       recordTrafficSource(state.tg?.user, state.tg.trafficSource).catch(() => {}))
     : Promise.resolve();
-  refreshInitialSeedGateUI();
-  document.getElementById('btn-enter-sound')?.removeAttribute('disabled');
-  document.getElementById('btn-enter-mute')?.removeAttribute('disabled');
-  await initPackConstructorDefaults();
+  initPackConstructorDefaults().catch(() => {});
 
   mergeFreshProfile(await fetchPlayerProfile(state.tg?.user), { preserveProgress: false });
   if (earlyRole) {
@@ -1580,9 +1724,9 @@ async function bootstrap() {
     await enterWorkshopGate(false);
   }
 
-  // Если активирована сессия «ТЕСТ-БОГА» (/testbog/) — монтируем плавающий пульт песочницы (0 запросов в БД)
+  // Если активирована сессия «ТЕСТ-БОГА» (/testbog/) — лениво монтируем плавающий пульт песочницы (0 запросов в БД)
   if (isTestBogSessionActive()) {
-    mountTestBogHUD({
+    import('./testbog.js').then(({ mountTestBogHUD }) => mountTestBogHUD({
       getState: () => state,
       toast: (msg) => showToast(msg),
       syncProfile: (nextProf) => {
@@ -1784,7 +1928,7 @@ async function bootstrap() {
           await finishPremiereRound(true, { premiereCode: vipCode });
         }
       },
-    });
+    })).catch(() => {});
   }
 }
 
@@ -2041,7 +2185,7 @@ async function enterWorkshopGate(withSound) {
     return;
   }
   state.entered = true;
-  await audio.unlock(withSound);
+  await Promise.all([audio.unlock(withSound), ensureSceneReady()]);
   refreshSoundButtonLabel();
 
   if (state.incomingPassId) {
@@ -2155,6 +2299,7 @@ function pickNextBarrelHeavenQuote() {
 }
 
 async function startNewbieOnboardingRound() {
+  await ensureSceneReady();
   // v9.0: На Уровне 1 ВСЕГДА ровно 1 жизнь (3 удара ломом), чтобы логично открывался трейлер (+3 ❤️)!
   state.profile.lives = 1;
   const demoChars = t('demoChars');
@@ -2235,6 +2380,7 @@ async function startNewbieOnboardingRound() {
 }
 
 async function startDemoRound({ resumeAttempts = null } = {}) {
+  await ensureSceneReady();
   const demoChars = t('demoChars');
   const pickIdx = Math.floor(Math.random() * DEMO_PORTRAITS.length);
   const charMeta = Array.isArray(demoChars) && demoChars[pickIdx]
@@ -2353,7 +2499,7 @@ async function startDemoRound({ resumeAttempts = null } = {}) {
 
 async function startDailyShiftRound() {
   state.entered = true;
-  await audio.unlock(true);
+  await Promise.all([audio.unlock(true), ensureSceneReady()]);
   refreshSoundButtonLabel();
 
   const now = new Date();
@@ -2432,6 +2578,7 @@ async function startDailyShiftRound() {
 }
 
 async function startViralFriendRound(pack) {
+  await ensureSceneReady();
   let portraitDataUrl = pack?.photoUrl || DEMO_PORTRAITS[0];
 
   const voiceUrl = pack?.voiceUrl || '';
@@ -2531,16 +2678,20 @@ async function startViralFriendRound(pack) {
   // ШАГ 8.2 (ТРИГГЕР А): Отправляем живой пуш автору бочки + включаем WebSocket-трансляцию ударов!
   closeActiveWatchChannel();
   if (pack?.id) {
-    state.watchChannel = createBarrelWatchChannel(pack.id, {
+    createWatchChannelLazy(pack.id, {
       onRemoteEvent: (ev) => {
         if (ev.type === 'rattle' && state.round.running) {
           audio.playChainRattle(1.0);
-          scene.triggerScreamerShake(0.38);
+          scene?.triggerScreamerShake?.(0.38);
           Haptics.heavy();
           showToast(`⛓ ${ev.senderName || 'Автор бочки'} подглядывает и гремит цепями!`);
         }
       },
-    });
+    })
+      .then((ch) => {
+        state.watchChannel = ch;
+      })
+      .catch(() => {});
     notifyBarrelSearchStarted(pack, state.tg?.user).catch(() => {});
   }
 }
@@ -2549,6 +2700,7 @@ async function startViralFriendRound(pack) {
    ГЛАВНАЯ СУПЕРИГРА v3.0: «ГОНКА ЗА ПРЕМЬЕРОЙ (0..100)» + ЗОЛОТЫЕ БОЧКИ
    ============================================================================ */
 async function startPremiereRaceRound() {
+  await ensureSceneReady();
   const q = getQuestState();
   if (!isPremiereRaceUnlocked(q, state.profile)) {
     showToast(t('premiereLockedHint'));
@@ -3437,20 +3589,21 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
 async function refreshLevel3TicketPoolBar(level = 1) {
   const bar = document.getElementById('hud-ticket-pool-bar');
   if (!bar) return;
-  if (Number(level || 1) < 3) {
+  if (Number(level || 1) < 2) {
     bar.setAttribute('hidden', '');
     return;
   }
   const st = await fetchTicketPoolStatus().catch(() => null);
   if (!st) return;
   state.ticketPoolStatus = st;
+  const sh = Math.max(0, Math.min(3, Number(state.profile?.ticketShards || 0)));
   bar.removeAttribute('hidden');
   if (st.dailyRemaining > 0 && !st.isPaused) {
     bar.classList.remove('is-empty');
-    bar.textContent = `🎟 Сегодня в пуле цеха осталось: ${st.dailyRemaining} из ${st.maxDaily} парных билетов (1+1)`;
+    bar.textContent = `🎟 Собери 4 куска = бесплатный билет другу (${sh}/4) · Сегодня осталось: ${st.dailyRemaining} из ${st.maxDaily}`;
   } else {
     bar.classList.add('is-empty');
-    bar.textContent = '⭐ Дневной пул билетов разобран — сейчас в бочках удвоенные очки в Гонку за Закрытую Премьеру! Новая партия билетов в 00:00 МСК';
+    bar.textContent = '⭐ Партия билетов на сегодня разобрана — новая откроется в 00:00 МСК! За 4-й кусок даём +500 ⭐ в ТОП-20 Закрытого показа в Москве!';
   }
 }
 
@@ -3618,20 +3771,21 @@ async function handleBarrelStrike(index, worldPoint) {
     scene.triggerEmptyBarrelOpen(index);
     audio.playStrike(index);
 
+    let hitSteamNoPenalty = false;
     if (index === r.steamHazardIndex) {
-      r.airLeft = Math.max(0.5, r.airLeft - 4.0);
-      updateAirHUD(r.airLeft);
+      // v15.0: Визуальный клуб пара и шипение для атмосферы, но БЕЗ штрафа (0 потерь ударов, 0 потерь O2, 0 потерь жизней!)
+      hitSteamNoPenalty = true;
       scene.triggerSteamHazardBurst?.(index);
       audio.playSteamPenaltyBurst?.();
-      r.strikeLog.push(`[Удар ${r.attemptsUsed}: Пар]`);
-      showToast('⚠️ Пробитая труба с паром! −4 сек воздуха O₂');
+      r.strikeLog.push(`[Удар ${r.attemptsUsed}: Пар без штрафа]`);
+      showToast('💨 Горячий пар впустую! Удар не списан, слушай дальше');
     } else {
       r.strikeLog.push(`[Удар ${r.attemptsUsed}: Пусто]`);
     }
 
     // v11.0: Если на бочке краской написано имя самого игрока — БОНУС (+2 удара или +8с O₂ если удары полные!)
     const gotNameBonus = applyOwnNameBarrelBonus(index);
-    if (!gotNameBonus) {
+    if (!hitSteamNoPenalty && !gotNameBonus) {
       r.attemptsLeft = Math.max(0, r.attemptsLeft - 1);
       renderAttemptSquares(r.attemptsLeft, 3);
     }
@@ -3700,21 +3854,21 @@ async function handleBarrelStrike(index, worldPoint) {
   }
 
   scene.triggerEmptyBarrelOpen(index);
+  let hitSteamNoPenaltyProg = false;
   if (index === r.steamHazardIndex) {
-    // v14.0: Мягкий баланс паровой ловушки на Ур.2 — только −1 удар и −3 сек O₂ (без мгновенного слива всей жизни!)
-    r.airLeft = Math.max(0.5, r.airLeft - 3.0);
-    updateAirHUD(r.airLeft);
+    // v15.0: Пар на Ур.2 оставляет клуб пара и шипение, но ПОЛНОСТЬЮ без штрафа (0 ударов, 0 O2, 0 жизней!)
+    hitSteamNoPenaltyProg = true;
     scene.triggerSteamHazardBurst?.(index);
     audio.playSteamPenaltyBurst?.();
-    r.strikeLog.push(`[Удар ${r.attemptsUsed}: Пар]`);
-    showToast('⚠️ Пробитая труба с паром! −1 удар и −3 сек O₂');
+    r.strikeLog.push(`[Удар ${r.attemptsUsed}: Пар без штрафа]`);
+    showToast('💨 Горячий пар впустую! Удар не списан, слушай дальше');
   } else {
     r.strikeLog.push(`[Удар ${r.attemptsUsed}: Пусто]`);
   }
 
   // v11.0: Если на бочке краской написано имя самого игрока — БОНУС (+2 удара или +8с O₂ если удары полные!)
   const gotProgNameBonus = applyOwnNameBarrelBonus(index);
-  if (!gotProgNameBonus) {
+  if (!hitSteamNoPenaltyProg && !gotProgNameBonus) {
     r.attemptsLeft = Math.max(0, r.attemptsLeft - 1);
     renderAttemptSquares(r.attemptsLeft, r.isBlitz ? 5 : 3);
   }
@@ -4182,18 +4336,17 @@ function openGoldenTicketForkModal() {
     const word = cnt === 1 ? 'БИЛЕТ В КИНО' : cnt <= 4 ? `${cnt} БИЛЕТА В КИНО` : `${cnt} БИЛЕТОВ В КИНО`;
     if (titleEl) {
       titleEl.textContent = cnt > 1
-        ? `У ТЕБЯ ${word} ДЛЯ ДРУЗЕЙ!`
-        : 'ВНУТРИ БИЛЕТ В КИНО НА «БОЧКУ» ДЛЯ ДРУГА!';
+        ? `🎟 У ТЕБЯ ${word} ИЗ 4 ЧАСТЕЙ ДЛЯ ДРУЗЕЙ!`
+        : '🎟 БИЛЕТ ИЗ 4 ЧАСТЕЙ СКЛЕЕН ДЛЯ ДРУГА!';
     }
     if (descEl) {
-      descEl.textContent = cnt > 1
-        ? `У тебя ${cnt} билетов! Выбери друга из списка (получит в игре и TG) или отправь НОВОМУ другу (+25% к шкале Супер-приза)!`
-        : 'Отправить билет можно 1 раз — сразу после отправки вернёшься в игру. Выбери друга или отправь НОВОМУ (+25% к шкале)!';
+      descEl.textContent =
+        'Использовать собранный билет самому нельзя — подари его другу в Telegram (чистый бесплатный билет без чеков!), а сам возьми соседнее кресло рядом!';
     }
     if (lblEl) {
       lblEl.textContent = cnt > 1
-        ? `🚀 ОТПРАВИТЬ НОВОМУ ДРУГУ (ОСТАЛОСЬ ${cnt} · +25% К ШКАЛЕ!)`
-        : '🚀 ОТПРАВИТЬ НОВОМУ ДРУГУ (ЕЩЁ НЕ ИГРАЛ → +25% К ШКАЛЕ!)';
+        ? `🎁 ПОДАРИТЬ ЭТОТ БИЛЕТ ДРУГУ В TELEGRAM (ОСТАЛОСЬ ${cnt})`
+        : '🎁 ПОДАРИТЬ ЭТОТ БИЛЕТ ДРУГУ В TELEGRAM';
     }
     choicesEl?.removeAttribute('hidden');
     friendsWrap?.removeAttribute('hidden');
@@ -4471,8 +4624,8 @@ async function openIncomingPassScreen(passId) {
   }
   state.activePassData = passData;
   state.pairReceiptUrl = '';
-  const poolMeta = await fetchTicketPoolStatus().catch(() => ({ requirePairReceipt: true }));
-  state.requirePairReceipt = poolMeta?.requirePairReceipt !== false;
+  const poolMeta = await fetchTicketPoolStatus().catch(() => ({ requirePairReceipt: false }));
+  state.requirePairReceipt = Boolean(poolMeta?.requirePairReceipt);
   const receiptBox = document.getElementById('pair-receipt-upload-box');
   if (receiptBox) {
     if (state.requirePairReceipt) receiptBox.removeAttribute('hidden');
@@ -4587,8 +4740,13 @@ function renderPassOrderStatusBox(passData) {
 
   if (contactEl) {
     contactEl.textContent = isSent
-      ? `Виртуальный билет ${ticketNum} оформлен и продублирован в чат @bochka_film_bot!`
-      : `Виртуальный билет ${ticketNum} закреплён за твоим Telegram! Другу начислено ×2 жизней.`;
+      ? `Бесплатный билет ${ticketNum} выписан и отправлен прямо в чат @bochka_film_bot!`
+      : `Заявка на бесплатный билет ${ticketNum} (${passData.cityCinema || 'выбранный сеанс'}) принята! Продюсер пришлёт билет в @bochka_film_bot.`;
+  }
+  const nativeSub = document.getElementById('pass-native-pair-sub');
+  if (nativeSub) {
+    const sess = passData.cityCinema ? ` (${passData.cityCinema})` : '';
+    nativeSub.textContent = `Мы уже отправили твоему другу пуш с сеансом${sess} — возьмите соседнее кресло рядом в 1 клик, чтобы пойти вместе!`;
   }
 
   if (passData.bookingCode && bookingRow && codeIn) {
@@ -4711,7 +4869,7 @@ async function handleAcceptIncomingPass() {
     return;
   }
 
-  if (state.requirePairReceipt !== false && !state.pairReceiptUrl) {
+  if (state.requirePairReceipt === true && !state.pairReceiptUrl) {
     if (errEl) {
       errEl.textContent = 'Загрузи скриншот купленного 1-го билета (с рядом и местом), чтобы мы выкупили соседнее кресло за 0 ₽!';
       errEl.removeAttribute('hidden');
@@ -5258,42 +5416,25 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
       return;
     }
 
-    // v13.0 Ур.3+ (жёсткий серверный пул билетов в Supabase!):
-    // Билет выдаётся ТОЛЬКО если try_award_cinema_ticket_rpc одобрил слот (не превышены дневной и общий лимиты)!
-    let serverTicketGranted = false;
+    // v15.0: После Уровня 1 отложенно подгружаем модуль Дуэлей в фоне (не тормозя старт <1.2 сек!)
+    if (completedLvl >= 1 && !duelCtrl) {
+      window.setTimeout(() => ensureDuelReady().catch(() => {}), 900);
+    }
+
+    // v15.0: Механика 4 обрывков билета (25% × 4 = 1 целый бесплатный билет другу БЕЗ чеков!):
+    // - Часть 1/4: Ур. 2 (после отправки первой бочки другу)
+    // - Часть 2/4: Ур. 3
+    // - Часть 3/4: Ур. 4 (ИЛИ мгновенно, когда реальный друг открыл твою бочку!)
+    // - Часть 4/4: Ур. 5+ (ИЛИ победа в Дуэли) -> атомарная проверка пула 100 шт. / 6 в сутки МСК!
+    let shardAward = null;
     if (survived && completedLvl >= 3) {
-      if (completedLvl === 3 || state.round.targetKind === 'ticket') {
-        const tkRes = await requestServerCinemaTicket(state.tg?.user, 'level3');
-        if (tkRes?.granted) {
-          serverTicketGranted = true;
-          state.round.ticketGranted = true;
-          state.round.ticketDeniedReason = '';
-          if (typeof tkRes.pendingTicketsCount === 'number' && tkRes.pendingTicketsCount > 0) {
-            state.profile.pendingTicketsCount = tkRes.pendingTicketsCount;
-            state.profile.hasPendingTicket = true;
-            state.profile.ticketsExpireAt = Date.now() + 24 * 3600 * 1000;
-            saveLocalV9Flags();
-            syncPendingTicketsFloatingUI();
-            updatePremiereBarsUI();
-          } else {
-            addPendingCinemaTicket(1);
-          }
-        } else if (tkRes?.reason === 'seed_admin_excluded') {
-          state.round.ticketGranted = false;
-          state.round.ticketDeniedReason = 'seed_admin_excluded';
-          showToast('🛡 Режим админа посева: билет из призового пула сохранён для реальных зрителей!');
-        } else {
-          state.round.ticketGranted = false;
-          state.round.ticketDeniedReason = tkRes?.reason || 'cap_reached';
-          const bonusFallback = Number(tkRes?.fallbackPoints || 250);
-          state.profile.premierePoints = Math.max(
-            Number(tkRes?.premierePoints || 0),
-            Number(state.profile.premierePoints || 0) + bonusFallback
-          );
-          state.round.lastPointsAwarded = (state.round.lastPointsAwarded || 300) + bonusFallback;
-          updatePremiereBarsUI();
-          showToast(`⭐ Пул бесплатных билетов сейчас разобран — держи бонус +${bonusFallback} ⭐ к шкале Супер-приза!`);
-        }
+      const shardSrc = completedLvl === 3 ? 'level3' : completedLvl === 4 ? 'level4' : 'level5';
+      shardAward = await awardTicketShard(shardSrc, { silent: true });
+      state.round.lastShardAward = shardAward;
+      state.round.ticketGranted = Boolean(shardAward?.merged && shardAward?.granted);
+      state.round.ticketDeniedReason = shardAward?.res?.reason || '';
+      if (shardAward?.capReached && shardAward?.fallbackPoints) {
+        state.round.lastPointsAwarded = (state.round.lastPointsAwarded || 300) + shardAward.fallbackPoints;
       }
       if ((state.round.attemptsUsed || 1) === 1) {
         state.profile.premierePoints = Math.max(0, Number(state.profile.premierePoints || 0) + 100);
@@ -5304,7 +5445,11 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
       flyRewardToHud({
         type: 'rating',
         count: 3,
-        label: `⭐ +${state.round.lastPointsAwarded || 300}`,
+        label: shardAward?.merged
+          ? '🎟 4/4 БИЛЕТ СКЛЕЕН!'
+          : shardAward?.shards > 0
+            ? `🎟 ЧАСТЬ ${shardAward.shards}/4!`
+            : `⭐ +${state.round.lastPointsAwarded || 300}`,
         startX: pos?.visible ? pos.x : null,
         startY: pos?.visible ? pos.y : null,
       });
@@ -5312,12 +5457,18 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
     }
 
     if (survived) {
+      let revealCaption = '🎉 ПАЦАН ВЫЛЕЗ ИЗ БОЧКИ! СПАСИБО!';
+      if (shardAward?.merged && shardAward?.granted) {
+        revealCaption = '🎟 4/4 — БИЛЕТ СКЛЕЕН! ПОДАРИ ДРУГУ В TELEGRAM!';
+      } else if (shardAward?.capReached) {
+        revealCaption = '⭐ ПУЛ НА СЕГОДНЯ РАЗОБРАН · +500 ⭐ В ТОП-20 МОСКВЫ!';
+      } else if (shardAward?.shards > 0) {
+        revealCaption = `🎟 ЧАСТЬ БИЛЕТА ${shardAward.shards}/4 (${shardAward.shards * 25}%) НАЙДЕНА!`;
+      }
       await playRevealAvatar(2200, {
         barrelIndex: revIdx,
         isBoy: isBoyRescue,
-        caption: completedLvl === 3
-          ? (serverTicketGranted ? '🎟 БИЛЕТ В КИНО НАЙДЕН В БОЧКЕ!' : '⭐ СУПЕР-БОНУС К ШКАЛЕ ПРЕМЬЕРЫ!')
-          : '🎉 ПАЦАН ВЫЛЕЗ ИЗ БОЧКИ! СПАСИБО!',
+        caption: revealCaption,
       });
     } else {
       await playFullScreenScreamer(2900);
@@ -5597,11 +5748,16 @@ async function handleSealBarrelClick() {
     );
     updatePremiereBarsUI();
     refreshHudLevelLabel();
+    // v15.0: Часть 1/4 билета выпадает сразу после отправки первой бочки другу на Уровне 2!
+    let packShardRes = null;
+    if (!isBroadcastPack && Number(state.profile?.ticketShards || 0) === 0 && Number(state.profile?.pendingTicketsCount || 0) === 0) {
+      packShardRes = await awardTicketShard('level2_pack', { silent: true }).catch(() => null);
+    }
     // v12.5: На экране отправки сначала скрываем новые 3 ❤️ (показываем 0 ❤️), чтобы игрок ГЛАЗАМИ увидел прилёт 0→1→2→3 в шапку!
     state.pendingLevelStartFly = { lives: wasProducerFirstPack ? 1 : 3, strikes: 3 };
     Haptics.success();
     applyProgressiveDisclosureUI({ skipPromoteFromSocial: true });
-    showSentScreen({ wasLifeRefill, wasBroadcastPack: isBroadcastPack, broadcastRole: teamRole, prevRatingPct });
+    showSentScreen({ wasLifeRefill, wasBroadcastPack: isBroadcastPack, broadcastRole: teamRole, prevRatingPct, packShardRes });
     setHudVisualLivesDisplay(0);
     window.setTimeout(() => {
       flyRewardToHud({
@@ -5620,7 +5776,7 @@ async function handleSealBarrelClick() {
   }
 }
 
-function showSentScreen({ wasLifeRefill = false, wasBroadcastPack = false, broadcastRole = '', prevRatingPct = null } = {}) {
+function showSentScreen({ wasLifeRefill = false, wasBroadcastPack = false, broadcastRole = '', prevRatingPct = null, packShardRes = null } = {}) {
   const targetLvl = wasBroadcastPack && broadcastRole === 'prod' ? 1 : Math.max(3, Number(state.profile?.currentLevel || 3));
   const spec = getWorkshopLevelSpec(targetLvl);
   const titleEl = document.getElementById('sent-title');
@@ -5647,7 +5803,9 @@ function showSentScreen({ wasLifeRefill = false, wasBroadcastPack = false, broad
   if (sNote) {
     sNote.textContent = wasBroadcastPack
       ? 'Эта одна ссылка работает на 10 000+ человек сразу: каждому сервер сам выдаст порядковый номер _1, _2, _3... без спама в личку!'
-      : 'За отправку шкала чуть сдвинулась (+3% аванс). Когда друг реально зайдёт играть по твоей ссылке — получишь +20% (+500 ⭐) к шкале Супер-приза!';
+      : packShardRes?.shards > 0
+        ? `🎟 Получена 1-я часть билета (${packShardRes.shards}/4 · 25%)! А когда друг реально зайдёт по твоей ссылке — получишь ещё +20% к Суперпризу (Закрытый показ в Москве) и бонусную часть билета!`
+        : 'За отправку шкала чуть сдвинулась (+3% аванс). Когда друг реально зайдёт играть по твоей ссылке — получишь +20% (+500 ⭐) к Закрытому показу в Москве и бонусную часть билета!';
   }
   if (copyBtn) {
     if (state.pack?.lastShareUrl) copyBtn.removeAttribute('hidden');
@@ -5879,10 +6037,12 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
       stampEl.textContent = '☠️ БОЧКА ЗАВАРЕНА — ПАЦАНА НЕ НАШЁЛ!';
     } else if (completedLvl === 1) {
       stampEl.textContent = '🎉 ТЫ НАШЁЛ ДРУГА!';
-    } else if (completedLvl === 3) {
-      stampEl.textContent = r.ticketGranted === false
-        ? `⭐ БОНУС ЦЕХА! (+${r.lastPointsAwarded || 550} ⭐ В РЕЙТИНГ)`
-        : '🎟 БИЛЕТ В КИНО НАЙДЕН! (+300 ⭐)';
+    } else if (r.lastShardAward?.merged && r.lastShardAward?.granted) {
+      stampEl.textContent = '🎟 4/4 — БИЛЕТ СКЛЕЕН ДЛЯ ДРУГА!';
+    } else if (r.lastShardAward?.capReached) {
+      stampEl.textContent = `⭐ ПУЛ НА СЕГОДНЯ РАЗОБРАН (+${r.lastPointsAwarded || 500} ⭐ В ТОП-20)`;
+    } else if (r.lastShardAward?.shards > 0) {
+      stampEl.textContent = `🎟 ЧАСТЬ БИЛЕТА ${r.lastShardAward.shards}/4 СОБРАНА! (+${r.lastPointsAwarded || 300} ⭐)`;
     } else if (completedLvl >= 4) {
       stampEl.textContent = `🎉 ПАЦАН СПАСЁН! (+${r.lastPointsAwarded || 350} ⭐)`;
     } else {
@@ -5968,21 +6128,25 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
     if (packText) packText.textContent = '🍿 ОТПРАВИТЬ ДРУГУ: «Я ТЕБЯ НАШЁЛ! ИДЁМ В КИНО!»';
     if (cinemaText) cinemaText.textContent = '🎟 «Я ТЕБЯ НАШЁЛ! ЖДУ БИЛЕТ» → РАУНД 2';
     cinemaBtn?.removeAttribute('hidden');
-  } else if (completedLvl === 3) {
+  } else if (r.lastShardAward?.merged && r.lastShardAward?.granted && Number(state.profile.pendingTicketsCount || 0) > 0) {
     state.finaleMode = 'next';
-    if (r.ticketGranted !== false && Number(state.profile.pendingTicketsCount || 0) > 0) {
-      document.querySelector('#screen-finale .finale-sheet')?.classList.add('is-ticket-mode');
-      if (nextEl) nextEl.textContent = `⭐ ${totalPts} в рейтинге · Отправь билет другу из списка / новому другу или прибереги его и иди на Уровень 4!`;
-      if (packText) packText.textContent = '▶ ИГРАТЬ ДАЛЬШЕ (ПРИБЕРЕЧЬ БИЛЕТ · УР. 4)';
-      cinemaBtn?.setAttribute('hidden', '');
-      await populateLevel3TicketFriendsBox();
+    document.querySelector('#screen-finale .finale-sheet')?.classList.add('is-ticket-mode');
+    if (nextEl) nextEl.textContent = '🎟 4/4 склеены в целый бесплатный билет! Использовать самому нельзя — подари другу в Telegram, а себе возьми соседнее кресло рядом!';
+    if (packText) packText.textContent = completedLvl >= 5 ? '⚔️ В ДУЭЛЬ ЗА СЛЕДУЮЩИЙ БИЛЕТ!' : `▶ ИГРАТЬ ДАЛЬШЕ (УР. ${spec.level})`;
+    cinemaBtn?.setAttribute('hidden', '');
+    await populateLevel3TicketFriendsBox();
+  } else if (completedLvl === 3 || completedLvl === 4) {
+    state.finaleMode = 'next';
+    document.querySelector('#screen-finale .finale-sheet')?.classList.remove('is-ticket-mode');
+    document.getElementById('finale-ticket-win-box')?.setAttribute('hidden', '');
+    const curSh = Math.max(0, Math.min(3, Number(state.profile?.ticketShards || 0)));
+    if (r.lastShardAward?.capReached) {
+      if (nextEl) nextEl.textContent = `⭐ Партия билетов на сегодня (6 шт.) разобрана — новая откроется в 00:00 МСК! За 4-й кусок тебе зачислено +500 ⭐ в ТОП-20 Закрытого показа в Москве!`;
     } else {
-      document.querySelector('#screen-finale .finale-sheet')?.classList.remove('is-ticket-mode');
-      document.getElementById('finale-ticket-win-box')?.setAttribute('hidden', '');
-      if (nextEl) nextEl.textContent = `⭐ ${totalPts} в рейтинге · Суточный пул билетов сейчас разобран — тебе зачислен усиленный бонус ⭐ в шкалу Супер-приза! Иди на Уровень 4!`;
-      if (packText) packText.textContent = '🔥 ИГРАТЬ УРОВЕНЬ 4 (10 БОЧЕК · +350 ⭐)';
-      cinemaBtn?.setAttribute('hidden', '');
+      if (nextEl) nextEl.textContent = `🎟 Собрано ${curSh}/4 частей билета (${curSh * 25}%)! ${curSh < 4 ? `Осталось ${4 - curSh} кус. до целого бесплатного билета другу (или позови друга в бочку для бонусной части)!` : ''}`;
     }
+    if (packText) packText.textContent = `🔥 ИГРАТЬ УРОВЕНЬ ${spec.level} (${spec.barrelCount} ${formatBarrelWord(spec.barrelCount)} · СЛЕДУЮЩАЯ ЧАСТЬ БИЛЕТА!)`;
+    cinemaBtn?.setAttribute('hidden', '');
   } else if (totalPts >= 1500 && completedLvl >= 5) {
     state.finaleMode = 'duels_unlocked';
     const ratingPct = computeSuperPrizeRatingPct(state.profile);
@@ -6179,6 +6343,14 @@ async function refreshQuestUI() {
   const temuOpen = !document.getElementById('modal-temu-unlock')?.hasAttribute('hidden');
   applyProgressiveDisclosureUI({ skipPromoteFromSocial: temuOpen });
   updatePremiereBarsUI();
+
+  const friendsOpenedNow = Math.max(0, Number(synced.friendsOpened || 0));
+  const prevFriendsShardCount = Math.max(0, Number(state.profile?.friendsShardAwardedCount || 0));
+  if (friendsOpenedNow > prevFriendsShardCount && !state.profile?.isSeedAdmin && !state.profile?.isBloggerSeed) {
+    state.profile.friendsShardAwardedCount = friendsOpenedNow;
+    saveLocalV9Flags();
+    awardTicketShard('friend_opened', { silent: false }).catch(() => {});
+  }
 
   const total = synced.totalTokens;
   const topBadge = document.getElementById('top-caps-count');
@@ -7144,7 +7316,7 @@ async function openDuelTable(roomId = '', { autoAddTestBots = false } = {}) {
   await syncUiStage(state.tg?.user, 4);
   applyProgressiveDisclosureUI({ forceStage: 4 });
 
-  await audio.unlock(audio.enabled !== false);
+  await Promise.all([audio.unlock(audio.enabled !== false), ensureDuelReady()]);
   refreshSoundButtonLabel();
 
   const cleanRoom = roomId || `d_${Math.random().toString(36).slice(2, 8)}`;
@@ -7228,6 +7400,7 @@ async function startLiveWatchSpectatorMode(barrelId) {
   state.round.running = false;
   closeActiveWatchChannel();
 
+  await ensureSceneReady();
   const pack = await loadBarrelPack(barrelId);
   showScreen('workshop');
   state.watchingBarrelId = barrelId;
@@ -7248,7 +7421,7 @@ async function startLiveWatchSpectatorMode(barrelId) {
   if (titleEl) titleEl.textContent = 'ДРУГ ПРЯМО СЕЙЧАС ИЩЕТ ТВОЮ БОЧКУ! ГРЕМИ ЦЕПЯМИ И СЛЕДИ ЗА УДАРАМИ';
   if (statusEl) statusEl.textContent = '👀 ЖДЁМ УДАРА ДРУГА ПО БОЧКАМ...';
 
-  state.watchChannel = createBarrelWatchChannel(barrelId, {
+  state.watchChannel = await createWatchChannelLazy(barrelId, {
     onRemoteEvent: (ev) => {
       if (ev.type === 'strike' && typeof ev.barrelIndex === 'number') {
         const idx = ev.barrelIndex;
@@ -8294,6 +8467,29 @@ function bindUIEvents() {
     Haptics.light();
     openLeaderboardModal();
   });
+
+  // v15.0: Золотые баннеры Суперприза (Закрытый показ в Москве 17 декабря) и корешок 4/4 частей билета
+  const openPremiereSuperPrizeModal = () => {
+    Haptics.light();
+    closeBurgerDrawer();
+    updatePremiereBarsUI();
+    document.getElementById('modal-prize')?.removeAttribute('hidden');
+  };
+  for (const id of ['gate-premiere-banner', 'mode-a-premiere-banner', 'btn-burger-premiere-banner']) {
+    document.getElementById(id)?.addEventListener('click', openPremiereSuperPrizeModal);
+  }
+  const onTicketShardsClick = () => {
+    Haptics.light();
+    const pending = Math.max(0, Number(state.profile?.pendingTicketsCount || 0));
+    if (pending > 0) {
+      openGoldenTicketForkModal();
+    } else {
+      const sh = Math.max(0, Math.min(3, Number(state.profile?.ticketShards || 0)));
+      showToast(`🎟 Собрано ${sh}/4 частей билета (${sh * 25}%)! Ур.2 (бочка другу) → Ур.3 → Ур.4 или друг → Ур.5/Дуэль = целый бесплатный билет другу!`);
+    }
+  };
+  document.getElementById('top-ticket-shards')?.addEventListener('click', onTicketShardsClick);
+  document.getElementById('hud-ticket-shards')?.addEventListener('click', onTicketShardsClick);
 
   // v9.0: Висящая кнопка накопленных билетов + Отложить билет + Повтор голоса + Соц-шаринг ранга + Дуэль к Тилю
   document.getElementById('hud-pending-tickets-btn')?.addEventListener('click', () => {

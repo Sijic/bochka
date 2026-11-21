@@ -706,10 +706,10 @@ function renderLimitsForm() {
   const pauseIn = document.getElementById('cfg-is-paused');
 
   if (winIn) winIn.value = String(s.win_every_n_hits ?? 100);
-  if (dailyIn) dailyIn.value = String(s.max_daily_tickets ?? 8);
+  if (dailyIn) dailyIn.value = String(s.max_daily_tickets ?? 6);
   if (totalIn) totalIn.value = String(s.max_total_tickets ?? 100);
   if (premIn) premIn.value = String(s.max_premiere_winners ?? 20);
-  if (pairIn) pairIn.checked = s.require_pair_receipt !== false;
+  if (pairIn) pairIn.checked = Boolean(s.require_pair_receipt);
   if (pauseIn) pauseIn.checked = Boolean(s.is_paused);
 }
 

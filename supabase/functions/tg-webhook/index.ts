@@ -545,14 +545,25 @@ Deno.serve(async (req: Request) => {
       }
 
       if (senderTgId) {
+        const sessionLabel = cityCinema ? escapeHtml(cityCinema) : "выбранный кинотеатр и время";
         await tgApi("sendMessage", {
           chat_id: senderTgId,
           parse_mode: "HTML",
           text:
-            `🎟 <b>Друг активировал твой виртуальный билет!</b>\n` +
-            `Тебе начислено <b>+3 ❤️ жизней и +300 ⭐ очков</b> в ТОП-10 Премьеры — жми в цех!`,
+            `🎟 <b>Друг забрал бесплатное место на «БОЧКУ»!</b>\n` +
+            `📍 Сеанс: <b>${sessionLabel}</b>\n\n` +
+            `Возьми себе соседнее кресло рядом в 1 клик, чтобы пойти вместе — на триллеры поодиночке не ходят!\n` +
+            `+ Тебе начислено <b>+3 ❤️ жизней и +300 ⭐</b> в рейтинг Закрытого показа в Москве 17 декабря!`,
           reply_markup: {
-            inline_keyboard: [[{ text: "🔥 ШТУРМОВАТЬ ПРЕМЬЕРУ", url: MINI_APP_LINK }]],
+            inline_keyboard: [
+              [
+                { text: "🎬 ВЗЯТЬ СОСЕДНЕЕ КРЕСЛО (КИНОПОИСК)", url: "https://www.kinopoisk.ru/afisha/new/" },
+              ],
+              [
+                { text: "🎟 АФИША / БИЛЕТЫ РЯДОМ", url: "https://www.afisha.ru/schedule_cinema/" },
+                { text: "🏆 В ТОП-20 МОСКВЫ", url: MINI_APP_LINK },
+              ],
+            ],
           },
         });
 
@@ -590,9 +601,10 @@ Deno.serve(async (req: Request) => {
           chat_id: receiverTgId,
           parse_mode: "HTML",
           text:
-            `🎟 <b>Твой виртуальный билет на триллер «Бочка» (17 декабря) активирован!</b>\n\n` +
+            `🎟 <b>Твой бесплатный билет на триллер «БОЧКА» (17 декабря) принят!</b>\n\n` +
+            `📍 Сеанс: <b>${escapeHtml(cityCinema || "уточняется")}</b>\n` +
             `📱 Подтверждённый номер: <code>${escapeHtml(normalizePhone(phone))}</code>\n\n` +
-            `Билет закреплён за твоим Telegram в @bochka_film_bot.`,
+            `Продюсер выпишет билет и пришлёт его прямо сюда в @bochka_film_bot! Перешли дарителю номер места, чтобы сесть рядом.`,
         });
       }
 
