@@ -3503,8 +3503,8 @@ function startOceanTapperCountdown() {
     const e = Number(state.oceanTapper.energy || 0);
     if (e <= 0) return;
 
-    // v15.3: Без таймера — если не стучишь, пульс Тиля уходит обратно в 0 (чем ближе к 100%, тем быстрее откат!)
-    const decayPerSec = e < 35 ? 9 : e < 65 ? 17 : e < 85 ? 25 : 33;
+    // v15.4.2: Без таймера — если не стучишь, пульс Тиля уходит обратно в 0 (чем ближе к 100%, тем быстрее откат, но достижимо живым пальцем!)
+    const decayPerSec = e < 35 ? 6 : e < 65 ? 11 : e < 85 ? 16 : 21;
     const nextE = Math.max(0, e - decayPerSec * dt);
     state.oceanTapper.energy = nextE;
 
@@ -3535,7 +3535,7 @@ function handleOceanBarrelTap() {
 
   state.oceanTapper.taps += 1;
   const taps = state.oceanTapper.taps;
-  const nextEnergy = Math.min(100, Number(state.oceanTapper.energy || 0) + 7.5);
+  const nextEnergy = Math.min(100, Number(state.oceanTapper.energy || 0) + 9.0);
   state.oceanTapper.energy = nextEnergy;
   const energyPct = Math.round(nextEnergy);
 
