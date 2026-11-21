@@ -7247,7 +7247,7 @@ function setTrailerMuted(nextMuted = false) {
 
 function openTrailerModal({ forRescue = false } = {}) {
   state.trailer.modalOpen = true;
-  state.trailer.usingYtFallback = false;
+  state.trailer.usingYtFallback = true;
   state.trailer.forRescue = Boolean(forRescue);
   state.trailer.externalRescueDepartedAt = 0;
   audio.stopListening();
@@ -7287,55 +7287,7 @@ function openTrailerModal({ forRescue = false } = {}) {
     rescueBox?.setAttribute('hidden', '');
   }
 
-  // v15.2.1: Сначала мгновенный нативный MP4-трейлер (2 МБ, работает в РФ без VPN и стартует сам с 1-й мс!)
-  const vid = document.getElementById('trailer-video');
-  const ytSlot = document.getElementById('yt-fallback-slot');
-  if (vid && ENV.trailerMp4) {
-    ytSlot?.setAttribute('hidden', '');
-    if (state.ytPlayer) {
-      try { state.ytPlayer.pauseVideo?.(); } catch { /* ignore */ }
-    }
-    if (!vid.getAttribute('src')) {
-      vid.src = ENV.trailerMp4;
-    }
-    const posterAttr = vid.getAttribute('data-poster');
-    if (posterAttr && !vid.getAttribute('poster')) {
-      vid.setAttribute('poster', posterAttr);
-    }
-    vid.playsInline = true;
-    vid.setAttribute('playsinline', '');
-    vid.setAttribute('webkit-playsinline', 'true');
-    vid.removeAttribute('hidden');
-    document.getElementById('trailer-custom-bar')?.removeAttribute('hidden');
-    document.getElementById('btn-trailer-open-yt-app')?.removeAttribute('hidden');
-    if (forRescue) {
-      try { vid.currentTime = 0; } catch { /* ignore */ }
-    }
-    vid.muted = false;
-    const playPromise = vid.play();
-    if (playPromise && typeof playPromise.catch === 'function') {
-      playPromise
-        .then(() => {
-          syncTrailerPlayButton();
-          syncTrailerMuteButton();
-        })
-        .catch(() => {
-          // Если WebView заблокировал автоплей со звуком — мгновенно стартуем без звука, чтобы трейлер пошёл сам!
-          if (!state.trailer.modalOpen) return;
-          state.trailer.muted = true;
-          vid.muted = true;
-          vid.play().catch(() => {
-            activateYouTubePrimary({ forRescue });
-          });
-          syncTrailerMuteButton();
-          syncTrailerPlayButton();
-          showToast('🔇 Трейлер запущен — тапни по видео или кнопку звука, чтобы включить звук!');
-        });
-    }
-    syncTrailerPlayButton();
-    return;
-  }
-
+  // v15.3.3: Только официальный трейлер с YouTube (OmyqxUXmqNY) с мгновенным автостартом!
   activateYouTubePrimary({ forRescue });
 }
 
@@ -7491,47 +7443,33 @@ function scheduleYtAutoplayRetry(player) {
     try {
       const pState = typeof player?.getPlayerState === 'function' ? player.getPlayerState() : -1;
       if (pState !== 1 && pState !== 3) {
-        // v8.1: Только официальный YouTube (@kinoceh_bel · OmyqxUXmqNY) — НИКОГДА не подменяем локальным MP4!
-        if (!state.trailer.muted) {
-          player.unMute?.();
-          player.setVolume?.(100);
-        }
+        // Мобильный WebView заблокировал автостарт со звуком — мгновенно запускаем YouTube в mute, чтобы картинка пошла сама!
+        state.trailer.muted = true;
+        player.mute?.();
         player.playVideo?.();
-        // Если браузер жёстко заблокировал автоплей со звуком — запускаем YouTube без звука, чтобы видео точно шло
-        state.trailer.ytAutoplayRetry = window.setTimeout(() => {
-          state.trailer.ytAutoplayRetry = null;
-          if (!state.trailer.modalOpen) return;
-          try {
-            const st2 = typeof player?.getPlayerState === 'function' ? player.getPlayerState() : -1;
-            if (st2 !== 1 && st2 !== 3) {
-              state.trailer.muted = true;
-              player.mute?.();
-              player.playVideo?.();
-              syncTrailerMuteButton();
-              syncTrailerPlayButton();
-            }
-          } catch { /* ignore */ }
-        }, 1200);
+        syncTrailerMuteButton();
+        syncTrailerPlayButton();
+        showToast('🔇 Трейлер запущен — нажми «ВКЛ ЗВУК» на плеере!');
       }
     } catch { /* ignore */ }
-  }, 1100);
+  }, 450);
 }
 
 function startYtPlaybackNow(player, { forRescue = false } = {}) {
   if (!player || !state.trailer.modalOpen) return;
   try {
     const loadedId = player.getVideoData?.()?.video_id || '';
-    if (loadedId && loadedId !== OFFICIAL_YT_TRAILER_ID && typeof player.loadVideoById === 'function') {
-      player.loadVideoById(OFFICIAL_YT_TRAILER_ID, 0);
-    } else {
-      if (forRescue) player.seekTo?.(0, true);
-      player.playVideo?.();
-    }
     if (state.trailer.muted) {
       player.mute?.();
     } else {
       player.unMute?.();
       player.setVolume?.(100);
+    }
+    if (loadedId && loadedId !== OFFICIAL_YT_TRAILER_ID && typeof player.loadVideoById === 'function') {
+      player.loadVideoById(OFFICIAL_YT_TRAILER_ID, 0);
+    } else {
+      if (forRescue) player.seekTo?.(0, true);
+      player.playVideo?.();
     }
     scheduleYtAutoplayRetry(player);
     syncTrailerPlayButton();
@@ -7562,7 +7500,7 @@ function ensureYtPlayerMounted() {
       : null;
     window.onYouTubeIframeAPIReady = () => {
       try { prevReady?.(); } catch { /* ignore */ }
-      ensureYtPlayerMounted();
+      if (state.trailer.modalOpen) ensureYtPlayerMounted();
     };
     ensureYouTubeScriptTag();
     return;
@@ -7571,11 +7509,13 @@ function ensureYtPlayerMounted() {
   state.ytPlayer = new window.YT.Player('yt-fallback-slot', {
     videoId: OFFICIAL_YT_TRAILER_ID,
     playerVars: {
-      autoplay: 0,
+      autoplay: 1,
+      mute: 1,
       controls: 1,
       rel: 0,
       modestbranding: 1,
       playsinline: 1,
+      enablejsapi: 1,
       origin: window.location.origin,
     },
     events: {
@@ -7605,18 +7545,12 @@ function ensureYtPlayerMounted() {
           return;
         }
         syncTrailerPlayButton();
-        try {
-          const ytMuted = Boolean(ev.target?.isMuted?.());
-          if (!state.trailer.muted && ytMuted) {
-            // Жест тапа уже был — принудительно снимаем mute с YouTube-плеера!
-            ev.target.unMute?.();
-            ev.target.setVolume?.(100);
-          }
-          syncTrailerMuteButton();
-        } catch { /* ignore */ }
-
         if (ev.data === 1) {
           state.trailer.ytStartedPlaying = true;
+          try {
+            state.trailer.muted = Boolean(ev.target?.isMuted?.());
+            syncTrailerMuteButton();
+          } catch { /* ignore */ }
           if (!state.trailer.ytTimer) {
             state.trailer.ytTimer = window.setInterval(() => {
               if (document.hidden || !state.trailer.modalOpen) return;
@@ -7645,8 +7579,8 @@ function ensureYtPlayerMounted() {
 }
 
 function prewarmYouTubeTrailerPlayer() {
+  // Подгружаем только лёгкий скрипт API YouTube; сам iframe монтируется при открытии видимой модалки (для 100% автоплея на мобильных!)
   ensureYouTubeScriptTag();
-  ensureYtPlayerMounted();
 }
 
 function activateYouTubePrimary({ forRescue = false } = {}) {
