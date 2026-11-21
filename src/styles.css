@@ -6019,9 +6019,11 @@ body.is-duel-active .topbar {
 
 .ocean-tap-main-btn {
   flex: 1 1 auto !important;
+  width: auto !important;
   min-height: 44px !important;
   padding: 8px 12px !important;
-  font-size: 13.5px !important;
+  font-size: 13px !important;
+  white-space: nowrap !important;
 }
 
 .ocean-mini-icon-btn {
