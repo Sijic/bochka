@@ -6147,7 +6147,7 @@ body.is-duel-active .topbar {
    берег сидит над нижней панелью кнопок, в небе чистый коридор под тост без наслоений! */
 @media (max-width: 768px) {
   .screen-ocean .ocean-waves-wrap {
-    top: 28%;
+    top: 22%;
     bottom: calc(64px + var(--safe-bottom));
     left: 0;
     right: 0;
@@ -6156,27 +6156,27 @@ body.is-duel-active .topbar {
     width: 100% !important;
     height: 100% !important;
     object-fit: cover !important;
-    object-position: 29% 100% !important;
+    object-position: 31% 100% !important;
     animation: none !important;
   }
   .screen-ocean .ocean-surf-shimmer {
-    background: linear-gradient(180deg, #2d3c49 0%, transparent 18%, transparent 86%, rgba(12, 16, 21, 0.68) 100%);
+    background: linear-gradient(180deg, #24313d 0%, transparent 16%, transparent 88%, rgba(12, 16, 21, 0.55) 100%);
   }
   .screen-ocean .ocean-beach-real {
     left: auto !important;
-    right: 2% !important;
+    right: 1% !important;
     bottom: calc(74px + var(--safe-bottom)) !important;
     transform: none !important;
-    width: clamp(166px, 49vw, 224px) !important;
+    width: clamp(212px, 62vw, 268px) !important;
     justify-content: flex-end !important;
     z-index: 12 !important;
   }
   .screen-ocean .ocean-tap-prompt-badge {
     top: auto;
     bottom: calc(100% + 6px);
-    right: 0;
+    right: 4px;
     left: auto;
-    max-width: 58vw;
+    max-width: 68vw;
     padding: 4px 8px;
     font-size: 9.5px;
     line-height: 1.25;
