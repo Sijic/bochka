@@ -1800,6 +1800,12 @@ function updateControlHintText() {
 function showScreen(name) {
   state.activeScreen = name;
   document.body.setAttribute('data-screen', name);
+  if (name === 'ocean') {
+    window.requestAnimationFrame(positionOceanToast);
+  } else {
+    const toastEl = document.getElementById('toast');
+    if (toastEl) toastEl.style.top = '';
+  }
   if (state.entered && ['workshop', 'pack', 'modeA', 'finale'].includes(name)) {
     saveSessionResumeSnapshot({ lastScreen: name });
   }
@@ -8849,14 +8855,36 @@ function refreshSoundButtonLabel() {
 }
 
 let toastTimer = null;
+function positionOceanToast() {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  if (state.activeScreen !== 'ocean') {
+    el.style.top = '';
+    return;
+  }
+  const topBox = document.querySelector('#screen-ocean .ocean-top-box')?.getBoundingClientRect();
+  const minTop = topBox && topBox.bottom > 40 ? Math.ceil(topBox.bottom + 12) : 236;
+  const promptBox = document.getElementById('ocean-tap-prompt')?.getBoundingClientRect();
+  const toastH = el.offsetHeight || 44;
+  let targetTop = minTop;
+  if (promptBox && promptBox.top > 0 && targetTop + toastH > promptBox.top - 8) {
+    targetTop = Math.max(minTop, Math.floor(promptBox.top - toastH - 8));
+  }
+  el.style.top = `${targetTop}px`;
+}
+
 function showToast(text) {
   const el = document.getElementById('toast');
   if (!el) return;
   el.textContent = text;
   el.removeAttribute('hidden');
+  positionOceanToast();
+  if (state.activeScreen === 'ocean') {
+    window.requestAnimationFrame(positionOceanToast);
+  }
   if (toastTimer) clearTimeout(toastTimer);
-  // v14.0: На экране Тиля (#screen-ocean) тост прячется за 1.2 сек и выводится в верхней зоне под таймером!
-  const durationMs = state.activeScreen === 'ocean' ? 1200 : 2800;
+  // v14.3.2: На экране Тиля (#screen-ocean) тост прячется за 1.4 сек и стоит строго под .ocean-top-box в зоне неба!
+  const durationMs = state.activeScreen === 'ocean' ? 1400 : 2800;
   toastTimer = window.setTimeout(() => {
     el.setAttribute('hidden', '');
   }, durationMs);

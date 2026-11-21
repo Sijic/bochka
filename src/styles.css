@@ -1820,14 +1820,18 @@ button:disabled {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.85);
 }
 
-/* v14.0: На экране Тиля (#screen-ocean) тост НИКОГДА не перекрывает нижнюю жёлтую кнопку тапа и «← В ЦЕХ»! */
+/* v14.3.2: На экране Тиля (#screen-ocean) тост НИКОГДА не перекрывает ни верхнюю плашку .ocean-top-box, ни бочку, ни нижние кнопки!
+   Точный top вычисляется динамически от .ocean-top-box.bottom + 12px в showToast()/positionOceanToast(), ниже безопасный fallback. */
 body[data-screen="ocean"] .toast {
   bottom: auto !important;
-  top: calc(188px + var(--safe-top));
-  max-width: min(88vw, 330px);
+  top: calc(236px + var(--safe-top));
+  z-index: 95;
+  width: max-content;
+  max-width: min(92vw, 340px);
   padding: 6px 12px;
   font-size: 11px;
-  opacity: 0.92;
+  line-height: 1.3;
+  opacity: 0.94;
   pointer-events: none;
 }
 
@@ -6136,6 +6140,76 @@ body.is-duel-active .topbar {
   color: #f8fafc !important;
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9);
   margin: 4px 0 6px !important;
+}
+
+/* v14.3.2: Мобильная композиция экрана Тиля (#screen-ocean) —
+   оба героя полностью в кадре (сидящий парень слева + бочка «ТИЛЬ» с рукой справа),
+   берег сидит над нижней панелью кнопок, в небе чистый коридор под тост без наслоений! */
+@media (max-width: 768px) {
+  .screen-ocean .ocean-waves-wrap {
+    top: 28%;
+    bottom: calc(64px + var(--safe-bottom));
+    left: 0;
+    right: 0;
+  }
+  .screen-ocean .ocean-photo-real {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    object-position: 29% 100% !important;
+    animation: none !important;
+  }
+  .screen-ocean .ocean-surf-shimmer {
+    background: linear-gradient(180deg, #2d3c49 0%, transparent 18%, transparent 86%, rgba(12, 16, 21, 0.68) 100%);
+  }
+  .screen-ocean .ocean-beach-real {
+    left: auto !important;
+    right: 2% !important;
+    bottom: calc(74px + var(--safe-bottom)) !important;
+    transform: none !important;
+    width: clamp(166px, 49vw, 224px) !important;
+    justify-content: flex-end !important;
+    z-index: 12 !important;
+  }
+  .screen-ocean .ocean-tap-prompt-badge {
+    top: auto;
+    bottom: calc(100% + 6px);
+    right: 0;
+    left: auto;
+    max-width: 58vw;
+    padding: 4px 8px;
+    font-size: 9.5px;
+    line-height: 1.25;
+    text-align: center;
+  }
+  .screen-ocean .ocean-ui-layer {
+    padding: calc(50px + var(--safe-top)) 10px calc(10px + var(--safe-bottom));
+  }
+  .screen-ocean .ocean-top-box {
+    padding: 7px 10px !important;
+  }
+  .screen-ocean .ocean-tag {
+    font-size: 9.5px;
+    letter-spacing: 0.04em;
+  }
+  .screen-ocean .ocean-quote-visible {
+    font-size: 14.5px !important;
+    min-height: 0;
+    line-height: 1.26;
+    margin: 3px 0 5px !important;
+  }
+  .screen-ocean .ocean-tapper-hud {
+    margin-top: 4px;
+    padding-top: 5px;
+  }
+  .screen-ocean .ocean-tapper-stats {
+    gap: 4px 10px;
+    font-size: 10.5px;
+    margin-bottom: 5px;
+  }
+  .screen-ocean .ocean-tapper-stats strong {
+    font-size: 12.5px;
+  }
 }
 
 /* Бейдж лута прямо над бочками в дуэли (⭐ +300 / 🎟 БИЛЕТ / 💨 ПУСТО / ☠️ СКРИМЕР) */
