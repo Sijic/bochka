@@ -2371,7 +2371,10 @@ async function triggerHubBarrelChoice(index, worldPoint = null) {
    ВХОДНОЙ ШЛЮЗ -> МАРШРУТИЗАТОР (ПРОПУСК / ДУЭЛЬ / ПОДГЛЯДЫВАНИЕ / БОЧКА / ХАБ)
    ============================================================================ */
 async function enterWorkshopGate(withSound) {
-  requestTelegramWriteAccessIfNeeded().catch(() => {});
+  // v15.4.2: Не пугаем новичка запросом пушей до 1-й игры — запрашиваем только после 1-го раунда (или у вернувшихся игроков)
+  if (state.profile?.hasPlayedSolo || Number(state.profile?.currentLevel || 1) >= 2) {
+    requestTelegramWriteAccessIfNeeded().catch(() => {});
+  }
   if (state.entered) {
     if (withSound) {
       await audio.unlock(true);
@@ -5953,6 +5956,7 @@ async function handleQuick1TapPrankClick() {
 }
 
 async function handleSealBarrelClick() {
+  requestTelegramWriteAccessIfNeeded().catch(() => {});
   const sealBtn = document.getElementById('btn-seal-barrel');
   const sealTxt = document.getElementById('btn-seal-text');
   const quickBtn = document.getElementById('btn-pack-quick-1tap');
@@ -6481,8 +6485,8 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
     cinemaBtn?.setAttribute('hidden', '');
   } else if (completedLvl === 1) {
     state.finaleMode = 'l1_reply_yes';
-    if (nextEl) nextEl.textContent = 'Отправь другу: «Я тебя нашёл! Идём в кино!» — и сразу погнали в Раунд 2 (запакуй друга, чтобы открыть Дуэли и билеты)!';
-    if (packText) packText.textContent = '🍿 ОТПРАВИТЬ ДРУГУ: «Я ТЕБЯ НАШЁЛ!» → РАУНД 2';
+    if (nextEl) nextEl.textContent = 'Отправь другу: «Я тебя нашёл!» и разреши уведомления от бота — чтобы получать ответы друзей, вызовы в Дуэли и бесплатные билеты в кино!';
+    if (packText) packText.textContent = '🍿 ОТПРАВИТЬ ДРУГУ И РАЗРЕШИТЬ ПУШИ → РАУНД 2';
     cinemaBtn?.setAttribute('hidden', '');
   } else if (r.lastShardAward?.merged && r.lastShardAward?.granted && Number(state.profile.pendingTicketsCount || 0) > 0) {
     state.finaleMode = 'next';
@@ -9155,6 +9159,8 @@ function bindUIEvents() {
 
   document.getElementById('btn-pack-revenge')?.addEventListener('click', async () => {
     if (state.finaleMode === 'l1_reply_yes') {
+      // v15.4.2: Запрашиваем разрешение на пуши от бота сразу после 1-й игры (внутри живого тапа игрока!)
+      requestTelegramWriteAccessIfNeeded().catch(() => {});
       // Уровень 1 Кнопка 1: мгновенно шлём ответ в фоне и без задержки запускаем Уровень 2 (6 бочек — найди пустую)!
       sendLevel1FriendReply({ pack: state.incomingPack, replyType: 'cinema_accept', viewerTgUser: state.tg?.user }).catch(() => {});
       showToast('🍿 Другу ушло: «Нашёл тебя! Идём в кино!» · Раунд 2 (6 бочек — найди пустую)!');
