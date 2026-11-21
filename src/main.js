@@ -1819,6 +1819,16 @@ async function bootstrap() {
   if (state.incomingParam) {
     loadBarrelPack(state.incomingParam).then((pack) => {
       state.incomingPack = pack;
+      if (!state.entered && pack?.senderName && getTeamSeedRole() !== 'prod') {
+        const teaserEl = document.getElementById('gate-teaser');
+        if (teaserEl && !getTeamSeedRole()) {
+          teaserEl.textContent = `🔥 ${pack.senderName} заварил тебя в одной из 4 бочек! У тебя 30 сек и 3 удара ломом — прислушайся, откуда идёт стук!`;
+        }
+        const enterSpan = document.querySelector('#btn-enter-sound span');
+        if (enterSpan && !getTeamSeedRole()) {
+          enterSpan.textContent = '🎧 ВСКРЫТЬ БОЧКУ СО ЗВУКОМ';
+        }
+      }
     });
   }
 
@@ -1888,7 +1898,9 @@ async function bootstrap() {
     openTrailerModal({ forRescue: false });
   }
 
-  // Единый разбор входящего трафика (Deep Links: gift_ / duel_ / pack_ / team_prod)
+  // Единый разбор входящего трафика (Deep Links: gift_ / duel_ / team_prod)
+  // v15.2.1: По обычным ссылкам бочек (pack_ / pr_ / bl_) НЕ перепрыгиваем стартовый шлюз #screen-gate —
+  // игрок сначала видит экран входа (с выбором «Со звуком / Тихий радар») и сам нажимает старт!
   if (state.incomingPassId) {
     await openIncomingPassScreen(state.incomingPassId);
   } else if (state.tg?.duelRoomParam) {
@@ -1900,8 +1912,6 @@ async function bootstrap() {
     applySeedPackModeUI(true);
     showScreen('pack');
     showToast('🎬 Запакуй СЕБЯ в бочку 1 раз — получишь ОДНУ общую ссылку для всех друзей и чатов!');
-  } else if (state.tg?.autoOpenPack && state.incomingParam) {
-    await enterWorkshopGate(false);
   }
 
   // Если активирована сессия «ТЕСТ-БОГА» (/testbog/) — лениво монтируем плавающий пульт песочницы (0 запросов в БД)
@@ -6930,6 +6940,22 @@ function initVisibilityAndAntiSeekGuards() {
 
   vid.addEventListener('error', () => {
     document.getElementById('btn-close-trailer')?.classList.remove('is-rescue-locked');
+    if (state.trailer.modalOpen && !state.trailer.usingYtFallback) {
+      activateYouTubePrimary({ forRescue: state.trailer.forRescue });
+    }
+  });
+
+  // Тап по видео: если видео играет без звука — сразу включаем звук, иначе пауза/пуск
+  vid.addEventListener('click', () => {
+    if (state.trailer.usingYtFallback) return;
+    if (vid.muted) {
+      setTrailerMuted(false);
+      if (vid.paused) vid.play().catch(() => {});
+      return;
+    }
+    if (vid.paused) vid.play().catch(() => {});
+    else vid.pause();
+    syncTrailerPlayButton();
   });
 }
 
@@ -7152,7 +7178,7 @@ function setTrailerMuted(nextMuted = false) {
 
 function openTrailerModal({ forRescue = false } = {}) {
   state.trailer.modalOpen = true;
-  state.trailer.usingYtFallback = true;
+  state.trailer.usingYtFallback = false;
   state.trailer.forRescue = Boolean(forRescue);
   state.trailer.externalRescueDepartedAt = 0;
   audio.stopListening();
@@ -7190,6 +7216,55 @@ function openTrailerModal({ forRescue = false } = {}) {
     updateTrailerRescueBanner(0, TRAILER_UNLOCK_SEC);
   } else {
     rescueBox?.setAttribute('hidden', '');
+  }
+
+  // v15.2.1: Сначала мгновенный нативный MP4-трейлер (2 МБ, работает в РФ без VPN и стартует сам с 1-й мс!)
+  const vid = document.getElementById('trailer-video');
+  const ytSlot = document.getElementById('yt-fallback-slot');
+  if (vid && ENV.trailerMp4) {
+    ytSlot?.setAttribute('hidden', '');
+    if (state.ytPlayer) {
+      try { state.ytPlayer.pauseVideo?.(); } catch { /* ignore */ }
+    }
+    if (!vid.getAttribute('src')) {
+      vid.src = ENV.trailerMp4;
+    }
+    const posterAttr = vid.getAttribute('data-poster');
+    if (posterAttr && !vid.getAttribute('poster')) {
+      vid.setAttribute('poster', posterAttr);
+    }
+    vid.playsInline = true;
+    vid.setAttribute('playsinline', '');
+    vid.setAttribute('webkit-playsinline', 'true');
+    vid.removeAttribute('hidden');
+    document.getElementById('trailer-custom-bar')?.removeAttribute('hidden');
+    document.getElementById('btn-trailer-open-yt-app')?.removeAttribute('hidden');
+    if (forRescue) {
+      try { vid.currentTime = 0; } catch { /* ignore */ }
+    }
+    vid.muted = false;
+    const playPromise = vid.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise
+        .then(() => {
+          syncTrailerPlayButton();
+          syncTrailerMuteButton();
+        })
+        .catch(() => {
+          // Если WebView заблокировал автоплей со звуком — мгновенно стартуем без звука, чтобы трейлер пошёл сам!
+          if (!state.trailer.modalOpen) return;
+          state.trailer.muted = true;
+          vid.muted = true;
+          vid.play().catch(() => {
+            activateYouTubePrimary({ forRescue });
+          });
+          syncTrailerMuteButton();
+          syncTrailerPlayButton();
+          showToast('🔇 Трейлер запущен — тапни по видео или кнопку звука, чтобы включить звук!');
+        });
+    }
+    syncTrailerPlayButton();
+    return;
   }
 
   activateYouTubePrimary({ forRescue });
@@ -7313,7 +7388,10 @@ function syncTrailerPlayButton() {
   const btn = document.getElementById('btn-trailer-play');
   if (!btn) return;
   let playing = false;
-  if (state.ytPlayer && typeof state.ytPlayer.getPlayerState === 'function') {
+  if (!state.trailer.usingYtFallback) {
+    const vid = document.getElementById('trailer-video');
+    playing = Boolean(vid && !vid.paused && !vid.ended);
+  } else if (state.ytPlayer && typeof state.ytPlayer.getPlayerState === 'function') {
     try {
       playing = state.ytPlayer.getPlayerState() === 1;
     } catch { playing = false; }
@@ -8524,6 +8602,18 @@ function bindUIEvents() {
 
   // Универсальный контроллер трейлера (YouTube OmyqxUXmqNY)
   document.getElementById('btn-trailer-play')?.addEventListener('click', () => {
+    if (!state.trailer.usingYtFallback) {
+      const vid = document.getElementById('trailer-video');
+      if (vid) {
+        if (vid.paused || vid.ended) {
+          vid.play().catch(() => {});
+        } else {
+          vid.pause();
+        }
+        syncTrailerPlayButton();
+      }
+      return;
+    }
     if (state.ytPlayer) {
       try {
         const pState = state.ytPlayer.getPlayerState?.() ?? -1;
