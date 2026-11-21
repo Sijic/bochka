@@ -3435,6 +3435,7 @@ function resetOceanTapperUI() {
   const promptEl = document.getElementById('ocean-tap-prompt');
   const subEl = document.getElementById('ocean-pulse-sub');
   const giftBtn = document.getElementById('btn-ocean-claim-gift');
+  const backBtn = document.getElementById('btn-ocean-back');
   const pill = document.getElementById('ocean-bonus-pill');
 
   if (barrelImg) barrelImg.src = './public/sprites/ocean_barrel_til_hand.webp';
@@ -3442,12 +3443,13 @@ function resetOceanTapperUI() {
   if (fillEl) fillEl.style.width = '0%';
   if (promptEl) {
     promptEl.removeAttribute('hidden');
-    promptEl.textContent = '👊 СТУЧИ ПО БОЧКЕ «ТИЛЬ» — НАБЕРИ 100% ПУЛЬСА!';
+    promptEl.textContent = '👊 ДОСТУЧИСЬ ДО ТИЛЯ (100%), ЧТОБЫ ВЕРНУТЬСЯ!';
   }
   if (subEl) {
-    subEl.textContent = '👊 Стучи быстрее — чем ближе к 100%, тем сильнее пульс откатывается вниз!';
+    subEl.textContent = '👊 Стучи быстрее — без ударов пульс уходит в ноль! Вернёшься в игру только на 100%!';
   }
   if (giftBtn) giftBtn.setAttribute('hidden', '');
+  if (backBtn) backBtn.setAttribute('hidden', '');
   if (pill) {
     pill.setAttribute('hidden', '');
     pill.textContent = '';
@@ -3578,7 +3580,12 @@ async function finishOceanTapperGame() {
   if (promptEl) {
     promptEl.textContent = '⚡ 100% ПУЛЬСА ПРОБИТО! 6 ❤️ ЗАРЯЖЕНО!';
   }
-  showToast('⚡ 100% пульса Тиля пробито! Получено 6 ❤️ на дуэль и +3 ❤️ в цех!');
+  const backBtn = document.getElementById('btn-ocean-back');
+  if (backBtn) {
+    backBtn.textContent = state.oceanTapper.returnDuel ? '⚡ В ДУЭЛЬ (6 ❤️)' : '← В ЦЕХ (+3 ❤️)';
+    backBtn.removeAttribute('hidden');
+  }
+  showToast('⚡ Достучался до Тиля (100%)! Получено 6 ❤️ на дуэль и +3 ❤️ в цех!');
 
   if (state.oceanTapper.returnDuel) {
     window.setTimeout(() => {
