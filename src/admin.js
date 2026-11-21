@@ -705,6 +705,10 @@ function renderLimitsForm() {
   const pairIn = document.getElementById('cfg-require-pair-receipt');
   const pauseIn = document.getElementById('cfg-is-paused');
   const notifyIn = document.getElementById('cfg-admin-notify-chats');
+  const apEnabledIn = document.getElementById('cfg-autopilot-enabled');
+  const apCapIn = document.getElementById('cfg-autopilot-hard-cap');
+  const apBadge = document.getElementById('adm-autopilot-mode-badge');
+  const apTel = document.getElementById('adm-autopilot-telemetry');
 
   if (winIn) winIn.value = String(s.win_every_n_hits ?? 100);
   if (dailyIn) dailyIn.value = String(s.max_daily_tickets ?? 6);
@@ -713,6 +717,30 @@ function renderLimitsForm() {
   if (pairIn) pairIn.checked = Boolean(s.require_pair_receipt);
   if (pauseIn) pauseIn.checked = Boolean(s.is_paused);
   if (notifyIn) notifyIn.value = String(s.admin_notify_chat_ids || '');
+  if (apEnabledIn) apEnabledIn.checked = s.auto_pilot_enabled !== false;
+  if (apCapIn) apCapIn.value = String(s.auto_pool_hard_cap ?? 150);
+
+  const mode = String(s.current_pacing_mode || 'normal').toLowerCase();
+  if (apBadge) {
+    if (mode === 'viral') {
+      apBadge.textContent = '🚀 ВИРУСНЫЙ';
+      apBadge.style.color = '#4ade80';
+      apBadge.style.borderColor = 'rgba(74,222,128,0.55)';
+    } else if (mode === 'quiet') {
+      apBadge.textContent = '🌙 ТИХИЙ';
+      apBadge.style.color = '#7dd3fc';
+      apBadge.style.borderColor = 'rgba(125,211,252,0.55)';
+    } else {
+      apBadge.textContent = '⚖️ НОРМА';
+      apBadge.style.color = '#fde047';
+      apBadge.style.borderColor = 'rgba(253,224,71,0.45)';
+    }
+  }
+  if (apTel) {
+    const bonus = Number(s.rare_drop_bonus_pct ?? 0);
+    const cd = Number(s.duel_cooldown_sec ?? 15);
+    apTel.textContent = `Бонус редких карт: +${bonus}% · Кулдаун дуэлей: ${cd}с · Автопилот: ${s.auto_pilot_enabled === false ? 'ВЫКЛ' : 'ВКЛ'} · До 14 декабря`;
+  }
 }
 
 async function handleSaveLimitsSubmit(e) {
@@ -725,13 +753,16 @@ async function handleSaveLimitsSubmit(e) {
     const rawDaily = document.getElementById('cfg-max-daily')?.value;
     const rawTotal = document.getElementById('cfg-max-total')?.value;
     const rawPrem = document.getElementById('cfg-max-premiere')?.value;
+    const rawApCap = document.getElementById('cfg-autopilot-hard-cap')?.value;
     const p_win_every_n_hits = Math.max(1, Number(rawWin !== '' && rawWin != null ? rawWin : 100));
-    const p_max_daily_tickets = Math.max(0, Number(rawDaily !== '' && rawDaily != null ? rawDaily : 8));
+    const p_max_daily_tickets = Math.max(0, Number(rawDaily !== '' && rawDaily != null ? rawDaily : 6));
     const p_max_total_tickets = Math.max(0, Number(rawTotal !== '' && rawTotal != null ? rawTotal : 100));
     const p_max_premiere_winners = Math.max(0, Number(rawPrem !== '' && rawPrem != null ? rawPrem : 20));
     const p_require_pair_receipt = Boolean(document.getElementById('cfg-require-pair-receipt')?.checked);
     const p_is_paused = Boolean(document.getElementById('cfg-is-paused')?.checked);
     const p_admin_notify_chat_ids = String(document.getElementById('cfg-admin-notify-chats')?.value || '').trim();
+    const p_auto_pilot_enabled = Boolean(document.getElementById('cfg-autopilot-enabled')?.checked);
+    const p_auto_pool_hard_cap = Math.min(500, Math.max(100, Number(rawApCap !== '' && rawApCap != null ? rawApCap : 150)));
 
     const { data, error } = await adminSupabase.rpc('admin_update_config', {
       p_win_every_n_hits,
@@ -741,6 +772,8 @@ async function handleSaveLimitsSubmit(e) {
       p_max_total_tickets,
       p_require_pair_receipt,
       p_admin_notify_chat_ids,
+      p_auto_pilot_enabled,
+      p_auto_pool_hard_cap,
     });
 
     if (error || !data?.ok) {

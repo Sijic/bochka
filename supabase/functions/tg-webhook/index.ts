@@ -159,6 +159,30 @@ async function getConfiguredAdminNotifyChatIds(extraRaw = ""): Promise<string[]>
   return Array.from(new Set([...fromExtra, ...fromDb, ...fromEnv]));
 }
 
+async function notifyAdminsAutopilotViral(ap: Record<string, any>): Promise<number> {
+  if (!ap?.viral_boosted) return 0;
+  const targets = await getConfiguredAdminNotifyChatIds();
+  if (!targets.length) return 0;
+  const text =
+    `🚀 <b>Автопилот «БОЧКА»: включён ВИРУСНЫЙ режим!</b>\n\n` +
+    `📈 Игроков сегодня: <b>${Number(ap.today_players || 0)}</b>\n` +
+    `🎟 Суточный лимит поднят до <b>${Number(ap.max_daily_tickets || 8)}</b> шт.\n` +
+    `🛡 Общий пул расширен на <b>+${Number(ap.pool_added || 10)}</b> → <b>${Number(ap.max_total_tickets || 110)} / ${Number(ap.auto_pool_hard_cap || 150)}</b> (потолок защищён).`;
+  let sent = 0;
+  for (const cid of targets) {
+    const res = await tgApi("sendMessage", {
+      chat_id: cid,
+      parse_mode: "HTML",
+      text,
+      reply_markup: {
+        inline_keyboard: [[{ text: "🤖 Открыть пульт автопилота", url: `${PUBLIC_WEB_URL}/admin/` }]],
+      },
+    });
+    if (res?.ok) sent += 1;
+  }
+  return sent;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: CORS_HEADERS });
@@ -319,6 +343,20 @@ Deno.serve(async (req: Request) => {
         totalTargets: targets.length,
         error: sentCount === 0 ? (errors[0] || "send_failed") : "",
       });
+    }
+
+    if (body.adminAction === "evaluate_autopilot") {
+      const { data: apRes, error: apErr } = await adminDb.rpc("evaluate_campaign_autopilot_rpc", {
+        p_now_msk: body.nowMsk || null,
+        p_today_players_override: typeof body.todayPlayers === "number" ? body.todayPlayers : null,
+        p_viral_threshold: typeof body.viralThreshold === "number" ? body.viralThreshold : null,
+        p_force_recheck: Boolean(body.forceRecheck),
+      });
+      if (apErr || !apRes) {
+        return jsonResp({ ok: false, error: apErr?.message || "autopilot_eval_failed" }, 500);
+      }
+      const adminNotified = await notifyAdminsAutopilotViral(apRes);
+      return jsonResp({ ok: true, autopilot: apRes, adminNotified });
     }
 
     return jsonResp({ ok: false, error: "unknown_admin_action" }, 400);
@@ -999,6 +1037,16 @@ Deno.serve(async (req: Request) => {
             },
           });
         }
+      }
+
+      // v15.5: Оценка Умного автопилота при выдаче билета (если вирусный всплеск — пуш админу!)
+      try {
+        const { data: apRes } = await adminDb.rpc("evaluate_campaign_autopilot_rpc");
+        if (apRes?.viral_boosted) {
+          await notifyAdminsAutopilotViral(apRes);
+        }
+      } catch {
+        // non-blocking
       }
 
       return jsonResp({ ok: true });

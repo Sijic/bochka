@@ -501,7 +501,7 @@ async function openLegalModal(tab = 'rules') {
 
   if (!legalModCache) {
     body.textContent = 'Загрузка документов…';
-    legalModCache = await import('./legal.js?v=1545');
+    legalModCache = await import('./legal.js?v=155');
   }
   legalModCache.renderLegalSectionInto(body, tab);
 }

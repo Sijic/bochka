@@ -413,6 +413,30 @@
                 </div>
               </label>
 
+              <div class="field-group" id="adm-autopilot-box" style="padding:12px;border:1px solid rgba(234,179,8,0.38);border-radius:10px;background:rgba(234,179,8,0.06);">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+                  <strong style="font-size:13px;color:#fde047;">🤖 УМНЫЙ АВТОПИЛОТ ПУЛА И ТЕМПА (v15.5)</strong>
+                  <span id="adm-autopilot-mode-badge" class="mono-muted" style="padding:2px 8px;border-radius:99px;border:1px solid rgba(255,255,255,0.2);font-weight:700;">⚖️ НОРМА</span>
+                </div>
+                <div id="adm-autopilot-telemetry" class="field-hint" style="margin-bottom:10px;">
+                  Бонус редких карт: <strong>+0%</strong> · Кулдаун дуэлей: <strong>15с</strong> · Работает до 14 декабря
+                </div>
+                <label class="pause-toggle-row" for="cfg-autopilot-enabled" style="margin-bottom:10px;">
+                  <input type="checkbox" id="cfg-autopilot-enabled" checked />
+                  <div>
+                    <strong>Включить «Умный автопилот» (<code>auto_pilot_enabled</code>)</strong>
+                    <span>В тихий вечер ускоряет темп и редкие карты (+10% / 8с); при вирусном всплеске до 15:00 МСК сам поднимает суточный лимит до 8 и добавляет +10 к пулу (строго до жёсткого потолка).</span>
+                  </div>
+                </label>
+                <label for="cfg-autopilot-hard-cap">
+                  ЖЁСТКИЙ ПОТОЛОК АВТОПИЛОТА (<code>AUTO_POOL_HARD_CAP</code>, МАКС. БИЛЕТОВ)
+                </label>
+                <input type="number" id="cfg-autopilot-hard-cap" min="100" max="500" step="1" value="150" class="adm-input" />
+                <span class="field-hint">
+                  Потолок, выше которого автопилот НИКОГДА не поднимет общий пул (по умолчанию 150 шт.).
+                </span>
+              </div>
+
               <div class="field-group">
                 <label for="cfg-admin-notify-chats">
                   ЧАТЫ ДЛЯ УВЕДОМЛЕНИЙ О НОВЫХ БИЛЕТАХ (<code>admin_notify_chat_ids</code>)
