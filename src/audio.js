@@ -189,9 +189,12 @@ class WorkshopAudio {
 
     this.master.gain.setTargetAtTime((this.enabled && !this.modalDucked) ? 0.92 : 0.0, this.ctx.currentTime, 0.04);
 
-    if (!this.loadingStarted) {
+    // v15.4.2: Не забиваем HTTP/2-канал 22 MP3-файлами при тихом входе и даём Three.js загрузиться первым!
+    if (this.enabled && !this.loadingStarted) {
       this.loadingStarted = true;
-      this._preloadBuffers();
+      window.setTimeout(() => {
+        this._preloadBuffers();
+      }, 900);
     }
 
     if (this.enabled && !this.ambientStarted) {
@@ -214,6 +217,10 @@ class WorkshopAudio {
       try {
         await this.ctx.resume();
       } catch { /* ignore */ }
+    }
+    if (this.enabled && !this.loadingStarted) {
+      this.loadingStarted = true;
+      this._preloadBuffers();
     }
     if (this.enabled && !this.ambientStarted) {
       this._startAmbientBed();
