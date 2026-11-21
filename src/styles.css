@@ -7357,3 +7357,77 @@ body.is-duel-active .topbar {
   text-align: center;
 }
 
+/* ==========================================================================
+   v15.3: MODE-A («ШАНС» строго внутри 360px) + ПУЛЬС ТИЛЯ БЕЗ ТАЙМЕРА
+   ========================================================================== */
+.mode-barrel-top-strip {
+  width: min(94vw, 430px) !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  padding: 8px 10px !important;
+  box-sizing: border-box !important;
+  text-align: center !important;
+}
+.mode-barrel-top-strip .premiere-hub-strip-btn {
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 6px 8px !important;
+  font-size: 10px !important;
+  line-height: 1.28 !important;
+}
+.mode-barrel-top-strip .mono-tag {
+  font-size: 10px !important;
+  line-height: 1.25 !important;
+  white-space: normal !important;
+}
+.mode-barrel-top-strip .mode-resume-btn {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 8px 10px !important;
+  min-height: 36px !important;
+  font-size: 12px !important;
+  white-space: normal !important;
+  text-align: center !important;
+}
+.mode-barrel-top-strip .mode-resume-btn.is-chance-mode {
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.24), rgba(180, 83, 9, 0.34)) !important;
+  border-color: rgba(250, 204, 21, 0.9) !important;
+  color: #fef08a !important;
+  font-weight: 800 !important;
+}
+
+.ocean-pulse-sub {
+  margin-top: 5px;
+  font-size: 10px;
+  line-height: 1.25;
+  color: #fde047;
+  text-align: center;
+  font-weight: 600;
+}
+#screen-ocean .ocean-actions-slim {
+  display: flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  width: 100% !important;
+}
+#screen-ocean #btn-ocean-story.ocean-tap-main-btn {
+  flex: 1 1 auto !important;
+  width: auto !important;
+  min-height: 44px !important;
+  padding: 8px 10px !important;
+  font-size: 11px !important;
+  line-height: 1.2 !important;
+  white-space: normal !important;
+}
+#screen-ocean .ocean-mini-back-btn {
+  flex: 0 0 auto !important;
+  min-height: 44px !important;
+  padding: 0 11px !important;
+  font-size: 11px !important;
+  white-space: nowrap !important;
+}
+
+

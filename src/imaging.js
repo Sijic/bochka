@@ -734,7 +734,12 @@ export async function processClearPassPhotoToWebP(source) {
  * Генерирует эксклюзивную вертикальную открытку 1080x1920 для Сторис с пасхалкой у моря
  * БЕЗ раскрытия секретной комбинации 19-97!
  */
-export async function generateOceanEasterEggStoriesPNG() {
+export async function generateOceanEasterEggStoriesPNG({
+  points = 0,
+  ratingPct = 0,
+  rankTitle = '',
+  botUsername = 'bochka_film_bot',
+} = {}) {
   const W = 1080;
   const H = 1920;
   const canvas = document.createElement('canvas');
@@ -744,79 +749,85 @@ export async function generateOceanEasterEggStoriesPNG() {
 
   // Холодное серое предрассветное небо над морем
   const sky = ctx.createLinearGradient(0, 0, 0, H);
-  sky.addColorStop(0, '#1f2933');
-  sky.addColorStop(0.38, '#394854');
-  sky.addColorStop(0.72, '#1d262e');
-  sky.addColorStop(1, '#0d1014');
+  sky.addColorStop(0, '#18212b');
+  sky.addColorStop(0.36, '#33414e');
+  sky.addColorStop(0.72, '#161e26');
+  sky.addColorStop(1, '#0b0e13');
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, W, H);
 
   try {
-    const seaImg = await loadImageElement(resolveSiteAsset('assets/keyed/ocean_beach_bg.webp'));
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(seaImg, 0, 520, W, 940);
+    const seaImg = await loadImageElement(resolveSiteAsset('public/sprites/ocean_sea_real.webp'));
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(seaImg, 0, 420, W, 1020);
   } catch { /* fallback gradient */ }
 
   // Мягкий морской туман сверху и снизу панорамы
-  const topMist = ctx.createLinearGradient(0, 500, 0, 690);
-  topMist.addColorStop(0, '#364551');
-  topMist.addColorStop(1, 'rgba(54, 69, 81, 0)');
+  const topMist = ctx.createLinearGradient(0, 410, 0, 620);
+  topMist.addColorStop(0, '#27333e');
+  topMist.addColorStop(1, 'rgba(39, 51, 62, 0)');
   ctx.fillStyle = topMist;
-  ctx.fillRect(0, 500, W, 190);
+  ctx.fillRect(0, 410, W, 210);
 
-  const botMist = ctx.createLinearGradient(0, 1300, 0, 1470);
-  botMist.addColorStop(0, 'rgba(13, 16, 20, 0)');
-  botMist.addColorStop(1, '#0d1014');
+  const botMist = ctx.createLinearGradient(0, 1240, 0, 1460);
+  botMist.addColorStop(0, 'rgba(11, 14, 19, 0)');
+  botMist.addColorStop(1, '#0b0e13');
   ctx.fillStyle = botMist;
-  ctx.fillRect(0, 1300, W, 180);
+  ctx.fillRect(0, 1240, W, 220);
 
   try {
-    const tillSit = await loadImageElement(resolveSiteAsset('assets/keyed/ocean_till_sitting.webp'));
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(tillSit, 135, 965, 290, 376);
+    const barrelArm = await loadImageElement(resolveSiteAsset('public/sprites/ocean_barrel_til_hand.webp'));
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(barrelArm, 390, 995, 620, 420);
   } catch { /* ignore */ }
 
-  try {
-    const barrelArm = await loadImageElement(resolveSiteAsset('assets/keyed/ocean_barrel_arm.webp'));
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(barrelArm, 455, 1085, 495, 255);
-  } catch { /* ignore */ }
-
-  // Пена прибоя вокруг ржавой бочки
-  ctx.fillStyle = 'rgba(226, 236, 242, 0.28)';
-  ctx.beginPath();
-  ctx.ellipse(W * 0.5, 1368, 250, 22, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.strokeStyle = 'rgba(234, 179, 8, 0.35)';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(234, 179, 8, 0.45)';
+  ctx.lineWidth = 3;
   ctx.strokeRect(48, 56, W - 96, H - 112);
 
-  ctx.fillStyle = 'rgba(226, 234, 240, 0.72)';
-  ctx.font = '600 24px monospace';
+  ctx.fillStyle = 'rgba(250, 204, 21, 0.9)';
+  ctx.font = '700 26px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('СЕКРЕТНЫЙ УРОВЕНЬ НАЙДЕН // БЕЗ ПОДСКАЗОК', W * 0.5, 132);
+  ctx.fillText('СЕКРЕТНЫЙ УРОВЕНЬ // СЕВЕРНОЕ МОРЕ · 19·97', W * 0.5, 134);
 
-  // Печатная машинка на небе
+  // Цитата на небе
   ctx.fillStyle = '#f8fafc';
-  ctx.font = '700 46px "Courier New", monospace';
-  wrapCenteredText(ctx, '«На небе только и разговоров, что о... БОЧКЕ.»', W * 0.5, 290, 880, 66);
+  ctx.font = '700 48px "Courier New", monospace';
+  wrapCenteredText(ctx, '«На небе только и разговоров, что о море и о бочке…»', W * 0.5, 250, 900, 66);
+
+  // Золотая плашка с рейтингом игрока
+  const cleanPts = Math.max(0, Math.round(Number(points || 0)));
+  const cleanPct = Math.max(0, Math.min(100, Math.round(Number(ratingPct || 0))));
+  ctx.fillStyle = 'rgba(15, 20, 28, 0.88)';
+  ctx.fillRect(110, 1420, W - 220, 150);
+  ctx.strokeStyle = '#eab308';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(110, 1420, W - 220, 150);
+
+  ctx.fillStyle = '#fde047';
+  ctx.font = '800 38px sans-serif';
+  ctx.fillText(`🏆 МОЙ РЕЙТИНГ: ${cleanPts} ⭐ (${cleanPct}%)`, W * 0.5, 1484);
+
+  ctx.fillStyle = '#e2e8f0';
+  ctx.font = '600 27px sans-serif';
+  const subRank = rankTitle ? `${rankTitle} · Гонка за Закрытый показ в Москве` : 'Гонка за Закрытый показ в Москве 17 декабря';
+  ctx.fillText(subRank, W * 0.5, 1538);
 
   ctx.fillStyle = '#eab308';
-  ctx.font = '900 132px Impact, "Arial Black", sans-serif';
-  ctx.fillText('БОЧКА', W * 0.5, 1555);
+  ctx.font = '900 108px Impact, "Arial Black", sans-serif';
+  ctx.fillText('БОЧКА', W * 0.5, 1682);
 
   ctx.fillStyle = '#eab308';
-  ctx.fillRect(190, 1615, W - 380, 82);
+  ctx.fillRect(190, 1712, W - 380, 66);
   ctx.fillStyle = '#0d0d0d';
-  ctx.font = '900 40px Impact, "Arial Black", sans-serif';
-  ctx.fillText('В КИНО С 17 ДЕКАБРЯ', W * 0.5, 1670);
+  ctx.font = '900 34px Impact, "Arial Black", sans-serif';
+  ctx.fillText('В КИНО С 17 ДЕКАБРЯ', W * 0.5, 1757);
 
-  ctx.fillStyle = 'rgba(226, 232, 240, 0.85)';
+  ctx.fillStyle = '#fef08a';
   ctx.font = '700 30px monospace';
-  ctx.fillText('НАЙДИ ВЫХОД К МОРЮ НА BOCHKA.QUEST', W * 0.5, 1785);
+  ctx.fillText(`ИГРАЙ И ЗАБЕРИ БИЛЕТ → t.me/${botUsername}`, W * 0.5, 1832);
 
-  return canvasToBlob(canvas, 'image/png', 0.95);
+  return canvasToBlob(canvas, 'image/png', 0.94);
 }
 
 function wrapCenteredText(ctx, text, x, y, maxWidth, lineHeight) {

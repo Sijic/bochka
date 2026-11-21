@@ -691,20 +691,22 @@ function renderFinaleShardVisual({ shards = 1, merged = false } = {}) {
   const cntEl = document.getElementById('finale-shard-counter');
   const footEl = document.getElementById('finale-shard-footer');
   if (!box) return;
-  const filledCount = merged ? 4 : Math.max(1, Math.min(4, Number(shards || 1)));
+  const filledCount = merged ? 4 : Math.max(0, Math.min(4, Number(shards ?? 0)));
   box.removeAttribute('hidden');
   box.classList.toggle('is-merged', Boolean(merged || filledCount >= 4));
   if (cntEl) cntEl.textContent = `${filledCount} / 4`;
   if (footEl) {
     footEl.textContent = merged
       ? '🎉 Все 4 части склеились в целый бесплатный билет в кино для друга (без чеков)!'
-      : `Осталось ещё ${4 - filledCount} из 4 — собери целый бесплатный билет другу (без чеков)!`;
+      : filledCount > 0
+        ? `Осталось ещё ${4 - filledCount} из 4 — собери целый бесплатный билет другу (без чеков)!`
+        : 'Собери 4 куска билета — подари другу бесплатный билет в кино (без чеков)!';
   }
   box.querySelectorAll('.fst-piece').forEach((pEl) => {
     const idx = Number(pEl.getAttribute('data-piece') || 0);
-    pEl.classList.toggle('is-collected', idx <= filledCount);
+    pEl.classList.toggle('is-collected', filledCount > 0 && idx <= filledCount);
     pEl.classList.remove('is-just-earned');
-    if (idx === filledCount || (merged && idx <= 4)) {
+    if ((filledCount > 0 && idx === filledCount) || (merged && idx <= 4)) {
       void pEl.offsetWidth;
       pEl.classList.add('is-just-earned');
     }
@@ -1906,8 +1908,8 @@ async function bootstrap() {
   } else if (state.tg?.duelRoomParam) {
     state.entered = true;
     await openDuelTable(state.tg.duelRoomParam);
-  } else if (state.tg?.teamSeedRole === 'prod' && isProducerPackFirstRequired()) {
-    // v15.2: Продюсер зашёл по ссылке team_prod — сразу просим запаковать СВОЮ бочку 1 раз и получить общую ссылку!
+  } else if (state.tg?.teamSeedRole === 'prod') {
+    // v15.3: Продюсер зашёл по ссылке team_prod — ВСЕГДА сразу открываем экран продюсерской бочки!
     state.entered = true;
     applySeedPackModeUI(true);
     showScreen('pack');
@@ -3041,10 +3043,17 @@ function updatePremiereBarsUI() {
 
 
   const startLbl = document.getElementById('btn-start-level-label');
+  const startBtnEl = document.getElementById('btn-start-demo');
   if (startLbl) {
-    startLbl.textContent = spec.isBlitz
-      ? `▶ УР. ${spec.level} · БЛИЦ (12 БОЧЕК)`
-      : `▶ ИГРАТЬ УР. ${spec.level} (${spec.barrelCount} ${formatBarrelWord(spec.barrelCount)})`;
+    const noLives = Number(state.profile?.lives || 0) <= 0;
+    startBtnEl?.classList.toggle('is-chance-mode', noLives);
+    if (noLives) {
+      startLbl.textContent = `🎲 ШАНС · УР. ${spec.level}`;
+    } else {
+      startLbl.textContent = spec.isBlitz
+        ? `▶ УР. ${spec.level} · БЛИЦ (12 БОЧЕК)`
+        : `▶ ИГРАТЬ УР. ${spec.level} (${spec.barrelCount} ${formatBarrelWord(spec.barrelCount)})`;
+    }
   }
   syncBurgerMenuLocks();
 
@@ -3413,41 +3422,35 @@ function resetOceanTapperUI() {
     running: false,
     finished: false,
     taps: 0,
-    timeLeft: 12.0,
+    energy: 0,
+    timeLeft: 0,
     timer: null,
     lastTapAt: 0,
     returnDuel: keepDuel,
   };
 
   const barrelImg = document.getElementById('ocean-barrel-img');
-  const timerEl = document.getElementById('ocean-tap-timer');
   const countEl = document.getElementById('ocean-tap-count');
   const fillEl = document.getElementById('ocean-tap-fill');
   const promptEl = document.getElementById('ocean-tap-prompt');
-  const startBtn = document.getElementById('btn-ocean-start-tap');
+  const subEl = document.getElementById('ocean-pulse-sub');
   const giftBtn = document.getElementById('btn-ocean-claim-gift');
   const pill = document.getElementById('ocean-bonus-pill');
 
   if (barrelImg) barrelImg.src = './public/sprites/ocean_barrel_til_hand.webp';
-  if (timerEl) timerEl.textContent = '12.0';
   if (countEl) countEl.textContent = '0';
   if (fillEl) fillEl.style.width = '0%';
   if (promptEl) {
     promptEl.removeAttribute('hidden');
-    promptEl.textContent = '👊 ТАПАЙ ПО БОЧКЕ «ТИЛЬ» → ⚡ 100% И 6 ❤️ НА ДУЭЛЬ!';
+    promptEl.textContent = '👊 СТУЧИ ПО БОЧКЕ «ТИЛЬ» — НАБЕРИ 100% ПУЛЬСА!';
   }
-  if (startBtn) {
-    startBtn.disabled = false;
-    startBtn.textContent = '👊 СТУЧИ ПО БОЧКЕ «ТИЛЬ» (6 ❤️)';
+  if (subEl) {
+    subEl.textContent = '👊 Стучи быстрее — чем ближе к 100%, тем сильнее пульс откатывается вниз!';
   }
-  // v12.5: На берегу Тиля НЕ показываем «Забрать билет» до окончания стука — здесь заряжаем энергию и 6 ❤️ на дуэль!
-  if (giftBtn) {
-    giftBtn.setAttribute('hidden', '');
-  }
+  if (giftBtn) giftBtn.setAttribute('hidden', '');
   if (pill) {
-    pill.textContent = keepDuel
-      ? '⚡ БОЧКА С ТИЛЕМ: заряди энергию 0% → 100% за 12 секунд и мгновенно вернись в дуэль!'
-      : state.profile.easterEggClaimed ? t('oceanBonusAlready') : t('oceanBonusBadge');
+    pill.setAttribute('hidden', '');
+    pill.textContent = '';
   }
 }
 
@@ -3457,70 +3460,69 @@ function startOceanTapperCountdown() {
 
   state.oceanTapper.running = true;
   state.oceanTapper.finished = false;
-  state.oceanTapper.taps = 0;
-  state.oceanTapper.timeLeft = 12.0;
-  state.oceanTapper.lastTapAt = 0;
-
-  const barrelImg = document.getElementById('ocean-barrel-img');
-  const timerEl = document.getElementById('ocean-tap-timer');
-  const countEl = document.getElementById('ocean-tap-count');
-  const fillEl = document.getElementById('ocean-tap-fill');
-  const promptEl = document.getElementById('ocean-tap-prompt');
-  const startBtn = document.getElementById('btn-ocean-start-tap');
-
-  if (barrelImg) barrelImg.src = './public/sprites/ocean_barrel_til_hand.webp';
-  if (timerEl) timerEl.textContent = '12.0';
-  if (countEl) countEl.textContent = '0';
-  if (fillEl) fillEl.style.width = '0%';
-  if (promptEl) promptEl.textContent = '⚡ ЖМИ ПО БОЧКЕ «ТИЛЬ» → ЭНЕРГИЯ + +2 ❤️!';
-  if (startBtn) startBtn.textContent = '👊 СТУЧИ ПО БОЧКЕ «ТИЛЬ»!';
+  if (typeof state.oceanTapper.energy !== 'number') state.oceanTapper.energy = 0;
 
   let lastTs = performance.now();
   state.oceanTapper.timer = window.setInterval(() => {
+    if (!state.oceanTapper.running || state.oceanTapper.finished) return;
     const now = performance.now();
-    const dt = (now - lastTs) / 1000;
+    const dt = Math.min(0.25, Math.max(0.01, (now - lastTs) / 1000));
     lastTs = now;
-    state.oceanTapper.timeLeft = Math.max(0, state.oceanTapper.timeLeft - dt);
-    if (timerEl) timerEl.textContent = state.oceanTapper.timeLeft.toFixed(1);
 
-    if (state.oceanTapper.timeLeft <= 0) {
-      finishOceanTapperGame();
-    }
-  }, 80);
+    const e = Number(state.oceanTapper.energy || 0);
+    if (e <= 0) return;
+
+    // v15.3: Без таймера — если не стучишь, пульс Тиля уходит обратно в 0 (чем ближе к 100%, тем быстрее откат!)
+    const decayPerSec = e < 35 ? 9 : e < 65 ? 17 : e < 85 ? 25 : 33;
+    const nextE = Math.max(0, e - decayPerSec * dt);
+    state.oceanTapper.energy = nextE;
+
+    const pct = Math.round(nextE);
+    const countEl = document.getElementById('ocean-tap-count');
+    const fillEl = document.getElementById('ocean-tap-fill');
+    if (countEl) countEl.textContent = String(pct);
+    if (fillEl) fillEl.style.width = `${nextE.toFixed(1)}%`;
+  }, 50);
 }
 
 const TIL_TAP_QUOTES = [
   '«На небе только и разговоров, что о море…»',
   '«На небе только и разговоров, что о бочке…»',
-  '«Ещё удар — и крышка сдастся!»',
+  '«Бей быстрее — пульс уходит в море!»',
   '«Ты слышишь прибой за стальной стенкой?»',
 ];
 
 function handleOceanBarrelTap() {
   const now = performance.now();
-  if (now - state.oceanTapper.lastTapAt < 25) return;
+  if (now - state.oceanTapper.lastTapAt < 40) return;
   state.oceanTapper.lastTapAt = now;
 
+  if (state.oceanTapper.finished) return;
   if (!state.oceanTapper.running) {
-    if (state.oceanTapper.finished) return;
     startOceanTapperCountdown();
   }
 
   state.oceanTapper.taps += 1;
   const taps = state.oceanTapper.taps;
-  const energyPct = Math.min(100, Math.round((taps / 24) * 100));
+  const nextEnergy = Math.min(100, Number(state.oceanTapper.energy || 0) + 7.5);
+  state.oceanTapper.energy = nextEnergy;
+  const energyPct = Math.round(nextEnergy);
 
   audio.playStrike((taps % 3) + 1);
-  if (energyPct >= 100 || taps === 12) Haptics.heavy();
+  if (energyPct >= 100 || energyPct >= 80) Haptics.heavy();
   else Haptics.light();
 
   const countEl = document.getElementById('ocean-tap-count');
   const fillEl = document.getElementById('ocean-tap-fill');
   const promptEl = document.getElementById('ocean-tap-prompt');
+  const subEl = document.getElementById('ocean-pulse-sub');
   if (countEl) countEl.textContent = String(energyPct);
-  if (fillEl) fillEl.style.width = `${energyPct}%`;
-  if (promptEl && taps % 6 === 0) {
-    promptEl.textContent = TIL_TAP_QUOTES[(taps / 6) % TIL_TAP_QUOTES.length | 0];
+  if (fillEl) fillEl.style.width = `${nextEnergy.toFixed(1)}%`;
+  if (promptEl && taps % 5 === 0) {
+    promptEl.textContent = TIL_TAP_QUOTES[(taps / 5) % TIL_TAP_QUOTES.length | 0];
+  }
+  if (subEl && energyPct >= 70 && energyPct < 100) {
+    subEl.textContent = '🔥 ПОЧТИ ДОБИЛ! СТУЧИ БЫСТРЕЕ — ПУЛЬС СИЛЬНО ТЯНЕТ ВНИЗ!';
   }
 
   const targetBtn = document.getElementById('btn-ocean-tap-barrel');
@@ -3530,7 +3532,7 @@ function handleOceanBarrelTap() {
     targetBtn.classList.add('is-knock-hit');
   }
 
-  if (energyPct >= 100 && state.oceanTapper.returnDuel) {
+  if (nextEnergy >= 100) {
     finishOceanTapperGame();
   }
 }
@@ -3543,54 +3545,45 @@ async function finishOceanTapperGame() {
   if (!state.oceanTapper.running && state.oceanTapper.finished) return;
   state.oceanTapper.running = false;
   state.oceanTapper.finished = true;
+  state.oceanTapper.energy = 100;
 
-  const taps = state.oceanTapper.taps;
-  const energyPct = Math.min(100, Math.round((taps / 24) * 100));
-  const startBtn = document.getElementById('btn-ocean-start-tap');
+  const taps = Math.max(15, state.oceanTapper.taps);
+  const countEl = document.getElementById('ocean-tap-count');
+  const fillEl = document.getElementById('ocean-tap-fill');
+  const subEl = document.getElementById('ocean-pulse-sub');
   const pill = document.getElementById('ocean-bonus-pill');
-  const giftBtn = document.getElementById('btn-ocean-claim-gift');
   const promptEl = document.getElementById('ocean-tap-prompt');
 
-  if (startBtn) {
-    startBtn.disabled = true;
-    startBtn.textContent = 'ЗАРЯДКА ЭНЕРГИИ...';
-  }
+  if (countEl) countEl.textContent = '100';
+  if (fillEl) fillEl.style.width = '100%';
+  if (subEl) subEl.textContent = '⚡ 100% ПРОБИТО! ТИЛЬ ЗАРЯДИЛ 6 ❤️ НА ДУЭЛЬ И +3 ❤️ В ЦЕХ!';
 
-  // Начисляем полный запас сил (+3 ❤️) и возвращаем в дуэль, если пришли с поражения
   const reward = await claimOceanTapperReward(state.tg?.user, Math.max(1, taps)).catch(() => ({ livesAwarded: 3 }));
   const v8Refill = await awardV8LevelProgress(state.tg?.user, { level: state.profile.currentLevel || 6, pointsDelta: 0, livesDelta: 3 }).catch(() => null);
   state.profile.easterEggClaimed = true;
   state.profile.lives = capEarlyLivesIfNoRealFriends(Math.max(3, Number(v8Refill?.lives ?? reward?.lives ?? state.profile.lives ?? 3)));
   if (duelCtrl) {
-    // v12.0: Тиль на берегу Северного моря выдаёт минимум 6 ❤️ жизней и 100% ⚡ энергии именно на Дуэль!
     duelCtrl.refillFromTil?.();
   }
   if (reward?.hasPendingTicket || reward?.giftAwarded) state.profile.hasPendingTicket = true;
   updatePremiereBarsUI();
   refreshHudLevelLabel();
-  flyRewardToHud({ type: 'lives', count: 3, label: '+2 ❤️' });
+  flyRewardToHud({ type: 'lives', count: 3, label: '+3 ❤️' });
+  Haptics.success();
 
   if (pill) {
-    pill.textContent = `⚡ ТИЛЬ ЗАРЯДИЛ 6 ❤️ ЖИЗНЕЙ И ⚡ ${energyPct}% НА ДУЭЛЬ! ВОЗВРАЩАЕМСЯ В БОЙ!`;
-    Haptics.success();
+    pill.removeAttribute('hidden');
+    pill.textContent = '⚡ ТИЛЬ ЗАРЯДИЛ 100% ПУЛЬСА И 6 ❤️ НА ДУЭЛЬ! Поделись открыткой с рейтингом или жми «← В ЦЕХ»!';
   }
   if (promptEl) {
-    promptEl.textContent = `⚡ ${energyPct}% ЗАРЯЖЕНО!`;
+    promptEl.textContent = '⚡ 100% ПУЛЬСА ПРОБИТО! 6 ❤️ ЗАРЯЖЕНО!';
   }
-  if (giftBtn) {
-    // Показываем кнопку билета на берегу Тиля ТОЛЬКО если игрок НЕ пришёл из дуэли и реально выбил билет именно здесь
-    if (!state.oceanTapper.returnDuel && reward?.giftAwarded) giftBtn.removeAttribute('hidden');
-    else giftBtn.setAttribute('hidden', '');
-  }
-  if (startBtn) {
-    startBtn.disabled = false;
-    startBtn.textContent = '⚡ ВЕРНУТЬСЯ В ДУЭЛЬ С ПОЛНОЙ ЭНЕРГИЕЙ';
-  }
+  showToast('⚡ 100% пульса Тиля пробито! Получено 6 ❤️ на дуэль и +3 ❤️ в цех!');
 
   if (state.oceanTapper.returnDuel) {
     window.setTimeout(() => {
       handleReturnFromOcean(false);
-    }, 900);
+    }, 1100);
   }
 }
 
@@ -3669,14 +3662,62 @@ async function handleReturnFromOcean(openGiftModalAfter = false) {
 
 async function handleDownloadOceanPostcard() {
   const btn = document.getElementById('btn-ocean-story');
-  if (btn) btn.disabled = true;
+  const prevText = btn?.textContent || '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ ГОТОВИМ ОТКРЫТКУ С РЕЙТИНГОМ...';
+  }
   Haptics.medium();
   try {
-    const blob = await generateOceanEasterEggStoriesPNG();
+    const pts = Math.max(0, Math.round(Number(state.profile?.premierePoints || 0)));
+    const ratingPct = computeSuperPrizeRatingPct(state.profile);
+    const rankTitle = computePlayerRankTitle();
+    const botUsername = ENV.tgBotUsername || 'bochka_film_bot';
+    const uid = encodeURIComponent(getViewerUid(state.tg?.user));
+    const shareUrl = `https://t.me/${botUsername}?startapp=ref_${uid}`;
+    const shareText =
+      `🌊 Я достучался до Тиля на Северном море в игре «БОЧКА»!\n` +
+      `🏆 Мой рейтинг: ${pts} ⭐ (${ratingPct}% к Закрытому показу в Москве 17 декабря · ${rankTitle})\n` +
+      `Попробуй сам и собери билет в кино: ${shareUrl}`;
+
+    const blob = await generateOceanEasterEggStoriesPNG({
+      points: pts,
+      ratingPct,
+      rankTitle,
+      botUsername,
+    });
     if (!blob) return;
-    await shareOrDownloadPngBlob(blob, `bochka-sea-secret-${Date.now()}.png`);
+
+    const file = new File([blob], `bochka-til-rating-${pts}.png`, { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: 'БОЧКА — Секретный берег Тиля (17 декабря)',
+          text: shareText,
+          url: shareUrl,
+        });
+        Haptics.success();
+        showToast('📸 Открытка с твоим рейтингом и ссылкой отправлена!');
+        return;
+      } catch (e) {
+        if (e?.name === 'AbortError') return;
+      }
+    }
+
+    // Фоллбэк: сохраняем картинку 9:16 с рейтингом + открываем нативную отправку ссылки с рейтингом в Telegram!
+    await shareOrDownloadPngBlob(blob, `bochka-til-rating-${pts}.png`);
+    await copyToClipboard(shareText).catch(() => {});
+    if (state.tg?.inTelegram) {
+      openTelegramShare(shareUrl, shareText);
+    } else {
+      showToast('📸 Открытка с рейтингом сохранена, а текст со ссылкой скопирован в буфер!');
+    }
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = prevText || '📸 ПОДЕЛИТЬСЯ В СОЦСЕТИ (КАРТИНКА + РЕЙТИНГ)';
+    }
   }
 }
 
@@ -5675,19 +5716,24 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
     }
 
     if (survived) {
-      const gotShard = Boolean((shardAward?.merged && shardAward?.granted) || (!shardAward?.duplicateBlocked && shardAward?.shards > 0));
+      const isTicketStage = completedLvl >= 3;
+      const shownShards = shardAward?.merged
+        ? 4
+        : Math.max(1, Number(shardAward?.shards || state.profile?.ticketShards || 1));
       let revealCaption = '🎉 ПАЦАН ВЫЛЕЗ ИЗ БОЧКИ! СПАСИБО!';
       if (shardAward?.merged && shardAward?.granted) {
         revealCaption = '🎟 4/4 — БИЛЕТ СКЛЕЕН! ПОДАРИ ДРУГУ В TELEGRAM!';
       } else if (shardAward?.capReached) {
         revealCaption = '⭐ ПУЛ НА СЕГОДНЯ РАЗОБРАН · +500 ⭐ В ТОП-20 МОСКВЫ!';
-      } else if (shardAward?.shards > 0) {
-        revealCaption = `🎟 ЧАСТЬ БИЛЕТА ${shardAward.shards}/4 (${shardAward.shards * 25}%) НАЙДЕНА!`;
+      } else if (shardAward?.seedExcluded) {
+        revealCaption = '🛡 РЕЖИМ КОМАНДЫ · ПРИЗОВОЙ ПУЛ СОХРАНЁН ДЛЯ ЗРИТЕЛЕЙ!';
+      } else if (isTicketStage) {
+        revealCaption = `🎟 ЧАСТЬ БИЛЕТА ${shownShards}/4 (${shownShards * 25}%) НАЙДЕНА!`;
       }
       await playRevealAvatar(2200, {
         barrelIndex: revIdx,
-        isBoy: gotShard ? false : isBoyRescue,
-        customImgSrc: gotShard ? createTicketShardDataUrl(shardAward.shards || 4, Boolean(shardAward?.merged)) : '',
+        isBoy: isTicketStage ? false : isBoyRescue,
+        customImgSrc: isTicketStage ? createTicketShardDataUrl(shownShards, Boolean(shardAward?.merged)) : '',
         caption: revealCaption,
       });
     } else {
@@ -6051,8 +6097,8 @@ function showSentScreen({ wasLifeRefill = false, wasBroadcastPack = false, broad
     sNote.textContent = wasBroadcastPack
       ? 'Эта одна ссылка работает на 10 000+ человек сразу: каждому сервер сам выдаст порядковый номер _1, _2, _3... без спама в личку!'
       : packShardRes?.shards > 0
-        ? `🎟 Получена 1-я часть билета (${packShardRes.shards}/4 · 25%)! А когда друг реально зайдёт по твоей ссылке — получишь ещё +20% к Суперпризу (Закрытый показ в Москве) и бонусную часть билета!`
-        : 'За отправку шкала чуть сдвинулась (+3% аванс). Когда друг реально зайдёт играть по твоей ссылке — получишь +20% (+500 ⭐) к Закрытому показу в Москве и бонусную часть билета!';
+        ? `🎟 Получена 1-я часть билета (${packShardRes.shards}/4 · 25%)! ⚔️ Когда друг зайдёт в игру по твоей ссылке — откроются Дуэли «На счёт три!» за билеты и главный приз (Закрытый показ в Москве 17 декабря)!`
+        : '⚔️ Когда друг зайдёт в игру по твоей ссылке — откроются Дуэли «На счёт три!» за билеты и главный приз: Закрытый показ в Москве 17 декабря (+20% к шкале и бонусная часть билета)!';
   }
   if (copyBtn) {
     if (state.pack?.lastShareUrl) copyBtn.removeAttribute('hidden');
@@ -6263,18 +6309,27 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
 
   if (subtag) subtag.textContent = premiereResult ? t('premiereRaceTag') : r.isDemo ? `УРОВЕНЬ ${completedLvl} · ⭐ ${totalPts} / 1 500` : r.senderLabel || t('revealFromFriend');
 
-  // v15.2: Если найдена часть билета (1/4..4/4) — показываем анимированный 4-сегментный кинобилет вместо фото пацана!
+  // v15.3: На Уровне 3+ ВСЕГДА показываем анимированный 4-сегментный кинобилет вместо фото пацана!
   const shardVisualEl = $('finale-shard-visual');
-  const isShardWin =
-    !lost &&
-    !premiereResult &&
-    Boolean((r.lastShardAward?.merged && r.lastShardAward?.granted) || Number(r.lastShardAward?.shards || 0) > 0);
+  const isShardWin = !lost && !premiereResult && completedLvl >= 3;
   if (isShardWin && shardVisualEl) {
     ring?.setAttribute('hidden', '');
+    const mergedNow = Boolean(r.lastShardAward?.merged && r.lastShardAward?.granted);
+    const displayShards = mergedNow
+      ? 4
+      : Math.max(0, Math.min(3, Number(r.lastShardAward?.shards || state.profile?.ticketShards || 0)));
     renderFinaleShardVisual({
-      shards: Number(r.lastShardAward?.shards || 4),
-      merged: Boolean(r.lastShardAward?.merged && r.lastShardAward?.granted),
+      shards: displayShards,
+      merged: mergedNow,
     });
+    const footEl = document.getElementById('finale-shard-footer');
+    if (footEl) {
+      if (r.lastShardAward?.seedExcluded) {
+        footEl.textContent = '🛡 Режим команды посева: призовые билеты сохранены для зрителей!';
+      } else if (r.lastShardAward?.capReached) {
+        footEl.textContent = '⭐ Дневная партия билетов (6 шт.) разобрана — тебе начислено +500 ⭐ в ТОП-20 Москвы!';
+      }
+    }
   } else {
     shardVisualEl?.setAttribute('hidden', '');
     ring?.removeAttribute('hidden');
@@ -6324,11 +6379,19 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
     } else if (completedLvl === 1) {
       msgEl.textContent = r.message || '«Идём со мной в кино 17 декабря?»';
     } else if (isShardWin) {
-      const shN = Number(r.lastShardAward?.shards || 4);
-      msgEl.textContent =
-        r.lastShardAward?.merged && r.lastShardAward?.granted
-          ? '«Все 4 части билета собраны и склеены! Отправь целый бесплатный билет другу в Telegram — и пойдёте в кино вместе!»'
-          : `«Ты выбил кусок кинобилета (${shN} из 4)! Собери ещё ${Math.max(1, 4 - shN)} — они склеятся в целый бесплатный билет другу (без чеков)!»`;
+      const shN = Number(r.lastShardAward?.shards || state.profile?.ticketShards || 0);
+      if (r.lastShardAward?.merged && r.lastShardAward?.granted) {
+        msgEl.textContent =
+          '«Все 4 части билета собраны и склеены! Отправь целый бесплатный билет другу в Telegram — и пойдёте в кино вместе!»';
+      } else if (r.lastShardAward?.seedExcluded) {
+        msgEl.textContent =
+          '«Режим команды посева: ты прошёл уровень, а призовые билеты сохранены для реальных зрителей!»';
+      } else if (r.lastShardAward?.capReached) {
+        msgEl.textContent =
+          '«Лимит билетов на сегодня (6 шт.) разобран — держи +500 ⭐ в гонку ТОП-20 за Закрытый показ в Москве 17 декабря!»';
+      } else {
+        msgEl.textContent = `«Ты выбил кусок кинобилета (${Math.max(1, shN)} из 4)! Собери ещё ${Math.max(1, 4 - Math.max(1, shN))} — они склеятся в целый бесплатный билет другу (без чеков)!»`;
+      }
     } else if (completedLvl >= 4) {
       msgEl.textContent = `«${r.message || 'Спасибо, что вытащил меня из бочки! Встретимся на премьере 17 декабря!'}»`;
     } else {
@@ -6392,10 +6455,9 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
     cinemaBtn?.setAttribute('hidden', '');
   } else if (completedLvl === 1) {
     state.finaleMode = 'l1_reply_yes';
-    if (nextEl) nextEl.textContent = 'Отправь другу: «Я тебя нашёл! Идём в кино!» — а дальше Раунд 2: найди пустую бочку, отправь другу скример и участвуй в розыгрыше билета!';
-    if (packText) packText.textContent = '🍿 ОТПРАВИТЬ ДРУГУ: «Я ТЕБЯ НАШЁЛ! ИДЁМ В КИНО!»';
-    if (cinemaText) cinemaText.textContent = '🎟 «Я ТЕБЯ НАШЁЛ! ЖДУ БИЛЕТ» → РАУНД 2';
-    cinemaBtn?.removeAttribute('hidden');
+    if (nextEl) nextEl.textContent = 'Отправь другу: «Я тебя нашёл! Идём в кино!» — и сразу погнали в Раунд 2 (запакуй друга, чтобы открыть Дуэли и билеты)!';
+    if (packText) packText.textContent = '🍿 ОТПРАВИТЬ ДРУГУ: «Я ТЕБЯ НАШЁЛ!» → РАУНД 2';
+    cinemaBtn?.setAttribute('hidden', '');
   } else if (r.lastShardAward?.merged && r.lastShardAward?.granted && Number(state.profile.pendingTicketsCount || 0) > 0) {
     state.finaleMode = 'next';
     document.querySelector('#screen-finale .finale-sheet')?.classList.add('is-ticket-mode');
