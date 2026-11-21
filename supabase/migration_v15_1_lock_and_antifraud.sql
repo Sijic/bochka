@@ -375,7 +375,6 @@ BEGIN
       premiere_score = LEAST(99.5, COALESCE(premiere_score, 0) + 20.0),
       lives = LEAST(12, COALESCE(lives, 0) + 3),
       lives_updated_at = now(),
-      has_social_connection = true,
       updated_at = now()
     WHERE uid = b.sender_uid;
 
