@@ -258,7 +258,15 @@ class WorkshopAudio {
       document.addEventListener('touchstart', wakeAudio, { passive: true, capture: true });
       document.addEventListener('click', wakeAudio, { passive: true, capture: true });
       document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) wakeAudio();
+        if (document.hidden) {
+          if (this.ctx && this.ctx.state === 'running') {
+            this._pausedByVisibility = true;
+            this.ctx.suspend().then(() => this._emitState()).catch(() => {});
+          }
+        } else {
+          this._pausedByVisibility = false;
+          wakeAudio();
+        }
       });
     }
 
@@ -1417,17 +1425,25 @@ class WorkshopAudio {
 
     const tickArpeggio = () => {
       if (!this._oceanActive) return;
-      const chordIdx = Math.floor(step / 8) % chords.length;
-      const noteIdx = step % 8;
-      pluckNote(chords[chordIdx][noteIdx]);
-      step += 1;
-      this._oceanTimers.push(window.setTimeout(tickArpeggio, 340));
+      if (typeof document === 'undefined' || !document.hidden) {
+        if (this.ctx && this.ctx.state === 'running' && this.enabled && !this._userMuted) {
+          const chordIdx = Math.floor(step / 8) % chords.length;
+          const noteIdx = step % 8;
+          pluckNote(chords[chordIdx][noteIdx]);
+          step += 1;
+        }
+      }
+      this._oceanArpTimer = window.setTimeout(tickArpeggio, 340);
     };
-    this._oceanTimers.push(window.setTimeout(tickArpeggio, 550));
+    this._oceanArpTimer = window.setTimeout(tickArpeggio, 550);
   }
 
   stopOceanEasterEggAudio() {
     this._oceanActive = false;
+    if (this._oceanArpTimer) {
+      clearTimeout(this._oceanArpTimer);
+      this._oceanArpTimer = null;
+    }
     if (Array.isArray(this._oceanTimers)) {
       this._oceanTimers.forEach((id) => clearTimeout(id));
       this._oceanTimers = [];

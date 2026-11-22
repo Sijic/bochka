@@ -365,7 +365,7 @@ Deno.serve(async (req: Request) => {
   // =========================================================================
   // 2. ЛЁГКИЕ СОЦИАЛЬНЫЕ ПУШИ МЕЖДУ ДРУЗЬЯМИ ИЗ ВЕБ-ИГРЫ / MINI APP
   // =========================================================================
-  if (body.clientAction || body.event) {
+  if (body.clientAction || body.event || body.action === "get_tg_avatar") {
     let verifiedCallerTgId: string | null = null;
     if (body.initData) {
       const check = await verifyTelegramInitData(String(body.initData), BOT_TOKEN);
@@ -375,7 +375,7 @@ Deno.serve(async (req: Request) => {
       verifiedCallerTgId = check.userId;
     }
 
-    const action = body.clientAction || body.event;
+    const action = body.clientAction || body.event || body.action;
 
     // v15.1 + v15.2: Нативная отправка карточки через Telegram WebApp.shareMessage (Bot API savePreparedInlineMessage)
     if (action === "prepare_share_message") {

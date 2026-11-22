@@ -165,8 +165,8 @@ export function initTelegram() {
   try {
     if (typeof tg.ready === 'function') tg.ready();
     if (typeof tg.expand === 'function') tg.expand();
-    if (typeof tg.disableVerticalSwipes === 'function') tg.disableVerticalSwipes();
     const hasVer = (v) => typeof tg.isVersionAtLeast === 'function' && tg.isVersionAtLeast(v);
+    if (hasVer('7.7') && typeof tg.disableVerticalSwipes === 'function') tg.disableVerticalSwipes();
     if (hasVer('6.1') && typeof tg.setHeaderColor === 'function') tg.setHeaderColor('#0d0d0d');
     if (hasVer('6.1') && typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor('#0d0d0d');
     const syncTgSafeAreas = () => {
@@ -307,7 +307,10 @@ export function requestTelegramWriteAccessIfNeeded({ force = false } = {}) {
       resolve({ ok: true, allowed: false, skipped: true });
       return;
     }
-    if (typeof tg.requestWriteAccess !== 'function') {
+    if (
+      typeof tg.requestWriteAccess !== 'function' ||
+      (typeof tg.isVersionAtLeast === 'function' && !tg.isVersionAtLeast('6.9'))
+    ) {
       resolve({ ok: false, allowed: false, unsupported: true });
       return;
     }
@@ -402,6 +405,7 @@ function _clearHapticTimers() {
 function _tgHaptic(kind, style) {
   const tg = getWebApp();
   if (!tg?.HapticFeedback) return;
+  if (typeof tg.isVersionAtLeast === 'function' && !tg.isVersionAtLeast('6.1')) return;
   try {
     if (kind === 'impact') tg.HapticFeedback.impactOccurred(style);
     else if (kind === 'notification') tg.HapticFeedback.notificationOccurred(style);
@@ -440,6 +444,10 @@ export const Haptics = {
   heavy() {
     _tgHaptic('impact', 'heavy');
     _navVibrate([48, 20, 34]);
+  },
+  warning() {
+    _tgHaptic('notification', 'warning');
+    _navVibrate([32, 36, 32]);
   },
   error() {
     _tgHaptic('notification', 'error');

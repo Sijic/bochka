@@ -4,7 +4,7 @@
 // ============================================================================
 import { Haptics } from './telegram.js';
 
-const MEDIA_SLOTS_URL = './assets/config/media_slots.json?v=160';
+const MEDIA_SLOTS_URL = './assets/config/media_slots.json?v=1612';
 const ARTIFACTS_STORAGE_KEY = 'bochka_v16_unlocked_artifacts';
 const TIL_LEVEL_STORAGE_KEY = 'bochka_v16_til_level';
 
@@ -16,7 +16,7 @@ const DEFAULT_MEDIA_SLOTS = {
     placeholder_caption: 'Здесь будет видео-приглашение от Тиля Швайгера',
     placeholder_hint: 'Подключается за 5 секунд в assets/config/media_slots.json → til_victory_video.video_url',
     video_url: '',
-    poster_url: './assets/keyed/ocean_till_sitting.webp',
+    poster_url: './public/cards/card_til_north_sea.webp?v=1553',
     duration_label: '0:18',
     director_badge: 'СНЯТО В РОССИИ · НАША КОМАНДА',
     director_title: 'Фильм снят русским режиссёром Алексеем Звонцовым',
@@ -211,6 +211,7 @@ function flushNextDuolingoCard() {
 
   const backdrop = el('div', `duo-card-backdrop is-tone-${tone}`);
   backdrop.id = 'duo-card-backdrop';
+  backdrop.dataset.sig = `${title || ''}|${body || ''}`;
   backdrop.setAttribute('role', 'dialog');
   backdrop.setAttribute('aria-modal', 'true');
 
@@ -283,7 +284,6 @@ export function showDuolingoCard(opts = {}) {
   if (cardQueue.some((q) => `${q.title || ''}|${q.body || ''}` === sig)) return;
   cardQueue.push(opts);
   flushNextDuolingoCard();
-  if (activeCardBackdrop) activeCardBackdrop.dataset.sig = sig;
 }
 
 export function isDuolingoCardOpen() {

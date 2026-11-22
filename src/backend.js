@@ -2746,7 +2746,7 @@ export async function fetchTelegramUserAvatarFallback() {
     const resp = await resilientFetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'get_tg_avatar', initData }),
+      body: JSON.stringify({ clientAction: 'get_tg_avatar', initData }),
     });
     if (!resp.ok) return '';
     const json = await resp.json().catch(() => null);

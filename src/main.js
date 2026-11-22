@@ -2097,12 +2097,11 @@ async function bootstrap() {
     state.entered = true;
     await openDuelTable(state.tg.duelRoomParam);
   } else if (state.tg?.teamSeedRole === 'prod') {
-    // v15.3 + v15.4.1: Продюсер зашёл по ссылке team_prod — сразу открываем упаковку и запрашиваем разрешение на пуши от бота!
+    // v15.3 + v15.4.1 + v16.1.2: Продюсер зашёл по ссылке team_prod — сразу открываем упаковку без блокирующей модалки!
     state.entered = true;
     applySeedPackModeUI(true);
     showScreen('pack');
     requestAndSyncWriteAccess();
-    showToast('🎬 Запакуй СЕБЯ в бочку 1 раз — получишь ОДНУ общую ссылку для всех друзей и чатов!');
   }
 
   // Если активирована сессия «ТЕСТ-БОГА» (/testbog/) — лениво монтируем плавающий пульт песочницы (0 запросов в БД)
@@ -2676,11 +2675,23 @@ function openOceanDirectScreen() {
   if (tw) tw.textContent = 'На небе только и разговоров, что о море и о бочке…';
 }
 
+let _enteringGateLock = false;
 async function enterWorkshopGate(withSound, { startTarget = 'auto' } = {}) {
+  // v16.1.2: Защита от двойного/тройного клика по кнопке входа (без дублей инициализации и модалок)
+  if (_enteringGateLock) return;
+  _enteringGateLock = true;
   // v16.0: СИНХРОННАЯ разблокировка AudioContext ПЕРВОЙ строкой — ДО любых await/fetch/setTimeout!
   audio.unlockSync(Boolean(withSound));
   if (withSound) audio.playSoundReadyClick();
   refreshSoundButtonLabel();
+  try {
+    await _enterWorkshopGateBody(withSound, { startTarget });
+  } finally {
+    _enteringGateLock = false;
+  }
+}
+
+async function _enterWorkshopGateBody(withSound, { startTarget = 'auto' } = {}) {
 
   // Не пугаем новичка запросом пушей до 1-й игры — запрашиваем только у вернувшихся игроков
   if (state.profile?.hasPlayedSolo || Number(state.profile?.currentLevel || 1) >= 2) {
@@ -3192,7 +3203,7 @@ async function startViralFriendRound(pack) {
     lastUrgentSec: 9,
   };
 
-  if (!pack?.photoUrl) {
+  if (!portraitDataUrl && !pack?.photoUrl) {
     processPortraitToWebP(null, pack?.frameStyle || 'flashlight')
       .then((fallbackGraded) => {
         if (fallbackGraded?.dataUrl) {

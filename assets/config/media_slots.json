@@ -7,7 +7,7 @@
     "placeholder_caption": "Здесь будет видео-приглашение от Тиля Швайгера",
     "placeholder_hint": "Слот готов к замене: добавьте MP4 в assets/config/media_slots.json → til_victory_video.video_url",
     "video_url": "",
-    "poster_url": "./assets/keyed/ocean_till_sitting.webp",
+    "poster_url": "./public/cards/card_til_north_sea.webp?v=1553",
     "duration_label": "0:18",
     "director_badge": "СНЯТО В РОССИИ · НАША КОМАНДА",
     "director_title": "Фильм снят русским режиссёром Алексеем Звонцовым",
