@@ -4,6 +4,7 @@
 // Весь DOM строится безопасно (createElement + textContent, без innerHTML).
 // ============================================================================
 import { getCloudDb, getViewerUid } from './backend.js';
+import { getCachedMediaSlots, getUnlockedArtifactLevels, openArtifactPlayerModal } from './v16_ux.js';
 
 export const CHIP_DUEL_UNLOCK_INVITES = 3;
 
@@ -291,7 +292,7 @@ function showTrophyDetailOverlay(modalHost, trophy) {
   modalHost.appendChild(ov);
 }
 
-export function renderHallOfFameModal(bodyEl, data, { onInviteFriend, onOpenChipDuel } = {}) {
+export function renderHallOfFameModal(bodyEl, data, { onInviteFriend, onOpenChipDuel, onPlayTil, initialTab = 'artifacts' } = {}) {
   if (!bodyEl) return;
   bodyEl.textContent = '';
 
@@ -304,7 +305,79 @@ export function renderHallOfFameModal(bodyEl, data, { onInviteFriend, onOpenChip
   const bonusPct = Number(data?.rareDropBonusPct || 0);
   const trophies = Array.isArray(data?.trophies) ? data.trophies : [];
 
-  // 1. Карточка статуса игрока + прогресс-бар до Ур. 3
+  const slots = getCachedMediaSlots().level_artifacts || [];
+  const unlockedLevels = new Set(getUnlockedArtifactLevels());
+  const unlockedArtCount = slots.filter((s) => unlockedLevels.has(Number(s.level))).length;
+
+  // v16.0: 2 понятные полки коллекции — «Артефакты фильма» (видео-кружки) и «Друзья из ветки»
+  const tabBar = el('div', 'hof-tabs-v16');
+  const tabArt = el('button', 'hof-tab-btn', `🎬 Артефакты фильма (${unlockedArtCount}/${slots.length})`);
+  tabArt.type = 'button';
+  tabArt.id = 'btn-hof-tab-artifacts';
+  const tabFriends = el('button', 'hof-tab-btn', `👥 Друзья из ветки (${trophies.length})`);
+  tabFriends.type = 'button';
+  tabFriends.id = 'btn-hof-tab-friends';
+  tabBar.appendChild(tabArt);
+  tabBar.appendChild(tabFriends);
+  bodyEl.appendChild(tabBar);
+
+  // --- ПОЛКА 1: АРТЕФАКТЫ ФИЛЬМА (ВИДЕО-КРУЖКИ ПО УРОВНЯМ) ---
+  const paneArt = el('div', 'hof-pane-v16');
+  paneArt.id = 'hof-pane-artifacts';
+
+  const artIntro = el(
+    'p',
+    'hof-art-intro',
+    'Проходи уровни с Тилем и собирай короткие видео-кружки со съёмок фильма «БОЧКА». Нажми на открытый кружок, чтобы пересмотреть.'
+  );
+  paneArt.appendChild(artIntro);
+
+  const artGrid = el('div', 'hof-chips-grid hof-artifacts-grid');
+  artGrid.id = 'hof-artifacts-grid';
+  for (const slot of slots) {
+    const isOpen = unlockedLevels.has(Number(slot.level));
+    const btn = el('button', `hof-chip-item hof-art-item${isOpen ? ' is-open' : ' is-locked-art'}`);
+    btn.type = 'button';
+    btn.dataset.artifactLevel = String(slot.level);
+
+    const ring = el('div', 'hof-chip-lid hof-art-lid');
+    const img = document.createElement('img');
+    img.src = safeImgUrl(slot.poster_url);
+    img.alt = String(slot.title || `Артефакт ${slot.level}`);
+    img.loading = 'lazy';
+    ring.appendChild(img);
+
+    ring.appendChild(el('span', 'hof-art-play-pill', isOpen ? '▶' : '🔒'));
+    ring.appendChild(el('span', 'hof-chip-serial', `УР. ${slot.level}`));
+    btn.appendChild(ring);
+
+    btn.appendChild(el('span', 'hof-chip-rarity-pill', isOpen ? slot.duration_label || 'ВИДЕО' : 'ЗАКРЫТО'));
+    btn.appendChild(el('span', 'hof-chip-label', isOpen ? slot.title : `Уровень ${slot.level} с Тилем`));
+
+    btn.addEventListener('click', () => {
+      if (isOpen) {
+        openArtifactPlayerModal(slot);
+      } else if (typeof onPlayTil === 'function') {
+        onPlayTil(Number(slot.level));
+      }
+    });
+    artGrid.appendChild(btn);
+  }
+  paneArt.appendChild(artGrid);
+
+  if (typeof onPlayTil === 'function') {
+    const playTilBtn = el('button', 'btn-primary btn-full btn-compact hof-play-til-btn', '▶ ИГРАТЬ С ТИЛЕМ ЗА НОВЫЙ АРТЕФАКТ');
+    playTilBtn.type = 'button';
+    playTilBtn.id = 'btn-hof-play-til';
+    playTilBtn.addEventListener('click', () => onPlayTil());
+    paneArt.appendChild(playTilBtn);
+  }
+  bodyEl.appendChild(paneArt);
+
+  // --- ПОЛКА 2: ДРУЗЬЯ ИЗ ВЕТКИ (+ ФИШКИ И ДУЭЛЬ НА ФИШКИ) ---
+  const paneFriends = el('div', 'hof-pane-v16');
+  paneFriends.id = 'hof-pane-friends';
+
   const statusCard = el('div', `hof-status-card${unlocked ? ' is-unlocked' : ''}`);
   const statusHead = el('div', 'hof-status-head');
   statusHead.appendChild(el('span', 'hof-level-badge', `УРОВЕНЬ ${level} · ${levelTitle.toUpperCase()}`));
@@ -314,8 +387,8 @@ export function renderHallOfFameModal(bodyEl, data, { onInviteFriend, onOpenChip
   if (unlocked) {
     const unlockedMsg =
       bonusPct > 0
-        ? `Дуэль на фишки открыта! Бонус Хранителя Зала: +${bonusPct}% к шансу редкой карты фильма.`
-        : `Дуэль на фишки открыта! Приглашено друзей: ${invited}. На 5 друзьях (Ур. 4) откроется +10% к дропу редких карт.`;
+        ? `Дуэль на фишки открыта! Бонус Хранителя Зала: +${bonusPct}% к шансу редкой фишки.`
+        : `Дуэль на фишки открыта! Приглашено друзей: ${invited}.`;
     statusCard.appendChild(el('p', 'hof-status-sub', unlockedMsg));
   } else {
     statusCard.appendChild(
@@ -334,34 +407,33 @@ export function renderHallOfFameModal(bodyEl, data, { onInviteFriend, onOpenChip
   progTrack.appendChild(progFill);
   statusCard.appendChild(progTrack);
 
-  const invBtn = el('button', 'btn-secondary btn-full btn-compact hof-invite-btn', '📲 ПРИГЛАСИТЬ ДРУГА');
+  const invBtn = el('button', 'btn-secondary btn-full btn-compact hof-invite-btn', '🛢 СПРЯТАТЬ ДРУГА В БОЧКЕ');
   invBtn.type = 'button';
   invBtn.id = 'btn-hof-invite-friend';
   invBtn.addEventListener('click', () => {
     if (typeof onInviteFriend === 'function') onInviteFriend();
   });
   statusCard.appendChild(invBtn);
-  bodyEl.appendChild(statusCard);
+  paneFriends.appendChild(statusCard);
 
-  // 2. Сетка 3 фишки в ряд
   const gridTitle = el(
     'div',
     'hof-section-title',
-    trophies.length ? `ТВОЯ ЛИЧНАЯ ПОЛКА (${trophies.length})` : 'ТВОЯ ЛИЧНАЯ ПОЛКА'
+    trophies.length ? `ФИШКИ ДРУЗЕЙ ИЗ ВЕТКИ (${trophies.length})` : 'ФИШКИ ДРУЗЕЙ ИЗ ВЕТКИ'
   );
-  bodyEl.appendChild(gridTitle);
+  paneFriends.appendChild(gridTitle);
 
   if (trophies.length === 0) {
     const empty = el('div', 'hof-empty-box');
-    empty.appendChild(el('strong', '', 'Полка пока пустая — пора добыть первую фишку!'));
+    empty.appendChild(el('strong', '', 'Здесь появятся фото-фишки и аватарки друзей!'));
     empty.appendChild(
       el(
         'p',
         '',
-        'Вскрывай бочки друзей из своей ветки, проходи Ур. 3 / Ур. 5 и экран Тиля, чтобы собирать фото-фишки и номерные карточки фильма.'
+        'Вскрывай бочки друзей из своей ветки или отправляй свои — их фото-фишки сохранятся здесь и пригодятся в Дуэли на фишки.'
       )
     );
-    bodyEl.appendChild(empty);
+    paneFriends.appendChild(empty);
   } else {
     const grid = el('div', 'hof-chips-grid');
     grid.id = 'hof-chips-grid';
@@ -374,10 +446,9 @@ export function renderHallOfFameModal(bodyEl, data, { onInviteFriend, onOpenChip
         })
       );
     }
-    bodyEl.appendChild(grid);
+    paneFriends.appendChild(grid);
   }
 
-  // 3. Нижняя кнопка перехода в «Дуэль на фишки»
   const ctaWrap = el('div', 'hof-footer-cta');
   const duelBtn = el(
     'button',
@@ -392,7 +463,7 @@ export function renderHallOfFameModal(bodyEl, data, { onInviteFriend, onOpenChip
     'span',
     'hof-cta-sub',
     unlocked
-      ? 'Выбери фишку на кон и забери карточку соперника'
+      ? 'Выбери фишку на кон и забери фишку соперника'
       : `Откроется на 3 уровне (ещё ${pluralFriends(remaining)})`
   );
   duelBtn.appendChild(mainLine);
@@ -409,7 +480,19 @@ export function renderHallOfFameModal(bodyEl, data, { onInviteFriend, onOpenChip
   });
 
   ctaWrap.appendChild(duelBtn);
-  bodyEl.appendChild(ctaWrap);
+  paneFriends.appendChild(ctaWrap);
+  bodyEl.appendChild(paneFriends);
+
+  const setActiveTab = (name) => {
+    const isArt = name === 'artifacts';
+    tabArt.classList.toggle('is-active', isArt);
+    tabFriends.classList.toggle('is-active', !isArt);
+    paneArt.hidden = !isArt;
+    paneFriends.hidden = isArt;
+  };
+  tabArt.addEventListener('click', () => setActiveTab('artifacts'));
+  tabFriends.addEventListener('click', () => setActiveTab('friends'));
+  setActiveTab(initialTab === 'friends' ? 'friends' : 'artifacts');
 }
 
 export function renderDuelChipPicker(

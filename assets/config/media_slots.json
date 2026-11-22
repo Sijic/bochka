@@ -1,0 +1,78 @@
+{
+  "version": "16.0",
+  "readme": "Чтобы подключить реальное видео вместо заглушки, укажите путь к MP4-файлу в поле video_url (например, './assets/video/til_invite.mp4' или './assets/video/artifact_lvl1.mp4') и пересоберите проект (npm run build).",
+  "til_victory_video": {
+    "id": "til_victory_invite",
+    "title": "Приглашение в кино от Тиля Швайгера",
+    "placeholder_caption": "Здесь будет видео-приглашение от Тиля Швайгера",
+    "placeholder_hint": "Слот готов к замене: добавьте MP4 в assets/config/media_slots.json → til_victory_video.video_url",
+    "video_url": "",
+    "poster_url": "./assets/keyed/ocean_till_sitting.webp",
+    "duration_label": "0:18",
+    "director_badge": "СНЯТО В РОССИИ · НАША КОМАНДА",
+    "director_title": "Фильм снят русским режиссёром Алексеем Звонцовым",
+    "director_text": "Триллер «БОЧКА» сняла наша команда («Киноцех» и ООО «БИГСКРИНПРОДАКШН») под руководством русского режиссёра Алексея Звонцова вместе с Тилем Швайгером. В кинотеатрах с 17 декабря!"
+  },
+  "level_artifacts": [
+    {
+      "id": "artifact_lvl_1",
+      "level": 1,
+      "title": "Секрет цеха «Корпус Б»",
+      "subtitle": "Видео-кружок со съёмок · Уровень 1",
+      "placeholder_caption": "Видео-кружок уровня 1: как строили настоящий цех",
+      "video_url": "",
+      "poster_url": "./public/cards/card_workshop_hall.webp?v=1553",
+      "duration_label": "0:15"
+    },
+    {
+      "id": "artifact_lvl_2",
+      "level": 2,
+      "title": "Внутри 200-литровой бочки",
+      "subtitle": "Видео-кружок со съёмок · Уровень 2",
+      "placeholder_caption": "Видео-кружок уровня 2: как снимали сцену побега",
+      "video_url": "",
+      "poster_url": "./public/cards/card_boy_escape.webp?v=1553",
+      "duration_label": "0:14"
+    },
+    {
+      "id": "artifact_lvl_3",
+      "level": 3,
+      "title": "Взгляд сквозь крышку",
+      "subtitle": "Видео-кружок со съёмок · Уровень 3",
+      "placeholder_caption": "Видео-кружок уровня 3: операторская фишка с крышкой",
+      "video_url": "",
+      "poster_url": "./public/cards/card_barrel_eye.webp?v=1553",
+      "duration_label": "0:16"
+    },
+    {
+      "id": "artifact_lvl_4",
+      "level": 4,
+      "title": "Пастор · Крупный план",
+      "subtitle": "Видео-кружок со съёмок · Уровень 4",
+      "placeholder_caption": "Видео-кружок уровня 4: Тиль Швайгер на площадке",
+      "video_url": "",
+      "poster_url": "./public/cards/card_pastor_vigil.webp?v=1553",
+      "duration_label": "0:19"
+    },
+    {
+      "id": "artifact_lvl_5",
+      "level": 5,
+      "title": "Огонь и овчарка в кадре",
+      "subtitle": "Видео-кружок со съёмок · Уровень 5",
+      "placeholder_caption": "Видео-кружок уровня 5: реальный трюк с огнём",
+      "video_url": "",
+      "poster_url": "./public/cards/card_fire_dog.webp?v=1553",
+      "duration_label": "0:17"
+    },
+    {
+      "id": "artifact_lvl_6",
+      "level": 6,
+      "title": "Режиссёр Алексей Звонцов и Тиль",
+      "subtitle": "Финальный видео-кружок · Уровень 6",
+      "placeholder_caption": "Видео-кружок уровня 6: закадровая история фильма",
+      "video_url": "",
+      "poster_url": "./public/cards/card_til_north_sea.webp?v=1553",
+      "duration_label": "0:22"
+    }
+  ]
+}

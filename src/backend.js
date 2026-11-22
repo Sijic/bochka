@@ -10,10 +10,62 @@ const PROFILE_STORAGE_KEY = 'bochka_v3_profile';
 const UID_STORAGE_KEY = 'bochka_v2_uid';
 const UI_STAGE_STORAGE_KEY = 'bochka_v6_ui_stage';
 
+// v16.0: Устойчивый fetch с таймаутом и 2 автоматическими ретраями для РФ и Беларуси
+const SUPABASE_TIMEOUT_MS = 12000;
+const SUPABASE_RETRIES = 2;
+
+export async function resilientFetch(input, init = {}) {
+  let lastErr = null;
+  for (let attempt = 0; attempt <= SUPABASE_RETRIES; attempt += 1) {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const externalSignal = init?.signal;
+    const onExtAbort = () => controller?.abort();
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        controller?.abort();
+      } else {
+        externalSignal.addEventListener('abort', onExtAbort, { once: true });
+      }
+    }
+    const timerId = controller
+      ? setTimeout(() => {
+          try {
+            controller.abort();
+          } catch { /* ignore */ }
+        }, SUPABASE_TIMEOUT_MS)
+      : null;
+
+    try {
+      const resp = await fetch(input, {
+        ...init,
+        signal: controller ? controller.signal : externalSignal,
+      });
+      if (timerId) clearTimeout(timerId);
+      if (externalSignal) externalSignal.removeEventListener('abort', onExtAbort);
+      // Повторяем только на 502/503/504/429 (временные сетевые сбои)
+      if (attempt < SUPABASE_RETRIES && (resp.status === 429 || resp.status >= 502)) {
+        await new Promise((r) => setTimeout(r, 420 * (attempt + 1)));
+        continue;
+      }
+      return resp;
+    } catch (err) {
+      if (timerId) clearTimeout(timerId);
+      if (externalSignal) externalSignal.removeEventListener('abort', onExtAbort);
+      lastErr = err;
+      if (externalSignal?.aborted || attempt >= SUPABASE_RETRIES) {
+        throw err;
+      }
+      await new Promise((r) => setTimeout(r, 450 * (attempt + 1)));
+    }
+  }
+  throw lastErr || new Error('network_failed');
+}
+
 export const supabase =
   ENV.supabaseUrl && ENV.supabaseAnonKey
     ? createClient(ENV.supabaseUrl, ENV.supabaseAnonKey, {
         auth: { persistSession: false },
+        global: { fetch: resilientFetch },
       })
     : null;
 
@@ -148,6 +200,7 @@ export async function createBarrelPack({
   seedTargetHandle = '',
   isBroadcast = false,
   broadcastPrefix = '',
+  autoAvatar = false,
 }) {
   const id = randomShortId(7);
   const cleanZone = Math.max(1, Math.min(4, Number(zoneId) || 1));
@@ -170,7 +223,9 @@ export async function createBarrelPack({
     'siren_cam',
   ]);
   const cleanScreamer = validScreamers.has(screamerType) ? screamerType : 'saw_scream';
-  const encodedFrame = `${String(frameStyle || 'flashlight').split(':z')[0]}:z${cleanZone}:s_${cleanScreamer}`;
+  const effectiveMode = autoAvatar ? 'auto_avatar' : mode;
+  const baseFrameStyle = autoAvatar ? 'auto_avatar' : String(frameStyle || 'flashlight').split(':z')[0];
+  const encodedFrame = `${baseFrameStyle}:z${cleanZone}:s_${cleanScreamer}`;
   const senderUid = getViewerUid(tgUser);
   const senderTgId = tgUser?.id || '';
   const senderUsername = tgUser?.username || '';
@@ -185,7 +240,7 @@ export async function createBarrelPack({
 
   if (db) {
     try {
-      if (processedImage?.blob) {
+      if (!autoAvatar && processedImage?.blob) {
         const imgExt = processedImage.ext || (processedImage.blob.type === 'image/jpeg' ? 'jpg' : 'webp');
         const photoPath = `portraits/${id}.${imgExt}`;
         const { error: upErr } = await db.storage
@@ -221,7 +276,7 @@ export async function createBarrelPack({
 
       const { data: rpcRes, error: rpcErr } = await db.rpc('create_barrel_pack_rpc', {
         p_short_id: id,
-        p_mode: mode,
+        p_mode: effectiveMode,
         p_message: cleanMsg,
         p_frame_style: encodedFrame,
         p_sender_uid: senderUid,
@@ -254,12 +309,13 @@ export async function createBarrelPack({
   const localPacks = readLocalPacks();
   localPacks[id] = {
     id,
-    mode,
+    mode: effectiveMode,
+    autoAvatar: Boolean(autoAvatar),
     message: cleanMsg,
-    photoUrl: remotePhotoUrl || '',
+    photoUrl: autoAvatar ? '' : (remotePhotoUrl || ''),
     voiceUrl: remoteVoiceUrl || '',
-    hasLocalMedia: true,
-    frameStyle: String(frameStyle || 'flashlight').split(':z')[0],
+    hasLocalMedia: !autoAvatar,
+    frameStyle: baseFrameStyle,
     zoneId: cleanZone,
     screamerType: cleanScreamer,
     targetIndex,
@@ -377,11 +433,13 @@ export async function loadBarrelPack(rawParam) {
         const rawFs = String(data.frame_style || 'flashlight');
         const [cleanFs, restPart = ''] = rawFs.split(':z');
         const [zStr = '1', scrStr = 'weld'] = restPart.split(':s_');
+        const isAutoAv = Boolean(data.mode === 'auto_avatar' || cleanFs === 'auto_avatar');
         return {
           id: data.id,
           mode: data.mode || 'friend',
+          autoAvatar: isAutoAv,
           message: data.message || '',
-          photoUrl,
+          photoUrl: isAutoAv ? '' : photoUrl,
           voiceUrl,
           frameStyle: cleanFs || 'flashlight',
           zoneId: Math.max(1, Math.min(4, Number(zStr) || 1)),
@@ -2673,6 +2731,30 @@ export async function reclaimServerTicketPass(tgUser = null, passId = '') {
   } catch (err) {
     return { ok: false, reason: err?.message || 'network_error' };
   }
+}
+
+/**
+ * v16.0: Серверный фолбэк аватарки друга через Bot API getUserProfilePhotos (для режима auto_avatar).
+ * Запрашивает ТОЛЬКО аватарку текущего авторизованного через Telegram initData пользователя.
+ */
+export async function fetchTelegramUserAvatarFallback() {
+  const endpoint = ENV.tgNotifyWebhook;
+  if (!endpoint || isTestBogActive()) return '';
+  const initData = typeof window !== 'undefined' ? String(window.Telegram?.WebApp?.initData || '') : '';
+  if (!initData) return '';
+  try {
+    const resp = await resilientFetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'get_tg_avatar', initData }),
+    });
+    if (!resp.ok) return '';
+    const json = await resp.json().catch(() => null);
+    if (json?.ok && json?.hasAvatar && typeof json.dataUrl === 'string' && json.dataUrl.startsWith('data:image/')) {
+      return json.dataUrl;
+    }
+  } catch { /* fallback handled by caller */ }
+  return '';
 }
 
 function safeWriteJson(k, obj) {

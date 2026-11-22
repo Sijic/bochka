@@ -9,6 +9,11 @@ const RUNTIME_ASSETS = [
   'public/legal.html',
   'src/legal.js',
   'src/trophies.js',
+  'src/v16_ux.js',
+  'src/til_game.js',
+  'assets/config/media_slots.json',
+  'public/vendor/telegram-web-app.js',
+  'public/fonts/fonts.css',
   'public/cards/card_workshop_hall.webp',
   'public/cards/card_boy_escape.webp',
   'public/cards/card_father_shadow.webp',
@@ -131,6 +136,23 @@ function stripStaticImportMapAndCopyAssets() {
         }
       };
       copyDirRec(sfxRoot, '');
+
+      // v16.0: Рекурсивно копируем public/fonts/* и public/vendor/* (0 внешних CDN для РФ/РБ)
+      for (const staticDir of ['fonts', 'vendor']) {
+        const srcStatic = path.join(root, 'public', staticDir);
+        if (!fs.existsSync(srcStatic)) continue;
+        for (const ent of fs.readdirSync(srcStatic, { withFileTypes: true })) {
+          if (ent.isDirectory()) continue;
+          const s = path.join(srcStatic, ent.name);
+          for (const dst of [
+            path.join(root, outDir, 'public', staticDir, ent.name),
+            path.join(root, outDir, staticDir, ent.name),
+          ]) {
+            fs.mkdirSync(path.dirname(dst), { recursive: true });
+            fs.copyFileSync(s, dst);
+          }
+        }
+      }
 
       // Рекурсивно копируем public/textures/* (Patch CC0 PBR-ржавчина + HDRI цеха v8.1)
       const texRoot = path.join(root, 'public', 'textures');

@@ -137,21 +137,58 @@ class WorkshopAudio {
     this.cleanVoiceSrc = null;
     this.cleanFallbackAudio = null;
     this._userMuted = false;
+    this._silentHtmlAudio = null;
+    this._stateListeners = new Set();
   }
 
-  async unlock(withSound = true) {
+  onStateChange(fn) {
+    if (typeof fn === 'function') this._stateListeners.add(fn);
+    return () => this._stateListeners.delete(fn);
+  }
+
+  _emitState() {
+    const audible = this.isActuallyAudible();
+    for (const fn of this._stateListeners) {
+      try { fn({ enabled: this.enabled, audible, state: this.ctx?.state || 'none' }); } catch { /* ignore */ }
+    }
+  }
+
+  isActuallyAudible() {
+    if (!this.enabled || this._userMuted) return false;
+    if (!this.ctx) return false;
+    return this.ctx.state === 'running';
+  }
+
+  /**
+   * v16.0: СИНХРОННАЯ разблокировка аудио прямо в первой строке pointerdown/click
+   * (без await/setTimeout/fetch — работает в iOS Safari, Telegram iOS WKWebView и Android WebView!).
+   */
+  unlockSync(withSound = true) {
     this.enabled = Boolean(withSound);
     this._userMuted = !this.enabled;
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return;
+    this.modalDucked = false;
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.audioSession) {
+        navigator.audioSession.type = 'playback';
+      }
+    } catch { /* ignore */ }
+
+    const AudioCtx = typeof window !== 'undefined' ? (window.AudioContext || window.webkitAudioContext) : null;
+    if (!AudioCtx) {
+      this._emitState();
+      return;
+    }
 
     if (!this.ctx) {
-      this.ctx = new AudioCtx();
+      const preCtx = typeof window !== 'undefined' ? window.__bochkaUnlockedCtx : null;
+      this.ctx = preCtx && preCtx.state !== 'closed' ? preCtx : new AudioCtx();
+      if (typeof window !== 'undefined') window.__bochkaUnlockedCtx = this.ctx;
+
       this.master = this.ctx.createGain();
-      this.master.gain.value = (this.enabled && !this.modalDucked) ? 0.96 : 0.0;
+      this.master.gain.value = this.enabled ? 0.96 : 0.0;
       this.master.connect(this.ctx.destination);
 
-      // Пиковый компрессор-лимитер на 0 dBFS для максимально мощных кино-скримеров на телефоне и ПК
       const comp = this.ctx.createDynamicsCompressor();
       comp.threshold.value = -3;
       comp.knee.value = 2;
@@ -166,40 +203,83 @@ class WorkshopAudio {
       this.noiseBuffer = this._createNoiseBuffer(2.5);
       this._setupListener(0, 1.55, 4.6);
       this._rebuildPanners();
+
+      this.ctx.onstatechange = () => this._emitState();
     }
 
-    if (this.ctx.state === 'suspended' && this.enabled) {
+    if (this.enabled) {
+      // 1. Синхронный resume() прямо внутри пользовательского жеста
+      if (this.ctx.state === 'suspended' || this.ctx.state === 'interrupted') {
+        try {
+          const p = this.ctx.resume();
+          if (p && typeof p.then === 'function') p.then(() => this._emitState()).catch(() => {});
+        } catch { /* ignore */ }
+      }
+      // 2. Синхронный 1-семпловый silent buffer — железный триггер iOS Safari / Telegram WebView
       try {
-        await this.ctx.resume();
+        const silentBuf = this.ctx.createBuffer(1, 1, 22050);
+        const src = this.ctx.createBufferSource();
+        src.buffer = silentBuf;
+        src.connect(this.ctx.destination);
+        src.start(0);
+      } catch { /* ignore */ }
+
+      // 3. Синхронная разблокировка HTML5 <audio> (обход аппаратного silent switch в iOS WebView)
+      try {
+        if (!this._silentHtmlAudio && typeof Audio !== 'undefined') {
+          const a = new Audio(
+            'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'
+          );
+          a.setAttribute('playsinline', '');
+          a.volume = 0.01;
+          this._silentHtmlAudio = a;
+        }
+        if (this._silentHtmlAudio) {
+          this._silentHtmlAudio.currentTime = 0;
+          const playP = this._silentHtmlAudio.play();
+          if (playP && typeof playP.catch === 'function') playP.catch(() => {});
+        }
       } catch { /* ignore */ }
     }
+
+    try {
+      this.master.gain.cancelScheduledValues(this.ctx.currentTime);
+      this.master.gain.setValueAtTime(this.enabled ? 0.94 : 0.0, this.ctx.currentTime);
+    } catch { /* ignore */ }
 
     if (!this._resumeHooksBound && typeof document !== 'undefined') {
       this._resumeHooksBound = true;
       const wakeAudio = () => {
-        if (this.enabled && this.ctx && this.ctx.state === 'suspended') {
-          this.ctx.resume().catch(() => {});
+        if (this.enabled && !this._userMuted && this.ctx && this.ctx.state !== 'running') {
+          this.ctx.resume().then(() => this._emitState()).catch(() => {});
         }
       };
-      document.addEventListener('pointerdown', wakeAudio, { passive: true });
+      document.addEventListener('pointerdown', wakeAudio, { passive: true, capture: true });
+      document.addEventListener('touchstart', wakeAudio, { passive: true, capture: true });
+      document.addEventListener('click', wakeAudio, { passive: true, capture: true });
       document.addEventListener('visibilitychange', () => {
         if (!document.hidden) wakeAudio();
       });
     }
 
-    this.master.gain.setTargetAtTime((this.enabled && !this.modalDucked) ? 0.92 : 0.0, this.ctx.currentTime, 0.04);
-
-    // v15.4.2: Не забиваем HTTP/2-канал 22 MP3-файлами при тихом входе и даём Three.js загрузиться первым!
     if (this.enabled && !this.loadingStarted) {
       this.loadingStarted = true;
-      window.setTimeout(() => {
-        this._preloadBuffers();
-      }, 900);
+      this._preloadBuffers();
     }
-
     if (this.enabled && !this.ambientStarted) {
       this._startAmbientBed();
     }
+    this._emitState();
+  }
+
+  async unlock(withSound = true) {
+    this.unlockSync(withSound);
+    if (this.ctx && this.ctx.state !== 'running' && this.enabled) {
+      try {
+        await this.ctx.resume();
+      } catch { /* ignore */ }
+    }
+    this._emitState();
 
     if (this.senderVoiceUrl && !this.senderVoiceBuffer) {
       await this.setSenderVoiceUrl(this.senderVoiceUrl);
@@ -208,30 +288,48 @@ class WorkshopAudio {
 
   async toggleSound() {
     if (!this.ctx) {
+      this.unlockSync(true);
       await this.unlock(true);
+      this.playSoundReadyClick();
       return this.enabled;
     }
-    this.enabled = !this.enabled;
+    const nextEnabled = !this.enabled || this.ctx.state !== 'running';
+    this.enabled = nextEnabled;
     this._userMuted = !this.enabled;
-    if (this.enabled && this.ctx.state === 'suspended') {
+    this.modalDucked = false;
+    if (this.enabled) {
+      this.unlockSync(true);
+      if (this.ctx.state !== 'running') {
+        try { await this.ctx.resume(); } catch { /* ignore */ }
+      }
+      this.playSoundReadyClick();
+    } else {
       try {
-        await this.ctx.resume();
+        this.master.gain.setTargetAtTime(0.0, this.ctx.currentTime, 0.03);
       } catch { /* ignore */ }
-    }
-    if (this.enabled && !this.loadingStarted) {
-      this.loadingStarted = true;
-      this._preloadBuffers();
-    }
-    if (this.enabled && !this.ambientStarted) {
-      this._startAmbientBed();
-    }
-    this.master.gain.setTargetAtTime((this.enabled && !this.modalDucked) ? 0.92 : 0.0, this.ctx.currentTime, 0.05);
-    if (!this.enabled) {
       this.stopListening();
       this.stopMuffledVoiceLoop();
       this.stopOceanEasterEggAudio();
     }
+    this._emitState();
     return this.enabled;
+  }
+
+  playSoundReadyClick() {
+    if (!this.ctx || !this.enabled || !this.master) return;
+    try {
+      const now = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(520, now);
+      osc.frequency.exponentialRampToValueAtTime(780, now + 0.075);
+      g.gain.setValueAtTime(0.22, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+      osc.connect(g).connect(this.master);
+      osc.start(now);
+      osc.stop(now + 0.095);
+    } catch { /* ignore */ }
   }
 
   setModalAudioDuck(ducked = false) {
@@ -1857,6 +1955,141 @@ class WorkshopAudio {
     nSrc.connect(bp).connect(g).connect(this.master);
     nSrc.start(now);
     nSrc.stop(now + 0.44);
+  }
+
+  // v16.0: Звуки 3-фазного режима «Играть с Тилем» (0 задержки, чистый WebAudio + буферы)
+  playTilBeat(step = 1) {
+    if (!this.ctx || !this.enabled || !this.master) return;
+    if (this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'sine';
+    const baseFreq = step === 1 ? 210 : 275;
+    osc.frequency.setValueAtTime(baseFreq, now);
+    osc.frequency.exponentialRampToValueAtTime(95, now + 0.14);
+    g.gain.setValueAtTime(0.45, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+    osc.connect(g).connect(this.master);
+    osc.start(now);
+    osc.stop(now + 0.17);
+  }
+
+  playTilGoSignal() {
+    if (!this.ctx || !this.enabled || !this.master) return;
+    if (this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
+    const now = this.ctx.currentTime;
+    [523.25, 659.25, 783.99].forEach((freq, i) => {
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + i * 0.025);
+      g.gain.setValueAtTime(0.28, now + i * 0.025);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.28 + i * 0.03);
+      osc.connect(g).connect(this.master);
+      osc.start(now + i * 0.025);
+      osc.stop(now + 0.34);
+    });
+  }
+
+  playTilFreezeAlert() {
+    if (!this.ctx || !this.enabled || !this.master) return;
+    if (this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(620, now);
+    osc.frequency.exponentialRampToValueAtTime(165, now + 0.22);
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(1400, now);
+    g.gain.setValueAtTime(0.36, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    osc.connect(lp).connect(g).connect(this.master);
+    osc.start(now);
+    osc.stop(now + 0.26);
+  }
+
+  playTilTap(progressPct = 50) {
+    if (!this.ctx || !this.enabled || !this.master) return;
+    if (this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
+    const now = this.ctx.currentTime;
+    const ratio = Math.max(0, Math.min(1, Number(progressPct || 0) / 100));
+    // Живой металлический стук бочки + нарастающий тон как в раннем Notcoin
+    const hitBuf = this.buffers.get('hitMid') || this.buffers.get('hitHigh');
+    if (hitBuf) {
+      const s = this.ctx.createBufferSource();
+      s.buffer = hitBuf;
+      s.playbackRate.value = 0.92 + ratio * 0.42;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.55, now);
+      s.connect(g).connect(this.master);
+      s.start(now);
+    }
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'triangle';
+    const f0 = 155 + ratio * 230;
+    osc.frequency.setValueAtTime(f0, now);
+    osc.frequency.exponentialRampToValueAtTime(62 + ratio * 45, now + 0.085);
+    g.gain.setValueAtTime(0.34, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.095);
+    osc.connect(g).connect(this.master);
+    osc.start(now);
+    osc.stop(now + 0.1);
+  }
+
+  playTilCaught() {
+    if (!this.ctx || !this.enabled || !this.master) return;
+    if (this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
+    const now = this.ctx.currentTime;
+    [195, 146.8].forEach((freq, i) => {
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(freq, now + i * 0.08);
+      osc.frequency.linearRampToValueAtTime(freq * 0.72, now + i * 0.08 + 0.16);
+      g.gain.setValueAtTime(0.34, now + i * 0.08);
+      g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.18);
+      osc.connect(g).connect(this.master);
+      osc.start(now + i * 0.08);
+      osc.stop(now + i * 0.08 + 0.2);
+    });
+  }
+
+  playTilBonus() {
+    if (!this.ctx || !this.enabled || !this.master) return;
+    if (this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
+    const now = this.ctx.currentTime;
+    [523.25, 659.25, 1046.5].forEach((freq, i) => {
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + i * 0.055);
+      g.gain.setValueAtTime(0.24, now + i * 0.055);
+      g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.055 + 0.24);
+      osc.connect(g).connect(this.master);
+      osc.start(now + i * 0.055);
+      osc.stop(now + i * 0.055 + 0.26);
+    });
+  }
+
+  playTilVictory() {
+    if (!this.ctx || !this.enabled || !this.master) return;
+    if (this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
+    const now = this.ctx.currentTime;
+    [392.0, 493.88, 587.33, 783.99, 1046.5].forEach((freq, i) => {
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + i * 0.065);
+      g.gain.setValueAtTime(0.26, now + i * 0.065);
+      g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.065 + 0.55);
+      osc.connect(g).connect(this.master);
+      osc.start(now + i * 0.065);
+      osc.stop(now + i * 0.065 + 0.58);
+    });
   }
 
   // v8.0: микрофон в цеху полностью отключён (запрос ТОЛЬКО на кнопке записи крика в окне упаковки)

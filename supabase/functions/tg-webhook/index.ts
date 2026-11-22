@@ -561,6 +561,70 @@ Deno.serve(async (req: Request) => {
       return jsonResp({ ok: true, uid: callerUid, tgWriteAccess: allowed, allowed });
     }
 
+    if (action === "get_tg_avatar") {
+      if (!verifiedCallerTgId) {
+        return jsonResp({ ok: false, error: "telegram_auth_required" }, 401);
+      }
+      const userIdNum = Number(verifiedCallerTgId);
+      if (!Number.isFinite(userIdNum) || userIdNum <= 0) {
+        return jsonResp({ ok: false, error: "invalid_tg_id" }, 400);
+      }
+      try {
+        const photosRes = await fetch(
+          `https://api.telegram.org/bot${BOT_TOKEN}/getUserProfilePhotos`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_id: userIdNum, limit: 1 }),
+          }
+        );
+        const photosJson = await photosRes.json();
+        const sizes = photosJson?.result?.photos?.[0];
+        if (!Array.isArray(sizes) || sizes.length === 0) {
+          return jsonResp({ ok: true, hasAvatar: false, dataUrl: "" });
+        }
+        // Pick medium-high size (~320-640px) for sharp barrel reveal without bloat
+        const picked = sizes.length >= 2 ? sizes[Math.min(sizes.length - 1, 1)] : sizes[0];
+        const fileId = picked?.file_id;
+        if (!fileId) {
+          return jsonResp({ ok: true, hasAvatar: false, dataUrl: "" });
+        }
+        const fileRes = await fetch(
+          `https://api.telegram.org/bot${BOT_TOKEN}/getFile`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ file_id: fileId }),
+          }
+        );
+        const fileJson = await fileRes.json();
+        const filePath = String(fileJson?.result?.file_path || "");
+        if (!filePath || filePath.includes("..")) {
+          return jsonResp({ ok: true, hasAvatar: false, dataUrl: "" });
+        }
+        const imgRes = await fetch(
+          `https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`
+        );
+        if (!imgRes.ok) {
+          return jsonResp({ ok: true, hasAvatar: false, dataUrl: "" });
+        }
+        const ab = await imgRes.arrayBuffer();
+        if (ab.byteLength === 0 || ab.byteLength > 450_000) {
+          return jsonResp({ ok: true, hasAvatar: false, dataUrl: "" });
+        }
+        const bytes = new Uint8Array(ab);
+        let bin = "";
+        for (let i = 0; i < bytes.length; i += 8192) {
+          bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
+        }
+        const mime = filePath.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+        const dataUrl = `data:${mime};base64,${btoa(bin)}`;
+        return jsonResp({ ok: true, hasAvatar: true, dataUrl });
+      } catch {
+        return jsonResp({ ok: true, hasAvatar: false, dataUrl: "" });
+      }
+    }
+
     if ((action === "barrel_opened" || action === "opened") && body.senderTgId) {
       if (body.barrelId) {
         const { data: bCheck } = await adminDb
