@@ -2719,6 +2719,11 @@ function ensureTil3DBarrelDuel() {
       onScreamerLoss: () => {
         triggerMiniScreamer(pickRandomBarrelSound());
       },
+      onRecoverFriend: () => {
+        delete document.body.dataset.tilDuel;
+        state.pack.forLifeRefill = true;
+        showScreen('pack');
+      },
       onVictory: async ({ level }) => {
         delete document.body.dataset.tilDuel;
         state.profile.hasPlayedSolo = true;
@@ -2727,21 +2732,34 @@ function ensureTil3DBarrelDuel() {
         saveLocalV9Flags();
         await loadMediaSlots().catch(() => {});
 
-        // Уровень 2 (6 бочек): нашли пустую бочку -> «Молодец! Закатай туда ДРУГА!» (+1/4 билета)
+        // Уровень 2 (6 бочек): если друг УЖЕ закатан после Ур.1 -> сразу на Ур.3 (8 бочек)! Если пропустил -> предлагаем закатать (+1/4)!
         if (lvl === 2) {
-          unlockArtifactLevel(1);
-          showDuolingoCard({
-            icon: '🛢',
-            badge: '✓ УР. 2 ПРОЙДЕН · 6 БОЧЕК',
-            title: 'Пустая бочка найдена! Закатай туда ДРУГА!',
-            body: 'Загрузи именно фото ДРУГА — он же себя будет искать! Звук-скример выберется случайно (1 из 10 реальных). За отправку получишь 1/4 билета другу!',
-            buttonText: '🛢 ЗАКАТАТЬ ДРУГА (+1/4 БИЛЕТА)',
-            tone: 'gold',
-            onConfirm: () => {
-              state.pack.forLifeRefill = false;
-              showScreen('pack');
-            },
-          });
+          const art = unlockArtifactLevel(1);
+          const alreadyPacked = Number(state.profile?.packedCount || 0) >= 1 || Number(state.profile?.ticketShards || 0) >= 1;
+          if (alreadyPacked) {
+            showArtifactUnlockedCard(art.level, {
+              bodyExtra: `🔥 6 закрытых бочек пройдено быстрее Тиля! Впереди Ур. 3 (8 бочек, 3 скримера) за 2/4 бесплатного билета другу!`,
+              buttonText: '👊 ДАЛЬШЕ: 8 БОЧЕК С ТИЛЕМ (УР. 3)',
+              secondaryText: '⚔️ ДУЭЛЬ 1×1 С ДРУГОМ',
+              onNext: () => openTil3DBarrelDuel(3),
+              onSecondary: () => openDuelTable(),
+            });
+          } else {
+            showDuolingoCard({
+              icon: '🛢',
+              badge: '✓ УР. 2 ПРОЙДЕН · 6 БОЧЕК',
+              title: 'Пустая бочка найдена! Закатай туда ДРУГА!',
+              body: 'Загрузи фото ДРУГА (он же себя будет искать!) или отправь в 1 клик с авто-аватаркой. За отправку получишь 1/4 билета другу!',
+              buttonText: '🛢 ЗАКАТАТЬ ДРУГА (+1/4 БИЛЕТА)',
+              secondaryText: '👊 ДАЛЬШЕ: 8 БОЧЕК (УР. 3)',
+              tone: 'gold',
+              onConfirm: () => {
+                state.pack.forLifeRefill = false;
+                showScreen('pack');
+              },
+              onSecondary: () => openTil3DBarrelDuel(3),
+            });
+          }
           return;
         }
 
@@ -3047,7 +3065,7 @@ async function startNewbieOnboardingRound() {
     : { name: 'ДРУГ В БОЧКЕ', quote: pickNextBarrelHeavenQuote() };
 
   const rawPortrait = './public/sprites/hero_boy_live.webp';
-  const targetIndex = 3;
+  const targetIndex = Math.floor(Math.random() * 4);
 
   // v9.2: Без робо-голоса! Голос играет ТОЛЬКО если его записал реальный друг в своей ссылке (?b=...).
   audio.setSenderVoiceUrl('');
@@ -4645,14 +4663,15 @@ async function handleBarrelStrike(index, worldPoint) {
   }
 
   // -------------------------------------------------------------------------
-  // РЕЖИМ 2 (v17.0): УРОВЕНЬ 1 (4 БОЧКИ · «НАЙДИ СЕБЯ / ДРУГА БЫСТРЕЕ ТИЛЯ!»)
-  // 1-я попытка (3 удара) -> жизни кончились -> СКРИМЕР проигрыша -> Трейлер VK (+3 ❤️) -> 4-й победный удар!
+  // РЕЖИМ 2 (v17.4): УРОВЕНЬ 1 (4 БОЧКИ · ЧЕСТНЫЙ РАНДОМ С 1-ГО УДАРА!)
+  // Попал в цель сразу (1-3 удар) -> мгновенно нашёл себя/друга!
+  // Промахнулся все 3 раза -> скример -> Трейлер VK (+3 ❤️) -> вскрывает последнюю бочку!
   // -------------------------------------------------------------------------
   if (r.modeType === 'viral') {
     r.attemptsUsed += 1;
 
-    // После просмотра трейлера VK (rescueStage >= 4) — мгновенно вскрываем оставшуюся бочку и находим себя/героя!
-    if (r.rescueStage >= 4 || r.attemptsUsed >= 4) {
+    // ЧЕСТНОЕ ПОПАДАНИЕ (с 1-го, 2-го или 3-го удара) ИЛИ вскрытие оставшейся бочки после трейлера VK!
+    if (index === r.targetIndex || r.rescueStage >= 4 || r.attemptsUsed >= 4) {
       r.targetIndex = index;
       r.attemptsLeft = 0;
       renderAttemptSquares(0, 3);
@@ -4661,17 +4680,9 @@ async function handleBarrelStrike(index, worldPoint) {
       scene.triggerStrikeFX(index, worldPoint);
       audio.playStrike(index);
       r.strikeLog.push(`[Удар ${r.attemptsUsed}: Вскрыл бочку за ${elapsedSec} сек]`);
-      state.watchChannel?.send('strike', { barrelIndex: index, rescued: true, hitTarget: true });
+      state.watchChannel?.send('strike', { barrelIndex: index, rescued: r.rescueStage >= 4, hitTarget: true });
       finishRound(true, { diveBarrelIndex: index, hitTarget: true });
       return;
-    }
-
-    // Первые 3 удара на Ур.1: цель прячется в последнюю закрытую бочку -> на 3-м ударе скример и трейлер VK за +3 ❤️!
-    const otherClosed = getUnstruckBarrelIndices().filter((i) => i !== index);
-    if (otherClosed.length > 0 && index === r.targetIndex) {
-      const nextTarget = otherClosed[Math.floor(Math.random() * otherClosed.length)];
-      r.targetIndex = nextTarget;
-      audio.setTargetIndex(nextTarget);
     }
 
     scene.triggerStrikeFX(index, worldPoint);
@@ -6329,13 +6340,18 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
           : 'МОЛОДЕЦ! ТЫ ВСКРЫЛ БОЧКУ БЫСТРЕЕ ТИЛЯ!',
       });
       showDuolingoCard({
-        icon: '👊',
+        icon: '🛢',
         badge: '✓ УРОВЕНЬ 1 ПРОЙДЕН · 4 БОЧКИ',
-        title: hasFriend ? 'Молодец! Ты нашёл себя в бочке!' : 'Молодец! Бочка вскрыта быстрее Тиля!',
-        body: 'Теперь сыграй с Тилем на 6 бочках — найди пустую бочку, чтобы закатать туда своего друга (+1/4 билета другу)!',
-        buttonText: '👊 ИГРАТЬ С ТИЛЕМ · 6 БОЧЕК (УР. 2)',
+        title: hasFriend ? 'Молодец! Ты нашёл себя в бочке!' : 'Молодец! Ты нашёл узника в бочке!',
+        body: 'Теперь закатай своего ДРУГА по его фото (или в 1 клик с авто-аватаркой) — он же себя будет искать! Сразу получишь 1/4 бесплатного билета другу, а дальше — схватка с Тилем на 6, 8, 12 и 16 бочках!',
+        buttonText: '🛢 ЗАКАТАТЬ ДРУГА (+1/4 БИЛЕТА)',
+        secondaryText: '👊 СРАЗУ К ТИЛЮ · 6 БОЧЕК (УР. 2)',
         tone: 'gold',
         onConfirm: () => {
+          state.pack.forLifeRefill = false;
+          showScreen('pack');
+        },
+        onSecondary: () => {
           openTil3DBarrelDuel(2);
         },
       });
@@ -6761,7 +6777,8 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
 }
 
 function showSentScreen({ wasLifeRefill = false, wasBroadcastPack = false, broadcastRole = '', prevRatingPct = null, packShardRes = null } = {}) {
-  const targetLvl = wasBroadcastPack && broadcastRole === 'prod' ? 1 : Math.max(3, Number(state.profile?.currentLevel || 3));
+  const nextTilLvl = Math.max(2, Math.min(5, Number(state.profile?.currentLevel || 2)));
+  const targetLvl = wasBroadcastPack && broadcastRole === 'prod' ? 1 : nextTilLvl;
   const spec = getWorkshopLevelSpec(targetLvl);
   const titleEl = document.getElementById('sent-title');
   const txt = document.getElementById('sent-text');
@@ -6831,13 +6848,15 @@ function showSentScreen({ wasLifeRefill = false, wasBroadcastPack = false, broad
         : '▶️ ПОИГРАТЬ В ЦЕХ — УРОВЕНЬ 1 (БЕЗ РОЗЫГРЫШЕЙ)';
     }
   } else {
+    const tilSpec = TIL_3D_LEVEL_SPECS[nextTilLvl] || TIL_3D_LEVEL_SPECS[2];
+    const bCount = tilSpec.barrels || 6;
     if (titleEl) titleEl.textContent = 'БОЧКА УЛЕТЕЛА ДРУГУ!';
     if (txt) {
       txt.textContent = packShardRes?.shards > 0
-        ? `Получена 1/4 часть бесплатного билета другу! Когда друг откроет бочку — бот сразу пришлёт пуш. А сейчас выходи против Тиля на 8 бочках!`
-        : 'Бочка улетела другу! Когда он откроет её — бот сразу пришлёт пуш. А сейчас — схватка с Тилем на 8 бочках за билет другу!';
+        ? `Получена ${packShardRes.shards}/4 часть бесплатного билета другу! Когда друг откроет бочку — бот сразу пришлёт пуш. А сейчас выходи против Тиля на ${bCount} закрытых бочках!`
+        : `Бочка улетела другу! Когда он откроет её — бот сразу пришлёт пуш. А сейчас — схватка с Тилем на ${bCount} закрытых бочках за билет другу!`;
     }
-    if (btnTxt) btnTxt.textContent = '👊 С ТИЛЕМ НА БИЛЕТ · 8 БОЧЕК (УР. 3)';
+    if (btnTxt) btnTxt.textContent = `👊 С ТИЛЕМ НА БИЛЕТ · ${bCount} БОЧЕК (УР. ${nextTilLvl})`;
   }
   showScreen('sent');
 }
@@ -9155,7 +9174,8 @@ function bindUIEvents() {
   document.getElementById('btn-pack-skip-to-til')?.addEventListener('click', () => {
     Haptics.light();
     if (!audio._userMuted) audio.unlockSync(true);
-    openTil3DBarrelDuel(3);
+    const nextTilLvl = Math.max(2, Math.min(5, Number(state.profile?.currentLevel || 2)));
+    openTil3DBarrelDuel(nextTilLvl);
   });
 
   document.getElementById('top-lives-pill')?.addEventListener('click', async () => {
@@ -10055,7 +10075,8 @@ function bindUIEvents() {
 
   document.getElementById('btn-sent-play')?.addEventListener('click', () => {
     if (!audio._userMuted) audio.unlockSync(true);
-    openTil3DBarrelDuel(3);
+    const nextTilLvl = Math.max(2, Math.min(5, Number(state.profile?.currentLevel || 2)));
+    openTil3DBarrelDuel(nextTilLvl);
   });
 
   document.getElementById('btn-pass-say-thanks')?.addEventListener('click', () => {

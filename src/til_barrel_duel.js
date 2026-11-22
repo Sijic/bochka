@@ -18,11 +18,13 @@ function el(tag, className = '', text = '') {
 }
 
 export class Til3DBarrelDuel {
-  constructor({ hostEl, getScene, onVictory, onGoOcean, onExit, onScreamerHit, onScreamerLoss } = {}) {
+  constructor({ hostEl, getScene, onVictory, onGoOcean, onRecoverFriend, onWatchTrailer, onExit, onScreamerHit, onScreamerLoss } = {}) {
     this.hostEl = hostEl;
     this.getScene = getScene;
     this.onVictory = onVictory;
     this.onGoOcean = onGoOcean;
+    this.onRecoverFriend = onRecoverFriend;
+    this.onWatchTrailer = onWatchTrailer;
     this.onExit = onExit;
     this.onScreamerHit = onScreamerHit || onScreamerLoss;
     this.onScreamerLoss = onScreamerLoss || onScreamerHit;
@@ -265,7 +267,7 @@ export class Til3DBarrelDuel {
       // Тиль реально вскрыл целевую бочку быстрее игрока!
       audio.playTilCaught();
       Haptics.error();
-      this._setSignal('caught', 'ТИЛЬ НАШЁЛ БОЧКУ РАНЬШЕ ТЕБЯ!', 'Ха-ха! Я вскрыл её первым! Встретимся у Северного моря!');
+      this._setSignal('caught', 'ТИЛЬ НАШЁЛ БОЧКУ РАНЬШЕ ТЕБЯ!', 'Ха-ха! Я вскрыл её первым! Бери реванш в цеху!');
       this._finishDuel(false, 'til_faster');
       return;
     }
@@ -334,7 +336,7 @@ export class Til3DBarrelDuel {
       if (this.lives <= 0) {
         this._clearTimers();
         this.phase = 'done';
-        this._setSignal('caught', '😱 СКРИМЕРЫ ДОБИЛИ ТЕБЯ! (0 ❤️)', 'Живым не ушёл! Отбей 3 ❤️ у Северного моря!');
+        this._setSignal('caught', '😱 СКРИМЕРЫ ДОБИЛИ ТЕБЯ! (0 ❤️)', 'Живым не ушёл! Бери реванш или закатай друга за +3 ❤️!');
         this._finishDuel(false, 'screamers');
         return;
       }
@@ -402,27 +404,27 @@ export class Til3DBarrelDuel {
       const isTilWin = reason === 'til_faster';
       const failedLevel = this.level;
       showDuolingoCard({
-        icon: '🌊',
+        icon: '😱',
         badge: isTilWin ? 'ТИЛЬ НАШЁЛ ПЕРВЫМ' : 'ЖИЗНИ СГОРЕЛИ НА СКРИМЕРАХ',
         title: isTilWin
-          ? 'Тиль опередил! Встретимся у Северного моря!'
-          : 'Скримеры выбили все ❤️ — зарядись у моря!',
-        body: 'Отправляйся на берег Северного моря «Достучись до небес», простучи пульс Тиля до 100%, забери +3 ❤️ и вернись в этот же цех!',
-        buttonText: '🌊 К ТИЛЮ У МОРЯ (+3 ❤️)',
-        secondaryText: '🔄 СРАЗУ ЕЩЁ РАЗ В ЦЕХУ',
+          ? 'Тиль опередил! Возьми реванш в цеху!'
+          : 'Скримеры выбили все ❤️ — попробуй ещё раз!',
+        body: 'Можешь сразу взять реванш в этом же цеху или закатать друга в бочку — получишь +3 ❤️ и приблизишь билет 4/4!',
+        buttonText: '🔄 РЕВАНШ В ЦЕХУ (ЕЩЁ РАЗ)',
+        secondaryText: '🛢 ЗАКАТАТЬ ДРУГА (+3 ❤️)',
         tone: 'gold',
         onConfirm: () => {
-          this.stop();
-          if (typeof this.onGoOcean === 'function') {
-            this.onGoOcean(failedLevel);
-          }
-        },
-        onSecondary: () => {
           this.start({
             level: failedLevel,
             barrelCount: this.barrelCount,
             titleBadge: this._dom?.stepBadge?.textContent || '',
           });
+        },
+        onSecondary: () => {
+          this.stop();
+          if (typeof this.onRecoverFriend === 'function') {
+            this.onRecoverFriend(failedLevel);
+          }
         },
       });
     }, 1850);
