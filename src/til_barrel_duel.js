@@ -1,8 +1,9 @@
 // ============================================================================
-// БОЧКА v17.0: «ИГРАТЬ С ТИЛЕМ В УДАРЫ ПО ОТКРЫВАНИЮ 3D-БОЧЕК»
-// Живая схватка на реакцию и скорость прямо в 3D-цеху (WorkshopScene):
-// 4 стоящие 3D-бочки, отсчёт «На счёт три!», зелёная вспышка на целевой бочке,
-// вылетающая крышка ломом, серия до 3 победных вскрытий против Тиля Швайгера.
+// БОЧКА v17.3: «НАЙДИ БОЧКУ БЫСТРЕЕ ТИЛЯ» (СЛЕПОЙ ПОИСК + РЕАЛЬНЫЕ СКРИМЕРЫ)
+// Никаких зелёных подсветок и подсказок! Все 6/8/12/16 бочек в 3D-цеху выглядят
+// одинаково: игрок вслепую бьёт по любой закрытой бочке, рискуя нарваться на
+// хоррор-скример (−1 ❤️), пока Тиль Швайгер в реальном времени тоже вскрывает
+// бочки одну за другой. Проиграл / сгорели ❤️ → сцена у моря «Достучись до небес»!
 // Без innerHTML (строго createElement + textContent).
 // ============================================================================
 import { audio } from './audio.js';
@@ -17,29 +18,29 @@ function el(tag, className = '', text = '') {
 }
 
 export class Til3DBarrelDuel {
-  constructor({ hostEl, getScene, onVictory, onGoOcean, onExit, onScreamerLoss } = {}) {
+  constructor({ hostEl, getScene, onVictory, onGoOcean, onExit, onScreamerHit, onScreamerLoss } = {}) {
     this.hostEl = hostEl;
     this.getScene = getScene;
     this.onVictory = onVictory;
     this.onGoOcean = onGoOcean;
     this.onExit = onExit;
-    this.onScreamerLoss = onScreamerLoss;
+    this.onScreamerHit = onScreamerHit || onScreamerLoss;
+    this.onScreamerLoss = onScreamerLoss || onScreamerHit;
 
     this.isActive = false;
-    this.phase = 'idle'; // 'idle' | 'countdown' | 'go' | 'between' | 'done'
+    this.phase = 'idle'; // 'idle' | 'playing' | 'screamer' | 'done'
     this.level = 2;
     this.barrelCount = 6;
-    this.targetWins = 3;
-    this.myScore = 0;
-    this.tilScore = 0;
+    this.maxLives = 3;
+    this.lives = 3;
     this.targetIndex = -1;
+    this.screamerSet = new Set();
     this.openedSet = new Set();
+    this.tilMoves = 0;
+    this.playerMoves = 0;
     this._timers = [];
-    this._raf = 0;
     this._dom = null;
-    this._lastFalseStartAt = 0;
-    this._goStartedAt = 0;
-    this._roundIndex = 0;
+    this._clickLockUntil = 0;
 
     this._buildUI();
   }
@@ -51,75 +52,57 @@ export class Til3DBarrelDuel {
     const wrap = el('div', 'til3d-hud');
     wrap.id = 'til3d-hud-root';
 
-    // Верхняя строка: счёт ТЫ vs ТИЛЬ + шаг Duolingo
     const topCard = el('div', 'til3d-score-card');
 
-    const stepBadge = el('div', 'til3d-step-badge', 'ШАГ 4 ИЗ 5 · СХВАТКА С ТИЛЕМ В 3D-БОЧКИ');
+    const stepBadge = el('div', 'til3d-step-badge', 'УР. 2 · 6 БОЧЕК · ПОИСК ВСЛЕПУЮ');
     stepBadge.id = 'til3d-step-badge';
     topCard.appendChild(stepBadge);
 
+    // Верхняя строка: Жизни игрока ❤️❤️❤️ + Осталось закрытых бочек + Тиль
     const scoreRow = el('div', 'til3d-score-row');
 
     const mySide = el('div', 'til3d-side is-me');
-    const myLbl = el('span', 'til3d-side-lbl', 'ТЫ');
-    const myDots = el('div', 'til3d-dots');
-    myDots.id = 'til3d-my-dots';
-    const myVal = el('strong', 'til3d-side-val', '0');
-    myVal.id = 'til3d-my-score';
-    mySide.append(myLbl, myDots, myVal);
+    const myLbl = el('span', 'til3d-side-lbl', 'ЖИЗНИ');
+    const myVal = el('strong', 'til3d-side-val', '❤️❤️❤️');
+    myVal.id = 'til3d-my-lives';
+    mySide.append(myLbl, myVal);
 
-    const vs = el('span', 'til3d-vs', 'VS');
+    const midInfo = el('span', 'til3d-vs', '🛢 6');
+    midInfo.id = 'til3d-barrels-left';
 
     const tilSide = el('div', 'til3d-side is-til');
     const tilVal = el('strong', 'til3d-side-val', '0');
-    tilVal.id = 'til3d-til-score';
-    const tilDots = el('div', 'til3d-dots');
-    tilDots.id = 'til3d-til-dots';
-    const tilLbl = el('span', 'til3d-side-lbl', 'ТИЛЬ');
-    tilSide.append(tilVal, tilDots, tilLbl);
+    tilVal.id = 'til3d-til-opened';
+    const tilLbl = el('span', 'til3d-side-lbl', 'ТИЛЬ ВСКРЫЛ');
+    tilSide.append(tilVal, tilLbl);
 
-    scoreRow.append(mySide, vs, tilSide);
+    scoreRow.append(mySide, midInfo, tilSide);
     topCard.appendChild(scoreRow);
 
-    // Реплика Тиля
+    // Реплика Тиля (без спойлеров — только атмосфера и накал!)
     const speechRow = el('div', 'til3d-speech-row');
     const ava = document.createElement('img');
     ava.className = 'til3d-ava';
     ava.src = './public/sprites/til_avatar.webp';
     ava.alt = 'Тиль Швайгер';
-    const bubble = el('div', 'til3d-bubble', 'Кто быстрее собьёт крышки 3 бочек — тот победил!');
+    const bubble = el('div', 'til3d-bubble', 'Бочка спрятана в темноте! Бей по любой — осторожно, там скримеры!');
     bubble.id = 'til3d-bubble';
     speechRow.append(ava, bubble);
     topCard.appendChild(speechRow);
 
     wrap.appendChild(topCard);
 
-    // Сигнальная плашка (не загораживает бочки)
-    const banner = el('div', 'til3d-signal is-wait', 'ГОТОВЬСЯ...');
+    // Компактный статус (без стрелок и без указания бочки!)
+    const banner = el('div', 'til3d-signal is-wait', 'ИЩИ В ЗАКРЫТЫХ БОЧКАХ!');
     banner.id = 'til3d-signal';
     wrap.appendChild(banner);
 
-    // 3D-привязанный пин прямо над целевой бочкой (можно кликнуть и по нему, и по 3D-бочке!)
-    const pin = el('button', 'til3d-barrel-pin is-wait', '⏳ ЖДИ...');
-    pin.type = 'button';
-    pin.id = 'btn-til3d-target-pin';
-    pin.hidden = true;
-    pin.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (this.targetIndex >= 0) {
-        this.handleBarrelClick(this.targetIndex, null);
-      }
-    });
-    wrap.appendChild(pin);
-
-    // Нижняя чистая подсказка (0 лишних кнопок)
-    const hint = el('div', 'til3d-bottom-hint', 'Жди зелёную вспышку «3! БЕЙ!» и бей по подсвеченной 3D-бочке быстрее Тиля');
+    const hint = el('div', 'til3d-bottom-hint', 'Бей по любой закрытой 3D-бочке — внутри может быть скример! Найди раньше Тиля');
     hint.id = 'til3d-bottom-hint';
     wrap.appendChild(hint);
 
     this.hostEl.appendChild(wrap);
-    this._dom = { wrap, stepBadge, myDots, myVal, tilDots, tilVal, bubble, banner, pin, hint };
+    this._dom = { wrap, stepBadge, myVal, midInfo, tilVal, bubble, banner, hint };
   }
 
   _setTimer(fn, ms) {
@@ -136,19 +119,21 @@ export class Til3DBarrelDuel {
     this._timers = [];
   }
 
-  _syncScoreUI() {
-    if (!this._dom) return;
-    this._dom.myVal.textContent = String(this.myScore);
-    this._dom.tilVal.textContent = String(this.tilScore);
+  _getClosedBarrels() {
+    const out = [];
+    for (let i = 0; i < this.barrelCount; i += 1) {
+      if (!this.openedSet.has(i)) out.push(i);
+    }
+    return out;
+  }
 
-    const renderDots = (container, filled, cls) => {
-      container.textContent = '';
-      for (let i = 0; i < this.targetWins; i += 1) {
-        container.appendChild(el('i', `til3d-dot ${cls}${i < filled ? ' is-on' : ''}`));
-      }
-    };
-    renderDots(this._dom.myDots, this.myScore, 'is-me');
-    renderDots(this._dom.tilDots, this.tilScore, 'is-til');
+  _syncUI() {
+    if (!this._dom) return;
+    const hearts = '❤️'.repeat(Math.max(0, this.lives)) + '🖤'.repeat(Math.max(0, this.maxLives - this.lives));
+    this._dom.myVal.textContent = hearts;
+    const left = this._getClosedBarrels().length;
+    this._dom.midInfo.textContent = `🛢 ${left}`;
+    this._dom.tilVal.textContent = String(this.tilMoves);
   }
 
   _setSignal(stateCls, bannerText, bubbleText = '') {
@@ -160,52 +145,71 @@ export class Til3DBarrelDuel {
     }
   }
 
-  _updatePinLoop() {
-    if (!this.isActive) return;
-    const scene = this.getScene?.();
-    const pin = this._dom?.pin;
-    if (scene && pin && this.targetIndex >= 0 && (this.phase === 'countdown' || this.phase === 'go')) {
-      const proj = scene.projectBarrelScreenPos?.(this.targetIndex, 1.62);
-      if (proj && proj.visible) {
-        pin.hidden = false;
-        pin.style.left = `${Math.round(proj.x)}px`;
-        pin.style.top = `${Math.round(Math.max(170, proj.y))}px`;
-      } else {
-        pin.hidden = true;
-      }
-    } else if (pin) {
-      pin.hidden = true;
+  _setupHiddenBarrels() {
+    const n = this.barrelCount;
+    const indices = Array.from({ length: n }, (_, i) => i);
+    // Перемешиваем Фишером-Йейтсом: полностью честный слепой рандом
+    for (let i = indices.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [indices[i], indices[j]] = [indices[j], indices[i]];
     }
-    this._raf = window.requestAnimationFrame(() => this._updatePinLoop());
+
+    this.targetIndex = indices[0];
+    this.screamerSet.clear();
+    // Количество скримеров-ловушек по уровню (2 на 6 бочках, 3 на 8, 4 на 12, 5 на 16)
+    const trapCount = n >= 16 ? 5 : n >= 12 ? 4 : n >= 8 ? 3 : 2;
+    for (let k = 1; k <= trapCount && k < indices.length; k += 1) {
+      this.screamerSet.add(indices[k]);
+    }
   }
 
   start({ level = 2, barrelCount = 6, titleBadge = '', introLine = '' } = {}) {
     this.stop();
     this.isActive = true;
-    this.level = Math.max(1, Number(level) || 2);
+    this.level = Math.max(2, Number(level) || 2);
     this.barrelCount = Math.max(4, Math.min(16, Number(barrelCount) || 6));
-    this.myScore = 0;
-    this.tilScore = 0;
-    this._roundIndex = 0;
+    this.maxLives = 3;
+    this.lives = 3;
+    this.tilMoves = 0;
+    this.playerMoves = 0;
     this.openedSet.clear();
-    this.phase = 'between';
+    this._setupHiddenBarrels();
+    this.phase = 'playing';
+    this._clickLockUntil = 0;
 
     const scene = this.getScene?.();
     if (scene) {
-      scene.resetRound({ targetIndex: 0, portraitUrl: '', golden: this.level >= 3, barrelCount: this.barrelCount });
+      const targetSprite = this.level === 2
+        ? './public/sprites/empty_barrel_hearts.webp'
+        : './public/sprites/cinema_ticket_barrel.webp';
+      scene.resetRound({
+        targetIndex: this.targetIndex,
+        portraitUrl: targetSprite,
+        golden: this.level >= 3,
+        barrelCount: this.barrelCount,
+      });
+      // СТРОГО БЕЗ ПОДСВЕТКИ ЦЕЛЕВОЙ БОЧКИ!
+      scene.setTilBarrelCue?.(-1, 'off');
       scene.setWorkshopLevelDecor?.(Math.min(5, this.level), 'til_duel');
       scene.setInteractive(true);
     }
 
+    const trapCount = this.screamerSet.size;
     if (this._dom?.stepBadge) {
-      this._dom.stepBadge.textContent = titleBadge || `УР. ${this.level} · ${this.barrelCount} БОЧЕК · СХВАТКА С ТИЛЕМ`;
+      this._dom.stepBadge.textContent = titleBadge || `УР. ${this.level} · ${this.barrelCount} БОЧЕК · ${trapCount} СКРИМЕРА`;
+    }
+    if (this._dom?.hint) {
+      this._dom.hint.textContent = `В цеху ${this.barrelCount} закрытых бочек (${trapCount} со скримерами). Бей наугад быстрее Тиля!`;
     }
     if (this.hostEl) this.hostEl.removeAttribute('hidden');
-    this._syncScoreUI();
-    this._setSignal('wait', 'ГОТОВЬСЯ...', introLine || `На раз-два-три! Сбей крышки 3 из ${this.barrelCount} бочек быстрее Тиля!`);
-    this._raf = window.requestAnimationFrame(() => this._updatePinLoop());
+    this._syncUI();
+    this._setSignal(
+      'go',
+      'БЕЙ ПО ЛЮБОЙ ЗАКРЫТОЙ БОЧКЕ!',
+      introLine || `Ищи быстрее меня! Среди ${this.barrelCount} бочек спрятана нужная — но в ${trapCount} сидят скримеры!`
+    );
 
-    this._setTimer(() => this._startNextStrikeRound(), 700);
+    this._scheduleTilTurn();
   }
 
   stop() {
@@ -213,189 +217,156 @@ export class Til3DBarrelDuel {
     this.phase = 'idle';
     this.targetIndex = -1;
     this._clearTimers();
-    if (this._raf) {
-      window.cancelAnimationFrame(this._raf);
-      this._raf = 0;
-    }
     const scene = this.getScene?.();
     scene?.setTilBarrelCue?.(-1, 'off');
-    if (this._dom?.pin) this._dom.pin.hidden = true;
     if (this.hostEl) this.hostEl.setAttribute('hidden', '');
   }
 
-  _pickAvailableBarrel() {
-    const n = this.barrelCount || 6;
-    const avail = [];
-    for (let i = 0; i < n; i += 1) {
-      if (!this.openedSet.has(i)) avail.push(i);
-    }
-    if (avail.length === 0) {
-      this.openedSet.clear();
-      const scene = this.getScene?.();
-      scene?.resetRound?.({ targetIndex: 0, portraitUrl: '', golden: this.level >= 3, barrelCount: n });
-      scene?.setInteractive?.(true);
-      return Math.floor(Math.random() * n);
-    }
-    return avail[Math.floor(Math.random() * avail.length)];
+  _scheduleTilTurn() {
+    if (!this.isActive || this.phase !== 'playing') return;
+    // Тиль делает ход каждые ~3.9–5.0 сек (на старших уровнях чуть быстрее)
+    const baseMs = Math.max(3200, 4700 - (this.level - 2) * 320);
+    const delay = baseMs + Math.floor(Math.random() * 900);
+    this._setTimer(() => {
+      if (!this.isActive || this.phase !== 'playing') return;
+      this._runTilMove();
+    }, delay);
   }
 
-  _startNextStrikeRound() {
-    if (!this.isActive) return;
-    this._clearTimers();
-    this._roundIndex += 1;
+  _runTilMove() {
+    if (!this.isActive || this.phase !== 'playing') return;
+    const closed = this._getClosedBarrels();
+    if (closed.length === 0) return;
 
-    const scene = this.getScene?.();
-    this.targetIndex = this._pickAvailableBarrel();
-    this.phase = 'countdown';
+    const nonTarget = closed.filter((idx) => idx !== this.targetIndex);
+    let pick = -1;
 
-    scene?.setInteractive?.(true);
-    scene?.setTilBarrelCue?.(this.targetIndex, 'wait');
-    scene?.triggerBarrelEerieFX?.(this.targetIndex, 'knock_urgent');
-
-    if (this._dom?.pin) {
-      this._dom.pin.className = 'til3d-barrel-pin is-wait';
-      this._dom.pin.textContent = '⏳ ЖДИ...';
+    // Первые 2 хода Тиль НЕ забирает цель — он бьёт по другим бочкам, нагнетая саспенс!
+    // Начиная с 3-го хода Тиль реально может вскрыть цель раньше игрока.
+    const canStealTarget = this.tilMoves >= 2 && (closed.length <= 2 || Math.random() < 0.36);
+    if (canStealTarget && !this.openedSet.has(this.targetIndex)) {
+      pick = this.targetIndex;
+    } else if (nonTarget.length > 0) {
+      pick = nonTarget[Math.floor(Math.random() * nonTarget.length)];
+    } else {
+      pick = closed[0];
     }
 
-    const wait1 = 550;
-    const wait2 = 550 + Math.floor(Math.random() * 450);
-    const totalWait = wait1 + wait2;
-
-    this._setSignal('wait', 'НА СЧЁТ ТРИ · 1...', 'Слушай бочку — не бей раньше сигнала!');
-    audio.playTilCountTick(1);
-
-    this._setTimer(() => {
-      if (!this.isActive || this.phase !== 'countdown') return;
-      this._setSignal('wait', 'НА СЧЁТ ТРИ · 2...', 'Сейчас вспыхнет зелёным — готовься!');
-      scene?.triggerBarrelEerieFX?.(this.targetIndex, 'knock_urgent');
-      audio.playTilCountTick(2);
-    }, wait1);
-
-    this._setTimer(() => {
-      if (!this.isActive || this.phase !== 'countdown') return;
-      this.phase = 'go';
-      this._goStartedAt = performance.now();
-      scene?.setTilBarrelCue?.(this.targetIndex, 'go');
-      scene?.triggerBarrelEerieFX?.(this.targetIndex, 'knock_urgent');
-      if (this._dom?.pin) {
-        this._dom.pin.className = 'til3d-barrel-pin is-go';
-        this._dom.pin.textContent = '👊 БЕЙ!';
-      }
-      this._setSignal('go', '3! БЕЙ ПО БОЧКЕ!', 'ДАВАЙ! Сбей крышку быстрее меня!');
-      audio.playTilGoSignal();
-      Haptics.medium();
-
-      // Окно реакции до удара Тиля (честное и бодрое на мобильном экране, даже среди 16 бочек)
-      const tilReactionMs = Math.max(1250, 1850 - this.myScore * 140 - (this.level - 1) * 65);
-      this._setTimer(() => {
-        if (!this.isActive || this.phase !== 'go') return;
-        this._resolveTilWonStrike();
-      }, tilReactionMs);
-    }, totalWait);
-  }
-
-  handleBarrelClick(index, worldPoint = null) {
-    if (!this.isActive) return;
+    this.openedSet.add(pick);
+    this.tilMoves += 1;
     const scene = this.getScene?.();
 
-    // 1. Фальстарт — нажал до зелёного сигнала «3! БЕЙ!»
-    if (this.phase === 'countdown') {
-      const now = performance.now();
-      if (now - this._lastFalseStartAt < 350) return;
-      this._lastFalseStartAt = now;
-      this._clearTimers();
-      this.phase = 'between';
-      scene?.setTilBarrelCue?.(this.targetIndex, 'til');
-      scene?.triggerBarrelEerieFX?.(index, 'latch_rattle');
-      if (this._dom?.pin) {
-        this._dom.pin.className = 'til3d-barrel-pin is-caught';
-        this._dom.pin.textContent = '⚡ РАНО!';
-      }
-      this._setSignal('caught', 'РАНО! ФАЛЬСТАРТ!', 'Ха-ха, поторопился! Жди зелёную «3! БЕЙ!»');
-      audio.playTilFalseStart();
-      Haptics.warning();
-      this._setTimer(() => {
-        if (this.isActive) this._startNextStrikeRound();
-      }, 900);
+    scene?.triggerStrikeFX?.(pick, null);
+    scene?.triggerEmptyBarrelOpen?.(pick, 'smoke');
+    audio.playStrike(pick);
+    this._syncUI();
+
+    if (pick === this.targetIndex) {
+      // Тиль реально вскрыл целевую бочку быстрее игрока!
+      audio.playTilCaught();
+      Haptics.error();
+      this._setSignal('caught', 'ТИЛЬ НАШЁЛ БОЧКУ РАНЬШЕ ТЕБЯ!', 'Ха-ха! Я вскрыл её первым! Встретимся у Северного моря!');
+      this._finishDuel(false, 'til_faster');
       return;
     }
 
-    // 2. Зелёный сигнал — удар по 3D-бочке!
-    if (this.phase === 'go') {
-      // Если игрок в азарте ткнул в соседнюю нецелевую закрытую бочку — подсказываем без проигрыша
-      if (index !== this.targetIndex && this.targetIndex >= 0) {
-        scene?.triggerBarrelEerieFX?.(index, 'latch_rattle');
-        audio.playEmptyBarrelClang?.(index);
-        Haptics.light();
-        this._setSignal('go', 'БЕЙ ПО ЗЕЛЁНОЙ БОЧКЕ!', 'Другая бочка! Бей по подсвеченной зелёной!');
+    const left = this._getClosedBarrels().length;
+    const taunts = [
+      `Я вскрыл бочку — пусто! Осталось ${left}. Твой ход!`,
+      `Мимо! Круг сужается — осталось ${left} бочек!`,
+      `Тиль уже близко! Осталось всего ${left} закрытых бочек!`,
+    ];
+    this._setSignal('wait', `ТИЛЬ ВСКРЫЛ БОЧКУ (ОСТАЛОСЬ ${left})`, taunts[(this.tilMoves - 1) % taunts.length]);
+    this._scheduleTilTurn();
+  }
+
+  handleBarrelClick(index, worldPoint = null) {
+    if (!this.isActive || this.phase !== 'playing') return;
+    const now = performance.now();
+    if (now < this._clickLockUntil) return;
+    if (index < 0 || index >= this.barrelCount) return;
+    if (this.openedSet.has(index)) return;
+
+    this._clickLockUntil = now + 320;
+    this.openedSet.add(index);
+    this.playerMoves += 1;
+
+    const scene = this.getScene?.();
+
+    // 1. ПОБЕДА — Игрок нашёл целевую бочку быстрее Тиля!
+    if (index === this.targetIndex) {
+      this._clearTimers();
+      this.phase = 'done';
+      scene?.setTilBarrelCue?.(-1, 'off');
+      scene?.assignTargetBarrelNow?.(index);
+      scene?.triggerStrikeFX?.(index, worldPoint);
+      scene?.triggerEmptyBarrelOpen?.(index, 'sparks');
+      audio.playStrike(index);
+      audio.playTilBonus();
+      Haptics.heavy();
+      this._syncUI();
+
+      this._setSignal(
+        'win',
+        '⚡ НАШЁЛ БЫСТРЕЕ ТИЛЯ!',
+        this.level === 2
+          ? 'Вот она — пустая бочка! Закатывай туда друга!'
+          : 'Чёрт, ты реально быстрее меня! Забирай награду!'
+      );
+      this._finishDuel(true, 'found');
+      return;
+    }
+
+    // 2. СКРИМЕР-ЛОВУШКА!
+    if (this.screamerSet.has(index)) {
+      this.lives = Math.max(0, this.lives - 1);
+      scene?.triggerStrikeFX?.(index, worldPoint);
+      scene?.triggerEmptyBarrelOpen?.(index, 'smoke');
+      audio.playStrike(index);
+      Haptics.error();
+      this._syncUI();
+
+      // Запускаем настоящий полноэкранный хоррор-скример + 1 из 10 реальных MP3!
+      if (typeof this.onScreamerHit === 'function') {
+        try { this.onScreamerHit(); } catch { /* ignore */ }
+      }
+
+      if (this.lives <= 0) {
+        this._clearTimers();
+        this.phase = 'done';
+        this._setSignal('caught', '😱 СКРИМЕРЫ ДОБИЛИ ТЕБЯ! (0 ❤️)', 'Живым не ушёл! Отбей 3 ❤️ у Северного моря!');
+        this._finishDuel(false, 'screamers');
         return;
       }
 
-      this._clearTimers();
-      this.phase = 'between';
-      const reactMs = Math.max(80, Math.round(performance.now() - this._goStartedAt));
-      this.openedSet.add(this.targetIndex);
-      this.myScore += 1;
-
-      scene?.setTilBarrelCue?.(-1, 'off');
-      scene?.triggerStrikeFX?.(this.targetIndex, worldPoint);
-      scene?.triggerEmptyBarrelOpen?.(this.targetIndex, 'sparks');
-      audio.playStrike(this.targetIndex);
-      audio.playTilBonus();
-      Haptics.heavy();
-
-      this._syncScoreUI();
-      const praises = [
-        `Ого, ${reactMs} мс! Крышка улетела!`,
-        `Мощный удар (${reactMs} мс)! Ты быстрее меня!`,
-        `Чистая победа (${reactMs} мс)! Моя школа!`,
-      ];
-      this._setSignal('win', `+1 ТЫ! КРЫШКА СБИТА (${reactMs} мс)`, praises[(this.myScore - 1) % praises.length]);
-      if (this._dom?.pin) this._dom.pin.hidden = true;
-
-      if (this.myScore >= this.targetWins) {
-        this._finishDuel(true);
-      } else {
-        this._setTimer(() => this._startNextStrikeRound(), 1050);
-      }
+      this._clickLockUntil = performance.now() + 1450;
+      const left = this._getClosedBarrels().length;
+      this._setSignal(
+        'caught',
+        `😱 СКРИМЕР! −1 ❤️ (ОСТАЛОСЬ ${this.lives} ❤️)`,
+        `Осторожнее! Там был не тот! Осталось ${left} бочек — ищи дальше!`
+      );
+      return;
     }
+
+    // 3. ПУСТАЯ БОЧКА — продолжаем искать!
+    scene?.triggerStrikeFX?.(index, worldPoint);
+    scene?.triggerEmptyBarrelOpen?.(index, 'sparks');
+    audio.playStrike(index);
+    Haptics.light();
+    this._syncUI();
+
+    const left = this._getClosedBarrels().length;
+    this._setSignal(
+      'go',
+      `ПУСТО! ОСТАЛОСЬ ${left} БОЧЕК`,
+      left <= 2
+        ? 'Осталось совсем чуть-чуть — бей быстрее меня!'
+        : `Здесь пусто! Бей следующую закрытую бочку (осталось ${left})!`
+    );
   }
 
-  _resolveTilWonStrike() {
-    if (!this.isActive) return;
-    this._clearTimers();
-    this.phase = 'between';
-    const scene = this.getScene?.();
-
-    this.openedSet.add(this.targetIndex);
-    this.tilScore += 1;
-
-    scene?.setTilBarrelCue?.(this.targetIndex, 'til');
-    scene?.triggerStrikeFX?.(this.targetIndex, null);
-    scene?.triggerEmptyBarrelOpen?.(this.targetIndex, 'smoke');
-    audio.playTilCaught();
-    Haptics.error();
-
-    this._syncScoreUI();
-    const taunts = [
-      'Я успел первым! Соберись на следующую бочку!',
-      'Моя крышка! Не зевай на сигнале!',
-      'Оп! Тиль снова первый — жми реванш!',
-    ];
-    this._setSignal('caught', 'ТИЛЬ УСПЕЛ ПЕРВЫМ! (+1 ТИЛЮ)', taunts[(this.tilScore - 1) % taunts.length]);
-    if (this._dom?.pin) this._dom.pin.hidden = true;
-
-    this._setTimer(() => {
-      scene?.setTilBarrelCue?.(-1, 'off');
-      if (this.tilScore >= this.targetWins) {
-        this._finishDuel(false);
-      } else {
-        this._startNextStrikeRound();
-      }
-    }, 1150);
-  }
-
-  _finishDuel(playerWon) {
+  _finishDuel(playerWon, reason = '') {
     this.phase = 'done';
     this._clearTimers();
     const scene = this.getScene?.();
@@ -406,35 +377,54 @@ export class Til3DBarrelDuel {
       Haptics.success();
       this._setTimer(() => {
         if (!this.isActive) return;
-        const summary = { myScore: this.myScore, tilScore: this.tilScore, level: this.level, barrelCount: this.barrelCount };
+        const summary = {
+          level: this.level,
+          barrelCount: this.barrelCount,
+          livesLeft: this.lives,
+          playerMoves: this.playerMoves,
+          tilMoves: this.tilMoves,
+        };
         this.stop();
         if (typeof this.onVictory === 'function') {
           this.onVictory(summary);
         }
-      }, 900);
-    } else {
-      // Скример при проигрыше Тилю (сохраняем накал и эмоции!) -> спокойная карточка с 1 кнопкой реванша
-      if (typeof this.onScreamerLoss === 'function') {
-        try { this.onScreamerLoss(); } catch { /* ignore */ }
-      }
-      this._setTimer(() => {
-        if (!this.isActive) return;
-        showDuolingoCard({
-          icon: '😱',
-          badge: `ТИЛЬ ПОБЕДИЛ · ${this.myScore} : ${this.tilScore}`,
-          title: 'Тиль вскрыл 3 бочки быстрее!',
-          body: 'На зелёной вспышке «3! БЕЙ!» сразу жми на подсвеченную 3D-бочку — возьми реванш прямо сейчас!',
-          buttonText: '🔄 РЕВАНШ (ЕЩЁ РАЗ)',
-          tone: 'gold',
-          onConfirm: () => {
-            this.start({
-              level: this.level,
-              barrelCount: this.barrelCount,
-              titleBadge: this._dom?.stepBadge?.textContent || '',
-            });
-          },
-        });
-      }, 1850);
+      }, 950);
+      return;
     }
+
+    // При поражении (Тиль опередил) — тоже даём скример! (При 'screamers' он уже вылетел на последнем ударе)
+    if (reason === 'til_faster' && typeof this.onScreamerLoss === 'function') {
+      try { this.onScreamerLoss(); } catch { /* ignore */ }
+    }
+
+    this._setTimer(() => {
+      if (!this.isActive) return;
+      const isTilWin = reason === 'til_faster';
+      const failedLevel = this.level;
+      showDuolingoCard({
+        icon: '🌊',
+        badge: isTilWin ? 'ТИЛЬ НАШЁЛ ПЕРВЫМ' : 'ЖИЗНИ СГОРЕЛИ НА СКРИМЕРАХ',
+        title: isTilWin
+          ? 'Тиль опередил! Встретимся у Северного моря!'
+          : 'Скримеры выбили все ❤️ — зарядись у моря!',
+        body: 'Отправляйся на берег Северного моря «Достучись до небес», простучи пульс Тиля до 100%, забери +3 ❤️ и вернись в этот же цех!',
+        buttonText: '🌊 К ТИЛЮ У МОРЯ (+3 ❤️)',
+        secondaryText: '🔄 СРАЗУ ЕЩЁ РАЗ В ЦЕХУ',
+        tone: 'gold',
+        onConfirm: () => {
+          this.stop();
+          if (typeof this.onGoOcean === 'function') {
+            this.onGoOcean(failedLevel);
+          }
+        },
+        onSecondary: () => {
+          this.start({
+            level: failedLevel,
+            barrelCount: this.barrelCount,
+            titleBadge: this._dom?.stepBadge?.textContent || '',
+          });
+        },
+      });
+    }, 1850);
   }
 }

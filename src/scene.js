@@ -2155,12 +2155,13 @@ export class WorkshopScene {
         this._spawnRustDust(new THREE.Vector3(rx, 0.22, rz), 2);
       }
 
-      // Расходящиеся круги по воде (floorRipples) раз в 2.5с вокруг целевой бочки (для ориентира без звука)
+      // Расходящиеся круги по воде (floorRipples) вокруг случайной закрытой бочки (атмосфера без спойлера цели!)
       this.boilerTargetRippleTimer -= dt;
       if (this.boilerTargetRippleTimer <= 0) {
         this.boilerTargetRippleTimer = 2.5;
-        const tb = this.barrels[this.diveTargetIndex];
-        if (tb && tb.group.visible && !tb.struck) {
+        const closed = this.barrels.filter((b) => b && b.group.visible && !b.struck);
+        const tb = closed.length ? closed[Math.floor(Math.random() * closed.length)] : null;
+        if (tb) {
           this._spawnFloorRipple(tb.group.position.x, tb.group.position.z, 0.155);
           this.boilerRipplesSpawned += 1;
         }

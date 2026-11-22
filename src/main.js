@@ -2686,23 +2686,23 @@ function ensureTilV16Controller() {
 const TIL_3D_LEVEL_SPECS = {
   2: {
     barrels: 6,
-    badge: 'УР. 2 · 6 БОЧЕК · НАЙДИ БОЧКУ ДЛЯ ДРУГА',
-    intro: 'На раз-два-три! Обыграй Тиля на 6 бочках и забери пустую бочку, чтобы закатать туда друга!',
+    badge: 'УР. 2 · 6 БОЧЕК · 2 СКРИМЕРА · ПОИСК ВСЛЕПУЮ',
+    intro: '6 одинаковых закрытых бочек! Внутри пустая бочка для друга и 2 скримера — найди быстрее Тиля!',
   },
   3: {
     barrels: 8,
-    badge: 'УР. 3 · 8 БОЧЕК · С ТИЛЕМ НА БИЛЕТ (2/4)',
-    intro: '8 бочек! Победи Тиля на раз-два-три и забери часть 2/4 бесплатного билета другу!',
+    badge: 'УР. 3 · 8 БОЧЕК · 3 СКРИМЕРА · БИЛЕТ 2/4',
+    intro: '8 закрытых бочек! Ищи часть билета 2/4 вслепую — осторожно, внутри 3 хоррор-скримера!',
   },
   4: {
     barrels: 12,
-    badge: 'УР. 4 · 12 БОЧЕК · С ТИЛЕМ НА БИЛЕТ (3/4)',
-    intro: '12 бочек! Бей по зелёной вспышке быстрее Тиля — впереди часть 3/4 билета другу!',
+    badge: 'УР. 4 · 12 БОЧЕК · 4 СКРИМЕРА · БИЛЕТ 3/4',
+    intro: '12 закрытых бочек в темноте! Опередить Тиля и не сгореть на 4 скримерах → билет 3/4 другу!',
   },
   5: {
     barrels: 16,
-    badge: 'УР. 5 · 16 БОЧЕК · ФИНАЛ НА БИЛЕТ (4/4)',
-    intro: 'ФИНАЛ! 16 бочек в цеху! Обыграй Тиля и подари бесплатный билет другу на 17 декабря!',
+    badge: 'УР. 5 · 16 БОЧЕК · 5 СКРИМЕРОВ · ФИНАЛ 4/4',
+    intro: 'ФИНАЛ! 16 закрытых бочек и 5 скримеров! Найди быстрее Тиля и подари другу билет на 17 декабря!',
   },
 };
 
@@ -2713,6 +2713,9 @@ function ensureTil3DBarrelDuel() {
     til3dDuel = new Til3DBarrelDuel({
       hostEl: host,
       getScene: () => scene,
+      onScreamerHit: () => {
+        triggerMiniScreamer(pickRandomBarrelSound());
+      },
       onScreamerLoss: () => {
         triggerMiniScreamer(pickRandomBarrelSound());
       },
@@ -2789,8 +2792,11 @@ function ensureTil3DBarrelDuel() {
           });
         }
       },
-      onGoOcean: () => {
+      onGoOcean: (failedLevel = null) => {
         delete document.body.dataset.tilDuel;
+        if (failedLevel) {
+          state.oceanTapper.returnTilLevel = Number(failedLevel);
+        }
         openOceanDirectScreen();
       },
       onExit: () => {
@@ -3993,6 +3999,7 @@ function resetOceanTapperUI() {
     clearInterval(state.oceanTapper.timer);
   }
   const keepDuel = state.oceanTapper?.returnDuel || null;
+  const keepTilLevel = state.oceanTapper?.returnTilLevel || null;
   state.oceanTapper = {
     running: false,
     finished: false,
@@ -4002,6 +4009,7 @@ function resetOceanTapperUI() {
     timer: null,
     lastTapAt: 0,
     returnDuel: keepDuel,
+    returnTilLevel: keepTilLevel,
   };
 
   const barrelImg = document.getElementById('ocean-barrel-img');
@@ -4185,6 +4193,23 @@ async function finishOceanTapperGame() {
     return;
   }
 
+  if (state.oceanTapper.returnTilLevel) {
+    const backLvl = Number(state.oceanTapper.returnTilLevel);
+    state.oceanTapper.returnTilLevel = null;
+    const completedLvl = getTilCurrentLevel();
+    unlockArtifactLevel(completedLvl);
+    await loadMediaSlots().catch(() => {});
+    showArtifactUnlockedCard(completedLvl, {
+      bodyExtra: `🌊 Пульс Тиля 100%! Ты зарядил +3 ❤️ у Северного моря — возвращайся в цех на Ур. ${backLvl}!`,
+      buttonText: `👊 ВЕРНУТЬСЯ В ЦЕХ (+3 ❤️ · УР. ${backLvl})`,
+      onNext: () => {
+        audio.stopOceanEasterEggAudio();
+        openTil3DBarrelDuel(backLvl);
+      },
+    });
+    return;
+  }
+
   // v16.1: После 100% в «Достучись до небес» — карточка артефакта и финальный экран приглашения в кино с Тилем и русским режиссёром!
   const completedLvl = getTilCurrentLevel();
   unlockArtifactLevel(completedLvl);
@@ -4239,6 +4264,13 @@ async function handleReturnFromOcean(openGiftModalAfter = false) {
     if (rd.solo) {
       showToast('🌊 Тиль зарядил 6 ❤️ жизней и ⚡ 100% энергии — снова в Дуэль за 🎟 билетами!');
     }
+    return;
+  }
+
+  if (state.oceanTapper.returnTilLevel) {
+    const backLvl = Number(state.oceanTapper.returnTilLevel);
+    state.oceanTapper.returnTilLevel = null;
+    await openTil3DBarrelDuel(backLvl);
     return;
   }
 
@@ -4650,6 +4682,13 @@ async function handleBarrelStrike(index, worldPoint) {
     r.attemptsLeft = Math.max(0, r.attemptsLeft - 1);
     renderAttemptSquares(r.attemptsLeft, 3);
     state.watchChannel?.send('strike', { barrelIndex: index, attemptsLeft: r.attemptsLeft });
+
+    // v17.3: Уже на 2-м промахе вылетает резкий реальный скример (напряжение с первых секунд!)
+    if (r.attemptsLeft === 1) {
+      triggerMiniScreamer(pickRandomBarrelSound());
+      const taskEl = document.getElementById('hud-task-banner');
+      if (taskEl) taskEl.textContent = '😱 СКРИМЕР! Остался последний удар — ищи в закрытых бочках!';
+    }
 
     if (r.attemptsLeft <= 0) {
       // Жизни кончились -> СКРИМЕР проигрыша -> спокойная карточка Duolingo: смотри трейлер VK и забери +3 ❤️!
@@ -8027,7 +8066,7 @@ function closeTrailerModal({ skipStep2Advance = false } = {}) {
   }
   syncTrailerPlayButton();
 
-  // v17.0: После трейлера VK на Ур.1 — возвращаем +3 ❤️ в 3D-цех и подсвечиваем оставшуюся 4-ю бочку для победного удара!
+  // v17.3: После трейлера VK на Ур.1 — возвращаем +3 ❤️ в 3D-цех (СТРОГО БЕЗ зелёной подсветки бочки!)
   if (wasDuolingoStep2 && !skipStep2Advance) {
     recordFunnelEvent('trailer_complete', state.tg?.user).catch(() => {});
     state.profile.lives = Math.max(3, Number(state.profile.lives || 0));
@@ -8041,9 +8080,9 @@ function closeTrailerModal({ skipStep2Advance = false } = {}) {
     const lastIdx = remaining.length > 0 ? remaining[0] : (state.round.targetIndex || 0);
     state.round.targetIndex = lastIdx;
     scene?.setInteractive?.(true);
-    scene?.setTilBarrelCue?.(lastIdx, 'go');
+    scene?.setTilBarrelCue?.(-1, 'off');
     const taskEl = document.getElementById('hud-task-banner');
-    if (taskEl) taskEl.textContent = '⚡ +3 ❤️ получено! Бей по подсвеченной бочке и забери награду!';
+    if (taskEl) taskEl.textContent = '⚡ +3 ❤️ получено! Вскрой закрытую бочку и найди друга!';
     Haptics.success();
     return;
   }
