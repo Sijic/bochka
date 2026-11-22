@@ -430,7 +430,9 @@ export class WorkshopDuelController {
         try { ch.untrack(); } catch { /* ignore */ }
         this.onToast?.('⚔️ За этим столом уже играют двое друзей (1 на 1)! Открываем твой новый стол…');
         this.leaveRoom(false);
-        this.onRoomFull?.();
+        window.setTimeout(() => {
+          this.onRoomFull?.();
+        }, 60);
         return;
       }
 
