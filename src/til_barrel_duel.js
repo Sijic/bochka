@@ -1,9 +1,15 @@
 // ============================================================================
-// БОЧКА v17.3: «НАЙДИ БОЧКУ БЫСТРЕЕ ТИЛЯ» (СЛЕПОЙ ПОИСК + РЕАЛЬНЫЕ СКРИМЕРЫ)
-// Никаких зелёных подсветок и подсказок! Все 6/8/12/16 бочек в 3D-цеху выглядят
-// одинаково: игрок вслепую бьёт по любой закрытой бочке, рискуя нарваться на
-// хоррор-скример (−1 ❤️), пока Тиль Швайгер в реальном времени тоже вскрывает
-// бочки одну за другой. Проиграл / сгорели ❤️ → сцена у моря «Достучись до небес»!
+// БОЧКА v18.0: ЕДИНЫЙ ДВИЖОК «НА РАЗ-ДВА-ТРИ!» ПРОТИВ ТИЛЯ (УР. 1–5)
+// Восстанавливает душу архива v15.5 в упрощённом виде:
+// - 4 / 6 / 8 / 12 / 16 ОДИНАКОВЫХ ЗАКРЫТЫХ 3D-БОЧЕК (0 зелёных подсветок и 0 пинов!)
+// - Ритм «РАЗ… ДВА… ТРИ — БЕЙ!»: на «ТРИ!» бьёшь ЛЮБУЮ закрытую бочку вслепую,
+//   и Тиль Швайгер бьёт другую закрытую бочку — кто первый найдёт цель!
+// - Ур. 1 (4 бочки): ищешь друга/себя быстрее Тиля → фото + скример → закатываешь друга;
+//   если проиграл → смотришь трейлер VK (+3 ❤️) и добиваешь!
+// - Ур. 2–5 (6 / 8 / 12 / 16 бочек): целевые награды v15.5 (пустая бочка, части билета
+//   2/4 → 3/4 → 4/4, ⭐ очки в Супер-приз, редкие карточки) + реальные скримеры (−1 ❤️).
+// - Если жизни кончились (0 ❤️): 1-й раз → закатай ещё друга (+3 ❤️), повторный слив
+//   всех жизней Тилю → перенос на сцену у моря «Достучись до небес»!
 // Без innerHTML (строго createElement + textContent).
 // ============================================================================
 import { audio } from './audio.js';
@@ -18,28 +24,46 @@ function el(tag, className = '', text = '') {
 }
 
 export class Til3DBarrelDuel {
-  constructor({ hostEl, getScene, onVictory, onGoOcean, onRecoverFriend, onWatchTrailer, onExit, onScreamerHit, onScreamerLoss } = {}) {
+  constructor({
+    hostEl,
+    getScene,
+    onVictory,
+    onL1TrailerRescue,
+    onRecoverFriend,
+    onGoOcean,
+    onBonusPoints,
+    onScreamerHit,
+    onScreamerLoss,
+    onExit,
+  } = {}) {
     this.hostEl = hostEl;
     this.getScene = getScene;
     this.onVictory = onVictory;
-    this.onGoOcean = onGoOcean;
+    this.onL1TrailerRescue = onL1TrailerRescue;
     this.onRecoverFriend = onRecoverFriend;
-    this.onWatchTrailer = onWatchTrailer;
-    this.onExit = onExit;
+    this.onGoOcean = onGoOcean;
+    this.onBonusPoints = onBonusPoints;
     this.onScreamerHit = onScreamerHit || onScreamerLoss;
     this.onScreamerLoss = onScreamerLoss || onScreamerHit;
+    this.onExit = onExit;
 
     this.isActive = false;
-    this.phase = 'idle'; // 'idle' | 'playing' | 'screamer' | 'done'
-    this.level = 2;
-    this.barrelCount = 6;
+    this.phase = 'idle'; // 'idle' | 'countdown' | 'go' | 'between' | 'paused_trailer' | 'done'
+    this.level = 1;
+    this.barrelCount = 4;
     this.maxLives = 3;
     this.lives = 3;
     this.targetIndex = -1;
     this.screamerSet = new Set();
+    this.pointsSet = new Set();
     this.openedSet = new Set();
+    this.beatIndex = 0;
     this.tilMoves = 0;
     this.playerMoves = 0;
+    this.playerActedThisBeat = false;
+    this.l1TrailerUsed = false;
+    this.defeatsCount = 0; // 1-й слив на Ур.2-5 -> закатай друга; 2-й+ слив -> море «Достучись до небес»!
+    this.packMeta = null;
     this._timers = [];
     this._dom = null;
     this._clickLockUntil = 0;
@@ -56,11 +80,10 @@ export class Til3DBarrelDuel {
 
     const topCard = el('div', 'til3d-score-card');
 
-    const stepBadge = el('div', 'til3d-step-badge', 'УР. 2 · 6 БОЧЕК · ПОИСК ВСЛЕПУЮ');
+    const stepBadge = el('div', 'til3d-step-badge', 'УР. 1 · 4 БОЧКИ · НА РАЗ-ДВА-ТРИ!');
     stepBadge.id = 'til3d-step-badge';
     topCard.appendChild(stepBadge);
 
-    // Верхняя строка: Жизни игрока ❤️❤️❤️ + Осталось закрытых бочек + Тиль
     const scoreRow = el('div', 'til3d-score-row');
 
     const mySide = el('div', 'til3d-side is-me');
@@ -69,37 +92,35 @@ export class Til3DBarrelDuel {
     myVal.id = 'til3d-my-lives';
     mySide.append(myLbl, myVal);
 
-    const midInfo = el('span', 'til3d-vs', '🛢 6');
+    const midInfo = el('span', 'til3d-vs', '🛢 4');
     midInfo.id = 'til3d-barrels-left';
 
     const tilSide = el('div', 'til3d-side is-til');
     const tilVal = el('strong', 'til3d-side-val', '0');
     tilVal.id = 'til3d-til-opened';
-    const tilLbl = el('span', 'til3d-side-lbl', 'ТИЛЬ ВСКРЫЛ');
+    const tilLbl = el('span', 'til3d-side-lbl', 'ТИЛЬ');
     tilSide.append(tilVal, tilLbl);
 
     scoreRow.append(mySide, midInfo, tilSide);
     topCard.appendChild(scoreRow);
 
-    // Реплика Тиля (без спойлеров — только атмосфера и накал!)
     const speechRow = el('div', 'til3d-speech-row');
     const ava = document.createElement('img');
     ava.className = 'til3d-ava';
     ava.src = './public/sprites/til_avatar.webp';
     ava.alt = 'Тиль Швайгер';
-    const bubble = el('div', 'til3d-bubble', 'Бочка спрятана в темноте! Бей по любой — осторожно, там скримеры!');
+    const bubble = el('div', 'til3d-bubble', 'На раз-два-три бьём бочки вслепую — кто первый найдёт друга!');
     bubble.id = 'til3d-bubble';
     speechRow.append(ava, bubble);
     topCard.appendChild(speechRow);
 
     wrap.appendChild(topCard);
 
-    // Компактный статус (без стрелок и без указания бочки!)
-    const banner = el('div', 'til3d-signal is-wait', 'ИЩИ В ЗАКРЫТЫХ БОЧКАХ!');
+    const banner = el('div', 'til3d-signal is-wait', 'РАЗ…');
     banner.id = 'til3d-signal';
     wrap.appendChild(banner);
 
-    const hint = el('div', 'til3d-bottom-hint', 'Бей по любой закрытой 3D-бочке — внутри может быть скример! Найди раньше Тиля');
+    const hint = el('div', 'til3d-bottom-hint', 'На «ТРИ — БЕЙ!» нажми на любую закрытую бочку быстрее Тиля');
     hint.id = 'til3d-bottom-hint';
     wrap.appendChild(hint);
 
@@ -150,7 +171,6 @@ export class Til3DBarrelDuel {
   _setupHiddenBarrels() {
     const n = this.barrelCount;
     const indices = Array.from({ length: n }, (_, i) => i);
-    // Перемешиваем Фишером-Йейтсом: полностью честный слепой рандом
     for (let i = indices.length - 1; i > 0; i -= 1) {
       const j = Math.floor(Math.random() * (i + 1));
       [indices[i], indices[j]] = [indices[j], indices[i]];
@@ -158,39 +178,62 @@ export class Til3DBarrelDuel {
 
     this.targetIndex = indices[0];
     this.screamerSet.clear();
-    // Количество скримеров-ловушек по уровню (2 на 6 бочках, 3 на 8, 4 на 12, 5 на 16)
-    const trapCount = n >= 16 ? 5 : n >= 12 ? 4 : n >= 8 ? 3 : 2;
-    for (let k = 1; k <= trapCount && k < indices.length; k += 1) {
-      this.screamerSet.add(indices[k]);
+    this.pointsSet.clear();
+
+    const trapCount = n >= 16 ? 5 : n >= 12 ? 4 : n >= 8 ? 3 : n >= 6 ? 2 : 1;
+    let cursor = 1;
+    for (let k = 0; k < trapCount && cursor < indices.length; k += 1, cursor += 1) {
+      this.screamerSet.add(indices[cursor]);
+    }
+    // На целевых уровнях (Ур.3–5) прячем бонусные ⭐ очки в 1–2 закрытые бочки (как в v15.5!)
+    const bonusCount = this.level >= 4 ? 2 : this.level >= 3 ? 1 : 0;
+    for (let k = 0; k < bonusCount && cursor < indices.length; k += 1, cursor += 1) {
+      this.pointsSet.add(indices[cursor]);
     }
   }
 
-  start({ level = 2, barrelCount = 6, titleBadge = '', introLine = '' } = {}) {
+  start({
+    level = 1,
+    barrelCount = 4,
+    titleBadge = '',
+    introLine = '',
+    portraitUrl = '',
+    packMeta = null,
+    resetDefeats = false,
+  } = {}) {
     this.stop();
     this.isActive = true;
-    this.level = Math.max(2, Number(level) || 2);
-    this.barrelCount = Math.max(4, Math.min(16, Number(barrelCount) || 6));
+    this.level = Math.max(1, Number(level) || 1);
+    this.barrelCount = Math.max(4, Math.min(16, Number(barrelCount) || 4));
     this.maxLives = 3;
     this.lives = 3;
+    this.beatIndex = 0;
     this.tilMoves = 0;
     this.playerMoves = 0;
+    this.playerActedThisBeat = false;
+    this.l1TrailerUsed = false;
+    this.packMeta = packMeta || null;
+    if (resetDefeats) this.defeatsCount = 0;
     this.openedSet.clear();
     this._setupHiddenBarrels();
-    this.phase = 'playing';
+    this.phase = 'between';
     this._clickLockUntil = 0;
 
     const scene = this.getScene?.();
     if (scene) {
-      const targetSprite = this.level === 2
-        ? './public/sprites/empty_barrel_hearts.webp'
-        : './public/sprites/cinema_ticket_barrel.webp';
+      const sprite = portraitUrl
+        || (this.level === 1
+          ? './public/sprites/hero_boy_live.webp'
+          : this.level === 2
+            ? './public/sprites/empty_barrel_hearts.webp'
+            : './public/sprites/cinema_ticket_barrel.webp');
       scene.resetRound({
         targetIndex: this.targetIndex,
-        portraitUrl: targetSprite,
+        portraitUrl: sprite,
         golden: this.level >= 3,
         barrelCount: this.barrelCount,
       });
-      // СТРОГО БЕЗ ПОДСВЕТКИ ЦЕЛЕВОЙ БОЧКИ!
+      // СТРОГО 0 ЗЕЛЁНЫХ ПОДСВЕТОК! Все бочки одинаковые!
       scene.setTilBarrelCue?.(-1, 'off');
       scene.setWorkshopLevelDecor?.(Math.min(5, this.level), 'til_duel');
       scene.setInteractive(true);
@@ -198,20 +241,56 @@ export class Til3DBarrelDuel {
 
     const trapCount = this.screamerSet.size;
     if (this._dom?.stepBadge) {
-      this._dom.stepBadge.textContent = titleBadge || `УР. ${this.level} · ${this.barrelCount} БОЧЕК · ${trapCount} СКРИМЕРА`;
+      this._dom.stepBadge.textContent = titleBadge
+        || (this.level === 1
+          ? 'УР. 1 · 4 БОЧКИ · НАЙДИ ДРУГА БЫСТРЕЕ ТИЛЯ!'
+          : `УР. ${this.level} · ${this.barrelCount} БОЧЕК · ${trapCount} СКРИМЕРА`);
     }
     if (this._dom?.hint) {
-      this._dom.hint.textContent = `В цеху ${this.barrelCount} закрытых бочек (${trapCount} со скримерами). Бей наугад быстрее Тиля!`;
+      this._dom.hint.textContent = this.level === 1
+        ? 'На «ТРИ — БЕЙ!» выбери любую закрытую бочку вслепую — найди друга быстрее Тиля!'
+        : `На «ТРИ — БЕЙ!» бей любую закрытую бочку (${trapCount} скримеров). Найди награду раньше Тиля!`;
     }
     if (this.hostEl) this.hostEl.removeAttribute('hidden');
     this._syncUI();
     this._setSignal(
-      'go',
-      'БЕЙ ПО ЛЮБОЙ ЗАКРЫТОЙ БОЧКЕ!',
-      introLine || `Ищи быстрее меня! Среди ${this.barrelCount} бочек спрятана нужная — но в ${trapCount} сидят скримеры!`
+      'wait',
+      'ПРИГОТОВЬСЯ…',
+      introLine || (this.level === 1
+        ? 'На раз-два-три бьём бочки вслепую! Кто первый найдёт друга!'
+        : `В цеху ${this.barrelCount} закрытых бочек. На раз-два-три — кто быстрее найдёт приз!`)
     );
 
-    this._scheduleTilTurn();
+    this._setTimer(() => this._startNextBeat(), 520);
+  }
+
+  resumeAfterTrailer() {
+    if (!this.isActive) return;
+    this.l1TrailerUsed = true;
+    this.lives = 3;
+    this.phase = 'between';
+    this.playerActedThisBeat = false;
+    const closed = this._getClosedBarrels();
+    // Если цель уже была вскрыта Тилем — перепрятываем в оставшуюся закрытую бочку (или ставим свежую партию)
+    if (closed.length === 0) {
+      this.openedSet.clear();
+      this._setupHiddenBarrels();
+      const scene = this.getScene?.();
+      scene?.resetRound?.({
+        targetIndex: this.targetIndex,
+        portraitUrl: this.packMeta?.portraitUrl || './public/sprites/hero_boy_live.webp',
+        golden: false,
+        barrelCount: this.barrelCount,
+      });
+    } else if (this.openedSet.has(this.targetIndex)) {
+      this.targetIndex = closed[Math.floor(Math.random() * closed.length)];
+    }
+    const scene = this.getScene?.();
+    scene?.setTilBarrelCue?.(-1, 'off');
+    scene?.setInteractive?.(true);
+    this._syncUI();
+    this._setSignal('wait', '+3 ❤️ ПОЛУЧЕНО! РАЗ…', 'Второй шанс! На раз-два-три вскрой закрытую бочку!');
+    this._setTimer(() => this._startNextBeat(), 450);
   }
 
   stop() {
@@ -224,29 +303,81 @@ export class Til3DBarrelDuel {
     if (this.hostEl) this.hostEl.setAttribute('hidden', '');
   }
 
-  _scheduleTilTurn() {
-    if (!this.isActive || this.phase !== 'playing') return;
-    // Тиль делает ход каждые ~3.9–5.0 сек (на старших уровнях чуть быстрее)
-    const baseMs = Math.max(3200, 4700 - (this.level - 2) * 320);
-    const delay = baseMs + Math.floor(Math.random() * 900);
+  _startNextBeat() {
+    if (!this.isActive || this.phase === 'done' || this.phase === 'paused_trailer') return;
+    this._clearTimers();
+
+    const closed = this._getClosedBarrels();
+    if (closed.length === 0) {
+      // Все бочки вскрыты — ставим свежую закрытую партию!
+      this.openedSet.clear();
+      this._setupHiddenBarrels();
+      const scene = this.getScene?.();
+      scene?.resetRound?.({
+        targetIndex: this.targetIndex,
+        portraitUrl: this.level === 1
+          ? (this.packMeta?.portraitUrl || './public/sprites/hero_boy_live.webp')
+          : this.level === 2
+            ? './public/sprites/empty_barrel_hearts.webp'
+            : './public/sprites/cinema_ticket_barrel.webp',
+        golden: this.level >= 3,
+        barrelCount: this.barrelCount,
+      });
+      scene?.setTilBarrelCue?.(-1, 'off');
+      scene?.setInteractive?.(true);
+      this._syncUI();
+    }
+
+    this.beatIndex += 1;
+    this.playerActedThisBeat = false;
+    this.phase = 'countdown';
+    const scene = this.getScene?.();
+    scene?.setTilBarrelCue?.(-1, 'off');
+    scene?.setInteractive?.(true);
+
+    this._setSignal('wait', 'РАЗ…', 'Не бей раньше «ТРИ!» — выбирай бочку глазами!');
+    audio.playTilCountTick(1);
+    Haptics.light();
+
     this._setTimer(() => {
-      if (!this.isActive || this.phase !== 'playing') return;
-      this._runTilMove();
-    }, delay);
+      if (!this.isActive || this.phase !== 'countdown') return;
+      this._setSignal('wait', 'ДВА…', 'Приготовься бить любую закрытую бочку!');
+      audio.playTilCountTick(2);
+      Haptics.light();
+    }, 520);
+
+    this._setTimer(() => {
+      if (!this.isActive || this.phase !== 'countdown') return;
+      this.phase = 'go';
+      this._setSignal('go', 'ТРИ — БЕЙ!', 'ДАВАЙ! Бей любую закрытую бочку быстрее меня!');
+      audio.playTilGoSignal();
+      Haptics.medium();
+
+      // Если игрок замешкался (3.2 сек без удара) — Тиль делает свой ход первым!
+      const timeoutMs = Math.max(2400, 3300 - (this.level - 1) * 140);
+      this._setTimer(() => {
+        if (!this.isActive || this.phase !== 'go' || this.playerActedThisBeat) return;
+        this.phase = 'between';
+        this._executeTilStrike('Ты замешкался — бью первым!');
+      }, timeoutMs);
+    }, 1040);
   }
 
-  _runTilMove() {
-    if (!this.isActive || this.phase !== 'playing') return;
+  _executeTilStrike(prefixText = '') {
+    if (!this.isActive || this.phase === 'done' || this.phase === 'paused_trailer') return;
     const closed = this._getClosedBarrels();
-    if (closed.length === 0) return;
+    if (closed.length === 0) {
+      this._setTimer(() => this._startNextBeat(), 650);
+      return;
+    }
 
     const nonTarget = closed.filter((idx) => idx !== this.targetIndex);
     let pick = -1;
 
-    // Первые 2 хода Тиль НЕ забирает цель — он бьёт по другим бочкам, нагнетая саспенс!
-    // Начиная с 3-го хода Тиль реально может вскрыть цель раньше игрока.
-    const canStealTarget = this.tilMoves >= 2 && (closed.length <= 2 || Math.random() < 0.36);
-    if (canStealTarget && !this.openedSet.has(this.targetIndex)) {
+    // На 1-м такте Тиль никогда не крадёт цель вслепую — всегда даёт игроку честный азарт!
+    // После 2+ ходов (или когда остались 2 бочки) Тиль реально может вскрыть цель первым!
+    const canSteal = this.beatIndex >= 2 && (closed.length <= 2 || (this.beatIndex >= 3 && Math.random() < 0.34));
+    if (canSteal && !this.openedSet.has(this.targetIndex)) {
       pick = this.targetIndex;
     } else if (nonTarget.length > 0) {
       pick = nonTarget[Math.floor(Math.random() * nonTarget.length)];
@@ -257,69 +388,81 @@ export class Til3DBarrelDuel {
     this.openedSet.add(pick);
     this.tilMoves += 1;
     const scene = this.getScene?.();
-
     scene?.triggerStrikeFX?.(pick, null);
     scene?.triggerEmptyBarrelOpen?.(pick, 'smoke');
     audio.playStrike(pick);
     this._syncUI();
 
     if (pick === this.targetIndex) {
-      // Тиль реально вскрыл целевую бочку быстрее игрока!
       audio.playTilCaught();
       Haptics.error();
-      this._setSignal('caught', 'ТИЛЬ НАШЁЛ БОЧКУ РАНЬШЕ ТЕБЯ!', 'Ха-ха! Я вскрыл её первым! Бери реванш в цеху!');
-      this._finishDuel(false, 'til_faster');
+      this._setSignal('caught', 'ТИЛЬ НАШЁЛ БОЧКУ ПЕРВЫМ!', 'Ха-ха! Я вскрыл её раньше тебя!');
+      this._handleDefeat('til_faster');
       return;
     }
 
     const left = this._getClosedBarrels().length;
-    const taunts = [
-      `Я вскрыл бочку — пусто! Осталось ${left}. Твой ход!`,
-      `Мимо! Круг сужается — осталось ${left} бочек!`,
-      `Тиль уже близко! Осталось всего ${left} закрытых бочек!`,
-    ];
-    this._setSignal('wait', `ТИЛЬ ВСКРЫЛ БОЧКУ (ОСТАЛОСЬ ${left})`, taunts[(this.tilMoves - 1) % taunts.length]);
-    this._scheduleTilTurn();
+    const msg = prefixText
+      ? `${prefixText} Пусто — осталось ${left}!`
+      : `Тиль вскрыл бочку — пусто! Осталось ${left}. Следующий счёт!`;
+    this._setSignal('wait', `ТИЛЬ: ПУСТО (ОСТАЛОСЬ ${left})`, msg);
+    this._setTimer(() => this._startNextBeat(), 820);
   }
 
   handleBarrelClick(index, worldPoint = null) {
-    if (!this.isActive || this.phase !== 'playing') return;
+    if (!this.isActive) return;
     const now = performance.now();
     if (now < this._clickLockUntil) return;
     if (index < 0 || index >= this.barrelCount) return;
     if (this.openedSet.has(index)) return;
 
-    this._clickLockUntil = now + 320;
+    // 1. Фальстарт — ударил ДО «ТРИ — БЕЙ!» -> пропускаешь этот такт, бьёт Тиль!
+    if (this.phase === 'countdown') {
+      this._clickLockUntil = now + 700;
+      this._clearTimers();
+      this.phase = 'between';
+      const scene = this.getScene?.();
+      scene?.triggerBarrelEerieFX?.(index, 'latch_rattle');
+      audio.playTilFalseStart();
+      Haptics.warning();
+      this._setSignal('caught', '⚡ РАНО! ФАЛЬСТАРТ — ХОД ТИЛЯ!', 'Поторопился! Жди «ТРИ — БЕЙ!», сейчас вскрываю я!');
+      this._setTimer(() => this._executeTilStrike('Фальстарт! Бью я!'), 650);
+      return;
+    }
+
+    // 2. Окно удара «ТРИ — БЕЙ!» — честный слепой удар по выбранной закрытой бочке!
+    if (this.phase !== 'go' || this.playerActedThisBeat) return;
+
+    this.playerActedThisBeat = true;
+    this._clickLockUntil = now + 400;
+    this._clearTimers();
+    this.phase = 'between';
     this.openedSet.add(index);
     this.playerMoves += 1;
 
     const scene = this.getScene?.();
 
-    // 1. ПОБЕДА — Игрок нашёл целевую бочку быстрее Тиля!
+    // 2A. НАШЁЛ ЦЕЛЕВУЮ БОЧКУ ПЕРВЫМ!
     if (index === this.targetIndex) {
-      this._clearTimers();
       this.phase = 'done';
       scene?.setTilBarrelCue?.(-1, 'off');
       scene?.assignTargetBarrelNow?.(index);
       scene?.triggerStrikeFX?.(index, worldPoint);
-      scene?.triggerEmptyBarrelOpen?.(index, 'sparks');
       audio.playStrike(index);
-      audio.playTilBonus();
+      audio.playLidBlowOff?.(true);
       Haptics.heavy();
       this._syncUI();
 
       this._setSignal(
         'win',
-        '⚡ НАШЁЛ БЫСТРЕЕ ТИЛЯ!',
-        this.level === 2
-          ? 'Вот она — пустая бочка! Закатывай туда друга!'
-          : 'Чёрт, ты реально быстрее меня! Забирай награду!'
+        this.level === 1 ? '⚡ НАШЁЛ ДРУГА БЫСТРЕЕ ТИЛЯ!' : '⚡ ПРИЗ ТВОЙ! БЫСТРЕЕ ТИЛЯ!',
+        this.level === 1 ? 'Вот он! Ты успел раньше меня!' : 'Чёрт, ты выбил награду первым!'
       );
-      this._finishDuel(true, 'found');
+      this._handleVictory(index);
       return;
     }
 
-    // 2. СКРИМЕР-ЛОВУШКА!
+    // 2B. СКРИМЕР-ЛОВУШКА!
     if (this.screamerSet.has(index)) {
       this.lives = Math.max(0, this.lives - 1);
       scene?.triggerStrikeFX?.(index, worldPoint);
@@ -328,105 +471,165 @@ export class Til3DBarrelDuel {
       Haptics.error();
       this._syncUI();
 
-      // Запускаем настоящий полноэкранный хоррор-скример + 1 из 10 реальных MP3!
       if (typeof this.onScreamerHit === 'function') {
         try { this.onScreamerHit(); } catch { /* ignore */ }
       }
 
       if (this.lives <= 0) {
-        this._clearTimers();
-        this.phase = 'done';
-        this._setSignal('caught', '😱 СКРИМЕРЫ ДОБИЛИ ТЕБЯ! (0 ❤️)', 'Живым не ушёл! Бери реванш или закатай друга за +3 ❤️!');
-        this._finishDuel(false, 'screamers');
+        this._setSignal('caught', '😱 СКРИМЕРЫ ДОБИЛИ ТЕБЯ! (0 ❤️)', 'Жизни на нуле!');
+        this._handleDefeat('screamers');
         return;
       }
 
-      this._clickLockUntil = performance.now() + 1450;
       const left = this._getClosedBarrels().length;
-      this._setSignal(
-        'caught',
-        `😱 СКРИМЕР! −1 ❤️ (ОСТАЛОСЬ ${this.lives} ❤️)`,
-        `Осторожнее! Там был не тот! Осталось ${left} бочек — ищи дальше!`
-      );
+      this._setSignal('caught', `😱 СКРИМЕР! −1 ❤️ (ОСТАЛОСЬ ${this.lives} ❤️)`, `Осторожнее! Осталось ${left} бочек — ход Тиля!`);
+      this._setTimer(() => this._executeTilStrike('Скример тебя задел — теперь мой удар!'), 1350);
       return;
     }
 
-    // 3. ПУСТАЯ БОЧКА — продолжаем искать!
+    // 2C. БОНУСНЫЕ ⭐ ОЧКИ В СУПЕР-ПРИЗ!
+    if (this.pointsSet.has(index)) {
+      scene?.triggerStrikeFX?.(index, worldPoint);
+      scene?.triggerEmptyBarrelOpen?.(index, 'sparks');
+      audio.playStrike(index);
+      audio.playTilBonus();
+      Haptics.success();
+      this._syncUI();
+      if (typeof this.onBonusPoints === 'function') {
+        try { this.onBonusPoints(100, index); } catch { /* ignore */ }
+      }
+      const left = this._getClosedBarrels().length;
+      this._setSignal('win', `⭐ +100 В СУПЕР-ПРИЗ! (ОСТАЛОСЬ ${left})`, 'Неплохо, баллы забрал — но главную бочку ещё не нашёл!');
+      this._setTimer(() => this._executeTilStrike('Мой удар!'), 680);
+      return;
+    }
+
+    // 2D. ПУСТАЯ БОЧКА
     scene?.triggerStrikeFX?.(index, worldPoint);
     scene?.triggerEmptyBarrelOpen?.(index, 'sparks');
     audio.playStrike(index);
     Haptics.light();
-    this._syncUI();
+
+    // На Ур.1 у игрока 3 удара (1 жизнь = 3 удара как в v15.5) — промах тратит 1 ❤️ из 3 попыток
+    if (this.level === 1) {
+      this.lives = Math.max(0, this.lives - 1);
+      if (this.lives === 1 && typeof this.onScreamerHit === 'function') {
+        try { this.onScreamerHit(); } catch { /* ignore */ }
+      }
+      this._syncUI();
+      if (this.lives <= 0) {
+        this._setSignal('caught', '😱 ПОПЫТКИ КОНЧИЛИСЬ!', 'Посмотри трейлер — заберёшь +3 ❤️ и вскроешь бочку!');
+        this._handleDefeat('out_of_strikes');
+        return;
+      }
+    } else {
+      this._syncUI();
+    }
 
     const left = this._getClosedBarrels().length;
-    this._setSignal(
-      'go',
-      `ПУСТО! ОСТАЛОСЬ ${left} БОЧЕК`,
-      left <= 2
-        ? 'Осталось совсем чуть-чуть — бей быстрее меня!'
-        : `Здесь пусто! Бей следующую закрытую бочку (осталось ${left})!`
-    );
+    this._setSignal('wait', `ПУСТО! ХОД ТИЛЯ (ОСТАЛОСЬ ${left})`, 'Мимо! Теперь вскрываю я!');
+    this._setTimer(() => this._executeTilStrike(''), 480);
   }
 
-  _finishDuel(playerWon, reason = '') {
+  _handleVictory(diveBarrelIndex) {
     this.phase = 'done';
     this._clearTimers();
     const scene = this.getScene?.();
     scene?.setInteractive?.(false);
     scene?.setTilBarrelCue?.(-1, 'off');
-
-    if (playerWon) {
-      Haptics.success();
-      this._setTimer(() => {
-        if (!this.isActive) return;
-        const summary = {
-          level: this.level,
-          barrelCount: this.barrelCount,
-          livesLeft: this.lives,
-          playerMoves: this.playerMoves,
-          tilMoves: this.tilMoves,
-        };
-        this.stop();
-        if (typeof this.onVictory === 'function') {
-          this.onVictory(summary);
-        }
-      }, 950);
-      return;
-    }
-
-    // При поражении (Тиль опередил) — тоже даём скример! (При 'screamers' он уже вылетел на последнем ударе)
-    if (reason === 'til_faster' && typeof this.onScreamerLoss === 'function') {
-      try { this.onScreamerLoss(); } catch { /* ignore */ }
-    }
+    Haptics.success();
 
     this._setTimer(() => {
       if (!this.isActive) return;
-      const isTilWin = reason === 'til_faster';
-      const failedLevel = this.level;
+      const summary = {
+        level: this.level,
+        barrelCount: this.barrelCount,
+        diveBarrelIndex,
+        livesLeft: this.lives,
+        playerMoves: this.playerMoves,
+        tilMoves: this.tilMoves,
+        packMeta: this.packMeta,
+      };
+      this.stop();
+      if (typeof this.onVictory === 'function') {
+        this.onVictory(summary);
+      }
+    }, 620);
+  }
+
+  _handleDefeat(reason = '') {
+    this._clearTimers();
+    const scene = this.getScene?.();
+    scene?.setInteractive?.(false);
+    scene?.setTilBarrelCue?.(-1, 'off');
+
+    if (reason !== 'screamers' && typeof this.onScreamerLoss === 'function') {
+      try { this.onScreamerLoss(); } catch { /* ignore */ }
+    }
+
+    // УРОВЕНЬ 1: проиграл (кончились удары или Тиль опередил) -> СМОТРИШЬ ТРЕЙЛЕР VK (+3 ❤️)!
+    if (this.level === 1 && !this.l1TrailerUsed) {
+      this.phase = 'paused_trailer';
+      this._setTimer(() => {
+        if (!this.isActive) return;
+        showDuolingoCard({
+          icon: '🎬',
+          badge: reason === 'til_faster' ? 'ТИЛЬ НАШЁЛ ПЕРВЫМ' : 'ПОПЫТКИ КОНЧИЛИСЬ',
+          title: 'Посмотри трейлер — забери +3 ❤️ и найди друга!',
+          body: 'Официальный трейлер триллера «БОЧКА» (реж. Алексей Звонцов и Тиль Швайгер). После просмотра сразу вернёшься с +3 ❤️!',
+          buttonText: '🎬 СМОТРЕТЬ ТРЕЙЛЕР (VK) → +3 ❤️',
+          tone: 'gold',
+          onConfirm: () => {
+            if (typeof this.onL1TrailerRescue === 'function') {
+              this.onL1TrailerRescue();
+            }
+          },
+        });
+      }, 1750);
+      return;
+    }
+
+    // УРОВНИ 2–5: сгорели все жизни / Тиль победил!
+    this.phase = 'done';
+    this.defeatsCount += 1;
+    const failedLevel = this.level;
+
+    // Когда Тилю проиграл уже все жизни повторно (defeatsCount >= 2) -> ВЫКИДЫВАЕТ НА УРОВЕНЬ С МОРЕМ «ДОСТУЧИСЬ ДО НЕБЕС»!
+    if (this.level >= 2 && this.defeatsCount >= 2 && typeof this.onGoOcean === 'function') {
+      this.defeatsCount = 0; // сбрасываем, чтобы море оставалось редкой культовой сценой
+      this._setTimer(() => {
+        if (!this.isActive) return;
+        this.stop();
+        this.onGoOcean(failedLevel);
+      }, 1650);
+      return;
+    }
+
+    // 1-й слив жизней на Ур.2–5 -> точно как в архиве v15.5: отправляешь ещё другу за +3 ❤️ (или реванш)!
+    this._setTimer(() => {
+      if (!this.isActive) return;
       showDuolingoCard({
-        icon: '😱',
-        badge: isTilWin ? 'ТИЛЬ НАШЁЛ ПЕРВЫМ' : 'ЖИЗНИ СГОРЕЛИ НА СКРИМЕРАХ',
-        title: isTilWin
-          ? 'Тиль опередил! Возьми реванш в цеху!'
-          : 'Скримеры выбили все ❤️ — попробуй ещё раз!',
-        body: 'Можешь сразу взять реванш в этом же цеху или закатать друга в бочку — получишь +3 ❤️ и приблизишь билет 4/4!',
-        buttonText: '🔄 РЕВАНШ В ЦЕХУ (ЕЩЁ РАЗ)',
-        secondaryText: '🛢 ЗАКАТАТЬ ДРУГА (+3 ❤️)',
+        icon: '🛢',
+        badge: reason === 'til_faster' ? 'ТИЛЬ ОПЕРЕДИЛ' : 'ЖИЗНИ КОНЧИЛИСЬ (0 ❤️)',
+        title: 'Закатай ещё друга в бочку — верни +3 ❤️!',
+        body: 'Отправь бочку новому другу: сразу получишь +3 ❤️, ускоришь сбор билета 4/4 и наберёшь ⭐ в Супер-приз (Закрытый показ в Москве 17 декабря)!',
+        buttonText: '🛢 ЗАКАТАТЬ ЕЩЁ ДРУГА (+3 ❤️)',
+        secondaryText: '🔄 РЕВАНШ В ЦЕХУ',
         tone: 'gold',
         onConfirm: () => {
+          this.stop();
+          if (typeof this.onRecoverFriend === 'function') {
+            this.onRecoverFriend(failedLevel);
+          }
+        },
+        onSecondary: () => {
           this.start({
             level: failedLevel,
             barrelCount: this.barrelCount,
             titleBadge: this._dom?.stepBadge?.textContent || '',
           });
         },
-        onSecondary: () => {
-          this.stop();
-          if (typeof this.onRecoverFriend === 'function') {
-            this.onRecoverFriend(failedLevel);
-          }
-        },
       });
-    }, 1850);
+    }, 1750);
   }
 }
