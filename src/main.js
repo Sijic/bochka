@@ -76,6 +76,7 @@ import {
   awardV8LevelProgress,
   checkFriendDuplicateConnection,
   fetchMyGameFriends,
+  fetchDuelFriendCandidates,
   sendDirectGiftTicketToFriend,
   notifyReferrerTicketWon,
   sendLevel1FriendReply,
@@ -379,7 +380,7 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=155'));
+    const mod = duelModCache || (await import('./duel.js?v=1710'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -387,6 +388,15 @@ async function ensureDuelReady() {
       audio,
       getTgUser: () => state.tg?.user || null,
       onOpenHallOfFame: () => openHallOfFameModal().catch(() => {}),
+      loadDuelCandidates: () => fetchDuelFriendCandidates(state.tg?.user),
+      onChallengeFriend: (friend, roomId) => challengeSpecificFriend1v1(friend, roomId),
+      onOpenPackFriend: () => {
+        duelCtrl?.leaveRoom(false);
+        showScreen('pack');
+      },
+      onRoomFull: () => {
+        openDuelTable('').catch(() => {});
+      },
       onProfileSync: (patch) => {
         state.profile = { ...state.profile, ...patch };
         if (patch && patch.ticketShards != null) {
@@ -397,9 +407,14 @@ async function ensureDuelReady() {
         refreshHudLevelLabel();
       },
       onToast: (msg) => showToast(msg),
-      onOpenInviteShare: () => pushDuelToFriends(),
+      onOpenInviteShare: () => shareCurrentDuelRoom(),
       onOpenGoldenFork: () => openGoldenTicketForkModal(),
-      onExitToHub: () => showScreen('modeA'),
+      onExitToHub: () => {
+        showScreen('workshop');
+        if (!state.round.running && !til3dDuel?.isActive) {
+          startNewbieOnboardingRound();
+        }
+      },
       onDuelDefeatToTil: ({ roomId, solo } = {}) => {
         state.oceanTapper.returnDuel = { roomId: roomId || '', solo: Boolean(solo) };
         duelCtrl?.leaveRoom(false);
@@ -8358,6 +8373,42 @@ async function openDuelTable(roomId = '', { autoAddTestBots = false, initialMode
 }
 
 /**
+ * v17.1: Личный вызов 1×1 конкретному другу (из «Кому отправил» или «Общей ветки»).
+ * Если есть tg_id — шлём мгновенный пуш от бота @bochka_film_bot прямо в личку;
+ * иначе — открываем личную ссылку 1×1 в Telegram/Шере.
+ */
+async function challengeSpecificFriend1v1(friend, roomId) {
+  const cleanRoom = roomId || duelCtrl?.roomId || `d_${Math.random().toString(36).slice(2, 8)}`;
+  const targetTgId = String(friend?.tg_id || friend?.receiver_tg_id || friend?.friend_tg_id || '').trim();
+  const friendName = String(friend?.name || friend?.receiver_name || 'Друг').trim();
+  const challengerName = state.tg?.user?.name || 'Друг из Цеха';
+
+  if (targetTgId) {
+    const ok = await sendDuelChallengePush({
+      targetTgId,
+      challengerName,
+      roomId: cleanRoom,
+    }).catch(() => false);
+    if (ok) {
+      showToast(`⚔️ Вызов 1×1 отправлен ${friendName} в Telegram! Ждём за столом.`);
+      return true;
+    }
+  }
+
+  // Фоллбэк: персональная ссылка именно на этот стол 1×1
+  const links = buildDuelShareLinks(cleanRoom);
+  const url = links.tgLink || links.webUrl;
+  const text = `⚔️ ${friendName}, погнали 1 на 1 в «БОЧКУ»! Только мы вдвоём — кто быстрее собьёт крышки бочек на счёт три!`;
+  if (state.tg?.inTelegram && links.tgLink) {
+    openTelegramShare(url, text);
+  } else {
+    openExternalLink(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`);
+  }
+  showToast(`🔗 Отправь личный вызов 1×1 для ${friendName}!`);
+  return true;
+}
+
+/**
  * v15.2: Автоматический пуш через бота ВСЕМ друзьям, кто играл в «БОЧКУ»,
  * чтобы они залетели прямо в эту дуэль (БЕЗ открытия ручного окна «Кому отправить»!).
  */
@@ -8983,6 +9034,11 @@ function bindUIEvents() {
   });
   document.getElementById('btn-burger-duel')?.addEventListener('click', () => {
     closeBurgerDrawer();
+    openDuelTable();
+  });
+  document.getElementById('btn-hud-duel')?.addEventListener('click', () => {
+    Haptics.light();
+    if (!audio._userMuted) audio.unlockSync(true);
     openDuelTable();
   });
   document.getElementById('btn-burger-play-til')?.addEventListener('click', () => {

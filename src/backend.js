@@ -2302,6 +2302,55 @@ export async function fetchMyGameFriends(tgUser = null) {
   return safeReadJson('bochka_v8_local_friends', []) || [];
 }
 
+/**
+ * v17.1: Кандидаты на дуэль строго 1 на 1 (2 друга):
+ *  - sent: кому ты отправил бочку / кто тебя пригласил
+ *  - branch: участники твоей общей вирусной ветки (до 4 колен)
+ */
+export async function fetchDuelFriendCandidates(tgUser = null) {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  if (db && uid) {
+    try {
+      const { data, error } = await db.rpc('get_my_branch_duel_candidates_rpc', { p_uid: uid });
+      if (!error && data?.ok) {
+        return {
+          ok: true,
+          sent: Array.isArray(data.sent) ? data.sent : [],
+          branch: Array.isArray(data.branch) ? data.branch : [],
+        };
+      }
+    } catch { /* fallback below */ }
+  }
+
+  // Fallback: объединяем локальных друзей / старые RPC
+  const [gameFriends, wsFriends] = await Promise.all([
+    fetchMyGameFriends(tgUser).catch(() => []),
+    fetchMyWorkshopFriends(tgUser).catch(() => []),
+  ]);
+  const map = new Map();
+  for (const f of [...(wsFriends || []), ...(gameFriends || [])]) {
+    const fUid = String(f?.friend_uid || f?.receiver_uid || f?.uid || '').trim();
+    const fTg = String(f?.friend_tg_id || f?.receiver_tg_id || f?.tg_id || '').trim();
+    const key = fUid || fTg;
+    if (!key || key === uid) continue;
+    if (!map.has(key)) {
+      map.set(key, {
+        uid: fUid || `tg_${fTg}`,
+        tg_id: fTg,
+        name: String(f?.friend_name || f?.receiver_name || f?.name || 'Друг из Цеха'),
+        username: String(f?.friend_username || f?.receiver_username || f?.username || ''),
+        relation: 'sent',
+        opened_barrel: Boolean(f?.opened_barrel),
+        duels_together: Number(f?.duels_together || 0),
+        avatar_url: String(f?.avatar_url || ''),
+      });
+    }
+  }
+  const sent = Array.from(map.values());
+  return { ok: true, sent, branch: sent.map((item) => ({ ...item, relation: 'direct', hop: 1 })) };
+}
+
 export async function sendDirectGiftTicketToFriend({ tgUser, friend, giftId }) {
   if (isTestBogActive() || !ENV.tgNotifyWebhook) {
     return { ok: true, tgSent: true };

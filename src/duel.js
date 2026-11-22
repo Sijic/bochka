@@ -10,17 +10,18 @@ import {
 } from './backend.js';
 
 const BARREL_BATCH_CODES = ['01', '19', '97', '12', '17', '26', '33', '48', '71', '84', '92', '99'];
+const MAX_DUEL_PLAYERS = 2; // v17.1: Строго 1 на 1 — за столом играют только двое друзей!
 const TIL_BOT_UID = 'bot_workshop_master';
 const TIL_BOT_NAME = 'Тиль Швайгер';
 const TIL_AVATAR_URL = './public/sprites/til_avatar.webp?v=1543';
 
 /**
- * Контроллер синхронного мультиплеера на 2–3 игроков «НА СЧЁТ ТРИ!» (Supabase Realtime Presence + Broadcast)
+ * Контроллер синхронного мультиплеера 1 на 1 (строго 2 друга) «НА СЧЁТ ТРИ!» (Supabase Realtime Presence + Broadcast)
  * и режима «👀 Подглядывать за игрой» (`watch_<barrelId>`).
- * Все промежуточные клики, таймеры и «Погреметь цепями» идут строго через WebSocket в оперативной памяти (0 записей в БД).
+ * Все промежуточные клики и таймеры идут строго через WebSocket в оперативной памяти (0 записей в БД).
  */
 export class WorkshopDuelController {
-  constructor({ scene, audio, getTgUser, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels, onOpenHallOfFame }) {
+  constructor({ scene, audio, getTgUser, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels, onOpenHallOfFame, loadDuelCandidates, onChallengeFriend, onOpenPackFriend, onRoomFull }) {
     this.scene = scene;
     this.audio = audio;
     this.getTgUser = getTgUser;
@@ -34,6 +35,13 @@ export class WorkshopDuelController {
     this.onFlyLife = onFlyLife;
     this.onReturnToLevels = onReturnToLevels;
     this.onOpenHallOfFame = onOpenHallOfFame;
+    this.loadDuelCandidates = loadDuelCandidates || null;
+    this.onChallengeFriend = onChallengeFriend || null;
+    this.onOpenPackFriend = onOpenPackFriend || null;
+    this.onRoomFull = onRoomFull || null;
+    this.duelCandidates = { sent: [], branch: [], loaded: false };
+    this.pickerTab = 'sent'; // 'sent' | 'branch'
+    this.challengedUids = new Set();
     this.soloMode = false;
     this.duelMode = 'classic'; // 'classic' | 'chips'
     this.selectedAnteTrophyId = null;
@@ -299,7 +307,10 @@ export class WorkshopDuelController {
     this.bindModeTabsOnce();
     this.connectRealtimeChannel();
     this.updateModeTabsUI();
+    this.challengedUids.clear();
+    this.duelCandidates = { sent: [], branch: [], loaded: false };
     this.renderLobbyUI();
+    this.refreshFriendPicker();
     this.startBadgeProjectionLoop();
 
     if (initialMode === 'chips') {
@@ -359,8 +370,8 @@ export class WorkshopDuelController {
   }
 
   addSandboxBot() {
-    if (this.players.length >= 3) {
-      this.onToast?.('За столом уже максимум 3 игрока!');
+    if (this.players.length >= MAX_DUEL_PLAYERS) {
+      this.onToast?.('⚔️ В дуэли играют строго двое (1 на 1)!');
       return;
     }
     this.botCounter += 1;
@@ -405,11 +416,19 @@ export class WorkshopDuelController {
           });
         }
       }
-      // Сохраняем локальных песочных ботов (если есть) и ограничиваем стол 3 слотами
+      // v17.1: Строго 1 на 1 — максимум 2 игрока за столом! Если 2 друга уже сидят, 3-го не пускаем.
+      const realSorted = [...list].sort((a, b) => (a.joinedAt - b.joinedAt) || a.uid.localeCompare(b.uid));
+      if (realSorted.length > MAX_DUEL_PLAYERS && !realSorted.slice(0, MAX_DUEL_PLAYERS).some((p) => p.uid === this.myUid)) {
+        this.onToast?.('⚔️ За этим столом уже играют двое друзей (1 на 1)! Открываем твой новый стол…');
+        this.leaveRoom(false);
+        this.onRoomFull?.();
+        return;
+      }
+
       const bots = this.players.filter((p) => p.isBot);
-      const merged = [...list, ...bots]
+      const merged = [...realSorted, ...bots]
         .sort((a, b) => (a.joinedAt - b.joinedAt) || a.uid.localeCompare(b.uid))
-        .slice(0, 3);
+        .slice(0, MAX_DUEL_PLAYERS);
 
       if (merged.length > 0) {
         this.players = merged;
@@ -538,16 +557,12 @@ export class WorkshopDuelController {
     if (potEl) {
       if (isChipsMode) {
         potEl.textContent = chipsUnlocked
-          ? '🪙 ДУЭЛЬ НА ФИШКИ (УР. 3+): оба ставят по фишке из Зала славы — победитель забирает карточку проигравшего!'
-          : '🔒 ДУЭЛЬ НА ФИШКИ: откроется на 3 уровне (пригласи 3 друзей). Обычная дуэль доступна сразу!';
+          ? '🪙 ДУЭЛЬ 1 НА 1 НА ФИШКИ (УР. 3+): двое ставят по фишке — победитель забирает карточку соперника!'
+          : '🔒 ДУЭЛЬ НА ФИШКИ: откроется на 3 уровне (пригласи 3 друзей). Обычная дуэль 1 на 1 доступна сразу!';
         potEl.classList.toggle('is-triple-bonus', chipsUnlocked);
-      } else if (count >= 3) {
-        potEl.innerHTML =
-          '🔥 <strong>БАНК НА ТРОИХ: 3 ❤️</strong> + БОНУС ЦЕХА: <strong>+450 ⭐ ОЧКОВ · +0.25 ШКАЛЫ · 8% ЗОЛОТАЯ БОЧКА 🎟</strong>';
-        potEl.classList.add('is-triple-bonus');
       } else {
-        potEl.innerHTML =
-          '⚔️ <strong>БАНК ДУЭЛИ: 2 ❤️</strong> (ставки по 1 ❤️ · Победитель забирает банк + 120 ⭐ в ТОП-10)';
+        potEl.textContent =
+          '⚔️ ТОЛЬКО 2 ДРУГА (1 НА 1): ставка по 1 ❤️ · Победитель забирает 2 ❤️ + 250 ⭐ и шаг к билету другу!';
         potEl.classList.remove('is-triple-bonus');
       }
     }
@@ -566,12 +581,12 @@ export class WorkshopDuelController {
           const vsTil = this.players.some((p) => p.isBot && (p.isTil || p.uid === TIL_BOT_UID));
           const vsBot = this.players.some((p) => p.isBot);
           miniStatus.textContent = isFinished
-            ? '🏁 ИТОГ РАУНДА'
+            ? '🏁 ИТОГ ДУЭЛИ 1 НА 1'
             : vsTil
-              ? '🎬 ТИЛЬ ИГРАЕТ С ТОБОЙ (ПОКА ЖДЁМ ДРУЗЕЙ)'
+              ? '🎬 РАЗМИНКА С ТИЛЕМ (ПОКА ЖДЁМ ДРУГА)'
               : vsBot
-                ? '🤖 БОЙ С БОТОМ (ПОКА ЖДЁМ ДРУЗЕЙ)'
-                : `⚔️ БОЙ · ${count} ИГРОКА`;
+                ? '🤖 БОЙ 1 НА 1 С БОТОМ'
+                : '⚔️ ДУЭЛЬ 1 НА 1 · 2 ДРУГА';
         }
       } else {
         liveMiniBar.setAttribute('hidden', '');
@@ -579,71 +594,79 @@ export class WorkshopDuelController {
     }
 
     const shareLinkBtn = document.getElementById('btn-duel-share-link');
-    if (invite3Btn) {
-      if (count < 3 && (this.phase === 'lobby' || this.phase === 'finished')) {
-        invite3Btn.removeAttribute('hidden');
-        shareLinkBtn?.removeAttribute('hidden');
-        const need = Math.max(1, 3 - count);
-        if (!invite3Btn.dataset.pushCooldown) {
-          invite3Btn.textContent =
-            count === 1
-              ? `📣 ПУШ ВСЕМ ДРУЗЬЯМ В БОЧКЕ (НУЖНО ЕЩЁ ${need})`
-              : '📣 ПУШ ДРУЗЬЯМ В БОЧКЕ (+450 ⭐ И БИЛЕТ!)';
-        }
+    // v17.1: Убираем массовый пуш «на троих» — теперь точечный выбор 1 друга из списка ниже или личная ссылка 1×1!
+    if (invite3Btn) invite3Btn.setAttribute('hidden', '');
+    if (shareLinkBtn) {
+      if (count < MAX_DUEL_PLAYERS && (this.phase === 'lobby' || this.phase === 'finished')) {
+        shareLinkBtn.removeAttribute('hidden');
       } else {
-        invite3Btn.setAttribute('hidden', '');
-        shareLinkBtn?.setAttribute('hidden', '');
+        shareLinkBtn.setAttribute('hidden', '');
       }
     }
 
-    // v11.0: На небо к Тилю — СТРОГО только при поражении и пустой энергии (кнопки ожидания в лобби больше нет!)
     this.syncEnergyUI();
 
     if (slotsEl) {
-      const cards = [];
-      for (let i = 0; i < 3; i++) {
+      slotsEl.textContent = '';
+      for (let i = 0; i < MAX_DUEL_PLAYERS; i++) {
         const p = this.players[i];
+        const card = document.createElement('div');
         if (p) {
-          const isKnockout = this.spectatorUids.includes(p.uid);
           const isTil = Boolean(p.isTil || p.uid === TIL_BOT_UID);
           const initials = (p.name || '?').trim().slice(0, 2).toUpperCase();
-          const avatarHtml = p.avatar
-            ? `<img src="${escapeAttr(p.avatar)}" alt="${escapeAttr(p.name || '')}" class="duel-slot-avatar-img" />`
-            : `<span class="duel-slot-initials">${escapeHtml(initials)}</span>`;
-          const roleLine = isKnockout
-            ? '☠️ В НОКАУТЕ (ЗРИТЕЛЬ)'
-            : p.uid === this.myUid
-              ? 'ВЫ · В СТРОЮ'
-              : isTil
-                ? '🎬 ТИЛЬ ИГРАЕТ С ТОБОЙ'
-                : 'В СТРОЮ';
-          cards.push(`
-            <div class="duel-slot-card is-filled ${isKnockout ? 'is-knockout' : ''} ${isTil ? 'is-til-player' : ''}">
-              <div class="duel-slot-avatar">${avatarHtml}</div>
-              <div class="duel-slot-meta">
-                <strong>${escapeHtml(p.name)}</strong>
-                <span>${roleLine}</span>
-              </div>
-            </div>
-          `);
+          card.className = `duel-slot-card is-filled${isTil ? ' is-til-player' : ''}`;
+          const avaWrap = document.createElement('div');
+          avaWrap.className = 'duel-slot-avatar';
+          if (p.avatar && /^(https?:\/\/|\.?\/|data:image\/)/i.test(String(p.avatar))) {
+            const img = document.createElement('img');
+            img.src = p.avatar;
+            img.alt = p.name || '';
+            img.className = 'duel-slot-avatar-img';
+            avaWrap.appendChild(img);
+          } else {
+            const sp = document.createElement('span');
+            sp.className = 'duel-slot-initials';
+            sp.textContent = initials;
+            avaWrap.appendChild(sp);
+          }
+          const meta = document.createElement('div');
+          meta.className = 'duel-slot-meta';
+          const st = document.createElement('strong');
+          st.textContent = p.name || 'Игрок';
+          const sub = document.createElement('span');
+          sub.textContent = p.uid === this.myUid
+            ? 'ВЫ · ИГРОК 1'
+            : isTil
+              ? '🎬 ТИЛЬ (РАЗМИНКА)'
+              : 'ДРУГ · ИГРОК 2';
+          meta.append(st, sub);
+          card.append(avaWrap, meta);
         } else {
-          cards.push(`
-            <div class="duel-slot-card is-empty">
-              <div class="duel-slot-avatar"><span class="duel-slot-initials">+</span></div>
-              <div class="duel-slot-meta">
-                <strong>${i === 2 ? '3-Й СЛОТ (+БОНУС ЦЕХА)' : 'ЖДЁМ СОПЕРНИКА...'}</strong>
-                <span>${i === 2 ? '+450 ⭐ и шанс билета' : 'Отправь ссылку другу'}</span>
-              </div>
-            </div>
-          `);
+          card.className = 'duel-slot-card is-empty';
+          const avaWrap = document.createElement('div');
+          avaWrap.className = 'duel-slot-avatar';
+          const sp = document.createElement('span');
+          sp.className = 'duel-slot-initials';
+          sp.textContent = '+';
+          avaWrap.appendChild(sp);
+          const meta = document.createElement('div');
+          meta.className = 'duel-slot-meta';
+          const st = document.createElement('strong');
+          st.textContent = 'ЖДЁМ 1 ДРУГА (1×1)';
+          const sub = document.createElement('span');
+          sub.textContent = 'Выбери из ветки ниже или скинь ссылку';
+          meta.append(st, sub);
+          card.append(avaWrap, meta);
         }
+        slotsEl.appendChild(card);
       }
-      slotsEl.innerHTML = cards.join('');
     }
+
+    this.renderFriendPickerUI();
 
     const soloBtn = document.getElementById('btn-duel-play-solo');
     if (soloBtn) {
-      if (this.phase === 'lobby' && !isChipsMode) soloBtn.removeAttribute('hidden');
+      if (this.phase === 'lobby' && !isChipsMode && count < MAX_DUEL_PLAYERS) soloBtn.removeAttribute('hidden');
       else soloBtn.setAttribute('hidden', '');
     }
 
@@ -658,22 +681,193 @@ export class WorkshopDuelController {
         } else if (isChipsMode && !this.selectedAnteTrophyId) {
           startBtn.disabled = true;
           startBtn.textContent = '🪙 ВЫБЕРИ ФИШКУ НА КОН ВЫШЕ';
-        } else if (count < 2) {
+        } else if (count < MAX_DUEL_PLAYERS) {
           startBtn.disabled = true;
           startBtn.textContent = isChipsMode
-            ? '⏳ ЖДЁМ СОПЕРНИКА (УР. 3+) С ФИШКОЙ'
-            : '⏳ ЖДЁМ ДРУЗЕЙ (ИЛИ СЫГРАЙ ПРОТИВ ТИЛЯ ВЫШЕ)';
+            ? '⏳ ВЫЗОВИ 1 ДРУГА (УР. 3+) С ФИШКОЙ'
+            : '⏳ ВЫБЕРИ 1 ДРУГА ВЫШЕ ИЛИ СКИНЬ ССЫЛКУ';
         } else if (!this.isHost()) {
           startBtn.disabled = true;
           startBtn.textContent = '⏳ ЖДЁМ СТАРТА ОТ ХОСТА...';
         } else {
           startBtn.disabled = false;
           startBtn.textContent = isChipsMode
-            ? `🪙 НА СЧЁТ ТРИ! БОЙ НА ФИШКИ (${count} ИГРОКА)`
-            : `🔥 НА СЧЁТ ТРИ! СТАРТ (${count} ИГРОКА · БАНК ×3)`;
+            ? '🪙 НА СЧЁТ ТРИ! БОЙ 1 НА 1 НА ФИШКИ'
+            : '🔥 НА СЧЁТ ТРИ! СТАРТ 1 НА 1';
         }
       }
     }
+  }
+
+  async refreshFriendPicker() {
+    if (!this.loadDuelCandidates) return;
+    try {
+      const res = await this.loadDuelCandidates();
+      if (!this.active) return;
+      const sent = Array.isArray(res?.sent) ? res.sent : [];
+      const branch = Array.isArray(res?.branch) ? res.branch : [];
+      this.duelCandidates = { sent, branch, loaded: true };
+      if (sent.length === 0 && branch.length > 0) {
+        this.pickerTab = 'branch';
+      }
+      this.renderFriendPickerUI();
+    } catch {
+      this.duelCandidates = { sent: [], branch: [], loaded: true };
+      this.renderFriendPickerUI();
+    }
+  }
+
+  renderFriendPickerUI() {
+    const host = document.getElementById('duel-friend-picker');
+    if (!host) return;
+    const showPicker = this.phase === 'lobby' && this.players.length < MAX_DUEL_PLAYERS;
+    if (!showPicker) {
+      host.setAttribute('hidden', '');
+      return;
+    }
+    host.removeAttribute('hidden');
+    host.textContent = '';
+
+    const sentList = this.duelCandidates?.sent || [];
+    const branchList = this.duelCandidates?.branch || [];
+
+    const head = document.createElement('div');
+    head.className = 'dfp-head';
+    const title = document.createElement('span');
+    title.className = 'dfp-title';
+    title.textContent = '👥 ВЫБЕРИ 1 ДРУГА НА ДУЭЛЬ (ТОЛЬКО ВДВОЁМ):';
+    head.appendChild(title);
+    host.appendChild(head);
+
+    const tabs = document.createElement('div');
+    tabs.className = 'dfp-tabs';
+    tabs.setAttribute('role', 'tablist');
+
+    const tabSent = document.createElement('button');
+    tabSent.type = 'button';
+    tabSent.id = 'btn-dfp-tab-sent';
+    tabSent.className = `dfp-tab${this.pickerTab === 'sent' ? ' is-active' : ''}`;
+    tabSent.textContent = `📨 Кому отправил (${sentList.length})`;
+    tabSent.addEventListener('click', () => {
+      Haptics.light();
+      this.pickerTab = 'sent';
+      this.renderFriendPickerUI();
+    });
+
+    const tabBranch = document.createElement('button');
+    tabBranch.type = 'button';
+    tabBranch.id = 'btn-dfp-tab-branch';
+    tabBranch.className = `dfp-tab${this.pickerTab === 'branch' ? ' is-active' : ''}`;
+    tabBranch.textContent = `🌳 Общая ветка (${branchList.length})`;
+    tabBranch.addEventListener('click', () => {
+      Haptics.light();
+      this.pickerTab = 'branch';
+      this.renderFriendPickerUI();
+    });
+
+    tabs.append(tabSent, tabBranch);
+    host.appendChild(tabs);
+
+    const items = this.pickerTab === 'branch' ? branchList : sentList;
+    const listEl = document.createElement('div');
+    listEl.className = 'dfp-list';
+
+    if (!this.duelCandidates?.loaded) {
+      const loadMsg = document.createElement('p');
+      loadMsg.className = 'dfp-empty';
+      loadMsg.textContent = 'Загружаем друзей из твоей ветки…';
+      listEl.appendChild(loadMsg);
+    } else if (items.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'dfp-empty-box';
+      const txt = document.createElement('p');
+      txt.className = 'dfp-empty';
+      txt.textContent = this.pickerTab === 'branch'
+        ? 'В твоей общей ветке пока нет других игроков — отправь бочку первому другу или скинь ссылку 1×1 ниже!'
+        : 'Ты ещё никому не отправлял бочку — закатай друга (он появится здесь) или скинь ссылку 1×1 ниже!';
+      empty.appendChild(txt);
+      if (this.onOpenPackFriend) {
+        const packBtn = document.createElement('button');
+        packBtn.type = 'button';
+        packBtn.className = 'btn-secondary btn-compact dfp-pack-btn';
+        packBtn.textContent = '🛢 ЗАКАТАТЬ ДРУГА В БОЧКУ';
+        packBtn.addEventListener('click', () => {
+          Haptics.light();
+          this.onOpenPackFriend();
+        });
+        empty.appendChild(packBtn);
+      }
+      listEl.appendChild(empty);
+    } else {
+      items.slice(0, 15).forEach((friend) => {
+        const row = document.createElement('div');
+        row.className = 'dfp-row';
+
+        const left = document.createElement('div');
+        left.className = 'dfp-left';
+
+        const ava = document.createElement('div');
+        ava.className = 'dfp-ava';
+        const avaUrl = String(friend.avatar_url || '').trim();
+        if (avaUrl && /^(https?:\/\/|\.?\/|data:image\/)/i.test(avaUrl)) {
+          const img = document.createElement('img');
+          img.src = avaUrl;
+          img.alt = friend.name || 'Друг';
+          ava.appendChild(img);
+        } else {
+          ava.textContent = (friend.name || 'Д').trim().slice(0, 2).toUpperCase();
+        }
+
+        const info = document.createElement('div');
+        info.className = 'dfp-info';
+        const nameEl = document.createElement('strong');
+        nameEl.textContent = friend.name || 'Друг из Цеха';
+        const tagEl = document.createElement('span');
+        if (this.pickerTab === 'branch') {
+          const hop = Number(friend.hop || 1);
+          tagEl.textContent = hop <= 1
+            ? 'Прямой друг в ветке'
+            : `Общая ветка · ${hop}-е колено`;
+        } else if (friend.relation === 'invited_by') {
+          tagEl.textContent = 'Прислал тебе бочку';
+        } else {
+          tagEl.textContent = friend.opened_barrel
+            ? 'Открыл твою бочку ✓'
+            : 'Ты отправил ему бочку';
+        }
+        info.append(nameEl, tagEl);
+        left.append(ava, info);
+
+        const key = String(friend.uid || friend.tg_id || friend.name || '');
+        const alreadySent = this.challengedUids.has(key);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `dfp-btn${alreadySent ? ' is-sent' : ''}`;
+        btn.disabled = alreadySent;
+        btn.textContent = alreadySent ? '✓ ПОЗВАН' : '⚔️ ВЫЗВАТЬ 1×1';
+        btn.addEventListener('click', async () => {
+          Haptics.medium();
+          this.challengedUids.add(key);
+          btn.disabled = true;
+          btn.classList.add('is-sent');
+          btn.textContent = '📡 ЗОВЁМ...';
+          try {
+            await this.onChallengeFriend?.(friend, this.roomId);
+            btn.textContent = '✓ ПОЗВАН';
+          } catch {
+            this.challengedUids.delete(key);
+            btn.disabled = false;
+            btn.classList.remove('is-sent');
+            btn.textContent = '⚔️ ВЫЗВАТЬ 1×1';
+          }
+        });
+
+        row.append(left, btn);
+        listEl.appendChild(row);
+      });
+    }
+
+    host.appendChild(listEl);
   }
 
   /**
