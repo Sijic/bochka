@@ -8377,35 +8377,42 @@ function escapeHtmlSafe(str) {
     .replace(/"/g, '&quot;');
 }
 
+let _openingDuelLock = false;
 async function openDuelTable(roomId = '', { autoAddTestBots = false, initialMode = 'classic', prefetchedHof = null } = {}) {
-  state.entered = true;
-  requestAndSyncWriteAccess();
-  stopAirTimer();
-  state.round.running = false;
-  state.round.pausedForModal = false;
-  document.querySelectorAll('.modal-backdrop').forEach((m) => m.setAttribute('hidden', ''));
-  closeBurgerDrawer();
-  syncUiStage(state.tg?.user, 4).catch(() => {});
-  applyProgressiveDisclosureUI({ forceStage: 4 });
+  if (_openingDuelLock && !roomId) return;
+  _openingDuelLock = true;
+  try {
+    state.entered = true;
+    requestAndSyncWriteAccess();
+    stopAirTimer();
+    state.round.running = false;
+    state.round.pausedForModal = false;
+    document.querySelectorAll('.modal-backdrop').forEach((m) => m.setAttribute('hidden', ''));
+    closeBurgerDrawer();
+    syncUiStage(state.tg?.user, 4).catch(() => {});
+    applyProgressiveDisclosureUI({ forceStage: 4 });
 
-  await Promise.all([audio.unlock(audio.enabled !== false), ensureDuelReady()]);
-  refreshSoundButtonLabel();
+    await Promise.all([audio.unlock(audio.enabled !== false), ensureDuelReady()]);
+    refreshSoundButtonLabel();
 
-  const cleanRoom = roomId || `d_${Math.random().toString(36).slice(2, 8)}`;
-  await duelCtrl?.openRoom(cleanRoom, { autoAddTestBots, initialMode, prefetchedHof });
-  showScreen('duel');
+    const cleanRoom = roomId || `d_${Math.random().toString(36).slice(2, 8)}`;
+    await duelCtrl?.openRoom(cleanRoom, { autoAddTestBots, initialMode, prefetchedHof });
+    showScreen('duel');
+  } finally {
+    _openingDuelLock = false;
+  }
 }
 
 /**
- * v17.1: Личный вызов 1×1 конкретному другу (из «Кому отправил» или «Общей ветки»).
- * Если есть tg_id — шлём мгновенный пуш от бота @bochka_film_bot прямо в личку;
- * иначе — открываем личную ссылку 1×1 в Telegram/Шере.
+ * v17.2.2: Личный вызов 1×1 конкретному другу (из «Кому отправил» или «Общей ветки»).
+ * Без блокирующей модалки поверх кнопки «СТАРТ 1 НА 1»: статус обновляется прямо в #dfp-tab-explain и на кнопке «✓ ПОЗВАН».
  */
 async function challengeSpecificFriend1v1(friend, roomId) {
   const cleanRoom = roomId || duelCtrl?.roomId || `d_${Math.random().toString(36).slice(2, 8)}`;
   const targetTgId = String(friend?.tg_id || friend?.receiver_tg_id || friend?.friend_tg_id || '').trim();
   const friendName = String(friend?.name || friend?.receiver_name || 'Друг').trim();
   const challengerName = state.tg?.user?.name || 'Друг из Цеха';
+  const explainEl = document.getElementById('dfp-tab-explain');
 
   if (targetTgId) {
     const ok = await sendDuelChallengePush({
@@ -8414,7 +8421,7 @@ async function challengeSpecificFriend1v1(friend, roomId) {
       roomId: cleanRoom,
     }).catch(() => false);
     if (ok) {
-      showToast(`⚔️ Вызов 1×1 отправлен ${friendName} в Telegram! Ждём за столом.`);
+      if (explainEl) explainEl.textContent = `✓ Вызов 1×1 отправлен ${friendName} в Telegram! Ждём за столом.`;
       return true;
     }
   }
@@ -8428,7 +8435,7 @@ async function challengeSpecificFriend1v1(friend, roomId) {
   } else {
     openExternalLink(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`);
   }
-  showToast(`🔗 Отправь личный вызов 1×1 для ${friendName}!`);
+  if (explainEl) explainEl.textContent = `🔗 Отправь личную ссылку 1×1 для ${friendName} и жми «СТАРТ»!`;
   return true;
 }
 
