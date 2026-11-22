@@ -62,6 +62,7 @@ export function initTelegram() {
       trailerAutoOpen: false,
       trailerRefUid: '',
       openGiftFork: false,
+      openTilKnock: false,
       trafficSource: '',
       teamSeedRole: '',
       broadcastLinkType: '',
@@ -71,6 +72,9 @@ export function initTelegram() {
     const low = clean.toLowerCase();
     if (clean === 'giftfork') {
       res.openGiftFork = true;
+    } else if (low === 'til_knock' || low === 'ocean_til' || low === 'knock_til' || low === 'knock') {
+      res.openTilKnock = true;
+      res.trafficSource = 'til_knock';
     } else if (low === 'team_prod' || low === 'seed_admin' || low === 'admin_seed' || /^(?:seed_prod|src_prod)\d*$/.test(low)) {
       res.teamSeedRole = 'prod';
       res.trafficSource = 'team_prod';
@@ -151,6 +155,7 @@ export function initTelegram() {
       trailerAutoOpen: urlExtras.trailer || parsed.trailerAutoOpen,
       trailerRefUid: urlExtras.ref || parsed.trailerRefUid,
       openGiftFork: urlExtras.giftfork || parsed.openGiftFork,
+      openTilKnock: Boolean(urlExtras.tilKnock || parsed.openTilKnock),
       trafficSource,
       teamSeedRole: urlExtras.teamSeedRole || parsed.teamSeedRole || '',
       broadcastLinkType: parsed.broadcastLinkType || '',
@@ -218,6 +223,7 @@ export function initTelegram() {
     trailerAutoOpen: urlExtras.trailer || parsed.trailerAutoOpen,
     trailerRefUid: urlExtras.ref || parsed.trailerRefUid,
     openGiftFork: urlExtras.giftfork || parsed.openGiftFork,
+    openTilKnock: Boolean(urlExtras.tilKnock || parsed.openTilKnock),
     trafficSource,
     teamSeedRole: urlExtras.teamSeedRole || parsed.teamSeedRole || '',
     broadcastLinkType: parsed.broadcastLinkType || '',

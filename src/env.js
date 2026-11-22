@@ -47,7 +47,7 @@ export const ENV = {
   vkTrailerUrl: pick('VITE_VK_TRAILER_URL', 'https://vkvideo.ru/video-191197563_456239557'),
   vkTrailerEmbedUrl: pick(
     'VITE_VK_TRAILER_EMBED_URL',
-    'https://vkvideo.ru/video_ext.php?oid=-191197563&id=456239557&hd=2&autoplay=1'
+    'https://vkvideo.ru/video_ext.php?oid=-191197563&id=456239557&hd=2'
   ),
   trailerMp4: pick('VITE_TRAILER_MP4', resolveSiteAsset('video/trailer.mp4')),
   youtubeFallbackId: resolvedYtId,

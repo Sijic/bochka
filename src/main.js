@@ -97,6 +97,8 @@ import {
   renderTicketPuzzleWidget,
   openAboutFilmModal,
   getTilCurrentLevel,
+  unlockArtifactLevel,
+  showArtifactUnlockedCard,
 } from './v16_ux.js';
 import { TilThreePhaseController } from './til_game.js';
 
@@ -644,6 +646,18 @@ function refreshInitialSeedGateUI() {
   }
 
   banner?.setAttribute('hidden', '');
+
+  // Прямая ссылка рассылки продюсеров: ?startapp=til_knock -> сразу сцена у моря «Достучись до небес»!
+  if (state.tg?.openTilKnock && !state.incomingParam) {
+    const fTitle = document.getElementById('gate-friend-title');
+    const fSub = document.getElementById('gate-friend-sub');
+    if (fTitle) fTitle.textContent = '🌊 Достучись до небес — Тиль Швайгер ждёт у моря';
+    if (fSub) fSub.textContent = 'Постучи по бочке на берегу Северного моря и получи приглашение в кино';
+    friendCallout?.removeAttribute('hidden');
+    if (enterSoundLabel) enterSoundLabel.textContent = '🌊 ДОСТУЧАТЬСЯ ДО НЕБЕС';
+    packFriendBtn?.setAttribute('hidden', '');
+    return;
+  }
 
   // Путь А: пришёл по бочке от друга
   if (state.incomingParam) {
@@ -1696,7 +1710,7 @@ function syncBurgerMenuLocks() {
 
   const headTag = document.querySelector('#burger-drawer .burger-head .mono-tag');
   if (headTag) {
-    headTag.textContent = `ЦЕХ // МЕНЮ · 📍 ВЫ НА УР. ${lvl}`;
+    headTag.textContent = 'БОЧКА // МЕНЮ';
   }
 
   const setLock = (id, locked, unlockedHtml, lockedText) => {
@@ -1711,11 +1725,12 @@ function syncBurgerMenuLocks() {
     }
   };
 
+  // v16.1: Спрятать друга в бочке доступно сразу с первого захода (без искусственного замка Ур. 2!)
   setLock(
     'btn-burger-pack-friend',
-    !hasRescuedL1,
-    '🛢 ЗАКАТАТЬ И ПРИГЛАСИТЬ ДРУГА (+3 ❤️)',
-    '🔒 ЗАКАТАТЬ ДРУГА (ОТКРОЕТСЯ С УР. 2)'
+    false,
+    '🛢 СПРЯТАТЬ ДРУГА В БОЧКЕ',
+    '🛢 СПРЯТАТЬ ДРУГА В БОЧКЕ'
   );
   const sentLedger = readSentTicketsLedger().filter((x) => x.status === 'waiting_24h' || x.status === 'opened_unactivated');
   setLock(
@@ -1926,6 +1941,7 @@ async function bootstrap() {
       getScene: () => scene,
       getAudio: () => audio,
       openTilGame: (lvl) => openTilThreePhaseGame(lvl),
+      openOcean: () => openOceanDirectScreen(),
       getTilCtrl: () => tilV16Ctrl,
       ensureSceneReady: () => ensureSceneReady(),
       ensureDuelReady: () => ensureDuelReady(),
@@ -2560,14 +2576,9 @@ function requestAndSyncWriteAccess({ force = false } = {}) {
     .catch(() => ({ ok: false, allowed: false }));
 }
 
-function openTilThreePhaseGame(levelOverride = null) {
+function ensureTilV16Controller() {
   const host = document.getElementById('screen-til-v16');
-  if (!host) return;
-  state.entered = true;
-  if (duelCtrl?.isActive) duelCtrl.leaveRoom(false);
-  stopAirTimer();
-  state.round.running = false;
-
+  if (!host) return null;
   if (!tilV16Ctrl) {
     tilV16Ctrl = new TilThreePhaseController(host, {
       onExit: () => {
@@ -2577,9 +2588,7 @@ function openTilThreePhaseGame(levelOverride = null) {
       onWin: async ({ level }) => {
         state.profile.hasPlayedSolo = true;
         saveLocalV9Flags();
-        // +1 часть билета за прохождение раунда с Тилем (учитывает серверный пул и 152-ФЗ)
         const shardRes = await awardTicketShard(`til_v16_lvl_${level}`, { silent: true }).catch(() => null);
-        // Попутно можем запросить разрешение пушей после 1-го раунда (не при входе!)
         requestAndSyncWriteAccess();
         refreshInitialSeedGateUI();
         return shardRes;
@@ -2617,15 +2626,54 @@ function openTilThreePhaseGame(levelOverride = null) {
       },
     });
   }
+  return tilV16Ctrl;
+}
+
+function openTilThreePhaseGame(levelOverride = null) {
+  const ctrl = ensureTilV16Controller();
+  if (!ctrl) return;
+  state.entered = true;
+  if (duelCtrl?.isActive) duelCtrl.leaveRoom(false);
+  stopAirTimer();
+  state.round.running = false;
 
   showScreen('til16');
   loadMediaSlots()
     .catch(() => {})
     .finally(() => {
       if (state.activeScreen === 'til16') {
-        tilV16Ctrl.startRound(levelOverride ?? getTilCurrentLevel());
+        ctrl.startRound(levelOverride ?? getTilCurrentLevel());
       }
     });
+}
+
+function openTilVictoryInviteScreen(completedLevel = 1, rewardInfo = null) {
+  const ctrl = ensureTilV16Controller();
+  if (!ctrl) return;
+  state.entered = true;
+  showScreen('til16');
+  loadMediaSlots()
+    .catch(() => {})
+    .finally(() => {
+      if (state.activeScreen === 'til16') {
+        ctrl.showVictoryInviteDirectly(completedLevel, rewardInfo);
+      }
+    });
+}
+
+function openOceanDirectScreen() {
+  state.entered = true;
+  if (duelCtrl?.isActive) duelCtrl.leaveRoom(false);
+  stopAirTimer();
+  state.round.running = false;
+  if (tilV16Ctrl) tilV16Ctrl.stop();
+  resetOceanTapperUI();
+  showScreen('ocean');
+  if (audio.enabled && !audio._userMuted) {
+    audio.startOceanEasterEggAudio();
+  }
+  const tw = document.getElementById('ocean-typewriter');
+  if (tw) tw.textContent = 'На небе только и разговоров, что о море и о бочке…';
 }
 
 async function enterWorkshopGate(withSound, { startTarget = 'auto' } = {}) {
@@ -2673,6 +2721,12 @@ async function enterWorkshopGate(withSound, { startTarget = 'auto' } = {}) {
     } else {
       openTilThreePhaseGame();
     }
+    return;
+  }
+
+  // Прямая ссылка на сцену у моря «Достучись до небес» (?startapp=til_knock для отдельной рассылки продюсеров!)
+  if (state.tg?.openTilKnock && !state.incomingParam) {
+    openOceanDirectScreen();
     return;
   }
 
@@ -3865,24 +3919,36 @@ async function finishOceanTapperGame() {
 
   const reward = await claimOceanTapperReward(state.tg?.user, Math.max(1, taps)).catch(() => ({ livesAwarded: 3 }));
   const v8Refill = await awardV8LevelProgress(state.tg?.user, { level: state.profile.currentLevel || 6, pointsDelta: 0, livesDelta: 3 }).catch(() => null);
+  const shardRes = await awardTicketShard('til_ocean_knock', { silent: true }).catch(() => null);
   state.profile.easterEggClaimed = true;
+  state.profile.hasPlayedSolo = true;
   state.profile.lives = capEarlyLivesIfNoRealFriends(Math.max(3, Number(v8Refill?.lives ?? reward?.lives ?? state.profile.lives ?? 3)));
   if (duelCtrl) {
     duelCtrl.refillFromTil?.();
   }
-  if (reward?.hasPendingTicket || reward?.giftAwarded) state.profile.hasPendingTicket = true;
+  if (reward?.hasPendingTicket || reward?.giftAwarded || shardRes?.merged) state.profile.hasPendingTicket = true;
+  saveLocalV9Flags();
   updatePremiereBarsUI();
   refreshHudLevelLabel();
-  flyRewardToHud({ type: 'lives', count: 3, label: '+3 ❤️' });
-  showToast('⚡ Достучался до Тиля (100%)! Получено 6 ❤️ на дуэль и +3 ❤️ в цех!');
-  // v15.5: 50% шанс дропа официальной номерной карточки фильма после экрана Тиля (+10% на Ур. 4 Зала)
+  refreshInitialSeedGateUI();
   rollRareMovieCardLazy('til').catch(() => {});
 
   if (state.oceanTapper.returnDuel) {
     window.setTimeout(() => {
       handleReturnFromOcean(false);
-    }, 1100);
+    }, 900);
+    return;
   }
+
+  // v16.1: После 100% в «Достучись до небес» — карточка артефакта и финальный экран приглашения в кино с Тилем и русским режиссёром!
+  const completedLvl = getTilCurrentLevel();
+  unlockArtifactLevel(completedLvl);
+  await loadMediaSlots().catch(() => {});
+  showArtifactUnlockedCard(completedLvl, {
+    onNext: () => {
+      openTilVictoryInviteScreen(completedLvl, shardRes);
+    },
+  });
 }
 
 function startOceanTypewriter(fullText) {
@@ -7645,8 +7711,9 @@ function openTrailerModal({ forRescue = false } = {}) {
     ifr.title = 'БОЧКА — официальный трейлер (VK Видео)';
     ifr.referrerPolicy = 'strict-origin-when-cross-origin';
     ifr.setAttribute('frameborder', '0');
-    ifr.setAttribute('allow', 'autoplay; encrypted-media; fullscreen; picture-in-picture; screen-wake-lock;');
+    ifr.setAttribute('allow', 'autoplay; encrypted-media; fullscreen; picture-in-picture');
     ifr.setAttribute('allowfullscreen', '');
+    ifr.setAttribute('playsinline', '');
     slot.appendChild(ifr);
   }
 
@@ -8680,6 +8747,11 @@ function bindUIEvents() {
     audio.unlockSync(true);
     closeBurgerDrawer();
     openTilThreePhaseGame();
+  });
+  document.getElementById('btn-burger-til-ocean')?.addEventListener('click', () => {
+    audio.unlockSync(true);
+    closeBurgerDrawer();
+    openOceanDirectScreen();
   });
   document.getElementById('btn-burger-about-film')?.addEventListener('click', () => {
     closeBurgerDrawer();

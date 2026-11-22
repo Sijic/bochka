@@ -613,6 +613,18 @@ export class TilThreePhaseController {
     });
   }
 
+  showVictoryInviteDirectly(completedLevel = 1, rewardInfo = null) {
+    this.stop();
+    this._ensureDom();
+    this.active = true;
+    this.phase = 'victory';
+    this.level = Math.max(1, Math.round(Number(completedLevel) || 1));
+    if (audio.enabled && !audio._userMuted && !audio._oceanActive) {
+      audio.startOceanEasterEggAudio();
+    }
+    this._showVictoryInviteScreen(this.level, rewardInfo);
+  }
+
   _showVictoryInviteScreen(completedLevel, rewardInfo = null) {
     this._dom.playWrap.hidden = true;
     this._dom.winWrap.hidden = false;
