@@ -437,54 +437,66 @@ export class TilThreePhaseController {
   _startPhase2() {
     this._clearTimers();
     this.phase = 'p2_tap';
+    this._phase2HadFreeze = false;
     this._dom.phasePill.textContent = 'ФАЗА 2 / 3 · ЗАМРИ!';
     this._setVisualState('go', 'СТУЧИ!', 'Быстро тапай по бочке! На красный — ЗАМРИ!');
     this._scheduleNextFreeze();
   }
 
+  _enterPhase2Freeze() {
+    if (this.phase !== 'p2_tap') return;
+    this._clearTimers();
+    this._phase2HadFreeze = true;
+    this.phase = 'p2_freeze';
+    this.freezeTouched = false;
+    this.freezeStartedAt = performance.now();
+
+    this._setVisualState('freeze', 'ТССС! ЗАМРИ!', 'Не трогай экран 1.5 секунды!');
+    this._say('Тссс! Замри!', 'danger');
+    audio.playTilFreezeAlert();
+    Haptics.heavy();
+
+    this._setTimer(() => {
+      if (this.phase !== 'p2_freeze') return;
+      if (!this.freezeTouched) {
+        // Успешно замер -> бонусный рывок шкалы!
+        this.perfectFreezes += 1;
+        this._setProgress(Math.min(75, this.progress + 8));
+        this._spawnPop('+8% БОНУС!', 'green');
+        audio.playTilBonus();
+        Haptics.success();
+        const praises = ['Красава!', 'Стальные нервы!', 'Не спалился!'];
+        this._say(praises[this.perfectFreezes % praises.length], 'good');
+        if (this.progress >= 75) {
+          this._startPhase3();
+          return;
+        }
+      }
+      this.phase = 'p2_tap';
+      this._setVisualState('go', 'СТУЧИ!', 'Чисто! Продолжай быстро тапать!');
+      this._scheduleNextFreeze();
+    }, 1500);
+  }
+
   _scheduleNextFreeze() {
-    // На ур.1 пауза ~2.5–3.6с, на ур.2+ чаще и хитрее
-    const minWait = Math.max(1500, 2400 - (this.level - 1) * 180);
-    const spread = Math.max(700, 1200 - (this.level - 1) * 80);
+    // На ур.1 пауза ~1.8–2.8с (плюс гарантированный триггер при 52% для быстрых таперов)
+    const minWait = Math.max(1200, 1800 - (this.level - 1) * 150);
+    const spread = Math.max(600, 1000 - (this.level - 1) * 70);
     const waitMs = minWait + Math.random() * spread;
 
     this._setTimer(() => {
-      if (this.phase !== 'p2_tap') return;
-      this.phase = 'p2_freeze';
-      this.freezeTouched = false;
-      this.freezeStartedAt = performance.now();
-
-      this._setVisualState('freeze', 'ТССС! ЗАМРИ!', 'Не трогай экран 1.5 секунды!');
-      this._say('Тссс! Замри!', 'danger');
-      audio.playTilFreezeAlert();
-      Haptics.heavy();
-
-      this._setTimer(() => {
-        if (this.phase !== 'p2_freeze') return;
-        if (!this.freezeTouched) {
-          // Успешно замер -> бонусный рывок шкалы!
-          this.perfectFreezes += 1;
-          this._setProgress(Math.min(75, this.progress + 8));
-          this._spawnPop('+8% БОНУС!', 'green');
-          audio.playTilBonus();
-          Haptics.success();
-          const praises = ['Красава!', 'Стальные нервы!', 'Не спалился!'];
-          this._say(praises[this.perfectFreezes % praises.length], 'good');
-          if (this.progress >= 75) {
-            this._startPhase3();
-            return;
-          }
-        }
-        this.phase = 'p2_tap';
-        this._setVisualState('go', 'СТУЧИ!', 'Чисто! Продолжай быстро тапать!');
-        this._scheduleNextFreeze();
-      }, 1500);
+      this._enterPhase2Freeze();
     }, waitMs);
   }
 
   // ---------- ФАЗА 3: «ДОСТУЧИСЬ ДО НЕБЕС!» (75% -> 100%) ----------
   _startPhase3() {
     this._clearTimers();
+    // Прогреваем постер победного экрана заранее (важно для Slow 3G в РФ/РБ)
+    try {
+      const preImg = new Image();
+      preImg.src = './public/cards/card_til_north_sea.webp?v=1553';
+    } catch { /* ignore */ }
     this.phase = 'p3_sprint';
     this._dom.phasePill.textContent = 'ФАЗА 3 / 3 · ДОСТУЧИСЬ ДО НЕБЕС!';
     this._say('Дожимай!', 'go');
@@ -536,6 +548,10 @@ export class TilThreePhaseController {
 
       if (this.taps % 5 === 0) {
         this._say('Неплохо!', 'good');
+      }
+      if (!this._phase2HadFreeze && this.progress >= 52) {
+        this._enterPhase2Freeze();
+        return;
       }
       if (this.progress >= 75) {
         this._startPhase3();

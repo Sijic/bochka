@@ -250,8 +250,21 @@ class WorkshopAudio {
     if (!this._resumeHooksBound && typeof document !== 'undefined') {
       this._resumeHooksBound = true;
       const wakeAudio = () => {
-        if (this.enabled && !this._userMuted && this.ctx && this.ctx.state !== 'running') {
-          this.ctx.resume().then(() => this._emitState()).catch(() => {});
+        if (typeof document !== 'undefined' && document.hidden) return;
+        if (this.enabled && !this._userMuted && this.ctx) {
+          try {
+            this.master?.gain?.cancelScheduledValues?.(this.ctx.currentTime);
+            this.master?.gain?.setValueAtTime?.(0.94, this.ctx.currentTime);
+          } catch { /* ignore */ }
+          if (this.ctx.state !== 'running') {
+            this.ctx.resume().then(() => {
+              if (typeof document !== 'undefined' && document.hidden) {
+                this.ctx.suspend().catch(() => {});
+                return;
+              }
+              this._emitState();
+            }).catch(() => {});
+          }
         }
       };
       document.addEventListener('pointerdown', wakeAudio, { passive: true, capture: true });
@@ -259,9 +272,15 @@ class WorkshopAudio {
       document.addEventListener('click', wakeAudio, { passive: true, capture: true });
       document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
-          if (this.ctx && this.ctx.state === 'running') {
-            this._pausedByVisibility = true;
-            this.ctx.suspend().then(() => this._emitState()).catch(() => {});
+          this._pausedByVisibility = true;
+          if (this.ctx) {
+            try {
+              this.master?.gain?.cancelScheduledValues?.(this.ctx.currentTime);
+              this.master?.gain?.setValueAtTime?.(0.0, this.ctx.currentTime);
+            } catch { /* ignore */ }
+            if (this.ctx.state === 'running') {
+              this.ctx.suspend().then(() => this._emitState()).catch(() => {});
+            }
           }
         } else {
           this._pausedByVisibility = false;
@@ -1197,7 +1216,7 @@ class WorkshopAudio {
       } catch { /* ignore */ }
     }
     if (!this.ctx || !this.enabled) return;
-    if (this.ctx.state === 'suspended') {
+    if (this.ctx.state === 'suspended' && (typeof document === 'undefined' || !document.hidden)) {
       this.ctx.resume().catch(() => {});
     }
     const now = this.ctx.currentTime;
@@ -1321,7 +1340,7 @@ class WorkshopAudio {
   startOceanEasterEggAudio() {
     this.stopOceanEasterEggAudio();
     if (!this.ctx || !this.enabled) return;
-    if (this.ctx.state === 'suspended') {
+    if (this.ctx.state === 'suspended' && (typeof document === 'undefined' || !document.hidden)) {
       this.ctx.resume().catch(() => {});
     }
 

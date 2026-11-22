@@ -480,12 +480,12 @@ async function openHallOfFameModal() {
   });
 }
 
-async function collectBarrelTrophyLazy(barrelId) {
+async function collectBarrelTrophyLazy(barrelId, { silent = true } = {}) {
   if (!barrelId) return null;
   try {
     const mod = await loadTrophiesMod();
     const res = await mod.collectBarrelTrophy(state.tg?.user || null, barrelId);
-    if (res?.ok && res.collected && res.trophy) {
+    if (!silent && res?.ok && res.collected && res.trophy) {
       const tag = res.trophy.rarity === 'blogger' ? '🌟 Блогерская фишка' : '🪙 Фото-фишка';
       showToast(`${tag} «${res.trophy.label}» добавлена в Зал славы!`);
     }
