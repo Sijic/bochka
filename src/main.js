@@ -4374,31 +4374,24 @@ async function handleBarrelStrike(index, worldPoint) {
   }
 
   // -------------------------------------------------------------------------
-  // РЕЖИМ 2: 4 БОЧКИ · 3 ПОПЫТКИ МИМО -> ПРОСМОТР ТРЕЙЛЕРА -> 4-Й ПОБЕДНЫЙ УДАР!
+  // РЕЖИМ 2 (v16.1.4): БОЧКА ОТ ДРУГА (4 БОЧКИ, ЧЕСТНЫЙ ПОИСК ЗА 1–3 УДАРА -> СРАЗУ ТИЛЬ!)
+  // Без искусственных 3 промахов и старого замка «40с трейлера» из v15.
   // -------------------------------------------------------------------------
   if (r.modeType === 'viral') {
     r.attemptsUsed += 1;
+    const hitTargetNow = index === r.targetIndex || r.attemptsLeft <= 1 || r.rescueStage >= 4 || r.attemptsUsed >= 3;
 
-    // После просмотра трейлера (rescueStage >= 4 или 4-я попытка) игрок 100% угадывает оставшуюся 4-ю бочку!
-    if (r.rescueStage >= 4 || r.attemptsUsed >= 4) {
+    if (hitTargetNow) {
       r.targetIndex = index;
       r.attemptsLeft = 0;
       renderAttemptSquares(0, 3);
       scene.assignTargetBarrelNow(index);
       scene.triggerStrikeFX(index, worldPoint);
       audio.playStrike(index);
-      r.strikeLog.push(`[Удар ${r.attemptsUsed}: Спас за ${elapsedSec} сек]`);
+      r.strikeLog.push(`[Удар ${r.attemptsUsed}: Нашёл себя за ${elapsedSec} сек]`);
       state.watchChannel?.send('strike', { barrelIndex: index, rescued: true, hitTarget: true });
       finishRound(true, { diveBarrelIndex: index, hitTarget: true });
       return;
-    }
-
-    // Первые 3 попытки (attemptsUsed = 1, 2, 3) угадать НЕВОЗМОЖНО — цель всегда переносится в закрытую бочку!
-    const otherClosed = getUnstruckBarrelIndices().filter((i) => i !== index);
-    if (otherClosed.length > 0 && index === r.targetIndex) {
-      const nextTarget = otherClosed[Math.floor(Math.random() * otherClosed.length)];
-      r.targetIndex = nextTarget;
-      audio.setTargetIndex(nextTarget);
     }
 
     scene.triggerStrikeFX(index, worldPoint);
@@ -4407,40 +4400,20 @@ async function handleBarrelStrike(index, worldPoint) {
 
     let hitSteamNoPenalty = false;
     if (index === r.steamHazardIndex) {
-      // v15.0: Визуальный клуб пара и шипение для атмосферы, но БЕЗ штрафа (0 потерь ударов, 0 потерь O2, 0 потерь жизней!)
       hitSteamNoPenalty = true;
       scene.triggerSteamHazardBurst?.(index);
       audio.playSteamPenaltyBurst?.();
       r.strikeLog.push(`[Удар ${r.attemptsUsed}: Пар без штрафа]`);
-      showToast('💨 Горячий пар впустую! Удар не списан, слушай дальше');
     } else {
       r.strikeLog.push(`[Удар ${r.attemptsUsed}: Пусто]`);
     }
 
-    // v11.0: Если на бочке краской написано имя самого игрока — БОНУС (+2 удара или +8с O₂ если удары полные!)
     const gotNameBonus = applyOwnNameBarrelBonus(index);
     if (!hitSteamNoPenalty && !gotNameBonus) {
       r.attemptsLeft = Math.max(0, r.attemptsLeft - 1);
       renderAttemptSquares(r.attemptsLeft, 3);
     }
     state.watchChannel?.send('strike', { barrelIndex: index, attemptsLeft: r.attemptsLeft });
-
-    if (r.attemptsLeft > 0) {
-      // Попытки ещё есть: без скримера — из пустой бочки уже вырвался столб пара или густого дыма!
-    } else {
-      // Уровень 1: единственная жизнь (1 -> 0) потрачена -> полный 3.25-сек скример -> возвращаемся в цех с надписью «Смотреть трейлер»!
-      r.roundLives = 0;
-      r.running = false;
-      r.pausedForModal = true;
-      stopAirTimer();
-      audio.stopListening();
-      scene.setInteractive(false);
-      refreshHudLevelLabel();
-      triggerMiniScreamer();
-      window.setTimeout(() => {
-        enterWorkshopTrailerPrompt();
-      }, 3280);
-    }
     return;
   }
 
