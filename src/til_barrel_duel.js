@@ -374,9 +374,8 @@ export class Til3DBarrelDuel {
     const nonTarget = closed.filter((idx) => idx !== this.targetIndex);
     let pick = -1;
 
-    // На 1-м такте Тиль никогда не крадёт цель вслепую — всегда даёт игроку честный азарт!
-    // После 2+ ходов (или когда остались 2 бочки) Тиль реально может вскрыть цель первым!
-    const canSteal = this.beatIndex >= 2 && (closed.length <= 2 || (this.beatIndex >= 3 && Math.random() < 0.34));
+    // На 1–2 тактах Тиль нагнетает саспенс и бьёт нецелевые бочки; с 3-го такта (или когда осталась 1–2 бочки) Тиль реально может забрать цель первым!
+    const canSteal = (this.beatIndex >= 3 && (closed.length <= 2 || Math.random() < 0.30)) || closed.length <= 1;
     if (canSteal && !this.openedSet.has(this.targetIndex)) {
       pick = this.targetIndex;
     } else if (nonTarget.length > 0) {

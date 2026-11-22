@@ -3544,7 +3544,7 @@ async function startViralFriendRound(pack) {
   }
 
   // v18.0: Вход по ссылке от продюсера/друга -> Уровень 1 (4 бочки вслепую «НА РАЗ-ДВА-ТРИ!» против Тиля)
-  await openTil3DBarrelDuel(1, { pack, portraitUrl });
+  await openTil3DBarrelDuel(1, { pack, portraitUrl: portraitDataUrl });
   if (voiceUrl) {
     audio.startMuffledVoiceLoop();
   }
