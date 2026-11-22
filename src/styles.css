@@ -9759,6 +9759,14 @@ body[data-til-duel="1"] #screen-workshop #hud-mode-tag {
   color: #fef08a;
 }
 
+.dfp-tab-explain {
+  margin: 0;
+  padding: 2px 2px 0;
+  font-size: 11px;
+  line-height: 1.3;
+  color: #94a3b8;
+}
+
 .dfp-list {
   display: flex;
   flex-direction: column;

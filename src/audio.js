@@ -307,13 +307,16 @@ class WorkshopAudio {
     this.unlockSync(withSound);
     if (this.ctx && this.ctx.state !== 'running' && this.enabled) {
       try {
-        await this.ctx.resume();
+        await Promise.race([
+          this.ctx.resume(),
+          new Promise((resolve) => setTimeout(resolve, 600)),
+        ]);
       } catch { /* ignore */ }
     }
     this._emitState();
 
     if (this.senderVoiceUrl && !this.senderVoiceBuffer) {
-      await this.setSenderVoiceUrl(this.senderVoiceUrl);
+      this.setSenderVoiceUrl(this.senderVoiceUrl).catch(() => {});
     }
   }
 

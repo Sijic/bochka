@@ -305,6 +305,7 @@ export class WorkshopDuelController {
     this.scene.setInteractive(false);
 
     this.bindModeTabsOnce();
+    this._bouncingRoomFull = false;
     this.connectRealtimeChannel();
     this.updateModeTabsUI();
     this.challengedUids.clear();
@@ -416,9 +417,17 @@ export class WorkshopDuelController {
           });
         }
       }
-      // v17.1: Строго 1 на 1 — максимум 2 игрока за столом! Если 2 друга уже сидят, 3-го не пускаем.
+      // v17.2: Строго 1 на 1 — максимум 2 игрока за столом! Если 2 друга уже сидят, 3-го сразу уводим на свежий стол, не ломая пару.
       const realSorted = [...list].sort((a, b) => (a.joinedAt - b.joinedAt) || a.uid.localeCompare(b.uid));
-      if (realSorted.length > MAX_DUEL_PLAYERS && !realSorted.slice(0, MAX_DUEL_PLAYERS).some((p) => p.uid === this.myUid)) {
+      const othersCount = realSorted.filter((p) => p.uid !== this.myUid).length;
+      const inTopTwo = realSorted.slice(0, MAX_DUEL_PLAYERS).some((p) => p.uid === this.myUid);
+      const roomIsFullForMe =
+        (othersCount >= MAX_DUEL_PLAYERS && !inTopTwo) ||
+        (realSorted.length > MAX_DUEL_PLAYERS && !inTopTwo);
+      if (roomIsFullForMe) {
+        if (this._bouncingRoomFull) return;
+        this._bouncingRoomFull = true;
+        try { ch.untrack(); } catch { /* ignore */ }
         this.onToast?.('⚔️ За этим столом уже играют двое друзей (1 на 1)! Открываем твой новый стол…');
         this.leaveRoom(false);
         this.onRoomFull?.();
@@ -767,6 +776,15 @@ export class WorkshopDuelController {
 
     tabs.append(tabSent, tabBranch);
     host.appendChild(tabs);
+
+    // OASIS UX-2: понятное 1-строчное пояснение разницы между «Кому отправил» и «Общей веткой»
+    const tabExplain = document.createElement('p');
+    tabExplain.className = 'dfp-tab-explain';
+    tabExplain.id = 'dfp-tab-explain';
+    tabExplain.textContent = this.pickerTab === 'branch'
+      ? 'Друзья твоих друзей по общей цепочке бочек (до 4 колен)'
+      : 'Друзья, кому ты уже кидал бочку (или кто прислал тебе)';
+    host.appendChild(tabExplain);
 
     const items = this.pickerTab === 'branch' ? branchList : sentList;
     const listEl = document.createElement('div');

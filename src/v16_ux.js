@@ -404,7 +404,7 @@ export function createCircleVideoWidget(slot, { autoplay = true, compact = false
   return wrap;
 }
 
-export function showArtifactUnlockedCard(level = 1, { onNext, buttonText = 'ДАЛЬШЕ', bodyExtra = '' } = {}) {
+export function showArtifactUnlockedCard(level = 1, { onNext, buttonText = 'ДАЛЬШЕ', bodyExtra = '', secondaryText = '', onSecondary = null } = {}) {
   const slot = getArtifactSlotForLevel(level);
   const circleWidget = createCircleVideoWidget(slot, { autoplay: true });
   const baseBody = `${slot.title} — сохранён в «Зал славы → Артефакты фильма». Можешь пересмотреть в любой момент.`;
@@ -413,9 +413,11 @@ export function showArtifactUnlockedCard(level = 1, { onNext, buttonText = 'ДА
     title: 'Собран артефакт!',
     body: bodyExtra ? `${bodyExtra} ${baseBody}` : baseBody,
     buttonText: buttonText || 'ДАЛЬШЕ',
+    secondaryText,
     tone: 'gold',
     customNode: circleWidget,
     onConfirm: onNext,
+    onSecondary,
   });
 }
 

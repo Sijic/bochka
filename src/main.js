@@ -380,7 +380,7 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1710'));
+    const mod = duelModCache || (await import('./duel.js?v=1720'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -516,11 +516,11 @@ async function collectBarrelTrophyLazy(barrelId, { silent = true } = {}) {
   }
 }
 
-async function rollRareMovieCardLazy(source) {
+async function rollRareMovieCardLazy(source, { silent = false } = {}) {
   try {
     const mod = await loadTrophiesMod();
     const res = await mod.mintRareMovieCard(state.tg?.user || null, source);
-    if (res?.ok && res.dropped && res.trophy) {
+    if (!silent && res?.ok && res.dropped && res.trophy) {
       const num = res.trophy.serial_number
         ? ` #${String(res.trophy.serial_number).padStart(3, '0')}/${res.trophy.max_supply || 100}`
         : '';
@@ -675,6 +675,18 @@ function refreshInitialSeedGateUI() {
   }
 
   banner?.setAttribute('hidden', '');
+
+  // Прямая ссылка на дуэль 1×1 от друга (?startapp=duel_<roomId>) — 1 тап со звуком прямо за стол!
+  if (state.tg?.duelRoomParam) {
+    const fTitle = document.getElementById('gate-friend-title');
+    const fSub = document.getElementById('gate-friend-sub');
+    if (fTitle) fTitle.textContent = '⚔️ Друг зовёт тебя на дуэль 1 на 1!';
+    if (fSub) fSub.textContent = 'Только вы вдвоём за столом «НА СЧЁТ ТРИ!» — входи со звуком';
+    friendCallout?.removeAttribute('hidden');
+    if (enterSoundLabel) enterSoundLabel.textContent = '⚔️ ВОЙТИ В ДУЭЛЬ 1×1 (СО ЗВУКОМ)';
+    packFriendBtn?.setAttribute('hidden', '');
+    return;
+  }
 
   // Прямая ссылка рассылки продюсеров: ?startapp=til_knock -> сразу сцена у моря «Достучись до небес»!
   if (state.tg?.openTilKnock && !state.incomingParam) {
@@ -2124,9 +2136,6 @@ async function bootstrap() {
   // игрок сначала видит экран входа (с выбором «Со звуком / Тихий радар») и сам нажимает старт!
   if (state.incomingPassId) {
     await openIncomingPassScreen(state.incomingPassId);
-  } else if (state.tg?.duelRoomParam) {
-    state.entered = true;
-    await openDuelTable(state.tg.duelRoomParam);
   } else if (state.tg?.teamSeedRole === 'prod') {
     // v15.3 + v15.4.1 + v16.1.2: Продюсер зашёл по ссылке team_prod — сразу открываем упаковку без блокирующей модалки!
     state.entered = true;
@@ -2740,15 +2749,16 @@ function ensureTil3DBarrelDuel() {
         refreshInitialSeedGateUI();
         const art = unlockArtifactLevel(Math.min(6, lvl));
 
+        const curShards = Math.max(0, Math.min(4, Number(shardRes?.shards ?? state.profile?.ticketShards ?? 0)));
         if (lvl === 3) {
           showArtifactUnlockedCard(art.level, {
-            bodyExtra: '🎁 +1/4 бесплатного билета в подарок другу! Собери 4/4 и пойдёте в кино 17 декабря вместе.',
+            bodyExtra: `🎁 Собрано ${curShards}/4 частей бесплатного билета В ПОДАРОК ДРУГУ! Собери 4/4 и пойдёте 17 декабря вместе.`,
             buttonText: '👊 ДАЛЬШЕ: 12 БОЧЕК С ТИЛЕМ (УР. 4)',
             onNext: () => openTil3DBarrelDuel(4),
           });
         } else if (lvl === 4) {
           showArtifactUnlockedCard(art.level, {
-            bodyExtra: '🎁 +1/4 билета другу! Остался последний рывок — 16 бочек с Тилем!',
+            bodyExtra: `🎁 Собрано ${curShards}/4 частей билета другу! Остался финал — 16 бочек с Тилем!`,
             buttonText: '👊 ФИНАЛ: 16 БОЧЕК С ТИЛЕМ (УР. 5)',
             onNext: () => openTil3DBarrelDuel(5),
           });
@@ -2758,13 +2768,22 @@ function ensureTil3DBarrelDuel() {
           showArtifactUnlockedCard(art.level, {
             bodyExtra: hasTicket
               ? '🎟 4/4 СОБРАНО! Бесплатный билет в кино — ТОЛЬКО В ПОДАРОК ДРУГУ (себе оставить нельзя — идёте 17 декабря вместе!).'
-              : '🏆 16 бочек пройдено! Закатай друга (если ещё не успел), чтобы собрать 4/4 билета другу — а сейчас ждёт секрет Тиля у моря!',
+              : `🏆 16 бочек пройдено! Собрано ${curShards}/4 частей билета другу — закатай друга, чтобы добить 4/4, или загляни к Тилю у моря!`,
             buttonText: hasTicket ? '🎁 ПОДАРИТЬ БИЛЕТ ДРУГУ (4/4)' : '🌊 БОНУС: ДОСТУЧИСЬ ДО НЕБЕС У МОРЯ',
+            secondaryText: hasTicket ? '🌊 К ТИЛЮ У МОРЯ' : '🛢 ДОЗАБРАТЬ 4/4: ЗАКАТАТЬ ДРУГА',
             onNext: () => {
               if (hasTicket) {
                 openGoldenTicketForkModal();
               } else {
                 openOceanDirectScreen();
+              }
+            },
+            onSecondary: () => {
+              if (hasTicket) {
+                openOceanDirectScreen();
+              } else {
+                state.pack.forLifeRefill = false;
+                showScreen('pack');
               }
             },
           });
@@ -2860,9 +2879,12 @@ function openOceanDirectScreen() {
 
 let _enteringGateLock = false;
 async function enterWorkshopGate(withSound, { startTarget = 'auto' } = {}) {
-  // v16.1.2: Защита от двойного/тройного клика по кнопке входа (без дублей инициализации и модалок)
+  // v16.1.2 + v17.2: Защита от двойного/тройного клика + индикация загрузки на Slow 3G
   if (_enteringGateLock) return;
   _enteringGateLock = true;
+  const lblEl = document.getElementById('btn-enter-sound-label');
+  const prevLbl = lblEl?.textContent || '';
+  if (lblEl && !scene) lblEl.textContent = '⏳ ЗАГРУЖАЕМ 3D-ЦЕХ…';
   // v16.0: СИНХРОННАЯ разблокировка AudioContext ПЕРВОЙ строкой — ДО любых await/fetch/setTimeout!
   audio.unlockSync(Boolean(withSound));
   if (withSound) audio.playSoundReadyClick();
@@ -2870,6 +2892,7 @@ async function enterWorkshopGate(withSound, { startTarget = 'auto' } = {}) {
   try {
     await _enterWorkshopGateBody(withSound, { startTarget });
   } finally {
+    if (lblEl && state.activeScreen === 'gate' && prevLbl) lblEl.textContent = prevLbl;
     _enteringGateLock = false;
   }
 }
@@ -3313,7 +3336,8 @@ async function startViralFriendRound(pack) {
       if (lockRes.locked) {
         state.incomingPack = null;
         await startNewbieOnboardingRound();
-        showToast('🔒 Эту бочку уже открыли до тебя — держи свежий цех!');
+        const tBanner = document.getElementById('hud-task-banner');
+        if (tBanner) tBanner.textContent = '🔒 Эту бочку уже вскрыли до тебя — держи свежие 3D-бочки!';
         return;
       }
       if (lockRes.isSelf) {
@@ -4152,7 +4176,7 @@ async function finishOceanTapperGame() {
   updatePremiereBarsUI();
   refreshHudLevelLabel();
   refreshInitialSeedGateUI();
-  rollRareMovieCardLazy('til').catch(() => {});
+  rollRareMovieCardLazy('til', { silent: true }).catch(() => {});
 
   if (state.oceanTapper.returnDuel) {
     window.setTimeout(() => {
@@ -6669,7 +6693,7 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
     // v15.0: Часть 1/4 билета выпадает сразу после отправки первой бочки другу на Уровне 2!
     let packShardRes = null;
     if (!isBroadcastPack && Number(state.profile?.ticketShards || 0) === 0 && Number(state.profile?.pendingTicketsCount || 0) === 0) {
-      packShardRes = await awardTicketShard('level2_pack', { silent: false }).catch(() => null);
+      packShardRes = await awardTicketShard('level2_pack', { silent: true }).catch(() => null);
       if (packShardRes?.shards > 0) {
         syncTicketShardsUI({ pulse: true, justEarned: packShardRes.shards });
       }
@@ -9037,6 +9061,11 @@ function bindUIEvents() {
     openDuelTable();
   });
   document.getElementById('btn-hud-duel')?.addEventListener('click', () => {
+    Haptics.light();
+    if (!audio._userMuted) audio.unlockSync(true);
+    openDuelTable();
+  });
+  document.getElementById('btn-sent-duel-1x1')?.addEventListener('click', () => {
     Haptics.light();
     if (!audio._userMuted) audio.unlockSync(true);
     openDuelTable();
