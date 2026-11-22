@@ -404,14 +404,15 @@ export function createCircleVideoWidget(slot, { autoplay = true, compact = false
   return wrap;
 }
 
-export function showArtifactUnlockedCard(level = 1, { onNext } = {}) {
+export function showArtifactUnlockedCard(level = 1, { onNext, buttonText = 'ДАЛЬШЕ', bodyExtra = '' } = {}) {
   const slot = getArtifactSlotForLevel(level);
   const circleWidget = createCircleVideoWidget(slot, { autoplay: true });
+  const baseBody = `${slot.title} — сохранён в «Зал славы → Артефакты фильма». Можешь пересмотреть в любой момент.`;
   showDuolingoCard({
     badge: `🎬 АРТЕФАКТ УРОВНЯ ${slot.level}`,
     title: 'Собран артефакт!',
-    body: `${slot.title} — сохранён в «Зал славы → Артефакты фильма». Можешь пересмотреть в любой момент.`,
-    buttonText: 'ДАЛЬШЕ',
+    body: bodyExtra ? `${bodyExtra} ${baseBody}` : baseBody,
+    buttonText: buttonText || 'ДАЛЬШЕ',
     tone: 'gold',
     customNode: circleWidget,
     onConfirm: onNext,
@@ -524,33 +525,40 @@ export function renderTicketPuzzleWidget(containerEl, { shards = 0, pendingTicke
   const box = el('div', `v16-ticket-puzzle${hasReady ? ' is-ready' : ''}`);
 
   const head = el('div', 'v16-tp-head');
-  head.appendChild(el('span', 'v16-tp-title', '🎟 БИЛЕТ ДРУГУ В КИНО'));
+  head.appendChild(el('span', 'v16-tp-title', '🎁 БИЛЕТ В КИНО — ТОЛЬКО ДРУГУ'));
   head.appendChild(el('strong', 'v16-tp-counter', hasReady ? '4/4 ГОТОВ!' : `${filled}/4`));
   box.appendChild(head);
 
+  const stepLabels = ['Друг', '8 бочек', '12 бочек', '16 бочек'];
   const grid = el('div', 'v16-tp-grid');
   for (let i = 1; i <= 4; i += 1) {
     const isFilled = i <= filled;
     const cell = el('div', `v16-tp-cell${isFilled ? ' is-filled' : ''}`);
     cell.appendChild(el('span', 'v16-tp-num', `${i}/4`));
-    cell.appendChild(el('span', 'v16-tp-mark', isFilled ? '✓' : '·'));
+    cell.appendChild(el('span', 'v16-tp-mark', isFilled ? '✓' : stepLabels[i - 1]));
     grid.appendChild(cell);
   }
   box.appendChild(grid);
 
-  // Ровно одна простая строка под шкалой + конкретная подсказка на следующий шаг
+  // Предельно простое правило: билет можно подарить ТОЛЬКО другу (себе оставить нельзя — идёте вместе!)
   box.appendChild(
-    el('p', 'v16-tp-rule', 'Собери 4 части — получи бесплатный билет другу в кино на 17 декабря')
+    el('p', 'v16-tp-rule', 'Собери 4 части — подари бесплатный билет другу на 17 декабря (себе оставить нельзя, пойдёте вместе!)')
   );
 
+  const stepHints = [
+    '1/4: обыграй Тиля на 6 бочках и закатай друга',
+    '2/4: обыграй Тиля на 8 бочках (Ур. 3)',
+    '3/4: обыграй Тиля на 12 бочках (или когда друг откроет твою бочку)',
+    '4/4: финальная схватка с Тилем на 16 бочках!',
+  ];
   const hintText = hasReady
-    ? '🎉 Билет собран! Нажми, чтобы отправить другу.'
-    : nextStepHint || (filled === 0 ? 'Следующий шаг: +1 часть за игру с Тилем' : '+1 часть за игру с Тилем или бочку другу');
+    ? '🎉 4/4 собрано! Нажми, чтобы подарить бесплатный билет другу.'
+    : nextStepHint || stepHints[Math.min(3, filled)];
   const hintLine = el('div', 'v16-tp-next', hintText);
   box.appendChild(hintLine);
 
   if (hasReady && typeof onClaim === 'function') {
-    const claimBtn = el('button', 'btn-primary btn-full btn-compact v16-tp-claim-btn', '🎟 ПОДАРИТЬ БИЛЕТ ДРУГУ');
+    const claimBtn = el('button', 'btn-primary btn-full btn-compact v16-tp-claim-btn', '🎁 ПОДАРИТЬ БИЛЕТ ДРУГУ');
     claimBtn.type = 'button';
     claimBtn.addEventListener('click', () => onClaim());
     box.appendChild(claimBtn);

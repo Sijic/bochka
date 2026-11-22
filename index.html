@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0d0d'/%3E%3Crect x='8' y='4' width='16' height='24' rx='2' fill='none' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='11' x2='25' y2='11' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='21' x2='25' y2='21' stroke='%23eab308' stroke-width='2'/%3E%3C/svg%3E" />
   <title>БОЧКА — Играть с Тилем | В кино с 17 декабря</title>
-  <meta name="bochka-build" content="v16.1.4-swarm-20of20" />
+  <meta name="bochka-build" content="v17.0-duolingo-3d-barrels" />
   <meta name="description" content="Спрячь друга в бочке, сыграй с Тилем Швайгером и собери 4 части бесплатного билета в кино на 17 декабря!" />
 
   <!-- Open Graph / Telegram / WhatsApp Link Preview -->
@@ -42,7 +42,7 @@
   }
   </script>
 
-  <link rel="modulepreload" href="./src/main.js?v=1614" />
+  <link rel="modulepreload" href="./src/main.js?v=1700" />
   <link rel="modulepreload" href="./src/backend.js" />
   <link rel="modulepreload" href="./src/env.js" />
   <link rel="modulepreload" href="./vendor/supabase.esm.js" />
@@ -60,8 +60,8 @@
     .gate-legal-line{margin-top:12px;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
     .legal-inline-link{background:none;border:0;padding:0;margin:0;color:#9ca3af;font:inherit;font-size:11.5px;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
   </style>
-  <link rel="stylesheet" href="./src/styles.css?v=160" media="print" onload="this.media='all'" />
-  <noscript><link rel="stylesheet" href="./src/styles.css?v=160" /></noscript>
+  <link rel="stylesheet" href="./src/styles.css?v=1700" media="print" onload="this.media='all'" />
+  <noscript><link rel="stylesheet" href="./src/styles.css?v=1700" /></noscript>
 </head>
 <body data-ui-stage="1" data-blitz-unlocked="0" data-screen="gate">
   <!-- 3D Three.js Industrial Workshop Canvas -->
@@ -140,7 +140,7 @@
     </div>
 
     <div class="burger-list">
-      <button type="button" class="burger-item burger-item-gold" id="btn-burger-play-til">👊 ИГРАТЬ С ТИЛЕМ (3 ФАЗЫ)</button>
+      <button type="button" class="burger-item burger-item-gold" id="btn-burger-play-til">👊 СХВАТКА С ТИЛЕМ (3D-БОЧКИ)</button>
       <button type="button" class="burger-item burger-item-gold" id="btn-burger-til-ocean">🌊 ДОСТУЧИСЬ ДО НЕБЕС (У МОРЯ)</button>
       <button type="button" class="burger-item burger-item-gold" id="btn-burger-pack-friend">🛢 СПРЯТАТЬ ДРУГА В БОЧКЕ</button>
       <button type="button" class="burger-item burger-item-gold" id="btn-burger-hall-of-fame">🎬 ЗАЛ СЛАВЫ И АРТЕФАКТЫ (<span id="burger-trophies-count">0</span>)</button>
@@ -180,21 +180,21 @@
         <img src="./public/sprites/til_avatar.webp" alt="Тиль Швайгер" class="gate-v16-til-avatar" />
         <div class="gate-v16-title-wrap">
           <h1 class="metal-logo" data-i18n="gateTitle">БОЧКА</h1>
-          <p class="gate-subtitle" id="gate-subtitle-v16">В КИНО С 17 ДЕКАБРЯ · ТИЛЬ ШВАЙГЕР</p>
+          <p class="gate-subtitle" id="gate-subtitle-v16">В КИНО С 17 ДЕКАБРЯ · 3D-БОЧКИ С ТИЛЕМ</p>
         </div>
       </div>
 
       <!-- Путь А: баннер входящей бочки от друга (показывается только если пришёл по бочке друга) -->
       <div class="gate-v16-friend-callout" id="gate-friend-callout" hidden>
         <strong id="gate-friend-title">🛢 Друг спрятал тебя в бочке — найди себя!</strong>
-        <span id="gate-friend-sub">Открой нужную крышку и сразу сыграй с Тилем Швайгером</span>
+        <span id="gate-friend-sub">Вскрой нужную 3D-бочку в цеху, посмотри трейлер и перестучи Тиля!</span>
       </div>
 
       <!-- Служебный баннер для продюсеров/блогеров (team_prod / team_blog) -->
       <div class="gate-seed-banner" id="gate-seed-banner" hidden></div>
 
-      <!-- Наглядная шкала-пазл билета «5 букв» (1/4 -> 4/4) -->
-      <div class="gate-v16-ticket-host" id="gate-ticket-puzzle"></div>
+      <!-- Наглядная шкала-пазл билета «5 букв» (1/4 -> 4/4), скрыта на самом первом входе -->
+      <div class="gate-v16-ticket-host" id="gate-ticket-puzzle" hidden></div>
 
       <!-- Совместимость со скрытыми элементами (не засоряют первый экран!) -->
       <button type="button" class="premiere-hero-banner" id="gate-premiere-banner" hidden></button>
@@ -203,9 +203,9 @@
 
       <div class="gate-actions gate-v16-actions">
         <button type="button" class="btn-primary gate-v16-main-cta" id="btn-enter-sound">
-          <span id="btn-enter-sound-label">▶ ИГРАТЬ С ТИЛЕМ</span>
+          <span id="btn-enter-sound-label">▶ ИГРАТЬ С ТИЛЕМ (СО ЗВУКОМ)</span>
         </button>
-        <button type="button" class="btn-secondary gate-v16-sec-cta" id="btn-gate-pack-friend">
+        <button type="button" class="btn-secondary gate-v16-sec-cta" id="btn-gate-pack-friend" hidden>
           🛢 Спрятать друга в бочке
         </button>
       </div>
@@ -348,9 +348,11 @@
         </div>
       </div>
       <span class="hud-slim-o2"><strong id="air-seconds">30.0</strong> <small>O₂</small></span>
-      <button type="button" class="hud-slim-menu-btn" id="btn-hud-menu" aria-label="Меню цеха" title="Меню: пригласить друга, билеты, рейтинг">☰</button>
+      <button type="button" class="hud-slim-sound-btn" id="btn-hud-sound" aria-label="Звук" title="Включить или выключить звук">🔊</button>
+      <button type="button" class="hud-slim-menu-btn" id="btn-hud-menu" aria-label="Меню цеха" title="Меню">☰</button>
       <div class="hud-slim-airbar"><div class="air-bar-fill" id="air-bar-fill"></div></div>
     </div>
+    <div id="til3d-duel-host" class="til3d-duel-host" hidden></div>
     <div class="hud-top-stack" id="hud-top-stack">
       <div class="hud-task-banner" id="hud-task-banner">Слушай бочки (удерживай палец) и найди живого друга!</div>
       <div class="hud-ticket-pool-bar" id="hud-ticket-pool-bar" hidden>
@@ -427,7 +429,7 @@
     <div class="ocean-sky-bg" aria-hidden="true"></div>
 
     <div class="ocean-waves-wrap" aria-hidden="true">
-      <img src="./public/sprites/ocean_sea_real.webp" alt="Северное море — на небе только и разговоров, что о море" class="ocean-panorama-img ocean-photo-real" loading="lazy" decoding="async" />
+      <img src="./public/sprites/ocean_sea_real.webp" alt="Северное море — на небе только и разговоров, что о море" class="ocean-panorama-img ocean-photo-real" decoding="async" />
       <div class="ocean-surf-shimmer"></div>
     </div>
 
@@ -439,7 +441,6 @@
           alt="Ржавая бочка с надписью ТИЛЬ и торчащей рукой"
           class="ocean-barrel-lying-img ocean-barrel-photo"
           id="ocean-barrel-img"
-          loading="lazy"
           decoding="async"
         />
         <span class="ocean-tap-prompt-badge" id="ocean-tap-prompt">👊 СТУЧИ ДО НЕБЕС (100%) — ШКАЛА УХОДИТ ВНИЗ!</span>
@@ -654,14 +655,14 @@
     <div class="panel-sheet pack-clean pack-v16">
       <div class="sheet-header">
         <div>
-          <span class="mono-tag" id="pack-screen-tag">ШАГ 1 ИЗ 1 · ПЕРСОНАЛЬНАЯ БОЧКА ДРУГУ</span>
+          <span class="mono-tag" id="pack-screen-tag">УРОВЕНЬ 2 · ПУСТАЯ БОЧКА ДЛЯ ДРУГА (+1/4 БИЛЕТА)</span>
           <h2 class="section-title" id="pack-screen-title">Загрузи фото ДРУГА — он будет искать себя в бочке</h2>
         </div>
         <button type="button" class="icon-close" id="btn-close-pack" aria-label="Пропустить и отправить с аватаркой друга" title="Закрыть">✕</button>
       </div>
 
       <div class="pack-mandatory-banner" id="pack-mandatory-banner" hidden>
-        🎟 Отправь бочку другу — получишь +1 часть бесплатного билета в кино!
+        🎁 Отправь бочку другу — получишь +1/4 бесплатного билета в подарок другу!
       </div>
 
       <div class="pack-v16-photo-stage">
@@ -669,7 +670,7 @@
           <img id="pack-preview-img" alt="Фото друга в бочке" />
         </div>
         <p class="pack-v16-photo-note" id="pack-photo-note">
-          Загрузи фото <strong>друга</strong> из галереи — когда он откроет бочку, найдёт там себя. Звук бочки выберется случайно!
+          Загрузи именно фото <strong>ДРУГА</strong> — он же будет искать себя в бочке! Звук-скример выберется случайно (1 из 10 реальных).
         </p>
         <div class="pack-v16-upload-row">
           <label class="btn-secondary btn-full file-label pack-v16-upload-btn">
@@ -697,6 +698,9 @@
         </button>
         <button type="button" class="btn-ghost btn-full pack-v16-skip-btn" id="btn-pack-quick-1tap">
           <span id="btn-pack-quick-1tap-text">⚡ Пропустить и отправить в 1 клик (аватарка друга из Telegram)</span>
+        </button>
+        <button type="button" class="legal-inline-link pack-skip-til-link" id="btn-pack-skip-to-til">
+          Потом — сразу играть с Тилем на 8 бочек →
         </button>
       </div>
 
@@ -1106,6 +1110,14 @@
         <button type="button" class="hud-mini-btn" id="btn-trailer-open-yt-app" title="Открыть официальный трейлер в VK Видео">▶ Открыть в VK Видео ↗</button>
         <button type="button" class="hud-mini-btn" id="btn-trailer-mute">🔊 ВЫКЛ ЗВУК</button>
       </div>
+
+      <div class="trailer-director-strip" id="trailer-director-strip">
+        <strong>Снято в России:</strong> режиссёр Алексей Звонцов («Киноцех» / ООО «БИГСКРИНПРОДАКШН») и Тиль Швайгер · В кино с 17 декабря
+      </div>
+
+      <button type="button" class="btn-primary btn-full trailer-duolingo-next-btn" id="btn-trailer-duolingo-next" hidden>
+        ⚡ ЗАБРАТЬ +3 ❤️ И ОТКРЫТЬ БОЧКУ →
+      </button>
 
       <div class="trailer-rescue-box" id="trailer-rescue-box" hidden>
         <p class="trailer-rescue-status" id="trailer-rescue-status">
@@ -1578,6 +1590,6 @@
   <!-- Toast уведомления -->
   <div class="toast" id="toast" hidden></div>
 
-  <script type="module" src="./src/main.js?v=1614"></script>
+  <script type="module" src="./src/main.js?v=1700"></script>
 </body>
 </html>

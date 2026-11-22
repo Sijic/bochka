@@ -99,6 +99,10 @@ const SCREAMER_KEY_ALIAS = {
   siren_cam: 'tesla_siren',
   prank_rooster: 'prank_rooster',
   prank_dog_alarm: 'prank_dog_alarm',
+  horror_banging: 'horror_banging',
+  horror_scratch: 'horror_scratch',
+  horror_groan: 'horror_groan',
+  horror_whisper: 'horror_whisper',
 };
 
 class WorkshopAudio {
@@ -1623,6 +1627,10 @@ class WorkshopAudio {
       lid_blast: 'horror_jumpscare_lunge',
       tesla_siren: 'horror_jumpscare_klaxon',
       basement_shriek: 'horror_jumpscare_waterphone',
+      horror_banging: 'horror_barrel_banging',
+      horror_scratch: 'horror_barrel_scratch',
+      horror_groan: 'horror_barrel_groan',
+      horror_whisper: 'horror_barrel_breath',
     };
     const sampleBuf =
       this.buffers.get(horrorMap[normKey] || 'horror_jumpscare_shriek') ||
@@ -2093,9 +2101,32 @@ class WorkshopAudio {
     });
   }
 
+  playTilFalseStart() {
+    this.playTilCaught();
+  }
+
+  playTilCountTick(step = 1) {
+    if (!this.ctx || !this.enabled || !this.master) return;
+    if (this.ctx.state !== 'running' && (typeof document === 'undefined' || !document.hidden)) {
+      this.ctx.resume().catch(() => {});
+    }
+    const now = this.ctx.currentTime;
+    const baseFreq = step >= 2 ? 440 : 330;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(baseFreq, now);
+    osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.52, now + 0.09);
+    g.gain.setValueAtTime(0.26, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+    osc.connect(g).connect(this.master);
+    osc.start(now);
+    osc.stop(now + 0.12);
+  }
+
   playTilBonus() {
     if (!this.ctx || !this.enabled || !this.master) return;
-    if (this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
+    if (this.ctx.state !== 'running' && (typeof document === 'undefined' || !document.hidden)) this.ctx.resume().catch(() => {});
     const now = this.ctx.currentTime;
     [523.25, 659.25, 1046.5].forEach((freq, i) => {
       const osc = this.ctx.createOscillator();

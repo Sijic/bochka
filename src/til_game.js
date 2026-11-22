@@ -261,11 +261,16 @@ export class TilThreePhaseController {
     btnShare.addEventListener('click', () => this.cb.onShareFriends?.());
 
     const subRow = el('div', 'til16-victory-sub-row');
-    const btnNextLvl = el('button', 'btn-ghost btn-compact', '▶ СЛЕДУЮЩИЙ УРОВЕНЬ');
+    const btnNextLvl = el('button', 'btn-ghost btn-compact', '👊 ЕЩЁ СХВАТКА С ТИЛЕМ');
     btnNextLvl.type = 'button';
     btnNextLvl.id = 'btn-til16-next-level';
     btnNextLvl.addEventListener('click', () => {
-      this.startRound(this.level + 1);
+      if (typeof this.cb.onPlayNextLevel === 'function') {
+        this.stop();
+        this.cb.onPlayNextLevel(this.level + 1);
+      } else {
+        this.startRound(this.level + 1);
+      }
     });
 
     const btnPackFriend = el('button', 'btn-ghost btn-compact', '🛢 СПРЯТАТЬ ДРУГА');
