@@ -2379,7 +2379,7 @@ function showScreen(name) {
     state.passClockTimer = null;
   }
 
-  if (name !== 'ocean') {
+  if (name !== 'ocean' && name !== 'til16') {
     audio.stopOceanEasterEggAudio();
     if (state.oceanTypeTimer) {
       clearInterval(state.oceanTypeTimer);
@@ -7617,29 +7617,50 @@ function openTrailerModal({ forRescue = false } = {}) {
     rescueBox?.setAttribute('hidden', '');
   }
 
-  // v16.0: Локальный MP4 трейлер (0 заблокированных запросов к YouTube в РФ и Беларуси!)
+  // v16.1: Официальный трейлер в VK Видео (работает в РФ, Беларуси и Казахстане без VPN!)
+  audio.stopOceanEasterEggAudio();
   state.trailer.usingYtFallback = false;
-  const ytWrap = document.getElementById('trailer-yt-wrap');
   const vid = document.getElementById('trailer-video');
-  if (ytWrap) ytWrap.setAttribute('hidden', '');
+  const slot = document.getElementById('yt-fallback-slot');
+  const customBar = document.getElementById('trailer-custom-bar');
   if (vid) {
-    const localSrc = ENV.trailerMp4Url || './video/trailer.mp4';
-    if (!vid.getAttribute('src') || vid.getAttribute('src') !== localSrc) {
-      vid.src = localSrc;
-    }
-    vid.removeAttribute('hidden');
-    vid.muted = Boolean(state.trailer.muted);
-    vid.playsInline = true;
-    vid.setAttribute('playsinline', '');
-    try {
-      vid.currentTime = 0;
-    } catch { /* ignore */ }
-    vid.play().catch(() => {
-      vid.muted = true;
-      state.trailer.muted = true;
-      syncTrailerMuteButton();
-      vid.play().catch(() => {});
-    });
+    try { vid.pause(); } catch { /* ignore */ }
+    vid.setAttribute('hidden', '');
+  }
+  if (customBar) {
+    customBar.removeAttribute('hidden');
+    document.getElementById('btn-trailer-play')?.setAttribute('hidden', '');
+    document.getElementById('btn-trailer-mute')?.setAttribute('hidden', '');
+    customBar.querySelector('.trailer-progress-track')?.setAttribute('hidden', '');
+    document.getElementById('trailer-time-readout')?.setAttribute('hidden', '');
+    document.getElementById('btn-trailer-open-yt-app')?.removeAttribute('hidden');
+  }
+  if (slot) {
+    slot.removeAttribute('hidden');
+    slot.textContent = '';
+    const ifr = document.createElement('iframe');
+    ifr.id = 'vk-trailer-iframe';
+    ifr.className = 'vk-trailer-iframe';
+    ifr.src = ENV.vkTrailerEmbedUrl;
+    ifr.title = 'БОЧКА — официальный трейлер (VK Видео)';
+    ifr.referrerPolicy = 'strict-origin-when-cross-origin';
+    ifr.setAttribute('frameborder', '0');
+    ifr.setAttribute('allow', 'autoplay; encrypted-media; fullscreen; picture-in-picture; screen-wake-lock;');
+    ifr.setAttribute('allowfullscreen', '');
+    slot.appendChild(ifr);
+  }
+
+  if (forRescue) {
+    let sec = 0;
+    state.trailer.vkTimer = window.setInterval(() => {
+      if (!state.trailer.modalOpen || document.hidden) return;
+      sec += 1;
+      updateTrailerRescueBanner(sec, TRAILER_UNLOCK_SEC);
+      if (sec >= TRAILER_UNLOCK_SEC && !state.trailer.unlocked40) {
+        state.trailer.unlocked40 = true;
+        unlockTrailerRescueReward();
+      }
+    }, 1000);
   }
 }
 
@@ -7655,6 +7676,14 @@ function closeTrailerModal() {
   document.getElementById('btn-close-trailer')?.classList.remove('is-rescue-locked');
   modal?.setAttribute('hidden', '');
 
+  if (state.trailer.vkTimer) {
+    clearInterval(state.trailer.vkTimer);
+    state.trailer.vkTimer = null;
+  }
+  const slot = document.getElementById('yt-fallback-slot');
+  if (slot) {
+    slot.textContent = '';
+  }
   const vid = document.getElementById('trailer-video');
   if (vid) {
     try { vid.pause(); } catch { /* ignore */ }
@@ -7666,6 +7695,9 @@ function closeTrailerModal() {
     try { state.ytPlayer.pauseVideo?.(); } catch { /* ignore */ }
   }
   audio.setModalAudioDuck(false);
+  if ((state.activeScreen === 'til16' || state.activeScreen === 'ocean') && audio.enabled && !audio._userMuted) {
+    audio.startOceanEasterEggAudio();
+  }
   syncTrailerPlayButton();
 
   if (state.trailer.forRescue && !state.trailer.unlocked40 && state.activeScreen === 'workshop' && !state.round.running) {
@@ -9019,7 +9051,7 @@ function bindUIEvents() {
   document.getElementById('btn-trailer-open-yt-app')?.addEventListener('click', () => {
     pauseActiveTrailerPlayback();
     state.trailer.externalRescueDepartedAt = Date.now();
-    openExternalLink(OFFICIAL_YT_WATCH_URL);
+    openExternalLink(ENV.vkTrailerUrl || OFFICIAL_YT_WATCH_URL);
   });
 
   document.getElementById('btn-claim-trailer-life')?.addEventListener('click', () => claimTrailerFifthLife());

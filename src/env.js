@@ -44,6 +44,11 @@ export const ENV = {
   afishaUrl: pick('VITE_AFISHA_URL', 'https://www.afisha.ru/movie/bochka-1005119/'),
   kinoteatrUrl: pick('VITE_KINOTEATR_URL', 'https://kinoteatr.ru/film/bochka-dostuchatsya-do-nebes/'),
   kinopoiskTrailerUrl: pick('VITE_KINOPOISK_TRAILER_URL', 'https://www.kinopoisk.ru/film/11226275/video/210300/'),
+  vkTrailerUrl: pick('VITE_VK_TRAILER_URL', 'https://vkvideo.ru/video-191197563_456239557'),
+  vkTrailerEmbedUrl: pick(
+    'VITE_VK_TRAILER_EMBED_URL',
+    'https://vkvideo.ru/video_ext.php?oid=-191197563&id=456239557&hd=2&autoplay=1'
+  ),
   trailerMp4: pick('VITE_TRAILER_MP4', resolveSiteAsset('video/trailer.mp4')),
   youtubeFallbackId: resolvedYtId,
   youtubeWatchUrl: pick('VITE_YOUTUBE_WATCH_URL', `https://www.youtube.com/watch?v=${resolvedYtId}`),

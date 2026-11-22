@@ -39,6 +39,7 @@ export class TilThreePhaseController {
     this.p1GoAt = 0;
     this.timers = new Set();
     this.victoryCleanup = null;
+    this._audioUnsub = null;
     this._built = false;
     this._dom = {};
   }
@@ -63,6 +64,11 @@ export class TilThreePhaseController {
     this.active = false;
     this.phase = 'idle';
     this._clearTimers();
+    audio.stopOceanEasterEggAudio();
+    if (this._audioUnsub) {
+      try { this._audioUnsub(); } catch { /* ignore */ }
+      this._audioUnsub = null;
+    }
     if (this.victoryCleanup) {
       try { this.victoryCleanup(); } catch { /* ignore */ }
       this.victoryCleanup = null;
@@ -73,11 +79,35 @@ export class TilThreePhaseController {
     if (this._built && this.hostEl.firstChild) return;
     this.hostEl.textContent = '';
 
-    // 1. ИГРОВАЯ СЦЕНА (3 фазы)
+    // 0. КУЛЬТОВЫЙ ФОН «ДОСТУЧАТЬСЯ ДО НЕБЕС»: МОРЕ + ВТОРОЙ ЧЕЛОВЕК НА БЕРЕГУ + ВОЛНЫ
+    const skyBg = el('div', 'ocean-sky-bg til16-ocean-bg');
+    skyBg.setAttribute('aria-hidden', 'true');
+    this.hostEl.appendChild(skyBg);
+
+    const wavesWrap = el('div', 'ocean-waves-wrap til16-ocean-waves');
+    wavesWrap.setAttribute('aria-hidden', 'true');
+    const seaImg = document.createElement('img');
+    seaImg.src = './public/sprites/ocean_sea_real.webp';
+    seaImg.alt = 'Северное море — на небе только и разговоров, что о море';
+    seaImg.className = 'ocean-panorama-img ocean-photo-real til16-sea-photo';
+    seaImg.decoding = 'async';
+    wavesWrap.appendChild(seaImg);
+    wavesWrap.appendChild(el('div', 'ocean-surf-shimmer'));
+    this.hostEl.appendChild(wavesWrap);
+
+    // Светофор-виньетка по краям экрана (не закрывает море и второго человека!)
+    const signalVignette = el('div', 'til16-signal-vignette');
+    signalVignette.id = 'til16-signal-vignette';
+    signalVignette.setAttribute('aria-hidden', 'true');
+    this.hostEl.appendChild(signalVignette);
+
+    // 1. ИГРОВАЯ СЦЕНА (3 фазы прямо на берегу Северного моря!)
     const playWrap = el('div', 'til16-play-wrap');
     playWrap.id = 'til16-play-wrap';
 
-    // Верхняя чистая полоса: Назад + ОДНА шкала «Достучись до небес»
+    // Верхняя зона в небе (полупрозрачная стеклянная карточка, не закрывает море и сидящего человека!)
+    const skyHud = el('div', 'til16-sky-hud');
+
     const topBar = el('div', 'til16-top-bar');
     const backBtn = el('button', 'til16-back-btn', '←');
     backBtn.type = 'button';
@@ -100,7 +130,6 @@ export class TilThreePhaseController {
     const progFill = el('div', 'til16-progress-fill');
     progFill.id = 'til16-progress-fill';
     progFill.style.width = '0%';
-    // Метки фаз 30% и 75%
     const m30 = el('span', 'til16-prog-mark');
     m30.style.left = '30%';
     const m75 = el('span', 'til16-prog-mark');
@@ -118,16 +147,14 @@ export class TilThreePhaseController {
     topBar.appendChild(backBtn);
     topBar.appendChild(progWrap);
     topBar.appendChild(lvlPill);
-    playWrap.appendChild(topBar);
+    skyHud.appendChild(topBar);
 
-    // Фазовый чип (спокойный, 1 короткая фраза)
     const phaseRow = el('div', 'til16-phase-row');
     const phasePill = el('span', 'til16-phase-pill', 'ФАЗА 1 / 3 · НА СЧЁТ ТРИ!');
     phasePill.id = 'til16-phase-pill';
     phaseRow.appendChild(phasePill);
-    playWrap.appendChild(phaseRow);
+    skyHud.appendChild(phaseRow);
 
-    // Облачко-реплика Тиля в стиле Duolingo (2-3 слова)
     const bubbleWrap = el('div', 'til16-speech-wrap');
     const tilAva = document.createElement('img');
     tilAva.className = 'til16-speech-ava';
@@ -137,22 +164,26 @@ export class TilThreePhaseController {
     bubble.id = 'til16-speech-bubble';
     bubbleWrap.appendChild(tilAva);
     bubbleWrap.appendChild(bubble);
-    playWrap.appendChild(bubbleWrap);
+    skyHud.appendChild(bubbleWrap);
 
-    // Центральная интерактивная зона: Тиль с бочкой + светофор-сигнал
-    const stageBtn = el('button', 'til16-stage-btn');
+    playWrap.appendChild(skyHud);
+
+    // Открытая пляжная интерактивная зона (БЕЗ тёмного прямоугольника — море и второй человек слева видны целиком!)
+    const stageBtn = el('button', 'til16-stage-btn til16-beach-stage');
     stageBtn.type = 'button';
     stageBtn.id = 'btn-til16-barrel-tap';
-    stageBtn.setAttribute('aria-label', 'Стучать по бочке Тиля');
+    stageBtn.setAttribute('aria-label', 'Стучать по бочке Тиля на берегу моря');
 
     const signalRing = el('div', 'til16-signal-ring');
     signalRing.id = 'til16-signal-ring';
 
+    const barrelAnchor = el('div', 'til16-barrel-anchor');
     const tilImg = document.createElement('img');
-    tilImg.className = 'til16-barrel-art';
+    tilImg.className = 'til16-barrel-art ocean-barrel-photo';
     tilImg.src = './public/sprites/ocean_barrel_til_hand.webp';
-    tilImg.alt = 'Тиль Швайгер с бочкой';
+    tilImg.alt = 'Ржавая бочка с надписью ТИЛЬ и торчащей рукой';
     tilImg.draggable = false;
+    barrelAnchor.appendChild(tilImg);
 
     const signalBanner = el('div', 'til16-signal-banner', 'ЖДИ СИГНАЛ...');
     signalBanner.id = 'til16-signal-banner';
@@ -161,7 +192,7 @@ export class TilThreePhaseController {
     burstLayer.setAttribute('aria-hidden', 'true');
 
     stageBtn.appendChild(signalRing);
-    stageBtn.appendChild(tilImg);
+    stageBtn.appendChild(barrelAnchor);
     stageBtn.appendChild(signalBanner);
     stageBtn.appendChild(burstLayer);
 
@@ -172,7 +203,6 @@ export class TilThreePhaseController {
 
     playWrap.appendChild(stageBtn);
 
-    // Одна понятная подсказка внизу
     const hintText = el('div', 'til16-bottom-hint', 'Жди команду «СТУЧИ!» и жми быстрее Тиля');
     hintText.id = 'til16-bottom-hint';
     playWrap.appendChild(hintText);
@@ -261,6 +291,7 @@ export class TilThreePhaseController {
     this._dom = {
       playWrap,
       winWrap,
+      signalVignette,
       progFill,
       progPct,
       lvlPill,
@@ -300,9 +331,12 @@ export class TilThreePhaseController {
   }
 
   _setVisualState(mode, bannerText, hint) {
-    const { stageBtn, signalBanner, hintText } = this._dom;
+    const { stageBtn, signalBanner, hintText, signalVignette } = this._dom;
     if (stageBtn) {
       stageBtn.dataset.signal = mode; // 'wait' | 'go' | 'freeze' | 'sprint' | 'caught'
+    }
+    if (signalVignette) {
+      signalVignette.dataset.signal = mode;
     }
     if (signalBanner) signalBanner.textContent = bannerText;
     if (hintText && hint !== undefined) hintText.textContent = hint;
@@ -312,8 +346,8 @@ export class TilThreePhaseController {
     const layer = this._dom.burstLayer;
     if (!layer) return;
     const node = el('span', `til16-pop is-${tone}`, text);
-    const rx = 25 + Math.random() * 50;
-    const ry = 25 + Math.random() * 40;
+    const rx = 38 + Math.random() * 44;
+    const ry = 35 + Math.random() * 34;
     node.style.left = `${rx}%`;
     node.style.top = `${ry}%`;
     layer.appendChild(node);
@@ -342,6 +376,16 @@ export class TilThreePhaseController {
     this._dom.playWrap.hidden = false;
     this._dom.lvlPill.textContent = `УР. ${this.level}`;
     this._setProgress(0);
+
+    // Запускаем ТУ САМУЮ музыку «Достучаться до небес» + шум волн Северного моря!
+    if (audio.enabled && !audio._userMuted) {
+      audio.startOceanEasterEggAudio();
+    }
+    this._audioUnsub = audio.onStateChange(({ enabled, audible }) => {
+      if (this.active && enabled && audible && !audio._oceanActive && !audio.modalDucked) {
+        audio.startOceanEasterEggAudio();
+      }
+    });
 
     // Запускаем Фазу 1 — «На счёт три!»
     this._startPhase1();

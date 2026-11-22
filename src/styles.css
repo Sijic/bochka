@@ -9216,3 +9216,155 @@ body[data-screen="sent"] #nav-prize {
   flex-direction: column;
   gap: 8px;
 }
+
+
+/* ============================================================================
+   БОЧКА v16.1: ВОЗВРАТ БЕРЕГА СЕВЕРНОГО МОРЯ, ВТОРОГО ЧЕЛОВЕКА, БОЧКИ И МУЗЫКИ
+   + ВСТРОЕННЫЙ VK ВИДЕО ПЛЕЕР (РФ / РБ / КЗ БЕЗ VPN)
+   ============================================================================ */
+.screen-til-v16 {
+  background: #10161c !important;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.screen-til-v16 .til16-ocean-bg,
+.screen-til-v16 .til16-ocean-waves {
+  position: fixed !important;
+  inset: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 1;
+  pointer-events: none;
+}
+.screen-til-v16 .til16-sea-photo {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: 31% 100% !important;
+  filter: contrast(1.04) saturate(0.96);
+}
+@media (min-width: 720px) {
+  .screen-til-v16 .til16-sea-photo {
+    object-position: center 55% !important;
+  }
+}
+.screen-til-v16 .ocean-surf-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(16, 24, 32, 0.74) 0%, rgba(16, 24, 32, 0.16) 34%, transparent 62%, rgba(10, 14, 19, 0.62) 100%);
+  pointer-events: none;
+}
+
+/* Мягкая светофор-виньетка по краям экрана (не закрывает море и второго человека!) */
+.til16-signal-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  transition: box-shadow 0.16s ease;
+}
+.til16-signal-vignette[data-signal="go"] {
+  box-shadow: inset 0 0 0 4px rgba(34, 197, 94, 0.85), inset 0 0 42px rgba(34, 197, 94, 0.32);
+}
+.til16-signal-vignette[data-signal="freeze"] {
+  box-shadow: inset 0 0 0 5px rgba(239, 68, 68, 0.95), inset 0 0 70px rgba(220, 38, 38, 0.52);
+}
+.til16-signal-vignette[data-signal="sprint"] {
+  box-shadow: inset 0 0 0 4px rgba(250, 204, 21, 0.9), inset 0 0 48px rgba(234, 179, 8, 0.36);
+}
+.til16-signal-vignette[data-signal="caught"] {
+  box-shadow: inset 0 0 0 5px rgba(249, 115, 22, 0.92), inset 0 0 60px rgba(234, 88, 12, 0.46);
+}
+
+.til16-play-wrap,
+.til16-victory-wrap {
+  position: relative;
+  z-index: 5;
+}
+.til16-victory-wrap {
+  background: rgba(12, 14, 18, 0.84);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(250, 204, 21, 0.28);
+  border-radius: 18px;
+  padding: 12px 12px 14px;
+}
+
+/* Верхняя зона в небе над морем */
+.til16-sky-hud {
+  background: rgba(14, 19, 25, 0.68);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  padding: 10px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Прозрачная открытая пляжная зона — море и сидящий человек слева ПОЛНОСТЬЮ ОТКРЫТЫ! */
+.til16-stage-btn.til16-beach-stage {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  min-height: 290px;
+  flex: 1;
+  max-height: none;
+  padding: 0 0 6px;
+  justify-content: flex-end;
+  align-items: flex-end;
+  gap: 8px;
+}
+.til16-barrel-anchor {
+  width: clamp(205px, 60vw, 275px);
+  margin-left: auto;
+  margin-right: 0;
+  display: flex;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+.til16-stage-btn.til16-beach-stage .til16-barrel-art {
+  width: 100%;
+  max-height: none;
+  filter: drop-shadow(0 16px 20px rgba(0, 0, 0, 0.78));
+}
+.til16-stage-btn.til16-beach-stage[data-signal="go"] .til16-barrel-art {
+  filter: drop-shadow(0 0 18px rgba(34, 197, 94, 0.72)) drop-shadow(0 16px 20px rgba(0, 0, 0, 0.78));
+}
+.til16-stage-btn.til16-beach-stage[data-signal="freeze"] .til16-barrel-art {
+  filter: drop-shadow(0 0 22px rgba(239, 68, 68, 0.85)) drop-shadow(0 16px 20px rgba(0, 0, 0, 0.78));
+}
+.til16-stage-btn.til16-beach-stage[data-signal="sprint"] .til16-barrel-art {
+  filter: drop-shadow(0 0 20px rgba(250, 204, 21, 0.85)) drop-shadow(0 16px 20px rgba(0, 0, 0, 0.78));
+}
+.til16-stage-btn.til16-beach-stage .til16-signal-banner {
+  align-self: center;
+  margin-top: 2px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.65);
+}
+.til16-bottom-hint {
+  background: rgba(10, 14, 19, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-radius: 10px;
+  padding: 6px 10px;
+  color: #f4f4f5;
+}
+
+/* Встроенный VK Видео плеер в модалке трейлера */
+.vk-trailer-iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: #000000;
+}
+#yt-fallback-slot {
+  width: 100%;
+  height: 100%;
+}
