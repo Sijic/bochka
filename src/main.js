@@ -6699,14 +6699,10 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
     // v11.0 Честная экономика: после отправки жизни улетают ровно 3 ❤️ (5 быть не может, пока реальные друзья не зашли!).
     const wasLifeRefill = Boolean(state.pack.forLifeRefill);
     state.pack.forLifeRefill = false;
-    const prevRoundLvl = Math.max(1, Number(state.round?.workshopLevel || 2));
+    const curProfLvl = Math.max(1, Number(state.profile?.currentLevel || 2));
     const targetNextLevel = wasProducerFirstPack
       ? 1
-      : wasLifeRefill
-        ? Math.max(2, prevRoundLvl)
-        : prevRoundLvl <= 2
-          ? 3
-          : Math.max(3, prevRoundLvl + 1);
+      : Math.max(2, Math.min(5, curProfLvl));
     state.profile.currentLevel = targetNextLevel;
     const prevLives = Math.max(0, Number(state.profile.lives || 0));
     const nextLives = capEarlyLivesIfNoRealFriends(Math.max(3, prevLives + 3));

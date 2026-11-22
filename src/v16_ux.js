@@ -260,6 +260,7 @@ function flushNextDuolingoCard() {
 
   if (secondaryText) {
     const secBtn = el('button', 'btn-ghost btn-full duo-card-sec-btn', secondaryText);
+    secBtn.id = 'btn-duo-card-secondary';
     secBtn.type = 'button';
     secBtn.addEventListener('click', () => closeCard(onSecondary));
     actions.appendChild(secBtn);
