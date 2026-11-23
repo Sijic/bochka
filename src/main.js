@@ -388,7 +388,7 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1951'));
+    const mod = duelModCache || (await import('./duel.js?v=1952'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -1811,7 +1811,12 @@ function openBurgerDrawer() {
   document.getElementById('btn-burger-menu')?.setAttribute('aria-expanded', 'true');
 }
 
+function armWorkshopClickGuard(ms = 360) {
+  state._workshopClickGuardUntil = Math.max(Number(state._workshopClickGuardUntil || 0), performance.now() + ms);
+}
+
 function closeBurgerDrawer() {
+  armWorkshopClickGuard(360);
   document.getElementById('burger-backdrop')?.setAttribute('hidden', '');
   document.getElementById('burger-drawer')?.setAttribute('hidden', '');
   document.getElementById('btn-burger-menu')?.setAttribute('aria-expanded', 'false');
@@ -2368,6 +2373,7 @@ function updateControlHintText() {
 
 function showScreen(name) {
   state.activeScreen = name;
+  if (name === 'workshop') armWorkshopClickGuard(360);
   document.body.setAttribute('data-screen', name);
   if (name === 'ocean') {
     window.requestAnimationFrame(positionOceanToast);
@@ -3519,6 +3525,7 @@ function handleAirDepleted() {
     scene.setInteractive(false);
     triggerMiniScreamer();
     window.setTimeout(() => {
+      if (state.activeScreen !== 'workshop' || duelCtrl?.isActive || _openingDuelLock) return;
       enterWorkshopTrailerPrompt();
       if (!state.trailer.shownInL1Flow) {
         state.trailer.shownInL1Flow = true;
@@ -4245,6 +4252,9 @@ async function handleBarrelStrike(index, worldPoint) {
     return;
   }
   if (state.watchingBarrelId) return;
+  if (_openingDuelLock || state.activeScreen !== 'workshop') return;
+  if (!document.getElementById('burger-drawer')?.hasAttribute('hidden')) return;
+  if (performance.now() < Number(state._workshopClickGuardUntil || 0)) return;
 
   const r = state.round;
   if (!r.running || r.pausedForModal || r.strikeBusy) return;
@@ -4419,6 +4429,7 @@ async function handleBarrelStrike(index, worldPoint) {
       refreshHudLevelLabel();
       triggerMiniScreamer();
       window.setTimeout(() => {
+        if (state.activeScreen !== 'workshop' || duelCtrl?.isActive || _openingDuelLock) return;
         enterWorkshopTrailerPrompt();
         if (!state.trailer.shownInL1Flow) {
           state.trailer.shownInL1Flow = true;
@@ -6028,6 +6039,7 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
   }
 
   window.setTimeout(async () => {
+    if (state.activeScreen !== 'workshop' || duelCtrl?.isActive || _openingDuelLock) return;
     const revIdx = typeof diveBarrelIndex === 'number' && diveBarrelIndex >= 0 ? diveBarrelIndex : state.round.targetIndex;
     const isBoyRescue = survived && ((completedLvl === 1 && !state.incomingPack) || completedLvl >= 4);
 
@@ -6035,7 +6047,9 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
     const isL1FriendReveal = survived && completedLvl === 1 && (!state.round.isDemo || Boolean(state.incomingPack));
     if (isL1FriendReveal) {
       await playRevealAvatar(2100, { barrelIndex: revIdx, isBoy: isBoyRescue });
+      if (state.activeScreen !== 'workshop' || duelCtrl?.isActive || _openingDuelLock) return;
       await populateFinaleScreen({ premiereResult: null });
+      if (state.activeScreen !== 'workshop' || duelCtrl?.isActive || _openingDuelLock) return;
       showScreen('finale');
       if (!state.trailer.shownInL1Flow && Number(state.round?.rescueStage || 0) < 4) {
         state.trailer.shownInL1Flow = true;
@@ -6128,7 +6142,9 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
     } else {
       await playFullScreenScreamer(2900);
     }
+    if (state.activeScreen !== 'workshop' || duelCtrl?.isActive || _openingDuelLock) return;
     await populateFinaleScreen({ premiereResult: null });
+    if (state.activeScreen !== 'workshop' || duelCtrl?.isActive || _openingDuelLock) return;
     showScreen('finale');
     if (survived && completedLvl === 1 && !state.trailer.shownInL1Flow && Number(state.round?.rescueStage || 0) < 4) {
       state.trailer.shownInL1Flow = true;
@@ -7760,6 +7776,7 @@ function openTrailerModal({ forRescue = false, afterL1ToPack = false } = {}) {
 }
 
 function closeTrailerModal({ goToPack = false } = {}) {
+  armWorkshopClickGuard(360);
   const wasAfterL1ToPack = Boolean(state.trailer.afterL1ToPack || goToPack);
   state.trailer.afterL1ToPack = false;
   document.getElementById('btn-trailer-to-pack')?.setAttribute('hidden', '');
