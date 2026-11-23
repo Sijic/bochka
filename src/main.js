@@ -2458,6 +2458,8 @@ function showContextHintModal({ kind, text, buttonText = 'Дальше', highlig
     else arrowEl.setAttribute('hidden', '');
   }
   hudSlim?.classList.toggle('is-hint-highlight', Boolean(highlightAir));
+  document.body.classList.toggle('is-air-hint-active', Boolean(highlightAir));
+  modal.dataset.hint = state.contextHint.kind || '';
   modal.removeAttribute('hidden');
   Haptics.light();
 }
@@ -2473,6 +2475,8 @@ function dismissContextHintModal() {
   }
   state.contextHint = { open: false, kind: '', text: '', onClose: null };
   hudSlim?.classList.remove('is-hint-highlight');
+  document.body.classList.remove('is-air-hint-active');
+  if (modal) delete modal.dataset.hint;
   document.getElementById('context-hint-arrow')?.setAttribute('hidden', '');
   modal?.setAttribute('hidden', '');
   Haptics.light();
@@ -2527,7 +2531,12 @@ function showScreen(name) {
     window.requestAnimationFrame(positionOceanToast);
   } else {
     const toastEl = document.getElementById('toast');
-    if (toastEl) toastEl.style.top = '';
+    if (toastEl) {
+      toastEl.style.top = '';
+      if (['gate', 'tilChallenge', 'pack', 'sent'].includes(name)) {
+        toastEl.setAttribute('hidden', '');
+      }
+    }
   }
   if (state.entered && ['workshop', 'tilChallenge', 'pack', 'modeA', 'finale'].includes(name)) {
     saveSessionResumeSnapshot({ lastScreen: name });
@@ -6061,7 +6070,7 @@ function claimTrailerFifthLife() {
     audio.startMuffledVoiceLoop();
   }
   startAirCountdownLoop();
-  showToast('❤️ +3 жизни (9 ударов ломом)! Вскрывай последнюю бочку — там твой друг!');
+  showToast('+3 ❤️ получены!');
   Haptics.success();
 }
 

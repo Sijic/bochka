@@ -8758,12 +8758,26 @@ body[data-ui-stage="1"] #hud-pts-pill {
   display: none !important;
 }
 
+body.is-air-hint-active #screen-workshop {
+  z-index: 9610 !important;
+}
+
 .hud-slim.is-hint-highlight {
   position: relative;
-  z-index: 9605;
+  z-index: 9615;
   border-color: #38bdf8 !important;
   box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.9), 0 0 24px rgba(56, 189, 248, 0.75) !important;
   animation: airHintPulse 0.9s ease-in-out infinite alternate;
+}
+
+.hud-slim.is-hint-highlight .hud-slim-airbar {
+  border: 1.5px solid #38bdf8 !important;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.95) !important;
+}
+
+.hud-slim.is-hint-highlight .hud-slim-airbar .air-bar-fill {
+  min-width: 24% !important;
+  background: linear-gradient(90deg, #38bdf8, #7dd3fc) !important;
 }
 
 @keyframes airHintPulse {
