@@ -1822,7 +1822,7 @@ export class WorkshopScene {
           const nowMs = performance.now();
           if (nowMs - (this._lastDirectStrikeAt || 0) > 140) {
             this._lastDirectStrikeAt = nowMs;
-            this.onStrikeBarrel(hit.index, hit.point);
+            this.onStrikeBarrel(hit.index, hit.point, { clientX: e.clientX, clientY: e.clientY });
           }
         }
         return;
@@ -1874,7 +1874,7 @@ export class WorkshopScene {
       }
 
       if (info.barrelIndex >= 0 && !info.dragged) {
-        this.onStrikeBarrel(info.barrelIndex, info.point);
+        this.onStrikeBarrel(info.barrelIndex, info.point, { clientX: info.x, clientY: info.y });
       }
     });
 

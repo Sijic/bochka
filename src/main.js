@@ -359,7 +359,7 @@ async function ensureSceneReady() {
   if (sceneInitPromise) return sceneInitPromise;
   sceneInitPromise = (async () => {
     try {
-      const { WorkshopScene } = await import('./scene.js?v=1965');
+      const { WorkshopScene } = await import('./scene.js?v=1966');
       if (scene) return scene;
       const canvas = document.getElementById('workshop-canvas');
       scene = new WorkshopScene(canvas, {
@@ -395,7 +395,7 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1965'));
+    const mod = duelModCache || (await import('./duel.js?v=1966'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -480,7 +480,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=1965'));
+  const mod = duelModCache || (await import('./duel.js?v=1966'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
@@ -2398,6 +2398,14 @@ function syncSceneRenderPause() {
 function showScreen(name) {
   state.activeScreen = name;
   if (name === 'workshop') armWorkshopClickGuard(260);
+  if (name === 'workshop' && state._gateGhostGuard) {
+    state._gateGhostGuard.until = Math.max(state._gateGhostGuard.until, performance.now() + 850);
+    window.requestAnimationFrame(() => {
+      if (state._gateGhostGuard) {
+        state._gateGhostGuard.until = Math.max(state._gateGhostGuard.until, performance.now() + 650);
+      }
+    });
+  }
   document.body.setAttribute('data-screen', name);
   if (name === 'ocean') {
     window.requestAnimationFrame(positionOceanToast);
@@ -2646,7 +2654,10 @@ function requestAndSyncWriteAccess({ force = false } = {}) {
 }
 
 let _enteringGateLock = false;
-async function enterWorkshopGate(withSound) {
+async function enterWorkshopGate(withSound, ev = null) {
+  if (ev && Number.isFinite(ev.clientX) && Number.isFinite(ev.clientY) && (ev.clientX > 0 || ev.clientY > 0)) {
+    state._gateGhostGuard = { x: ev.clientX, y: ev.clientY, until: performance.now() + 1400 };
+  }
   // v19.0: Синхронная разблокировка WebAudio ДО любых await — мгновенный звук на iOS/Android!
   audio.unlockSync(Boolean(withSound));
   if (withSound) audio.playSoundReadyClick?.();
@@ -4312,7 +4323,7 @@ async function refreshLevel3TicketPoolBar(level = 1) {
   }
 }
 
-async function handleBarrelStrike(index, worldPoint) {
+async function handleBarrelStrike(index, worldPoint, pointerMeta = null) {
   if (!audio.enabled && !audio._userMuted) {
     audio.unlock(true).catch(() => {});
   }
@@ -4330,6 +4341,13 @@ async function handleBarrelStrike(index, worldPoint) {
   if (_openingDuelLock || state.activeScreen !== 'workshop') return;
   if (!document.getElementById('burger-drawer')?.hasAttribute('hidden')) return;
   if (performance.now() < Number(state._workshopClickGuardUntil || 0)) return;
+  if (pointerMeta && state._gateGhostGuard && performance.now() < state._gateGhostGuard.until) {
+    const gx = Number(pointerMeta.clientX);
+    const gy = Number(pointerMeta.clientY);
+    if (Number.isFinite(gx) && Number.isFinite(gy) && Math.hypot(gx - state._gateGhostGuard.x, gy - state._gateGhostGuard.y) <= 14) {
+      return;
+    }
+  }
 
   const r = state.round;
   if (!r.running || r.pausedForModal || r.strikeBusy) return;
@@ -8018,7 +8036,8 @@ function openTrailerModal({ forRescue = false, afterL1ToPack = false } = {}) {
         stalledTicks = 0;
         prevCt = curCt;
       }
-      if (stalledTicks >= 4 && curCt < 0.25 && vid.readyState < 2) {
+      const isHardMediaFailure = Boolean(vid.error) || vid.networkState === 3;
+      if (isHardMediaFailure || (stalledTicks >= 12 && curCt < 0.25 && vid.readyState < 2 && vid.networkState !== 2)) {
         mountVkTrailerIframeFallback();
         return;
       }
@@ -8056,6 +8075,9 @@ function closeTrailerModal({ goToPack = false, force = false } = {}) {
   clearTrailerTimers();
   const slot = document.getElementById('yt-fallback-slot');
   if (slot) {
+    slot.querySelectorAll('iframe').forEach((f) => {
+      try { f.src = 'about:blank'; } catch { /* ignore */ }
+    });
     slot.textContent = '';
     slot.setAttribute('hidden', '');
   }
@@ -9200,8 +9222,8 @@ function bindUIEvents() {
   });
 
   // Экран 1: Входной шлюз
-  document.getElementById('btn-enter-sound')?.addEventListener('click', () => enterWorkshopGate(true));
-  document.getElementById('btn-enter-mute')?.addEventListener('click', () => enterWorkshopGate(false));
+  document.getElementById('btn-enter-sound')?.addEventListener('click', (e) => enterWorkshopGate(true, e));
+  document.getElementById('btn-enter-mute')?.addEventListener('click', (e) => enterWorkshopGate(false, e));
 
   document.getElementById('btn-gate-daily-shift')?.addEventListener('click', () => {
     startDailyShiftRound();
