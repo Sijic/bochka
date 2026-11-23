@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0d0d'/%3E%3Crect x='8' y='4' width='16' height='24' rx='2' fill='none' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='11' x2='25' y2='11' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='21' x2='25' y2='21' stroke='%23eab308' stroke-width='2'/%3E%3C/svg%3E" />
   <title>БОЧКА — Заводской триллер | Вызволи друга за 3 удара ломом</title>
-  <meta name="bochka-build" content="v19.2.1-studio" />
+  <meta name="bochka-build" content="v19.3.0-studio" />
   <meta name="description" content="Четыре цеха завода, заваренные 200-литровые бочки и 30 секунд кислорода. Запиши фото и голос друга на дно бочки, проверь его слух и забери допуск на закрытую Премьеру 17 декабря." />
 
   <!-- Open Graph / Telegram / WhatsApp Link Preview -->
@@ -44,7 +44,7 @@
   }
   </script>
 
-  <link rel="modulepreload" href="./src/main.js?v=1921" />
+  <link rel="modulepreload" href="./src/main.js?v=1930" />
   <link rel="modulepreload" href="./src/backend.js" />
   <link rel="modulepreload" href="./src/env.js" />
   <link rel="modulepreload" href="./vendor/three.module.min.js" />
@@ -65,8 +65,8 @@
     .gate-legal-line{margin-top:8px;text-align:center;line-height:1.3}
     .legal-inline-link{background:none;border:0;padding:0;margin:0;color:#9ca3af;font:inherit;font-size:11px;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
   </style>
-  <link rel="stylesheet" href="./src/styles.css?v=1921" media="print" onload="this.media='all'" />
-  <noscript><link rel="stylesheet" href="./src/styles.css?v=1921" /></noscript>
+  <link rel="stylesheet" href="./src/styles.css?v=1930" media="print" onload="this.media='all'" />
+  <noscript><link rel="stylesheet" href="./src/styles.css?v=1930" /></noscript>
 </head>
 <body data-ui-stage="1" data-blitz-unlocked="0">
   <!-- 3D Three.js Industrial Workshop Canvas -->
@@ -662,18 +662,11 @@
         🔒 Отправь пранк другу в 1 касание — получишь 1-ю часть билета (1/4) и +3 ❤️! Когда друг зайдёт в игру — откроются Дуэли 1×1 за билеты и главный приз!
       </div>
 
-      <!-- Быстрая отправка готовой бочки в 1 касание (подставит фото Telegram друга автоматически!) -->
-      <div class="pack-quick-1tap-box">
-        <button type="button" class="btn-primary btn-full pack-quick-1tap-btn btn-temu-pulse" id="btn-pack-quick-1tap">
-          <span id="btn-pack-quick-1tap-text">⚡ ЗАКАТАТЬ В 1 КАСАНИЕ (+3 ❤️)</span>
-          <small class="btn-sub-line">Без фото — игра сама подставит аватарку друга из Telegram и 1 из 10 скримеров!</small>
-        </button>
-      </div>
-
-      <!-- 2-я быстрая кнопка: сразу загрузить фото друга из галереи без раскрытия аккордеона -->
+      <!-- Приоритет #1: вставь фото друга в бочку -->
       <div class="pack-quick-photo-box">
-        <label class="btn-secondary btn-full pack-upload-direct-btn" for="input-photo-file">
-          <span>📸 ЗАГРУЗИТЬ ФОТО ДРУГА</span>
+        <label class="btn-primary btn-full pack-upload-direct-btn pack-upload-priority-btn btn-temu-pulse" for="input-photo-file">
+          <span>📸 ЗАГРУЗИТЬ ФОТО ДРУГА (+3 ❤️)</span>
+          <small class="btn-sub-line">Приоритет 1: вставь лицо друга — бочка с его лицом и жутким криком!</small>
         </label>
         <div class="pack-uploaded-confirm" id="pack-uploaded-confirm" hidden>
           <img id="pack-uploaded-thumb" alt="Фото друга" class="pack-uploaded-thumb" />
@@ -681,6 +674,14 @@
             🔥 ОТПРАВИТЬ ЭТУ БОЧКУ ДРУГУ (+3 ❤️)
           </button>
         </div>
+      </div>
+
+      <!-- Приоритет #2: если лень выбирать фото — аватар TG или случайный скример + страшный звук -->
+      <div class="pack-quick-1tap-box">
+        <button type="button" class="btn-secondary btn-full pack-quick-1tap-btn pack-quick-lazy-btn" id="btn-pack-quick-1tap">
+          <span id="btn-pack-quick-1tap-text">⚡ ЛЕНЬ? АВТО-АВАТАР / СКРИМЕР (+3 ❤️)</span>
+          <small class="btn-sub-line">Без фото: подставим аватар друга (или скример) и случайный страшный звук!</small>
+        </button>
       </div>
 
       <details class="pack-custom-details" id="pack-custom-details">
@@ -1324,7 +1325,8 @@
 
     <!-- v12.0: Мини-панель живого боя: Раунд/Бочки + Дуэльные Жизни (❤️ 6) + Энергия (⚡) + Пропуск -->
     <div class="duel-live-mini-bar" id="duel-live-mini-bar" hidden>
-      <span id="duel-live-mini-status">⚔️ РАУНД 1/3 · 10/10</span>
+      <span id="duel-live-mini-status">⚔️ РАУНД 1 · 6/6</span>
+      <span class="duel-shards-pill" id="duel-shards-pill" title="Собери 4 части билета (🎟) в бочках!">🎟 <strong id="duel-shards-val">0/4</strong></span>
       <span class="duel-lives-pill" id="duel-lives-pill" title="Жизни в дуэли (мимо = −1 ❤️, Тиль выдаёт минимум 6 ❤️)">❤️ <strong id="duel-lives-val">6</strong></span>
       <span class="duel-energy-pill" id="duel-energy-pill" title="Каждый удар тратит 20% энергии. Можешь пропустить ход, чтобы сэкономить!">
         <span>⚡ <strong id="duel-energy-val">100%</strong></span>
@@ -1358,7 +1360,7 @@
       <div class="duel-chips-panel" id="duel-chips-panel" hidden></div>
 
       <div class="duel-pot-banner" id="duel-pot-banner">
-        🎟 РЕДКИЙ БИЛЕТ В БОЧКАХ! Бей без пауз пока есть ❤️ и ⚡: 💨 пусто (−1 ❤️) · ☠️ скример (−2 ❤️) · ❤️ редкая жизнь · ⭐ баллы! Тиль даёт 6 ❤️!
+        🎟 ЧАСТЬ БИЛЕТА (4/4 = БИЛЕТ), 🪙 ФИШКИ, ⭐ БАЛЛЫ И ☠️ СКРИМЕРЫ В БОЧКАХ! Бей пока есть ❤️ и ⚡ · Тиль даёт 6 ❤️!
       </div>
 
       <div class="duel-slots-row" id="duel-slots-row"></div>
@@ -1667,6 +1669,6 @@
   <!-- Toast уведомления -->
   <div class="toast" id="toast" hidden></div>
 
-  <script type="module" src="./src/main.js?v=1921"></script>
+  <script type="module" src="./src/main.js?v=1930"></script>
 </body>
 </html>

@@ -2008,19 +2008,23 @@ body[data-screen="ocean"] .toast {
   color: #e2e8f0;
 }
 .pack-quick-1tap-box {
-  margin: 8px 0 10px;
+  margin: 4px 0 10px;
 }
 .pack-quick-1tap-btn {
   display: flex !important;
   flex-direction: column !important;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 12px 14px !important;
+  gap: 3px;
+  padding: 10px 12px !important;
   text-align: center;
-  min-height: 62px;
-  font-size: 15px !important;
-  box-shadow: 0 0 24px rgba(234, 179, 8, 0.35);
+  min-height: 52px;
+  font-size: 13.5px !important;
+}
+.pack-quick-lazy-btn {
+  border: 1px solid rgba(250, 204, 21, 0.38) !important;
+  background: rgba(20, 24, 34, 0.88) !important;
+  color: #fde68a !important;
 }
 .pack-custom-details {
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -8582,22 +8586,67 @@ body.is-duel-active .topbar {
   box-sizing: border-box;
 }
 
-/* v19.1: 2-кнопочная быстрая упаковка друга + кнопка «Дальше» под VK трейлером */
+/* v19.3: Приоритет #1 загрузка фото друга + компактная плашка 🎟 X/4 в дуэли на 360px */
 .pack-quick-photo-box {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin: 0 0 10px;
+  margin: 8px 0 10px;
 }
 .pack-upload-direct-btn {
-  display: flex;
+  display: flex !important;
+  flex-direction: column !important;
   align-items: center;
   justify-content: center;
-  min-height: 46px;
+  gap: 3px;
+  min-height: 58px;
+  padding: 11px 14px !important;
   cursor: pointer;
-  font-size: 13.5px;
+  font-size: 14.5px !important;
   font-weight: 800;
   text-align: center;
+  box-shadow: 0 0 24px rgba(234, 179, 8, 0.35);
+}
+.pack-upload-priority-btn .btn-sub-line {
+  font-weight: 600;
+  opacity: 0.86;
+}
+.duel-shards-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 6px;
+  background: rgba(30, 22, 6, 0.88);
+  border: 1px solid rgba(250, 204, 21, 0.68);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #fde047;
+  pointer-events: none;
+  flex-shrink: 0;
+}
+@media (max-width: 420px) {
+  .duel-live-mini-bar {
+    gap: 4px !important;
+    padding: 4px 6px !important;
+    font-size: 10px !important;
+  }
+  .duel-live-mini-bar #duel-live-mini-status {
+    max-width: 112px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .duel-shards-pill,
+  .duel-lives-pill,
+  .duel-energy-pill {
+    padding: 2px 5px !important;
+    font-size: 10px !important;
+    gap: 3px !important;
+  }
+  .duel-energy-track {
+    width: 24px !important;
+  }
 }
 .pack-uploaded-confirm {
   display: flex;

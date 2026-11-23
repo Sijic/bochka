@@ -93,20 +93,40 @@ import {
 } from './backend.js';
 import { HorrorScreamerPlayer, preloadScreamerFrames } from './screamer-fx.js';
 
+const HORROR_FALLBACK_PORTRAITS = [
+  './public/sprites/horror_hero_captive.webp',
+  './public/sprites/horror_hero_warden.webp',
+  './public/sprites/horror_hero_mechanic.webp',
+  './public/sprites/horror_barrel_face.webp',
+  './public/sprites/horror_claw_hands.webp',
+  './public/sprites/horror_gasmask_weld.webp',
+  './public/sprites/horror_cctv_face.webp',
+];
+function pickRandomHorrorPortrait() {
+  return (
+    HORROR_FALLBACK_PORTRAITS[Math.floor(Math.random() * HORROR_FALLBACK_PORTRAITS.length)] ||
+    HORROR_FALLBACK_PORTRAITS[0]
+  );
+}
 const RANDOM_PACK_SCREAMERS = [
   'saw_scream',
   'lid_blast',
   'basement_shriek',
   'tesla_siren',
-  'prank_rooster',
-  'prank_dog_alarm',
   'horror_banging',
   'horror_scratch',
   'horror_groan',
   'horror_whisper',
+  'horror_char_0',
+  'horror_char_1',
+  'horror_char_2',
+  'horror_char_3',
+  'horror_char_4',
+  'horror_char_5',
+  'horror_char_6',
 ];
 function pickRandomPackScreamer() {
-  return RANDOM_PACK_SCREAMERS[Math.floor(Math.random() * RANDOM_PACK_SCREAMERS.length)] || 'saw_scream';
+  return RANDOM_PACK_SCREAMERS[Math.floor(Math.random() * RANDOM_PACK_SCREAMERS.length)] || 'horror_jumpscare_shriek';
 }
 
 const AIR_DURATION_SEC = 30.0;
@@ -367,13 +387,14 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1921'));
+    const mod = duelModCache || (await import('./duel.js?v=1930'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
       scene,
       audio,
       getTgUser: () => state.tg?.user || null,
+      getTicketShards: () => Number(state.profile?.ticketShards || 0),
       onOpenHallOfFame: () => openHallOfFameModal().catch(() => {}),
       loadDuelCandidates: () => fetchDuelFriendCandidates(state.tg?.user || null),
       onChallengeFriend: (friend, roomId) => challengeSpecificFriend1v1(friend, roomId),
@@ -385,12 +406,30 @@ async function ensureDuelReady() {
         showToast('🔒 За тем столом 1×1 уже играют двое — открыли тебе новый стол!');
         openDuelTable('').catch(() => {});
       },
-      onTriggerScreamerFx: (durMs) => triggerMiniScreamer(null, durMs),
+      onTriggerScreamerFx: (durMs, variant = null) => triggerMiniScreamer(variant, durMs),
+      onCollectChipFromBarrel: ({ barrelIndex = -1 } = {}) => {
+        const pos = barrelIndex >= 0 ? scene?.projectBarrelScreenPos?.(barrelIndex, 1.08) : null;
+        flyRewardToHud({
+          type: 'rating',
+          count: 3,
+          label: '🪙 +ФИШКА',
+          startX: pos?.visible ? pos.x : null,
+          startY: pos?.visible ? pos.y : null,
+        });
+        rollRareMovieCardLazy('duel_barrel')
+          .then((res) => {
+            if (res?.dropped && res?.trophy?.title) {
+              showToast(`🪙 ФИШКА ИЗ БОЧКИ: «${res.trophy.title}» (+150 ⭐)!`);
+            }
+          })
+          .catch(() => {});
+      },
       onProfileSync: (patch) => {
         state.profile = { ...state.profile, ...patch };
         if (patch && patch.ticketShards != null) {
           saveLocalV9Flags();
           syncTicketShardsUI({ pulse: true });
+          duelCtrl?.syncEnergyUI?.();
         }
         updatePremiereBarsUI();
         refreshHudLevelLabel();
@@ -435,7 +474,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=1920'));
+  const mod = duelModCache || (await import('./duel.js?v=1930'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
@@ -443,7 +482,7 @@ async function createWatchChannelLazy(barrelId, opts) {
 let trophiesModCache = null;
 async function loadTrophiesMod() {
   if (!trophiesModCache) {
-    trophiesModCache = await import('./trophies.js?v=1920');
+    trophiesModCache = await import('./trophies.js?v=1930');
   }
   return trophiesModCache;
 }
@@ -2997,17 +3036,23 @@ async function startViralFriendRound(pack) {
   const isAutoAvatarBarrel = Boolean(
     pack?.autoAvatar || pack?.mode === 'auto_avatar' || pack?.frameStyle === 'auto_avatar'
   );
-  let portraitDataUrl = '';
-  if (isAutoAvatarBarrel) {
+  const uploadedPhoto = !isAutoAvatarBarrel && pack?.photoUrl ? String(pack.photoUrl).trim() : '';
+  let resolvedTgPhoto = '';
+  let portraitDataUrl = uploadedPhoto;
+  if (!portraitDataUrl) {
     const directTgPhoto = String(state.tg?.user?.photoUrl || '').trim();
     if (directTgPhoto) {
+      resolvedTgPhoto = directTgPhoto;
       portraitDataUrl = directTgPhoto;
     } else {
       const srvPhoto = await fetchTelegramUserAvatarFallback().catch(() => '');
-      portraitDataUrl = srvPhoto || DEMO_PORTRAITS[0];
+      if (srvPhoto) {
+        resolvedTgPhoto = srvPhoto;
+        portraitDataUrl = srvPhoto;
+      } else {
+        portraitDataUrl = pickRandomHorrorPortrait();
+      }
     }
-  } else {
-    portraitDataUrl = pack?.photoUrl || DEMO_PORTRAITS[0];
   }
 
   const voiceUrl = pack?.voiceUrl || '';
@@ -3064,17 +3109,20 @@ async function startViralFriendRound(pack) {
     portraitDataUrl,
     voiceUrl,
     useBarrelFilter: true,
-    screamerType: pack?.screamerType || 'saw_scream',
+    screamerType:
+      pack?.screamerType && RANDOM_PACK_SCREAMERS.includes(pack.screamerType)
+        ? pack.screamerType
+        : pickRandomPackScreamer(),
     victimCardDataUrl: '',
     message: pack?.message || t('presetsSelf')[0],
     senderLabel: pack?.senderName ? `${t('revealFromFriend')} · ${pack.senderName}` : t('revealFromFriend'),
     lastUrgentSec: 9,
   };
 
-  if (!pack?.photoUrl) {
-    processPortraitToWebP(null, pack?.frameStyle || 'flashlight')
+  if (!uploadedPhoto && resolvedTgPhoto) {
+    processPortraitToWebP(resolvedTgPhoto, pack?.frameStyle || 'flashlight')
       .then((fallbackGraded) => {
-        if (fallbackGraded?.dataUrl) {
+        if (fallbackGraded?.dataUrl && state.round) {
           state.round.portraitDataUrl = fallbackGraded.dataUrl;
           scene?.setTargetPortrait?.(state.round.targetIndex, fallbackGraded.dataUrl);
         }
@@ -4474,11 +4522,13 @@ function triggerMiniScreamer(explicitVariant = null, durationMsOverride = null) 
     Number(state.uiStage || 1) <= 1 &&
     !state.incomingPack;
 
-  // Бочка друга: срабатывает ИМЕННО тот скример, который отправитель выбрал при упаковке.
+  // Бочка друга: срабатывает ИМЕННО тот скример/страшный звук, который прилетел с бочкой (или рандомный натуральный).
   // Демо-раунды: ротация 7 кадров (4 жёстких хоррор-скримера + 3 реальных страшных героя триллера).
   const SCREAMER_KEYS = ['weld', 'lunge', 'siren_cam', 'custom_scream'];
   const isFriendRound = Boolean(state.incomingPack) && !state.round?.isDemo;
-  const forcedKey = isFriendRound ? state.round?.screamerType || state.incomingPack?.screamerType || 'weld' : null;
+  const forcedKey = isFriendRound
+    ? state.round?.screamerType || state.incomingPack?.screamerType || pickRandomPackScreamer()
+    : null;
   const metaIndex = forcedKey && SCREAMER_KEYS.includes(forcedKey)
     ? SCREAMER_KEYS.indexOf(forcedKey)
     : typeof explicitVariant === 'number'
@@ -4493,8 +4543,14 @@ function triggerMiniScreamer(explicitVariant = null, durationMsOverride = null) 
     audio.unlock(true).catch(() => {});
   }
 
-  // Каждый из 7 скримеров играет свой УНИКАЛЬНЫЙ реальный актёрский звук/крик (char_0..char_6)!
-  audio.playMiniScreamer(charAudioIdx);
+  // Натуральный страшный звук: из 15 реальных хоррор-дорожек (без синтетики/петухов)!
+  if (forcedKey && !forcedKey.startsWith('horror_char_')) {
+    audio.playFullScreamer(forcedKey, { preview: true });
+  } else if (forcedKey && forcedKey.startsWith('horror_char_')) {
+    audio.playMiniScreamer(Number(forcedKey.slice(-1)));
+  } else {
+    audio.playMiniScreamer(explicitVariant == null ? null : charAudioIdx);
+  }
   if (charAudioIdx === 0 || charAudioIdx === 4) {
     scene?.triggerWeldDropImpact?.(targetIdx);
   } else if (charAudioIdx === 1 || charAudioIdx === 2 || charAudioIdx === 5) {
@@ -6165,7 +6221,7 @@ async function handleQuick1TapPrankClick() {
     await handleSealBarrelClick({ forceAutoAvatar: !state.pack.userUploadedPhoto });
   } finally {
     if (quickBtn) quickBtn.disabled = false;
-    if (quickTxt) quickTxt.textContent = '⚡ ЗАКАТАТЬ В 1 КАСАНИЕ (+3 ❤️)';
+    if (quickTxt) quickTxt.textContent = '⚡ ЛЕНЬ? АВТО-АВАТАР / СКРИМЕР (+3 ❤️)';
   }
 }
 

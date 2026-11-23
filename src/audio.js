@@ -103,6 +103,13 @@ const SCREAMER_KEY_ALIAS = {
   horror_scratch: 'horror_scratch',
   horror_groan: 'horror_groan',
   horror_whisper: 'horror_whisper',
+  horror_char_0: 'horror_char_0',
+  horror_char_1: 'horror_char_1',
+  horror_char_2: 'horror_char_2',
+  horror_char_3: 'horror_char_3',
+  horror_char_4: 'horror_char_4',
+  horror_char_5: 'horror_char_5',
+  horror_char_6: 'horror_char_6',
 };
 
 class WorkshopAudio {
@@ -1210,8 +1217,9 @@ class WorkshopAudio {
   /**
    * v8.1: 4 реальных кино-хоррор скримера (waterphone, визг, ревун, удар в грудь + вибрация, БЕЗ аркадных писков)
    */
-  playMiniScreamer(variant = 0) {
-    const idx = ((Math.round(Number(variant) || 0) % 7) + 7) % 7;
+  playMiniScreamer(variant = null) {
+    const rawIdx = variant == null ? Math.floor(Math.random() * 7) : Math.round(Number(variant) || 0);
+    const idx = ((rawIdx % 7) + 7) % 7;
     const hapticMap = ['saw_scream', 'lid_blast', 'lid_blast', 'tesla_siren', 'tesla_siren', 'basement_shriek', 'basement_shriek'];
     const charKey = `horror_char_${idx}`;
     const fallbackFile = `./public/sfx/horror/char_${idx}.mp3`;
@@ -1589,7 +1597,30 @@ class WorkshopAudio {
     } else {
       Haptics.screamer(normKey);
     }
-    if (!this.ctx || !this.enabled) return;
+    if (!this.ctx || !this.enabled) {
+      if (!this._userMuted && normKey !== 'prank_rooster' && normKey !== 'prank_dog_alarm') {
+        const earlyHorrorMap = {
+          saw_scream: 'horror_jumpscare_shriek',
+          lid_blast: 'horror_jumpscare_lunge',
+          tesla_siren: 'horror_jumpscare_klaxon',
+          basement_shriek: 'horror_jumpscare_waterphone',
+          horror_banging: 'horror_barrel_banging',
+          horror_scratch: 'horror_barrel_scratch',
+          horror_groan: 'horror_barrel_groan',
+          horror_whisper: 'horror_barrel_breath',
+        };
+        const earlyKey = normKey.startsWith('horror_char_') ? normKey : (earlyHorrorMap[normKey] || 'horror_jumpscare_shriek');
+        const earlyUrl = SFX_PATHS[earlyKey] || SFX_PATHS.horror_jumpscare_shriek;
+        if (earlyUrl) {
+          try {
+            const direct = new Audio(earlyUrl);
+            direct.volume = preview ? 0.85 : 1.0;
+            direct.play().catch(() => {});
+          } catch { /* ignore */ }
+        }
+      }
+      return;
+    }
     const now = this.ctx.currentTime;
     const bus = this.screamerBus || this.master;
 
@@ -1638,10 +1669,19 @@ class WorkshopAudio {
       horror_scratch: 'horror_barrel_scratch',
       horror_groan: 'horror_barrel_groan',
       horror_whisper: 'horror_barrel_breath',
+      horror_char_0: 'horror_char_0',
+      horror_char_1: 'horror_char_1',
+      horror_char_2: 'horror_char_2',
+      horror_char_3: 'horror_char_3',
+      horror_char_4: 'horror_char_4',
+      horror_char_5: 'horror_char_5',
+      horror_char_6: 'horror_char_6',
     };
+    const targetHorrorKey = horrorMap[normKey] || 'horror_jumpscare_shriek';
     const sampleBuf =
-      this.buffers.get(horrorMap[normKey] || 'horror_jumpscare_shriek') ||
+      this.buffers.get(targetHorrorKey) ||
       this.buffers.get(`scream_${normKey}`) ||
+      this.buffers.get('horror_jumpscare_shriek') ||
       this.buffers.get('scream1');
     if (sampleBuf) {
       const src = this.ctx.createBufferSource();
@@ -1651,6 +1691,15 @@ class WorkshopAudio {
       src.connect(g).connect(bus);
       src.start(now);
       if (preview) src.stop(now + 1.95);
+    } else if (!this._userMuted) {
+      const fallbackUrl = SFX_PATHS[targetHorrorKey] || SFX_PATHS.horror_jumpscare_shriek;
+      if (fallbackUrl) {
+        try {
+          const direct = new Audio(fallbackUrl);
+          direct.volume = preview ? 0.85 : 1.0;
+          direct.play().catch(() => {});
+        } catch { /* ignore */ }
+      }
     }
 
     // v8.1: Второй слой Patch CC0 (взрыв / разряд / колокол + глубокий sub_boom)
