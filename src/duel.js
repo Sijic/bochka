@@ -485,8 +485,18 @@ export class WorkshopDuelController {
         return;
       }
 
+      const myLocal = this.players.find((p) => p.uid === this.myUid) || {
+        uid: this.myUid,
+        name: this.myName,
+        avatar: this.myAvatar,
+        joinedAt: Date.now(),
+        isBot: false,
+      };
+      const realWithSelf = realSorted.some((p) => p.uid === this.myUid)
+        ? realSorted
+        : [myLocal, ...realSorted];
       const bots = this.players.filter((p) => p.isBot);
-      const merged = [...realSorted, ...bots]
+      const merged = [...realWithSelf, ...bots]
         .sort((a, b) => (a.joinedAt - b.joinedAt) || a.uid.localeCompare(b.uid))
         .slice(0, MAX_DUEL_PLAYERS);
 
@@ -497,7 +507,7 @@ export class WorkshopDuelController {
         } else if (this.phase === 'countdown' || this.phase === 'claim') {
           const presentUids = merged.map((p) => p.uid);
           const presentContenders = this.contenderUids.filter((u) => presentUids.includes(u));
-          if (presentContenders.length < 2) {
+          if (!this.soloMode && presentContenders.length < 2) {
             this.clearAllTimers();
             this.phase = 'lobby';
             this.antePaidForRound = null;

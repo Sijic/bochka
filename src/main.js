@@ -367,7 +367,7 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1910'));
+    const mod = duelModCache || (await import('./duel.js?v=1911'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -435,7 +435,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=1910'));
+  const mod = duelModCache || (await import('./duel.js?v=1911'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
