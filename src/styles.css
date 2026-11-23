@@ -4689,13 +4689,13 @@ body[data-blitz-unlocked="0"] .blitz-rule-note {
 }
 
 #modal-trailer .video-aspect > iframe,
-#modal-trailer .video-aspect > .yt-fallback-slot,
-#modal-trailer .video-aspect > video {
+#modal-trailer .video-aspect > .yt-fallback-slot {
   position: absolute !important;
   inset: 0 !important;
   width: 100% !important;
   height: 100% !important;
   border: 0 !important;
+  pointer-events: auto !important;
 }
 
 #modal-trailer .video-aspect [hidden] {
@@ -8320,15 +8320,21 @@ body.is-duel-active .topbar {
 
 /* VK Видео плеер в модалке трейлера (РФ/СНГ без VPN) */
 .vk-trailer-iframe {
+  position: relative;
+  z-index: 2;
   width: 100%;
   height: 100%;
   border: 0;
   display: block;
   background: #000000;
+  pointer-events: auto !important;
 }
 #yt-fallback-slot {
+  position: relative;
+  z-index: 2;
   width: 100%;
   height: 100%;
+  pointer-events: auto !important;
 }
 #modal-trailer .trailer-custom-bar {
   justify-content: space-between;
@@ -8337,7 +8343,7 @@ body.is-duel-active .topbar {
 #modal-trailer #btn-trailer-open-yt-app {
   width: auto;
   justify-content: center;
-  padding: 6px 10px;
+  padding: 5px 10px;
   font-size: 11px;
 }
 .trailer-director-strip {
@@ -8699,26 +8705,10 @@ body.is-duel-active .topbar {
 
 #trailer-video-wrap {
   position: relative;
+  pointer-events: auto !important;
 }
 
-.trailer-unmute-pill {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  z-index: 6;
-  padding: 7px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(250, 204, 21, 0.85);
-  background: rgba(12, 14, 18, 0.88);
-  color: #fde047;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-  pointer-events: auto;
-}
-
-#modal-trailer.is-intro-locked button:not(#btn-trailer-unmute-pill) {
+#modal-trailer.is-intro-locked button {
   pointer-events: none !important;
   opacity: 0.42 !important;
   cursor: not-allowed !important;
@@ -8727,6 +8717,12 @@ body.is-duel-active .topbar {
 
 #modal-trailer.is-intro-locked #btn-close-trailer {
   opacity: 0.2 !important;
+}
+
+#modal-trailer.is-intro-locked iframe,
+#modal-trailer.is-intro-locked #yt-fallback-slot,
+#modal-trailer.is-intro-locked #trailer-video-wrap {
+  pointer-events: auto !important;
 }
 
 .duel-barrel-badge.is-telegraph .duel-badge-ava {

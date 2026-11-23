@@ -268,28 +268,26 @@ const state = {
     fallbackTimer: null,
   },
 
-  // Плеер трейлера: нативный MP4 с гарантированным автоплеем и фоллбэком на VK Видео
+  // Плеер трейлера: чистый официальный VK Видео через локальный VK.VideoPlayer (91.8с, 0 МБ с GitHub Pages)
   trailer: {
     modalOpen: false,
     forRescue: false,
+    afterL1ToPack: false,
     shownInL1Flow: false,
     introLocked: false,
     introWatchedSec: 0,
-    usingVkFallback: false,
-    introStallTimer: null,
-    introWatchTimer: null,
-    muted: false,
     maxTime: 0,
     unlocked40: false,
-    usingYtFallback: true,
-    ytReady: false,
-    ytTimer: null,
-    ytWatchedSec: 0,
-    ytBootWatchdog: null,
-    ytStallWatchdog: null,
-    ytAutoplayRetry: null,
-    ytStartedPlaying: false,
-    ytBlockedInSession: false,
+    muted: false,
+    vkReady: false,
+    vkState: '',
+    vkTime: 0,
+    vkDuration: 0,
+    vkMuted: false,
+    vkVolume: 1,
+    vkAutoplaySoundBlocked: false,
+    wallClockSec: 0,
+    vkTimer: null,
     externalRescueDepartedAt: 0,
     rescueSafetyTimer: null,
   },
@@ -340,7 +338,7 @@ const state = {
   },
 
   cameraStream: null,
-  ytPlayer: null,
+  vkPlayer: null,
   airInterval: null,
   passClockTimer: null,
   oceanTypeTimer: null,
@@ -359,7 +357,7 @@ async function ensureSceneReady() {
   if (sceneInitPromise) return sceneInitPromise;
   sceneInitPromise = (async () => {
     try {
-      const { WorkshopScene } = await import('./scene.js?v=1966');
+      const { WorkshopScene } = await import('./scene.js?v=1970');
       if (scene) return scene;
       const canvas = document.getElementById('workshop-canvas');
       scene = new WorkshopScene(canvas, {
@@ -395,7 +393,7 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1966'));
+    const mod = duelModCache || (await import('./duel.js?v=1970'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -480,7 +478,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=1966'));
+  const mod = duelModCache || (await import('./duel.js?v=1970'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
@@ -2018,7 +2016,16 @@ async function bootstrap() {
         introLocked: Boolean(state.trailer.introLocked),
         introWatchedSec: Number(state.trailer.introWatchedSec || 0),
         maxTime: Number(state.trailer.maxTime || 0),
-        usingVkFallback: Boolean(state.trailer.usingVkFallback),
+        wallClockSec: Number(state.trailer.wallClockSec || 0),
+        vkReady: Boolean(state.trailer.vkReady),
+        vkState: String(state.trailer.vkState || ''),
+        vkTime: Number(state.trailer.vkTime || 0),
+        vkDuration: Number(state.trailer.vkDuration || 0),
+        vkMuted: Boolean(state.trailer.vkMuted),
+        vkVolume: Number(state.trailer.vkVolume ?? 1),
+        vkAutoplaySoundBlocked: Boolean(state.trailer.vkAutoplaySoundBlocked),
+        iframeSrc: document.getElementById('vk-trailer-iframe')?.getAttribute('src') || '',
+        hasLocalVideoEl: Boolean(document.getElementById('trailer-video')),
       }),
       openDuel: (code, opts) => openDuelTable(code, opts || {}),
       openHallOfFame: () => openHallOfFameModal(),
@@ -7397,9 +7404,10 @@ async function handleDownloadStories() {
   }
 }
 
-function getEffectiveTrailerUnlockSec(vidEl = null) {
-  if (!state.trailer.usingYtFallback && vidEl && Number.isFinite(vidEl.duration) && vidEl.duration > 5 && vidEl.duration < TRAILER_UNLOCK_SEC) {
-    return Math.max(15, Math.floor(vidEl.duration - 0.3));
+function getEffectiveTrailerUnlockSec() {
+  const dur = Number(state.trailer.vkDuration || 0);
+  if (dur > 5 && dur < TRAILER_UNLOCK_SEC) {
+    return Math.max(15, Math.floor(dur - 0.3));
   }
   return TRAILER_UNLOCK_SEC;
 }
@@ -7409,33 +7417,9 @@ function clearTrailerTimers() {
     clearTimeout(state.trailer.rescueSafetyTimer);
     state.trailer.rescueSafetyTimer = null;
   }
-  if (state.trailer.introStallTimer) {
-    clearTimeout(state.trailer.introStallTimer);
-    state.trailer.introStallTimer = null;
-  }
-  if (state.trailer.introWatchTimer) {
-    clearInterval(state.trailer.introWatchTimer);
-    state.trailer.introWatchTimer = null;
-  }
   if (state.trailer.vkTimer) {
     clearInterval(state.trailer.vkTimer);
     state.trailer.vkTimer = null;
-  }
-  if (state.trailer.ytBootWatchdog) {
-    clearTimeout(state.trailer.ytBootWatchdog);
-    state.trailer.ytBootWatchdog = null;
-  }
-  if (state.trailer.ytStallWatchdog) {
-    clearTimeout(state.trailer.ytStallWatchdog);
-    state.trailer.ytStallWatchdog = null;
-  }
-  if (state.trailer.ytAutoplayRetry) {
-    clearTimeout(state.trailer.ytAutoplayRetry);
-    state.trailer.ytAutoplayRetry = null;
-  }
-  if (state.trailer.ytTimer) {
-    clearInterval(state.trailer.ytTimer);
-    state.trailer.ytTimer = null;
   }
 }
 
@@ -7455,8 +7439,6 @@ function syncTrailerIntroLockUI(watchedSec = 0) {
   for (const id of [
     'btn-close-trailer',
     'btn-trailer-open-yt-app',
-    'btn-trailer-play',
-    'btn-trailer-mute',
     'btn-trailer-like-yt',
     'btn-trailer-sub-yt',
     'btn-trailer-like-ig',
@@ -7479,39 +7461,51 @@ function syncTrailerIntroLockUI(watchedSec = 0) {
   }
 }
 
-function mountVkTrailerIframeFallback() {
-  if (!state.trailer.modalOpen || state.trailer.usingVkFallback) return;
-  state.trailer.usingVkFallback = true;
-  state.trailer.usingYtFallback = false;
-  if (state.trailer.introStallTimer) {
-    clearTimeout(state.trailer.introStallTimer);
-    state.trailer.introStallTimer = null;
+function destroyVkTrailerPlayerAndIframe() {
+  if (state.vkPlayer) {
+    try { state.vkPlayer.pause?.(); } catch { /* ignore */ }
+    try { state.vkPlayer.mute?.(); } catch { /* ignore */ }
+    try { state.vkPlayer.destroy?.(); } catch { /* ignore */ }
+    state.vkPlayer = null;
   }
-  if (state.trailer.introWatchTimer) {
-    clearInterval(state.trailer.introWatchTimer);
-    state.trailer.introWatchTimer = null;
-  }
-  const vid = document.getElementById('trailer-video');
+  const slot = document.getElementById('yt-fallback-slot');
+  if (!slot) return;
+  slot.querySelectorAll('iframe').forEach((f) => {
+    f.removeAttribute('id');
+    f.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;pointer-events:none;opacity:0;';
+    try { f.src = 'about:blank'; } catch { /* ignore */ }
+    window.setTimeout(() => {
+      try { f.remove(); } catch { /* ignore */ }
+    }, 250);
+  });
+  slot.setAttribute('hidden', '');
+}
+
+function mountVkTrailerPlayer() {
+  if (!state.trailer.modalOpen) return;
   const slot = document.getElementById('yt-fallback-slot');
   const customBar = document.getElementById('trailer-custom-bar');
-  document.getElementById('btn-trailer-unmute-pill')?.setAttribute('hidden', '');
-  if (vid) {
-    try { vid.pause(); } catch { /* ignore */ }
-    vid.removeAttribute('src');
-    try { vid.load(); } catch { /* ignore */ }
-    vid.setAttribute('hidden', '');
-  }
+
+  state.trailer.vkReady = false;
+  state.trailer.vkState = '';
+  state.trailer.vkTime = 0;
+  state.trailer.vkDuration = 0;
+  state.trailer.vkMuted = false;
+  state.trailer.vkVolume = 1;
+  state.trailer.vkAutoplaySoundBlocked = false;
+  state.trailer.wallClockSec = 0;
+
   if (customBar) {
     customBar.removeAttribute('hidden');
-    document.getElementById('btn-trailer-play')?.setAttribute('hidden', '');
-    document.getElementById('btn-trailer-mute')?.setAttribute('hidden', '');
-    customBar.querySelector('.trailer-progress-track')?.setAttribute('hidden', '');
-    document.getElementById('trailer-time-readout')?.setAttribute('hidden', '');
+    customBar.querySelector('.trailer-progress-track')?.removeAttribute('hidden');
+    document.getElementById('trailer-time-readout')?.removeAttribute('hidden');
     document.getElementById('btn-trailer-open-yt-app')?.removeAttribute('hidden');
   }
+  updateTrailerProgressUI(0, 92, TRAILER_UNLOCK_SEC);
+
   if (slot) {
+    destroyVkTrailerPlayerAndIframe();
     slot.removeAttribute('hidden');
-    slot.textContent = '';
     const ifr = document.createElement('iframe');
     ifr.id = 'vk-trailer-iframe';
     ifr.className = 'vk-trailer-iframe';
@@ -7522,23 +7516,129 @@ function mountVkTrailerIframeFallback() {
     ifr.setAttribute('allow', 'autoplay; encrypted-media; fullscreen; picture-in-picture');
     ifr.setAttribute('allowfullscreen', '');
     ifr.setAttribute('playsinline', '');
+
+    let wired = false;
+    ifr.onload = () => {
+      if (wired || !state.trailer.modalOpen || document.getElementById('vk-trailer-iframe') !== ifr) return;
+      wired = true;
+      if (!window.VK?.VideoPlayer) return;
+      try {
+        const player = window.VK.VideoPlayer(ifr);
+        state.vkPlayer = player;
+        const syncPlayerAudioState = (ev) => {
+          state.trailer.vkMuted = Boolean(ev?.muted ?? player.isMuted?.());
+          const v = Number(ev?.volume ?? player.getVolume?.() ?? state.trailer.vkVolume);
+          if (Number.isFinite(v)) state.trailer.vkVolume = v;
+          const d = Number(ev?.duration ?? player.getDuration?.() ?? 0);
+          if (d > 0) state.trailer.vkDuration = d;
+        };
+
+        player.on('inited', (ev) => {
+          if (!state.trailer.modalOpen || state.vkPlayer !== player) return;
+          state.trailer.vkReady = true;
+          state.trailer.vkState = String(ev?.state || player.getState?.() || 'unstarted');
+          syncPlayerAudioState(ev);
+          try {
+            if (!state.trailer.muted) {
+              player.unmute?.();
+              player.setVolume?.(1);
+            } else {
+              player.mute?.();
+            }
+            player.play?.();
+          } catch { /* ignore */ }
+        });
+
+        player.on('started', (ev) => {
+          if (!state.trailer.modalOpen || state.vkPlayer !== player) return;
+          state.trailer.vkReady = true;
+          state.trailer.vkState = String(ev?.state || 'playing');
+          syncPlayerAudioState(ev);
+        });
+
+        player.on('resumed', (ev) => {
+          if (!state.trailer.modalOpen || state.vkPlayer !== player) return;
+          state.trailer.vkState = String(ev?.state || 'playing');
+          syncPlayerAudioState(ev);
+        });
+
+        player.on('paused', () => {
+          if (state.vkPlayer === player) state.trailer.vkState = 'paused';
+        });
+
+        player.on('volumechange', (ev) => {
+          if (state.vkPlayer === player) syncPlayerAudioState(ev);
+        });
+
+        player.on('autoplaySoundProhibited', () => {
+          if (!state.trailer.modalOpen || state.vkPlayer !== player) return;
+          state.trailer.vkAutoplaySoundBlocked = true;
+          state.trailer.vkMuted = true;
+          try {
+            player.mute?.();
+            player.play?.();
+          } catch { /* ignore */ }
+        });
+
+        player.on('timeupdate', (ev) => {
+          if (!state.trailer.modalOpen || state.vkPlayer !== player) return;
+          state.trailer.vkReady = true;
+          const stName = String(ev?.state ?? player.getState?.() ?? '');
+          if (stName) state.trailer.vkState = stName;
+          syncPlayerAudioState(ev);
+          const cur = Math.max(0, Number(ev?.time ?? player.getCurrentTime?.() ?? 0));
+          const dur = Number(state.trailer.vkDuration || 0);
+          state.trailer.vkTime = cur;
+          if (cur > state.trailer.maxTime) {
+            state.trailer.maxTime = Math.max(
+              Number(state.trailer.maxTime || 0),
+              Math.min(cur, Number(state.trailer.maxTime || 0) + 5.0)
+            );
+          }
+          const targetSec = getEffectiveTrailerUnlockSec();
+          updateTrailerProgressUI(cur, dur > 0 ? dur : 92, targetSec);
+          syncTrailerIntroLockUI(state.trailer.maxTime);
+          if (state.trailer.forRescue) {
+            updateTrailerRescueBanner(state.trailer.maxTime, targetSec);
+            if (state.trailer.maxTime >= targetSec && !state.trailer.unlocked40) {
+              unlockTrailerReward();
+            }
+          }
+        });
+
+        player.on('ended', () => {
+          if (!state.trailer.modalOpen || state.vkPlayer !== player) return;
+          state.trailer.vkState = 'ended';
+          syncTrailerIntroLockUI(TRAILER_INTRO_LOCK_SEC);
+          if (state.trailer.forRescue && !state.trailer.unlocked40) {
+            unlockTrailerReward();
+          }
+        });
+      } catch { /* fallback wall-clock timer below guarantees unlock */ }
+    };
+
     slot.appendChild(ifr);
   }
+
   if (state.trailer.vkTimer) {
     clearInterval(state.trailer.vkTimer);
     state.trailer.vkTimer = null;
   }
-  let sec = Math.floor(Number(state.trailer.maxTime || 0));
-  syncTrailerIntroLockUI(sec);
+  let visibleWallSec = 0;
+  syncTrailerIntroLockUI(0);
   state.trailer.vkTimer = window.setInterval(() => {
     if (!state.trailer.modalOpen || document.hidden) return;
-    sec += 1;
-    state.trailer.ytWatchedSec = sec;
-    state.trailer.maxTime = Math.max(Number(state.trailer.maxTime || 0), sec);
+    visibleWallSec += 1;
+    state.trailer.wallClockSec = visibleWallSec;
+    state.trailer.maxTime = Math.max(Number(state.trailer.maxTime || 0), visibleWallSec);
     syncTrailerIntroLockUI(state.trailer.maxTime);
+    const targetSec = getEffectiveTrailerUnlockSec();
+    if (!state.trailer.vkReady || state.trailer.vkTime <= 0) {
+      updateTrailerProgressUI(state.trailer.maxTime, state.trailer.vkDuration || 92, targetSec);
+    }
     if (state.trailer.forRescue) {
-      updateTrailerRescueBanner(state.trailer.maxTime, TRAILER_UNLOCK_SEC);
-      if (state.trailer.maxTime >= TRAILER_UNLOCK_SEC && !state.trailer.unlocked40) {
+      updateTrailerRescueBanner(state.trailer.maxTime, targetSec);
+      if (state.trailer.maxTime >= targetSec && !state.trailer.unlocked40) {
         unlockTrailerReward();
       }
     }
@@ -7546,7 +7646,7 @@ function mountVkTrailerIframeFallback() {
 }
 
 /* ============================================================================
-   ПЛЕЕР ТРЕЙЛЕРА: ОФИЦИАЛЬНЫЙ YOUTUBE (@kinoceh_bel) + ЛОКАЛЬНЫЙ MP4 ФОЛЛБЭК
+   ПЛЕЕР ТРЕЙЛЕРА: ОФИЦИАЛЬНЫЙ VK ВИДЕО (@kinoceh_bel, 91.8 СЕК)
    ============================================================================ */
 function evaluateExternalYouTubeRescueReturn() {
   const departed = Number(state.trailer.externalRescueDepartedAt || 0);
@@ -7569,13 +7669,8 @@ function initVisibilityAndAntiSeekGuards() {
         state.externalLikeSync.leftTab = true;
         state.externalLikeSync.departedAt = Date.now();
       }
-      const vid = document.getElementById('trailer-video');
-      if (vid && !vid.paused) {
-        vid.pause();
-        syncTrailerPlayButton();
-      }
-      if (state.ytPlayer && typeof state.ytPlayer.pauseVideo === 'function') {
-        try { state.ytPlayer.pauseVideo(); } catch { /* ignore */ }
+      if (state.vkPlayer && typeof state.vkPlayer.pause === 'function') {
+        try { state.vkPlayer.pause(); } catch { /* ignore */ }
       }
     } else {
       if (state.kpSync.waiting && state.kpSync.leftTab) {
@@ -7607,91 +7702,6 @@ function initVisibilityAndAntiSeekGuards() {
       evaluateExternalLikeReturn();
     }
     evaluateExternalYouTubeRescueReturn();
-  });
-
-  const vid = document.getElementById('trailer-video');
-  if (!vid) return;
-
-  vid.addEventListener('ratechange', () => {
-    if (vid.playbackRate > 1.02) {
-      vid.playbackRate = 1.0;
-    }
-  });
-
-  vid.addEventListener('loadedmetadata', () => {
-    if (!state.trailer.usingYtFallback) {
-      updateTrailerProgressUI(vid.currentTime || 0, vid.duration || 29.1, getEffectiveTrailerUnlockSec(vid));
-    }
-  });
-
-  vid.addEventListener('seeking', () => {
-    if ((state.trailer.introLocked || (state.trailer.forRescue && !state.trailer.unlocked40)) && vid.currentTime > state.trailer.maxTime + 0.65) {
-      vid.currentTime = state.trailer.maxTime;
-    }
-  });
-
-  vid.addEventListener('timeupdate', () => {
-    if (state.trailer.usingYtFallback || state.trailer.usingVkFallback) return;
-    if (!vid.seeking && vid.currentTime > state.trailer.maxTime) {
-      if (vid.currentTime - state.trailer.maxTime < 5.0) {
-        state.trailer.maxTime = vid.currentTime;
-      } else if (state.trailer.introLocked || (state.trailer.forRescue && !state.trailer.unlocked40)) {
-        vid.currentTime = state.trailer.maxTime;
-      }
-    }
-    syncTrailerIntroLockUI(state.trailer.maxTime);
-    const targetSec = getEffectiveTrailerUnlockSec(vid);
-    updateTrailerProgressUI(vid.currentTime, vid.duration || 29.1, targetSec);
-    if (state.trailer.forRescue && state.trailer.maxTime >= targetSec) {
-      unlockTrailerReward();
-    }
-  });
-
-  vid.addEventListener('ended', () => {
-    syncTrailerIntroLockUI(TRAILER_INTRO_LOCK_SEC);
-    if (state.trailer.forRescue) unlockTrailerReward();
-    syncTrailerPlayButton();
-  });
-
-  vid.addEventListener('playing', () => {
-    if (state.trailer.introStallTimer) {
-      clearTimeout(state.trailer.introStallTimer);
-      state.trailer.introStallTimer = null;
-    }
-    if (!vid.muted) {
-      document.getElementById('btn-trailer-unmute-pill')?.setAttribute('hidden', '');
-    }
-    syncTrailerPlayButton();
-  });
-  vid.addEventListener('play', syncTrailerPlayButton);
-  vid.addEventListener('pause', syncTrailerPlayButton);
-
-  vid.addEventListener('error', () => {
-    if (state.trailer.modalOpen && !state.trailer.usingVkFallback) {
-      mountVkTrailerIframeFallback();
-    }
-  });
-
-  // Тап по видео: если видео играет без звука — сразу включаем звук; пока идёт обязательное начало — не ставим на паузу
-  vid.addEventListener('click', () => {
-    if (state.trailer.usingYtFallback || state.trailer.usingVkFallback) return;
-    if (vid.muted) {
-      setTrailerMuted(false);
-      document.getElementById('btn-trailer-unmute-pill')?.setAttribute('hidden', '');
-      if (vid.paused) vid.play().catch(() => {});
-      return;
-    }
-    if (state.trailer.introLocked) return;
-    if (vid.paused) vid.play().catch(() => {});
-    else vid.pause();
-    syncTrailerPlayButton();
-  });
-
-  document.getElementById('btn-trailer-unmute-pill')?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    setTrailerMuted(false);
-    document.getElementById('btn-trailer-unmute-pill')?.setAttribute('hidden', '');
-    if (vid.paused) vid.play().catch(() => {});
   });
 }
 
@@ -7883,50 +7893,34 @@ function initLiveFriendFeedbackMonitor() {
 }
 
 function pauseActiveTrailerPlayback() {
-  const vid = document.getElementById('trailer-video');
-  if (vid && !vid.paused) {
-    try { vid.pause(); } catch { /* ignore */ }
+  if (state.vkPlayer && typeof state.vkPlayer.pause === 'function') {
+    try { state.vkPlayer.pause(); } catch { /* ignore */ }
   }
-  if (state.ytPlayer && typeof state.ytPlayer.pauseVideo === 'function') {
-    try { state.ytPlayer.pauseVideo(); } catch { /* ignore */ }
-  }
-  syncTrailerPlayButton();
 }
 
 function setTrailerMuted(nextMuted = false) {
   state.trailer.muted = Boolean(nextMuted);
-  const vid = document.getElementById('trailer-video');
-  if (vid) {
-    vid.muted = state.trailer.muted;
-  }
-  if (!state.trailer.muted) {
-    document.getElementById('btn-trailer-unmute-pill')?.setAttribute('hidden', '');
-  }
-  if (state.ytPlayer) {
+  if (state.vkPlayer) {
     try {
       if (state.trailer.muted) {
-        state.ytPlayer.mute?.();
+        state.vkPlayer.mute?.();
       } else {
-        state.ytPlayer.unMute?.();
-        state.ytPlayer.setVolume?.(100);
+        state.vkPlayer.unmute?.();
+        state.vkPlayer.setVolume?.(1);
       }
     } catch { /* ignore */ }
   }
-  syncTrailerMuteButton();
 }
 
 function openTrailerModal({ forRescue = false, afterL1ToPack = false } = {}) {
   clearTrailerTimers();
   state.trailer.modalOpen = true;
   syncSceneRenderPause();
-  state.trailer.usingYtFallback = false;
-  state.trailer.usingVkFallback = false;
   state.trailer.forRescue = Boolean(forRescue);
   state.trailer.afterL1ToPack = Boolean(afterL1ToPack);
   state.trailer.introLocked = Boolean(afterL1ToPack || forRescue);
   state.trailer.introWatchedSec = 0;
   state.trailer.maxTime = 0;
-  state.trailer.ytWatchedSec = 0;
   state.trailer.externalRescueDepartedAt = 0;
   recordFunnelEvent('trailer_open', state.tg?.user).catch(() => {});
 
@@ -7945,7 +7939,6 @@ function openTrailerModal({ forRescue = false, afterL1ToPack = false } = {}) {
   const closeBtn = document.getElementById('btn-close-trailer');
 
   state.trailer.muted = false;
-  syncTrailerMuteButton();
 
   const lockClose = Boolean(state.trailer.introLocked);
   modal?.classList.toggle('is-rescue-only', Boolean(forRescue && state.uiStage <= 2));
@@ -7965,97 +7958,10 @@ function openTrailerModal({ forRescue = false, afterL1ToPack = false } = {}) {
     rescueBox?.setAttribute('hidden', '');
   }
 
-  // v19.6: Гарантированный мгновенный автоплей локального MP4 (./video/trailer.mp4) с фоллбэком на muted+pill и VK Видео
+  // v19.7: Единственный и официальный плеер трейлера — VK Видео (91.8 сек, autoplay=1 + js_api=1, 0 МБ трафика с GitHub Pages)
   audio.stopOceanEasterEggAudio?.();
-  const vid = document.getElementById('trailer-video');
-  const slot = document.getElementById('yt-fallback-slot');
-  const customBar = document.getElementById('trailer-custom-bar');
-  const unmutePill = document.getElementById('btn-trailer-unmute-pill');
-
-  if (slot) {
-    slot.setAttribute('hidden', '');
-    slot.textContent = '';
-  }
-  if (unmutePill) unmutePill.setAttribute('hidden', '');
-  if (customBar) {
-    customBar.removeAttribute('hidden');
-    document.getElementById('btn-trailer-play')?.removeAttribute('hidden');
-    document.getElementById('btn-trailer-mute')?.removeAttribute('hidden');
-    customBar.querySelector('.trailer-progress-track')?.removeAttribute('hidden');
-    document.getElementById('trailer-time-readout')?.removeAttribute('hidden');
-    document.getElementById('btn-trailer-open-yt-app')?.removeAttribute('hidden');
-  }
-
   syncTrailerIntroLockUI(0);
-
-  if (vid) {
-    const targetSrc = ENV.trailerMp4;
-    if (vid.getAttribute('src') !== targetSrc) {
-      vid.setAttribute('src', targetSrc);
-    }
-    vid.removeAttribute('hidden');
-    vid.removeAttribute('controls');
-    vid.playsInline = true;
-    try { vid.currentTime = 0; } catch { /* ignore */ }
-    vid.muted = false;
-    state.trailer.muted = false;
-    syncTrailerMuteButton();
-    updateTrailerProgressUI(0, vid.duration || 29.1, getEffectiveTrailerUnlockSec(vid));
-
-    const tryAutoplay = async () => {
-      if (!state.trailer.modalOpen || state.trailer.usingVkFallback) return;
-      try {
-        await vid.play();
-        if (unmutePill) unmutePill.setAttribute('hidden', '');
-      } catch {
-        if (!state.trailer.modalOpen || state.trailer.usingVkFallback) return;
-        try {
-          vid.muted = true;
-          state.trailer.muted = true;
-          syncTrailerMuteButton();
-          if (unmutePill) unmutePill.removeAttribute('hidden');
-          await vid.play();
-        } catch {
-          mountVkTrailerIframeFallback();
-        }
-      }
-      syncTrailerPlayButton();
-    };
-    tryAutoplay();
-
-    let prevCt = 0;
-    let stalledTicks = 0;
-    let visibleWallSec = 0;
-    state.trailer.introWatchTimer = window.setInterval(() => {
-      if (!state.trailer.modalOpen || state.trailer.usingVkFallback || document.hidden) return;
-      visibleWallSec += 1;
-      const curCt = Number(vid.currentTime || 0);
-      if (curCt - prevCt < 0.15) {
-        stalledTicks += 1;
-      } else {
-        stalledTicks = 0;
-        prevCt = curCt;
-      }
-      const isHardMediaFailure = Boolean(vid.error) || vid.networkState === 3;
-      if (isHardMediaFailure || (stalledTicks >= 12 && curCt < 0.25 && vid.readyState < 2 && vid.networkState !== 2)) {
-        mountVkTrailerIframeFallback();
-        return;
-      }
-      if (state.trailer.introLocked) {
-        if (curCt > 0 || vid.readyState >= 1 || visibleWallSec >= 3) {
-          const effectiveSec = Math.max(Number(state.trailer.maxTime || 0), Math.max(0, visibleWallSec - 2));
-          state.trailer.maxTime = effectiveSec;
-          syncTrailerIntroLockUI(effectiveSec);
-        }
-      }
-      if (!state.trailer.introLocked && !state.trailer.forRescue && state.trailer.introWatchTimer) {
-        clearInterval(state.trailer.introWatchTimer);
-        state.trailer.introWatchTimer = null;
-      }
-    }, 1000);
-  } else {
-    mountVkTrailerIframeFallback();
-  }
+  mountVkTrailerPlayer();
 }
 
 function closeTrailerModal({ goToPack = false, force = false } = {}) {
@@ -8064,43 +7970,19 @@ function closeTrailerModal({ goToPack = false, force = false } = {}) {
   const wasAfterL1ToPack = Boolean(state.trailer.afterL1ToPack || goToPack);
   state.trailer.afterL1ToPack = false;
   state.trailer.introLocked = false;
-  state.trailer.usingVkFallback = false;
   document.getElementById('btn-trailer-to-pack')?.setAttribute('hidden', '');
-  document.getElementById('btn-trailer-unmute-pill')?.setAttribute('hidden', '');
   state.trailer.modalOpen = false;
   syncSceneRenderPause();
-  state.trailer.usingYtFallback = false;
-  state.trailer.ytStartedPlaying = false;
   state.trailer.externalRescueDepartedAt = 0;
   clearTrailerTimers();
-  const slot = document.getElementById('yt-fallback-slot');
-  if (slot) {
-    slot.querySelectorAll('iframe').forEach((f) => {
-      try { f.src = 'about:blank'; } catch { /* ignore */ }
-    });
-    slot.textContent = '';
-    slot.setAttribute('hidden', '');
-  }
+  destroyVkTrailerPlayerAndIframe();
 
   const modal = document.getElementById('modal-trailer');
   modal?.classList.remove('is-rescue-only', 'is-intro-locked');
   document.getElementById('btn-close-trailer')?.classList.remove('is-rescue-locked');
   modal?.setAttribute('hidden', '');
 
-  const vid = document.getElementById('trailer-video');
-  if (vid) {
-    try { vid.pause(); } catch { /* ignore */ }
-    vid.muted = true;
-    vid.removeAttribute('src');
-    try { vid.load(); } catch { /* ignore */ }
-    vid.setAttribute('hidden', '');
-  }
-  if (state.ytPlayer) {
-    try { state.ytPlayer.mute?.(); } catch { /* ignore */ }
-    try { state.ytPlayer.pauseVideo?.(); } catch { /* ignore */ }
-  }
   audio.setModalAudioDuck(false);
-  syncTrailerPlayButton();
 
   if (wasAfterL1ToPack) {
     recordFunnelEvent('trailer_complete', state.tg?.user).catch(() => {});
@@ -8172,6 +8054,7 @@ function updateTrailerRescueBanner(watchedSec, targetSec = TRAILER_UNLOCK_SEC) {
 async function unlockTrailerReward() {
   if (state.trailer.unlocked40) return;
   state.trailer.unlocked40 = true;
+  syncTrailerIntroLockUI(TRAILER_INTRO_LOCK_SEC);
   document.getElementById('btn-close-trailer')?.classList.remove('is-rescue-locked');
   clearTrailerTimers();
 
@@ -8201,203 +8084,6 @@ async function unlockTrailerReward() {
     } else {
       showToast('+1 ЖЕТОН ЦЕХА («КРЫШКА») НАЧИСЛЕН!');
     }
-  }
-}
-
-function syncTrailerPlayButton() {
-  const btn = document.getElementById('btn-trailer-play');
-  if (!btn) return;
-  let playing = false;
-  if (!state.trailer.usingYtFallback) {
-    const vid = document.getElementById('trailer-video');
-    playing = Boolean(vid && !vid.paused && !vid.ended);
-  } else if (state.ytPlayer && typeof state.ytPlayer.getPlayerState === 'function') {
-    try {
-      playing = state.ytPlayer.getPlayerState() === 1;
-    } catch { playing = false; }
-  }
-  btn.textContent = playing ? '❚❚ ПАУЗА' : '▶ ПУСК';
-}
-
-function syncTrailerMuteButton() {
-  const btn = document.getElementById('btn-trailer-mute');
-  if (!btn) return;
-  const muted = Boolean(state.trailer.muted);
-  btn.textContent = muted ? '🔇 ВКЛ ЗВУК' : '🔊 ВЫКЛ ЗВУК';
-  btn.setAttribute('aria-pressed', muted ? 'true' : 'false');
-}
-
-function showDirectYouTubeFallbackNotice() {
-  document.getElementById('btn-close-trailer')?.classList.remove('is-rescue-locked');
-  showToast('Нажми «▶ YOUTUBE ↗» — откроется этот же новый трейлер на YouTube');
-}
-
-function scheduleYtAutoplayRetry(player) {
-  if (state.trailer.ytAutoplayRetry) {
-    clearTimeout(state.trailer.ytAutoplayRetry);
-  }
-  state.trailer.ytAutoplayRetry = window.setTimeout(() => {
-    state.trailer.ytAutoplayRetry = null;
-    if (!state.trailer.modalOpen) return;
-    try {
-      const pState = typeof player?.getPlayerState === 'function' ? player.getPlayerState() : -1;
-      if (pState !== 1 && pState !== 3) {
-        // Мобильный WebView заблокировал автостарт со звуком — мгновенно запускаем YouTube в mute, чтобы картинка пошла сама!
-        state.trailer.muted = true;
-        player.mute?.();
-        player.playVideo?.();
-        syncTrailerMuteButton();
-        syncTrailerPlayButton();
-        showToast('🔇 Трейлер запущен — нажми «ВКЛ ЗВУК» на плеере!');
-      }
-    } catch { /* ignore */ }
-  }, 450);
-}
-
-function startYtPlaybackNow(player, { forRescue = false } = {}) {
-  if (!player || !state.trailer.modalOpen) return;
-  try {
-    const loadedId = player.getVideoData?.()?.video_id || '';
-    if (state.trailer.muted) {
-      player.mute?.();
-    } else {
-      player.unMute?.();
-      player.setVolume?.(100);
-    }
-    if (loadedId && loadedId !== OFFICIAL_YT_TRAILER_ID && typeof player.loadVideoById === 'function') {
-      player.loadVideoById(OFFICIAL_YT_TRAILER_ID, 0);
-    } else {
-      if (forRescue) player.seekTo?.(0, true);
-      player.playVideo?.();
-    }
-    scheduleYtAutoplayRetry(player);
-    syncTrailerPlayButton();
-    syncTrailerMuteButton();
-  } catch {
-    showDirectYouTubeFallbackNotice();
-  }
-}
-
-function ensureYouTubeScriptTag() {
-  if (window.YT?.Player) return;
-  if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
-    const tag = document.createElement('script');
-    tag.src = 'https://www.youtube.com/iframe_api';
-    tag.async = true;
-    tag.onerror = () => {
-      if (state.trailer.modalOpen) showDirectYouTubeFallbackNotice();
-    };
-    document.head.appendChild(tag);
-  }
-}
-
-function ensureYtPlayerMounted() {
-  if (state.ytPlayer) return;
-  if (!window.YT?.Player) {
-    const prevReady = typeof window.onYouTubeIframeAPIReady === 'function'
-      ? window.onYouTubeIframeAPIReady
-      : null;
-    window.onYouTubeIframeAPIReady = () => {
-      try { prevReady?.(); } catch { /* ignore */ }
-      if (state.trailer.modalOpen) ensureYtPlayerMounted();
-    };
-    ensureYouTubeScriptTag();
-    return;
-  }
-
-  state.ytPlayer = new window.YT.Player('yt-fallback-slot', {
-    videoId: OFFICIAL_YT_TRAILER_ID,
-    playerVars: {
-      autoplay: 1,
-      mute: 1,
-      controls: 1,
-      rel: 0,
-      modestbranding: 1,
-      playsinline: 1,
-      enablejsapi: 1,
-      origin: window.location.origin,
-    },
-    events: {
-      onReady: (ev) => {
-        state.trailer.ytReady = true;
-        try {
-          const ifr = ev.target.getIframe?.();
-          if (ifr) {
-            ifr.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
-            ifr.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen');
-          }
-        } catch { /* ignore */ }
-        if (!state.trailer.modalOpen) {
-          try { ev.target.mute?.(); ev.target.pauseVideo?.(); } catch { /* ignore */ }
-          return;
-        }
-        startYtPlaybackNow(ev.target, { forRescue: state.trailer.forRescue });
-      },
-      onError: () => {
-        if (state.trailer.modalOpen) {
-          showDirectYouTubeFallbackNotice();
-        }
-      },
-      onStateChange: (ev) => {
-        if (!state.trailer.modalOpen) {
-          try { ev.target?.mute?.(); ev.target?.pauseVideo?.(); } catch { /* ignore */ }
-          return;
-        }
-        syncTrailerPlayButton();
-        if (ev.data === 1) {
-          state.trailer.ytStartedPlaying = true;
-          try {
-            state.trailer.muted = Boolean(ev.target?.isMuted?.());
-            syncTrailerMuteButton();
-          } catch { /* ignore */ }
-          if (!state.trailer.ytTimer) {
-            state.trailer.ytTimer = window.setInterval(() => {
-              if (document.hidden || !state.trailer.modalOpen) return;
-              state.trailer.ytWatchedSec += 1;
-              const cur = Number(ev.target?.getCurrentTime?.() || state.trailer.ytWatchedSec);
-              const dur = Number(ev.target?.getDuration?.() || 92);
-              updateTrailerProgressUI(cur, dur > 0 ? dur : 92, TRAILER_UNLOCK_SEC);
-              updateTrailerRescueBanner(state.trailer.ytWatchedSec, TRAILER_UNLOCK_SEC);
-              if (state.trailer.ytWatchedSec >= TRAILER_UNLOCK_SEC) {
-                unlockTrailerReward();
-              }
-            }, 1000);
-          }
-        } else {
-          if (state.trailer.ytTimer) {
-            clearInterval(state.trailer.ytTimer);
-            state.trailer.ytTimer = null;
-          }
-          if (ev.data === 0 && state.trailer.ytWatchedSec >= 25) {
-            unlockTrailerReward();
-          }
-        }
-      },
-    },
-  });
-}
-
-function prewarmYouTubeTrailerPlayer() {
-  // Подгружаем только лёгкий скрипт API YouTube; сам iframe монтируется при открытии видимой модалки (для 100% автоплея на мобильных!)
-  ensureYouTubeScriptTag();
-}
-
-function activateYouTubePrimary({ forRescue = false } = {}) {
-  state.trailer.usingYtFallback = true;
-  state.trailer.ytStartedPlaying = false;
-
-  const vid = document.getElementById('trailer-video');
-  if (vid && !vid.paused) vid.pause();
-  vid?.setAttribute('hidden', '');
-  document.getElementById('yt-fallback-slot')?.removeAttribute('hidden');
-  document.getElementById('trailer-custom-bar')?.removeAttribute('hidden');
-  document.getElementById('btn-trailer-open-yt-app')?.removeAttribute('hidden');
-  syncTrailerMuteButton();
-  syncTrailerPlayButton();
-
-  ensureYtPlayerMounted();
-  if (state.ytPlayer && state.trailer.ytReady) {
-    startYtPlaybackNow(state.ytPlayer, { forRescue });
   }
 }
 
@@ -9441,41 +9127,12 @@ function bindUIEvents() {
     openTrailerModal({ forRescue: true });
   });
 
-  // Универсальный контроллер трейлера (локальный MP4 + VK Видео фоллбэк)
-  document.getElementById('btn-trailer-play')?.addEventListener('click', () => {
-    if (state.trailer.introLocked) return;
-    if (!state.trailer.usingYtFallback) {
-      const vid = document.getElementById('trailer-video');
-      if (vid) {
-        if (vid.paused || vid.ended) {
-          vid.play().catch(() => {});
-        } else {
-          vid.pause();
-        }
-        syncTrailerPlayButton();
-      }
-      return;
-    }
-    if (state.ytPlayer) {
-      try {
-        const pState = state.ytPlayer.getPlayerState?.() ?? -1;
-        if (pState === 1) state.ytPlayer.pauseVideo?.();
-        else state.ytPlayer.playVideo?.();
-      } catch { /* ignore */ }
-      syncTrailerPlayButton();
-    }
-  });
-
-  document.getElementById('btn-trailer-mute')?.addEventListener('click', () => {
-    if (state.trailer.introLocked) return;
-    setTrailerMuted(!state.trailer.muted);
-  });
-
+  // Внешняя кнопка «Открыть в VK Видео» и выдача награды
   document.getElementById('btn-trailer-open-yt-app')?.addEventListener('click', () => {
     if (state.trailer.introLocked) return;
     pauseActiveTrailerPlayback();
     state.trailer.externalRescueDepartedAt = Date.now();
-    openExternalLink(ENV.vkTrailerUrl || ENV.vkTrailerWatchUrl || OFFICIAL_YT_WATCH_URL);
+    openExternalLink(ENV.vkTrailerUrl || OFFICIAL_YT_WATCH_URL);
   });
 
   document.getElementById('btn-claim-trailer-life')?.addEventListener('click', () => {

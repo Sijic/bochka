@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0d0d'/%3E%3Crect x='8' y='4' width='16' height='24' rx='2' fill='none' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='11' x2='25' y2='11' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='21' x2='25' y2='21' stroke='%23eab308' stroke-width='2'/%3E%3C/svg%3E" />
   <title>БОЧКА — Заводской триллер | Вызволи друга за 3 удара ломом</title>
-  <meta name="bochka-build" content="v19.6.6-studio" />
+  <meta name="bochka-build" content="v19.7.0-studio" />
   <meta name="description" content="Четыре цеха завода, заваренные 200-литровые бочки и 30 секунд кислорода. Запиши фото и голос друга на дно бочки, проверь его слух и забери допуск на закрытую Премьеру 17 декабря." />
 
   <!-- Open Graph / Telegram / WhatsApp Link Preview -->
@@ -28,8 +28,9 @@
   <meta name="twitter:description" content="Индустриальный триллер в браузере и Telegram: 4 цеха завода, упаковка друга с голосом из бочки и дуэль «На счёт три!»." />
   <meta name="twitter:image" content="https://bochka.quest/bochka_og_1280x720.jpg" />
 
-  <!-- Telegram Mini App SDK (100% локально — работает в РФ/СНГ без внешних CDN!) -->
+  <!-- Telegram Mini App SDK и VK VideoPlayer API (100% локально — работает в РФ/СНГ без внешних CDN!) -->
   <script defer src="./public/vendor/telegram-web-app.js?v=1900"></script>
+  <script defer src="./public/vendor/vk-videoplayer.js?v=1970"></script>
 
   <!-- Industrial Typography (100% локально — без Google Fonts CDN) -->
   <link rel="stylesheet" href="./public/fonts/fonts.css?v=1900" />
@@ -44,11 +45,11 @@
   }
   </script>
 
-  <link rel="modulepreload" href="./src/main.js?v=1966" />
+  <link rel="modulepreload" href="./src/main.js?v=1970" />
   <link rel="modulepreload" href="./src/backend.js" />
   <link rel="modulepreload" href="./src/env.js" />
   <link rel="modulepreload" href="./vendor/three.module.min.js" />
-  <link rel="modulepreload" href="./src/scene.js?v=1966" />
+  <link rel="modulepreload" href="./src/scene.js?v=1970" />
   <link rel="modulepreload" href="./vendor/supabase.esm.js" />
 
   <style id="critical-gate-css">
@@ -1153,7 +1154,7 @@
   </div>
 
   <!-- ====================================================================
-       МОДАЛКА 1: КАСТОМНЫЙ ИНДУСТРИАЛЬНЫЙ MP4-ПЛЕЕР ТРЕЙЛЕРА (БЕЗ ПЕРЕМОТКИ ВПЕРЁД)
+       МОДАЛКА 1: ОФИЦИАЛЬНЫЙ VK ВИДЕО ПЛЕЕР ТРЕЙЛЕРА (91.8 СЕК, АВТОПЛЕЙ + 10С ЗАМОК)
        ==================================================================== -->
   <div class="modal-backdrop" id="modal-trailer" hidden>
     <div class="modal-card trailer-modal-card">
@@ -1163,26 +1164,15 @@
       </div>
 
       <div class="video-aspect" id="trailer-video-wrap">
-        <video
-          id="trailer-video"
-          data-poster="./photo_2026-11-08_00-00-14.jpg"
-          autoplay
-          playsinline
-          preload="metadata"
-          hidden
-        ></video>
-        <button type="button" class="trailer-unmute-pill" id="btn-trailer-unmute-pill" hidden>🔇 ВКЛЮЧИТЬ ЗВУК</button>
         <div id="yt-fallback-slot" class="yt-fallback-slot"></div>
       </div>
 
       <div class="trailer-custom-bar" id="trailer-custom-bar">
-        <button type="button" class="hud-mini-btn" id="btn-trailer-play" hidden>❚❚ ПАУЗА</button>
-        <div class="trailer-progress-track" aria-label="Прогресс просмотра" hidden>
+        <div class="trailer-progress-track" aria-label="Прогресс просмотра">
           <div class="trailer-progress-fill" id="trailer-progress-fill"></div>
         </div>
-        <span class="trailer-time-readout" id="trailer-time-readout" hidden>0:00 / 1:32</span>
+        <span class="trailer-time-readout" id="trailer-time-readout">0:00 / 1:32</span>
         <button type="button" class="hud-mini-btn" id="btn-trailer-open-yt-app" title="Открыть этот трейлер напрямую в VK Видео">▶ ОТКРЫТЬ В VK ВИДЕО ↗</button>
-        <button type="button" class="hud-mini-btn" id="btn-trailer-mute" hidden>🔊 ВЫКЛ ЗВУК</button>
       </div>
 
       <div class="trailer-director-strip" id="trailer-director-strip">
@@ -1671,6 +1661,6 @@
   <!-- Toast уведомления -->
   <div class="toast" id="toast" hidden></div>
 
-  <script type="module" src="./src/main.js?v=1966"></script>
+  <script type="module" src="./src/main.js?v=1970"></script>
 </body>
 </html>
