@@ -388,7 +388,7 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1950'));
+    const mod = duelModCache || (await import('./duel.js?v=1951'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({

@@ -1709,6 +1709,8 @@ export class WorkshopScene {
       this.camera.lookAt(this.currentLookAt);
     }
     if (this.renderer?.shadowMap) this.renderer.shadowMap.needsUpdate = true;
+    this.camera.updateMatrixWorld(true);
+    this.scene?.updateMatrixWorld(true);
   }
 
   _syncViewportSize() {
