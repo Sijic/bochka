@@ -4698,7 +4698,6 @@ body[data-blitz-unlocked="0"] .blitz-rule-note {
   border: 0 !important;
 }
 
-#modal-trailer #trailer-video,
 #modal-trailer .video-aspect [hidden] {
   display: none !important;
 }
@@ -8332,13 +8331,14 @@ body.is-duel-active .topbar {
   height: 100%;
 }
 #modal-trailer .trailer-custom-bar {
-  justify-content: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
 }
 #modal-trailer #btn-trailer-open-yt-app {
-  width: 100%;
+  width: auto;
   justify-content: center;
-  padding: 9px 14px;
-  font-size: 12.5px;
+  padding: 6px 10px;
+  font-size: 11px;
 }
 .trailer-director-strip {
   margin-top: 8px;
