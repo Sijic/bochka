@@ -387,7 +387,7 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1940'));
+    const mod = duelModCache || (await import('./duel.js?v=1941'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -991,7 +991,10 @@ function mergeFreshProfile(freshProfile, { preserveProgress = true } = {}) {
       seedFirstPackDone: Boolean(freshProfile.hasBroadcastBarrel),
       hasBroadcastBarrel: Boolean(freshProfile.hasBroadcastBarrel),
       repeatLinkEntered: false,
-      lastOceanRefillAt: 0,
+      lastOceanRefillAt:
+        !preserveProgress && !state.oceanTapper?.refilledThisVisit
+          ? 0
+          : Math.max(0, Number(prev.lastOceanRefillAt || 0)),
     };
     state.profile = cleanMerged;
     state.uiStage = Math.min(2, Math.max(1, Number(freshProfile.uiStage || 1)));
@@ -1023,6 +1026,11 @@ function mergeFreshProfile(freshProfile, { preserveProgress = true } = {}) {
     merged.seedFirstPackDone = false;
   }
   merged.friendsShardAwardedCount = keptFriendsAwarded;
+  merged.lastOceanRefillAt = Math.max(
+    0,
+    Number(prev.lastOceanRefillAt || 0),
+    Number(freshProfile.lastOceanRefillAt || 0)
+  );
   if (typeof merged.lives === 'number') {
     merged.lives = capEarlyLivesIfNoRealFriends(merged.lives);
   }

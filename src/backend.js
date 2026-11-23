@@ -783,7 +783,23 @@ export async function fetchPlayerProfile(tgUser = null) {
         const srvPts = Number(data.premiere_points || 0);
         const srvPacked = Number(data.packed_count || 0);
         const srvDuels = Number(data.duels_played || 0);
-        const isFreshServer = srvLevel <= 1 && srvPts <= 0 && srvPacked <= 0 && !data.has_played_solo && srvDuels <= 0;
+        const hasServerRowFields =
+          data.lives != null ||
+          data.current_level != null ||
+          data.easter_egg_claimed != null;
+        const isFreshServer =
+          hasServerRowFields &&
+          srvLevel <= 1 &&
+          srvPts <= 0 &&
+          srvPacked <= 0 &&
+          !data.has_played_solo &&
+          srvDuels <= 0 &&
+          !data.easter_egg_claimed &&
+          Number(data.ticket_shards || 0) <= 0 &&
+          !data.has_pending_ticket &&
+          Number(data.duels_won || 0) <= 0 &&
+          !data.trailer_rewarded &&
+          !data.kp_click_rewarded;
         const mapped = {
           premiereScore: Number(data.premiere_score || 0),
           premierePoints: srvPts,
