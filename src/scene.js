@@ -83,7 +83,10 @@ export class WorkshopScene {
     this.proxyHitMeshes = [];
     this.activeBarrelCount = 6;
     this.hoveredIndex = -1;
+    this.telegraphIndex = -1;
     this.interactive = false;
+    this.duelDirectClick = false;
+    this._lastDirectStrikeAt = 0;
     this.goldenMode = false;
     this.contextLost = false;
 
@@ -181,6 +184,28 @@ export class WorkshopScene {
     }
   }
 
+  setDuelDirectClick(flag) {
+    this.duelDirectClick = Boolean(flag);
+    if (this.duelDirectClick) {
+      if (this._listenHoldTimer) {
+        clearTimeout(this._listenHoldTimer);
+        this._listenHoldTimer = null;
+      }
+      this.listeningIndex = -1;
+    }
+  }
+
+  setBarrelTelegraph(index, active = true) {
+    const clean = active && typeof index === 'number' && index >= 0 ? index : -1;
+    this.telegraphIndex = clean;
+    if (clean >= 0) {
+      const b = this.barrels?.[clean];
+      if (b && !b.struck) {
+        b.lidRattle = Math.max(b.lidRattle || 0, 0.35);
+      }
+    }
+  }
+
   setGoldenMode(enabled) {
     this.goldenMode = Boolean(enabled);
     if (this.mainSpot) {
@@ -209,6 +234,7 @@ export class WorkshopScene {
     this.diving = false;
     this.diveProgress = 0;
     this.diveTargetIndex = targetIndex;
+    this.telegraphIndex = -1;
     this.shakeIntensity = 0;
     this.screamerStrobe = 0;
     this.cameraRoll = 0;
@@ -1066,9 +1092,9 @@ export class WorkshopScene {
 
       const proxyMesh = new THREE.Mesh(proxyHitGeo, proxyHitMat);
       proxyMesh.position.y = 0.72;
-      // v14.0: На мобильных экранах (360-420px) расширяем хитбокс захвата касания на +25%!
-      const mobileHitBoost = window.innerWidth <= 440 ? 1.25 : 1.0;
-      proxyMesh.scale.set(mobileHitBoost, 1.08, mobileHitBoost);
+      // v19.5: Расширенный хитбокс как на мобильном (360-440px), так и на ноутбуках (1366/1920)
+      const hitBoost = window.innerWidth <= 440 ? 1.25 : 1.12;
+      proxyMesh.scale.set(hitBoost, 1.08, hitBoost);
       proxyMesh.userData.barrelIndex = i;
       group.add(proxyMesh);
 
@@ -1725,6 +1751,9 @@ export class WorkshopScene {
 
     const getCanvasNDC = (e) => {
       const rect = this.canvas.getBoundingClientRect();
+      if (Math.round(rect.width) !== this.width || Math.round(rect.height) !== this.height) {
+        this._syncViewportSize();
+      }
       const rw = Math.max(1, rect.width || this.width);
       const rh = Math.max(1, rect.height || this.height);
       const nx = ((e.clientX - rect.left) / rw) * 2 - 1;
@@ -1740,8 +1769,8 @@ export class WorkshopScene {
       if (this.pointerDownInfo) {
         const dx = e.clientX - this.pointerDownInfo.x;
         const dy = e.clientY - this.pointerDownInfo.y;
-        // v14.0: Мягкий допуск сдвига пальца до 22px без срыва прослушки!
-        if (Math.hypot(dx, dy) > 22) {
+        const dragTol = e.pointerType === 'mouse' ? 32 : 22;
+        if (Math.hypot(dx, dy) > dragTol) {
           this.pointerDownInfo.dragged = true;
         }
       }
@@ -1758,6 +1787,7 @@ export class WorkshopScene {
 
     this.canvas.addEventListener('pointerdown', (e) => {
       if (!this.interactive) return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
       const [nx, ny] = getCanvasNDC(e);
       this.pointerNDC.set(nx, ny);
 
@@ -1766,8 +1796,21 @@ export class WorkshopScene {
         clearTimeout(this._listenHoldTimer);
         this._listenHoldTimer = null;
       }
-      // v14.0: Быстрый старт прослушки за 170 мс (тач) / 240 мс (мышь)
-      const holdMs = e.pointerType === 'touch' ? 170 : 240;
+
+      // v19.5: В бою с Тилем / дуэли 1x1 клик срабатывает мгновенно на pointerdown (без удержания/порога pointerup)
+      if (this.duelDirectClick) {
+        this.pointerDownInfo = null;
+        if (hit) {
+          const nowMs = performance.now();
+          if (nowMs - (this._lastDirectStrikeAt || 0) > 140) {
+            this._lastDirectStrikeAt = nowMs;
+            this.onStrikeBarrel(hit.index, hit.point);
+          }
+        }
+        return;
+      }
+
+      const holdMs = e.pointerType === 'touch' ? 190 : 360;
       this.pointerDownInfo = {
         x: e.clientX,
         y: e.clientY,
@@ -1780,7 +1823,6 @@ export class WorkshopScene {
         point: hit ? hit.point : null,
       };
 
-      // v14.0: удержание пальца > 170 мс -> живой визуальный радар + прослушка; короткий тап -> удар ломом
       if (hit && !this.barrels[hit.index]?.struck) {
         const downX = e.clientX;
         const downY = e.clientY;
@@ -1805,7 +1847,7 @@ export class WorkshopScene {
       this.pointerDownInfo = null;
 
       const elapsed = performance.now() - info.time;
-      const isListenHold = Boolean(info.listening) || info.dragged || elapsed >= (info.holdMs || 280);
+      const isListenHold = Boolean(info.listening) || info.dragged || elapsed >= (info.holdMs || 360);
 
       if (isListenHold) {
         this.listeningIndex = -1;
@@ -1815,6 +1857,20 @@ export class WorkshopScene {
 
       if (info.barrelIndex >= 0 && !info.dragged) {
         this.onStrikeBarrel(info.barrelIndex, info.point);
+      }
+    });
+
+    window.addEventListener('pointerup', () => {
+      if (this._listenHoldTimer) {
+        clearTimeout(this._listenHoldTimer);
+        this._listenHoldTimer = null;
+      }
+      if (this.pointerDownInfo) {
+        this.pointerDownInfo = null;
+      }
+      if (this.listeningIndex !== -1) {
+        this.listeningIndex = -1;
+        if (this.hoveredIndex !== -1) this._setHovered(-1);
       }
     });
 
@@ -1851,6 +1907,7 @@ export class WorkshopScene {
   }
 
   _pickBarrel() {
+    this.camera.updateMatrixWorld();
     this.raycaster.setFromCamera(this.pointerNDC, this.camera);
     const hits = this.raycaster.intersectObjects(this.hitMeshes, false);
     const isValidIdx = (idx) =>
@@ -2257,7 +2314,18 @@ export class WorkshopScene {
         b.dentUniforms.uDentHeat.value = Math.max(0, b.dentUniforms.uDentHeat.value - dt * 1.15);
       }
 
-      const targetRingOp = b.index === this.hoveredIndex && this.interactive ? 0.68 : 0.0;
+      const isTelegraph = b.index === this.telegraphIndex && !b.struck;
+      if (isTelegraph) {
+        b.ringMesh.material.color.setHex(0xef4444);
+        if (!b.lidFlying) b.lidRattle = Math.max(b.lidRattle || 0, 0.25);
+      } else {
+        b.ringMesh.material.color.setHex(0xeab308);
+      }
+      const targetRingOp = isTelegraph
+        ? 0.55 + Math.abs(Math.sin(elapsed * 11)) * 0.4
+        : b.index === this.hoveredIndex && this.interactive
+          ? 0.68
+          : 0.0;
       b.ringMesh.material.opacity += (targetRingOp - b.ringMesh.material.opacity) * Math.min(1, dt * 10);
 
       if (b.lidFlying) {

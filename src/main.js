@@ -271,6 +271,7 @@ const state = {
   trailer: {
     modalOpen: false,
     forRescue: false,
+    shownInL1Flow: false,
     muted: false,
     maxTime: 0,
     unlocked40: false,
@@ -387,7 +388,7 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1941'));
+    const mod = duelModCache || (await import('./duel.js?v=1950'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -2018,6 +2019,7 @@ async function bootstrap() {
       getResumeSnapshot: () => readSessionResume(),
       applyPassiveRegen: (opts) => applyPassiveDailyLifeAndHourlyStrikes(opts || {}),
       canClaimOceanRefillToday: () => canClaimOceanRefillToday(),
+      getDuelPacing: () => duelCtrl?.getPacingDebug?.() || null,
     };
   }
 
@@ -2762,6 +2764,7 @@ function pickNextBarrelHeavenQuote() {
 
 async function startNewbieOnboardingRound() {
   await ensureSceneReady();
+  state.trailer.shownInL1Flow = false;
   // v9.0: На Уровне 1 ВСЕГДА ровно 1 жизнь (3 удара ломом), чтобы логично открывался трейлер (+3 ❤️)!
   state.profile.lives = 1;
   const demoChars = t('demoChars');
@@ -3110,6 +3113,7 @@ async function startViralFriendRound(pack) {
   }
 
   // Вход по ссылке друга: всегда Уровень 1 (4 бочки, 1 жизнь = 3 удара)
+  state.trailer.shownInL1Flow = false;
   const viralBarrelCount = 4;
   const spec = getWorkshopLevelSpec(1);
 
@@ -3516,6 +3520,10 @@ function handleAirDepleted() {
     triggerMiniScreamer();
     window.setTimeout(() => {
       enterWorkshopTrailerPrompt();
+      if (!state.trailer.shownInL1Flow) {
+        state.trailer.shownInL1Flow = true;
+        openTrailerModal({ forRescue: true });
+      }
     }, 3280);
     return;
   }
@@ -4412,6 +4420,10 @@ async function handleBarrelStrike(index, worldPoint) {
       triggerMiniScreamer();
       window.setTimeout(() => {
         enterWorkshopTrailerPrompt();
+        if (!state.trailer.shownInL1Flow) {
+          state.trailer.shownInL1Flow = true;
+          openTrailerModal({ forRescue: true });
+        }
       }, 3280);
     }
     return;
@@ -6025,6 +6037,10 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
       await playRevealAvatar(2100, { barrelIndex: revIdx, isBoy: isBoyRescue });
       await populateFinaleScreen({ premiereResult: null });
       showScreen('finale');
+      if (!state.trailer.shownInL1Flow && Number(state.round?.rescueStage || 0) < 4) {
+        state.trailer.shownInL1Flow = true;
+        openTrailerModal({ forRescue: false, afterL1ToPack: true });
+      }
       return;
     }
 
@@ -6114,6 +6130,10 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
     }
     await populateFinaleScreen({ premiereResult: null });
     showScreen('finale');
+    if (survived && completedLvl === 1 && !state.trailer.shownInL1Flow && Number(state.round?.rescueStage || 0) < 4) {
+      state.trailer.shownInL1Flow = true;
+      openTrailerModal({ forRescue: false, afterL1ToPack: true });
+    }
     if (shardAward && ((shardAward.merged && shardAward.granted) || shardAward.shards > 0)) {
       window.setTimeout(() => {
         syncTicketShardsUI({

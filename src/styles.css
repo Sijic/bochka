@@ -8672,3 +8672,39 @@ body.is-duel-active .topbar {
   font-size: 13.5px;
   font-weight: 800;
 }
+
+/* v19.5: Жёсткий запрет перехвата кликов оверлеями и скроллинг модалки трейлера на ноутбуке (1366x768) */
+#duel-overlay,
+#duel-countdown-banner,
+#duel-barrel-badges,
+.duel-barrel-badge,
+#screamer-overlay,
+.screamer-canvas,
+.fly-reward-token,
+#toast,
+#fx-scream,
+#fx-reveal,
+#barrel-reticle {
+  pointer-events: none !important;
+}
+
+#duel-overlay.is-playing #duel-top-panel,
+#duel-overlay.is-finished #duel-top-panel {
+  display: none !important;
+}
+
+#modal-trailer .trailer-modal-card {
+  overflow-y: auto !important;
+}
+
+.duel-barrel-badge.is-telegraph .duel-badge-ava {
+  border-color: #ef4444;
+  box-shadow: 0 0 22px rgba(239, 68, 68, 0.95);
+  animation: dangerPulse 0.45s infinite alternate;
+}
+
+.duel-barrel-badge.is-telegraph small {
+  background: rgba(153, 27, 27, 0.95);
+  border-color: #ef4444;
+  color: #fef08a;
+}
