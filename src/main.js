@@ -131,8 +131,29 @@ function pickRandomPackScreamer() {
 
 const AIR_DURATION_SEC = 30.0;
 const KP_MIN_AWAY_SEC = 3.5;
-const TRAILER_INTRO_LOCK_SEC = 10.0;
-const TRAILER_UNLOCK_SEC = 20.0;
+const TRAILER_INTRO_LOCK_SEC = 15.0;
+const TRAILER_UNLOCK_SEC = 15.0;
+const HINT_STORAGE_KEYS = {
+  airDepleted: 'bochka_hint_air_v198',
+  firstChip: 'bochka_hint_chip_v198',
+  firstPoints: 'bochka_hint_points_v198',
+};
+
+function loadHintsShownState() {
+  const out = { airDepleted: false, firstChip: false, firstPoints: false };
+  try {
+    for (const [k, storageKey] of Object.entries(HINT_STORAGE_KEYS)) {
+      out[k] = localStorage.getItem(storageKey) === '1';
+    }
+  } catch { /* ignore private storage */ }
+  return out;
+}
+
+function persistHintShown(kind) {
+  const key = HINT_STORAGE_KEYS[kind];
+  if (!key) return;
+  try { localStorage.setItem(key, '1'); } catch { /* ignore */ }
+}
 const STALE_YT_IDS = new Set(['EZFDcXeLTzQ', 'vAJpT_82uUo']);
 const OFFICIAL_YT_TRAILER_ID = (ENV.youtubeFallbackId && !STALE_YT_IDS.has(ENV.youtubeFallbackId))
   ? ENV.youtubeFallbackId
@@ -301,6 +322,14 @@ const state = {
     fallbackTimer: null,
   },
 
+  hintsShown: loadHintsShownState(),
+  contextHint: {
+    open: false,
+    kind: '',
+    text: '',
+    onClose: null,
+  },
+
   // Состояние конструктора пранка (Экран 4)
   pack: {
     mode: 'friend',
@@ -316,6 +345,8 @@ const state = {
     lastWebUrl: '',
     shareLifeClaimedForUrl: '',
     customEdited: false,
+    userUploadedPhoto: false,
+    sealing: false,
   },
 
   // Состояние оформления подарочного билета в Telegram (Путь Б)
@@ -357,7 +388,7 @@ async function ensureSceneReady() {
   if (sceneInitPromise) return sceneInitPromise;
   sceneInitPromise = (async () => {
     try {
-      const { WorkshopScene } = await import('./scene.js?v=1971');
+      const { WorkshopScene } = await import('./scene.js?v=1980');
       if (scene) return scene;
       const canvas = document.getElementById('workshop-canvas');
       scene = new WorkshopScene(canvas, {
@@ -393,7 +424,7 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1971'));
+    const mod = duelModCache || (await import('./duel.js?v=1980'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -407,6 +438,13 @@ async function ensureDuelReady() {
         duelCtrl?.leaveRoom(false);
         showScreen('pack');
       },
+      onFoundFriendBarrel: () => {
+        duelCtrl?.leaveRoom(false);
+        state.pack.forLifeRefill = false;
+        showScreen('pack');
+      },
+      onContextDiscoveryHint: (kind) => maybeShowDuelDiscoveryHint(kind),
+      onLifeLostPill: () => showLifeLostPill(),
       onOpenHallOfFame: () => openHallOfFameModal().catch(() => {}),
       loadDuelCandidates: () => fetchDuelFriendCandidates(state.tg?.user || null),
       onChallengeFriend: (friend, roomId) => challengeSpecificFriend1v1(friend, roomId),
@@ -478,7 +516,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=1971'));
+  const mod = duelModCache || (await import('./duel.js?v=1980'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
@@ -680,38 +718,16 @@ function refreshInitialSeedGateUI() {
 }
 
 function applySeedPackModeUI(active) {
-  const ban = document.getElementById('pack-mandatory-banner');
-  const tagEl = document.getElementById('pack-screen-tag');
   const titleEl = document.getElementById('pack-screen-title');
-  const customDetails = document.getElementById('pack-custom-details');
   const role = getTeamSeedRole();
   if (active && (role === 'prod' || role === 'blog')) {
-    const pref = buildBroadcastPrefix(role, state.tg?.user);
     const isBlog = role === 'blog';
-    if (tagEl) {
-      tagEl.textContent = isBlog
-        ? `🔥 БЛОГЕР-БОЧКА · АВТОНУМЕРАЦИЯ ${pref}_1..∞`
-        : `🎬 ПРОДЮСЕР-БОЧКА · АВТОНУМЕРАЦИЯ ${pref}_1..∞`;
-    }
     if (titleEl) {
-      titleEl.textContent = isBlog ? 'ЗАПАКУЙ СЕБЯ ДЛЯ STORIES И КАНАЛА' : 'ЗАПАКУЙ СЕБЯ В ОБЩУЮ БОЧКУ';
+      titleEl.textContent = isBlog ? 'Запакуй себя для Stories и канала' : 'Запакуй себя в общую бочку';
     }
-    if (ban) {
-      ban.textContent = isBlog
-        ? `🔥 Запакуй СЕБЯ (своё лицо + крик/скример) 1 раз → получишь ОДНУ общую ссылку bl_... для Stories и канала! Всем подписчикам сервер сам выдаст номера ${pref}_1, ${pref}_2...`
-        : `🎬 Запакуй СЕБЯ 1 раз → получишь ОДНУ общую ссылку pr_... для всех друзей и чатов! Каждому сервер сам выдаст номер ${pref}_1, ${pref}_2... (розыгрыши на команду не действуют).`;
-      ban.removeAttribute('hidden');
-    }
-    if (customDetails) customDetails.open = true;
     return;
   }
-  if (tagEl) tagEl.textContent = 'ФОТО УЖЕ ГОТОВО — ЖМИ ОТПРАВИТЬ ИЛИ ЗАМЕНИ';
-  if (titleEl) titleEl.textContent = 'УПАКУЙ В БОЧКУ ДРУГА';
-  if (ban) {
-    ban.textContent = '🔒 Чтобы выиграть парный билет 1+1 и играть дальше на супер-приз — отправь пранк другу в 1 касание!';
-    if (!state.profile.mustSendFriendPack) ban.setAttribute('hidden', '');
-  }
-  if (customDetails) customDetails.open = false;
+  if (titleEl) titleEl.textContent = 'Запакуй друга в бочку';
 }
 
 const ACTIVE_TG_ACCOUNT_KEY = 'bochka_active_tg_account';
@@ -1688,11 +1704,9 @@ function refreshHudLevelLabel() {
   const ptsVal = document.getElementById('hud-pts-val');
   if (ptsVal) ptsVal.textContent = String(Math.max(0, Math.round(Number(state.profile?.premierePoints || 0))));
   syncSuperPrizeRatingBarUI();
-  const taskEl = document.getElementById('hud-task-banner');
-  if (taskEl) {
-    const spec = getWorkshopLevelSpec(state.round?.workshopLevel || 1);
-    taskEl.textContent = state.round?.taskText || spec.taskText || 'Удерживай палец — слушать бочку · Тап — удар ломом';
-  }
+  document.getElementById('hud-top-stack')?.setAttribute('hidden', '');
+  document.getElementById('hud-task-banner')?.setAttribute('hidden', '');
+  document.getElementById('hud-hint-text')?.setAttribute('hidden', '');
 }
 
 function formatBarrelWord(n) {
@@ -1911,6 +1925,7 @@ async function bootstrap() {
   } catch { /* ignore */ }
 
   // v15.0: МГНОВЕННЫЙ СТАРТ (<1.2 сек): #screen-gate кликабелен СРАЗУ, до загрузки Three.js, текстур и сетевых запросов!
+  state.hintsShown = loadHintsShownState();
   state.uiStage = getStoredUiStage();
   loadLocalV9Flags();
   syncTicketShardsUI();
@@ -2047,6 +2062,18 @@ async function bootstrap() {
       applyPassiveRegen: (opts) => applyPassiveDailyLifeAndHourlyStrikes(opts || {}),
       canClaimOceanRefillToday: () => canClaimOceanRefillToday(),
       getDuelPacing: () => duelCtrl?.getPacingDebug?.() || null,
+      getContextHintState: () => ({
+        open: Boolean(state.contextHint?.open),
+        kind: String(state.contextHint?.kind || ''),
+        text: String(state.contextHint?.text || ''),
+        shown: { ...state.hintsShown },
+      }),
+      resetHints: () => {
+        for (const k of Object.values(HINT_STORAGE_KEYS)) {
+          try { localStorage.removeItem(k); } catch { /* ignore */ }
+        }
+        state.hintsShown = { airDepleted: false, firstChip: false, firstPoints: false };
+      },
     };
   }
 
@@ -2385,15 +2412,97 @@ async function bootstrap() {
 }
 
 function updateControlHintText() {
-  const coarse = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
   const el = document.getElementById('hud-hint-text');
   if (el) {
-    el.setAttribute('data-i18n', coarse ? 'hudHintMobile' : 'hudHintDesktop');
-    el.textContent = t(coarse ? 'hudHintMobile' : 'hudHintDesktop');
+    el.setAttribute('hidden', '');
+    el.textContent = '';
   }
 }
 
-const PAUSED_SCENE_SCREENS = new Set(['gate', 'pack', 'sent', 'finale', 'pass', 'ocean']);
+let lifeLostPillTimer = null;
+function showLifeLostPill(durationMs = 1750) {
+  const pill = document.getElementById('life-lost-pill');
+  if (!pill) return;
+  pill.textContent = 'Потерял жизнь';
+  pill.removeAttribute('hidden');
+  pill.classList.remove('is-pop');
+  void pill.offsetWidth;
+  pill.classList.add('is-pop');
+  if (lifeLostPillTimer) clearTimeout(lifeLostPillTimer);
+  lifeLostPillTimer = window.setTimeout(() => {
+    pill.setAttribute('hidden', '');
+    pill.classList.remove('is-pop');
+  }, durationMs);
+}
+
+function showContextHintModal({ kind, text, buttonText = 'Дальше', highlightAir = false, onClose = null } = {}) {
+  const modal = document.getElementById('modal-context-hint');
+  const txtEl = document.getElementById('context-hint-text');
+  const btnEl = document.getElementById('btn-context-hint-ok');
+  const arrowEl = document.getElementById('context-hint-arrow');
+  const hudSlim = document.getElementById('hud-slim');
+  if (!modal || !txtEl || !btnEl) {
+    onClose?.();
+    return;
+  }
+  state.contextHint = {
+    open: true,
+    kind: String(kind || ''),
+    text: String(text || ''),
+    onClose: typeof onClose === 'function' ? onClose : null,
+  };
+  txtEl.textContent = state.contextHint.text;
+  btnEl.textContent = buttonText;
+  if (arrowEl) {
+    if (highlightAir) arrowEl.removeAttribute('hidden');
+    else arrowEl.setAttribute('hidden', '');
+  }
+  hudSlim?.classList.toggle('is-hint-highlight', Boolean(highlightAir));
+  modal.removeAttribute('hidden');
+  Haptics.light();
+}
+
+function dismissContextHintModal() {
+  const modal = document.getElementById('modal-context-hint');
+  const hudSlim = document.getElementById('hud-slim');
+  const cur = state.contextHint || {};
+  const cb = cur.onClose;
+  if (cur.kind) {
+    state.hintsShown[cur.kind] = true;
+    persistHintShown(cur.kind);
+  }
+  state.contextHint = { open: false, kind: '', text: '', onClose: null };
+  hudSlim?.classList.remove('is-hint-highlight');
+  document.getElementById('context-hint-arrow')?.setAttribute('hidden', '');
+  modal?.setAttribute('hidden', '');
+  Haptics.light();
+  cb?.();
+}
+
+function maybeShowDuelDiscoveryHint(kind) {
+  if (state.contextHint?.open) return false;
+  if (kind === 'chip' && !state.hintsShown.firstChip) {
+    showContextHintModal({
+      kind: 'firstChip',
+      text: 'Ты нашел фишку! Собирай фишки для коллекции и призов.',
+      buttonText: 'Дальше',
+      highlightAir: false,
+    });
+    return true;
+  }
+  if (kind === 'points' && !state.hintsShown.firstPoints) {
+    showContextHintModal({
+      kind: 'firstPoints',
+      text: 'Собирай очки и получи суперприз!',
+      buttonText: 'Дальше',
+      highlightAir: false,
+    });
+    return true;
+  }
+  return false;
+}
+
+const PAUSED_SCENE_SCREENS = new Set(['gate', 'tilChallenge', 'pack', 'sent', 'finale', 'pass', 'ocean']);
 
 function syncSceneRenderPause() {
   const shouldPause =
@@ -2420,7 +2529,7 @@ function showScreen(name) {
     const toastEl = document.getElementById('toast');
     if (toastEl) toastEl.style.top = '';
   }
-  if (state.entered && ['workshop', 'pack', 'modeA', 'finale'].includes(name)) {
+  if (state.entered && ['workshop', 'tilChallenge', 'pack', 'modeA', 'finale'].includes(name)) {
     saveSessionResumeSnapshot({ lastScreen: name });
   }
   closeBurgerDrawer();
@@ -2433,15 +2542,33 @@ function showScreen(name) {
   for (const mid of ['modal-leaderboard', 'modal-share-hub', 'modal-prize', 'modal-rules', 'modal-legal']) {
     document.getElementById(mid)?.setAttribute('hidden', '');
   }
-  document.getElementById('topbar')?.toggleAttribute('hidden', name === 'gate');
+  document.getElementById('topbar')?.toggleAttribute('hidden', ['gate', 'tilChallenge', 'pack', 'sent'].includes(name));
   document.getElementById('nav-workshop')?.classList.toggle('is-active', name === 'workshop' || name === 'modeA');
-  if (name === 'pack' && (getTeamSeedRole() === 'prod' || getTeamSeedRole() === 'blog')) {
-    applySeedPackModeUI(true);
+  if (name === 'pack') {
+    state.pack.userUploadedPhoto = false;
+    state.pack.sealing = false;
+    state.pack.processed = null;
+    const fInput = document.getElementById('input-photo-file');
+    if (fInput) fInput.value = '';
+    document.getElementById('label-pack-upload-photo')?.removeAttribute('hidden');
+    document.getElementById('pack-uploaded-confirm')?.setAttribute('hidden', '');
+    const sendUpBtn = document.getElementById('btn-pack-send-uploaded');
+    if (sendUpBtn) {
+      sendUpBtn.disabled = false;
+      sendUpBtn.textContent = 'Отправить другу';
+      sendUpBtn.setAttribute('hidden', '');
+    }
+    const quickBtn = document.getElementById('btn-pack-quick-1tap');
+    const quickTxt = document.getElementById('btn-pack-quick-1tap-text');
+    if (quickBtn) quickBtn.disabled = false;
+    if (quickTxt) quickTxt.textContent = 'Отправить сразу';
+    applySeedPackModeUI(getTeamSeedRole() === 'prod' || getTeamSeedRole() === 'blog');
   }
   const ids = {
     gate: 'screen-gate',
     modeA: 'screen-mode-a',
     workshop: 'screen-workshop',
+    tilChallenge: 'screen-til-challenge',
     pack: 'screen-pack',
     finale: 'screen-finale',
     sent: 'screen-sent',
@@ -3548,6 +3675,33 @@ function handleAirDepleted() {
     return;
   }
 
+  // Первая остановка по воздуху: пауза + акцент на шкалу («Вот линия воздуха — следи за ней!» + «Понял»)
+  if (!state.hintsShown.airDepleted) {
+    stopAirTimer();
+    audio.stopListening();
+    r.running = false;
+    r.pausedForModal = true;
+    scene.setInteractive(false);
+    updateAirHUD(0);
+    showContextHintModal({
+      kind: 'airDepleted',
+      text: 'Вот линия воздуха — следи за ней!',
+      buttonText: 'Понял',
+      highlightAir: true,
+      onClose: () => {
+        if (state.activeScreen !== 'workshop') return;
+        r.airLeft = 25.0;
+        r.lastUrgentSec = 9;
+        r.running = true;
+        r.pausedForModal = false;
+        updateAirHUD(r.airLeft);
+        scene.setInteractive(true);
+        startAirCountdownLoop();
+      },
+    });
+    return;
+  }
+
   // v9.1: В режиме Блиц (Уровень 8+), если время вышло: очки за найденные цели начисляем, но ПАЦАНА НЕ СПАС (без фальшивого «Спасибо что нашёл»!)
   if (r.isBlitz && r.blitzTargetsCleared > 0) {
     r.partialBlitzScore = true;
@@ -4311,23 +4465,11 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
 
 async function refreshLevel3TicketPoolBar(level = 1) {
   const bar = document.getElementById('hud-ticket-pool-bar');
-  if (!bar) return;
-  if (Number(level || 1) < 2) {
-    bar.setAttribute('hidden', '');
-    return;
-  }
+  if (bar) bar.setAttribute('hidden', '');
+  document.getElementById('hud-top-stack')?.setAttribute('hidden', '');
+  if (Number(level || 1) < 2) return;
   const st = await fetchTicketPoolStatus().catch(() => null);
-  if (!st) return;
-  state.ticketPoolStatus = st;
-  const sh = Math.max(0, Math.min(3, Number(state.profile?.ticketShards || 0)));
-  bar.removeAttribute('hidden');
-  if (st.dailyRemaining > 0 && !st.isPaused) {
-    bar.classList.remove('is-empty');
-    bar.textContent = `🎟 Собери 4 куска = бесплатный билет другу (${sh}/4) · Сегодня осталось: ${st.dailyRemaining} из ${st.maxDaily}`;
-  } else {
-    bar.classList.add('is-empty');
-    bar.textContent = '⭐ Партия билетов на сегодня разобрана — новая откроется в 00:00 МСК! За 4-й кусок даём +500 ⭐ в ТОП-20 Закрытого показа в Москве!';
-  }
+  if (st) state.ticketPoolStatus = st;
 }
 
 async function handleBarrelStrike(index, worldPoint, pointerMeta = null) {
@@ -4791,10 +4933,8 @@ function triggerMiniScreamer(explicitVariant = null, durationMsOverride = null) 
   document.body.classList.add('is-horror-jolt');
 
   el.removeAttribute('hidden');
-  el.style.animation = 'none';
-  void el.offsetWidth;
-  el.style.animation = '';
   const showMs = Number(durationMsOverride) > 300 ? Number(durationMsOverride) : 3250;
+  showLifeLostPill(Math.min(2100, showMs));
   if (screamerPlayer) {
     imgEl?.setAttribute('hidden', '');
     screamerPlayer.play({
@@ -6143,17 +6283,16 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
     const revIdx = typeof diveBarrelIndex === 'number' && diveBarrelIndex >= 0 ? diveBarrelIndex : state.round.targetIndex;
     const isBoyRescue = survived && ((completedLvl === 1 && !state.incomingPack) || completedLvl >= 4);
 
-    // v11.0 Ур.1 (бочка друга): при открытии целевой бочки — пацан/друг физически вылезает прямо из бочки!
+    // Ур.1 (входящая бочка друга или первый старт): пацан/друг вылезает -> сразу 15с трейлер (или сразу Вызов Тиля, если трейлер уже досмотрен после 3 промахов)
     const isL1FriendReveal = survived && completedLvl === 1 && (!state.round.isDemo || Boolean(state.incomingPack));
     if (isL1FriendReveal) {
-      await playRevealAvatar(2100, { barrelIndex: revIdx, isBoy: isBoyRescue });
+      await playRevealAvatar(1800, { barrelIndex: revIdx, isBoy: isBoyRescue });
       if (state.activeScreen !== 'workshop' || duelCtrl?.isActive || _openingDuelLock) return;
-      await populateFinaleScreen({ premiereResult: null });
-      if (state.activeScreen !== 'workshop' || duelCtrl?.isActive || _openingDuelLock) return;
-      showScreen('finale');
       if (!state.trailer.shownInL1Flow && Number(state.round?.rescueStage || 0) < 4) {
         state.trailer.shownInL1Flow = true;
         openTrailerModal({ forRescue: false, afterL1ToPack: true });
+      } else {
+        showScreen('tilChallenge');
       }
       return;
     }
@@ -6243,13 +6382,18 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
       await playFullScreenScreamer(2900);
     }
     if (state.activeScreen !== 'workshop' || duelCtrl?.isActive || _openingDuelLock) return;
+    if (survived && completedLvl === 1) {
+      if (!state.trailer.shownInL1Flow && Number(state.round?.rescueStage || 0) < 4) {
+        state.trailer.shownInL1Flow = true;
+        openTrailerModal({ forRescue: false, afterL1ToPack: true });
+      } else {
+        showScreen('tilChallenge');
+      }
+      return;
+    }
     await populateFinaleScreen({ premiereResult: null });
     if (state.activeScreen !== 'workshop' || duelCtrl?.isActive || _openingDuelLock) return;
     showScreen('finale');
-    if (survived && completedLvl === 1 && !state.trailer.shownInL1Flow && Number(state.round?.rescueStage || 0) < 4) {
-      state.trailer.shownInL1Flow = true;
-      openTrailerModal({ forRescue: false, afterL1ToPack: true });
-    }
     if (shardAward && ((shardAward.merged && shardAward.granted) || shardAward.shards > 0)) {
       window.setTimeout(() => {
         syncTicketShardsUI({
@@ -6421,37 +6565,36 @@ async function rebuildPackPortraitPreview(newSource = undefined) {
 async function handleQuick1TapPrankClick() {
   const quickBtn = document.getElementById('btn-pack-quick-1tap');
   const quickTxt = document.getElementById('btn-pack-quick-1tap-text');
-  if (quickBtn?.disabled) return;
-  if (quickBtn) quickBtn.disabled = true;
-  if (quickTxt) quickTxt.textContent = '⏳ Завариваем крышку…';
+  if (state.pack.sealing || quickBtn?.disabled) return;
+  if (quickTxt) quickTxt.textContent = 'Отправка…';
   try {
     state.pack.screamerType = pickRandomPackScreamer();
-    const inp = document.getElementById('input-custom-phrase');
-    if (inp && !inp.value.trim()) inp.value = 'Вытащи меня из цеха — с нас поход в кино!';
-    if (state.pack.userUploadedPhoto && !state.pack.processed) {
-      await initPackConstructorDefaults();
-    }
-    await handleSealBarrelClick({ forceAutoAvatar: !state.pack.userUploadedPhoto });
+    await handleSealBarrelClick({ forceAutoAvatar: true });
   } finally {
     if (quickBtn) quickBtn.disabled = false;
-    if (quickTxt) quickTxt.textContent = '⚡ ЛЕНЬ? АВТО-АВАТАР / СКРИМЕР (+3 ❤️)';
+    if (quickTxt) quickTxt.textContent = 'Отправить сразу';
   }
 }
 
 async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
   requestAndSyncWriteAccess();
-  const sealBtn = document.getElementById('btn-seal-barrel');
-  const sealTxt = document.getElementById('btn-seal-text');
+  if (state.pack.sealing) return;
+  state.pack.sealing = true;
+
   const quickBtn = document.getElementById('btn-pack-quick-1tap');
-  if (!sealBtn || !sealTxt || sealBtn.disabled) return;
+  const quickTxt = document.getElementById('btn-pack-quick-1tap-text');
+  const sendUpBtn = document.getElementById('btn-pack-send-uploaded');
 
   if (voiceRecorder?.isRecording) {
     voiceRecorder.stop();
   }
 
-  sealBtn.disabled = true;
   if (quickBtn) quickBtn.disabled = true;
-  sealTxt.textContent = '⏳ Завариваем крышку…';
+  if (sendUpBtn) {
+    sendUpBtn.disabled = true;
+    if (!sendUpBtn.hidden) sendUpBtn.textContent = 'Отправка…';
+  }
+  if (quickTxt && !forceAutoAvatar) quickTxt.textContent = 'Отправка…';
   audio.playWeldSeal();
 
   try {
@@ -6462,7 +6605,7 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
     if (!useAutoAvatar && !state.pack.processed) {
       await rebuildPackPortraitPreview();
     }
-    const phrase = document.getElementById('input-custom-phrase')?.value || '';
+    const phrase = 'Вытащи меня из бочки!';
     const randomSound = pickRandomPackScreamer();
     const broadcastPrefix = isBroadcastPack ? buildBroadcastPrefix(teamRole, state.tg?.user) : '';
     const created = await createBarrelPack({
@@ -6494,16 +6637,13 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
     state.profile.packedCount = Math.max(1, Number(state.profile.packedCount || 0) + 1);
     if (isBroadcastPack) {
       state.profile.seedFirstPackDone = true;
-      if (isBroadcastPack) state.profile.hasBroadcastBarrel = true;
+      state.profile.hasBroadcastBarrel = true;
       applySeedPackModeUI(false);
     }
 
-    // v9.0: Игрок отправил бочку другу — снимаем обязательный замок Раунда 2 и открываем билеты и супер-приз!
     state.profile.mustSendFriendPack = false;
     saveLocalV9Flags();
-    document.getElementById('pack-mandatory-banner')?.setAttribute('hidden', '');
 
-    // v11.0 Честная экономика: после отправки жизни улетают ровно 3 ❤️ (5 быть не может, пока реальные друзья не зашли!).
     const wasLifeRefill = Boolean(state.pack.forLifeRefill);
     state.pack.forLifeRefill = false;
     const prevRoundLvl = Math.max(1, Number(state.round?.workshopLevel || 2));
@@ -6532,15 +6672,15 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
 
     const sharePrefix =
       teamRole === 'blog'
-        ? '🛢 Я заварил себя в 3D-цеху фильма «БОЧКА»! Надень наушники — вытащи меня за 3 удара, собери 4 части бесплатного билета другу и попади в ТОП-20 на Закрытый показ в Москве 17 декабря'
+        ? '🛢 Я заварил себя в 3D-цеху фильма «БОЧКА»! Надень наушники — вытащи меня за 3 удара и собери билет в кино'
         : '🛢 Кто-то заварил тебя в цеху «БОЧКИ»! Надень наушники — найди нужную крышку за 3 удара и собери билет в кино';
-    const fullShareText = `${sharePrefix}${phrase ? `: «${phrase}»` : ''}`;
+    const fullShareText = `${sharePrefix}: «${phrase}»`;
     const linkType = isBroadcastPack ? (teamRole === 'blog' ? 'bl' : 'pr') : 'pack';
     const prepShare = await prepareNativeShareMessage({
       tgUser: state.tg?.user,
       barrelId: created.id,
       linkType,
-      senderName: state.tg?.user?.name || document.getElementById('input-sender-name')?.value || '',
+      senderName: state.tg?.user?.name || '',
       phrase,
       shareUrl: created.shareUrl,
     }).catch(() => ({ ok: false, fallback: true, preparedMessageId: '', shareUrl: created.shareUrl }));
@@ -6557,7 +6697,7 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
     };
     updatePremiereBarsUI();
     refreshHudLevelLabel();
-    // v15.0: Часть 1/4 билета выпадает сразу после отправки первой бочки другу на Уровне 2!
+
     let packShardRes = null;
     if (!isBroadcastPack && Number(state.profile?.ticketShards || 0) === 0 && Number(state.profile?.pendingTicketsCount || 0) === 0) {
       packShardRes = await Promise.race([
@@ -6568,62 +6708,31 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
         syncTicketShardsUI({ pulse: true, justEarned: packShardRes.shards });
       }
     }
-    // v12.5: На экране отправки сначала скрываем новые 3 ❤️ (показываем 0 ❤️), чтобы игрок ГЛАЗАМИ увидел прилёт 0→1→2→3 в шапку!
     state.pendingLevelStartFly = { lives: wasProducerFirstPack ? 1 : 3, strikes: 3 };
     Haptics.success();
     applyProgressiveDisclosureUI({ skipPromoteFromSocial: true });
     showSentScreen({ wasLifeRefill, wasBroadcastPack: isBroadcastPack, broadcastRole: teamRole, prevRatingPct, packShardRes });
-    setHudVisualLivesDisplay(0);
-    window.setTimeout(() => {
-      flyRewardToHud({
-        type: 'lives',
-        count: 3,
-        label: '+1 ❤️',
-        onStepImpact: (step) => setHudVisualLivesDisplay(step),
-      });
-      window.setTimeout(() => flyRewardToHud({ type: 'rating', count: 1, label: '🏆 +3%' }), 720);
-    }, 180);
     refreshQuestUI().catch(() => {});
   } finally {
-    sealBtn.disabled = false;
+    state.pack.sealing = false;
     if (quickBtn) quickBtn.disabled = false;
-    sealTxt.textContent = t('btnSealBarrel');
+    if (quickTxt) quickTxt.textContent = 'Отправить сразу';
+    if (sendUpBtn) {
+      sendUpBtn.disabled = false;
+      sendUpBtn.textContent = 'Отправить другу';
+    }
   }
 }
 
-function showSentScreen({ wasLifeRefill = false, wasBroadcastPack = false, broadcastRole = '', prevRatingPct = null, packShardRes = null } = {}) {
-  const targetLvl = wasBroadcastPack && broadcastRole === 'prod' ? 1 : Math.max(3, Number(state.profile?.currentLevel || 3));
-  const spec = getWorkshopLevelSpec(targetLvl);
-  const titleEl = document.getElementById('sent-title');
+function showSentScreen({ wasBroadcastPack = false, broadcastRole = '' } = {}) {
   const txt = document.getElementById('sent-text');
   const btnTxt = document.getElementById('btn-sent-play-text');
   const copyBtn = document.getElementById('btn-sent-copy-link');
   const blogInvBtn = document.getElementById('btn-sent-copy-blogger-invite');
   const seedMetaEl = document.getElementById('sent-seed-meta');
-  const nextPct = computeSuperPrizeRatingPct(state.profile);
-  const startPct = prevRatingPct !== null ? Math.min(nextPct, prevRatingPct) : Math.max(0, nextPct - 3);
-  const sPct = document.getElementById('sent-rating-pct');
-  const sFill = document.getElementById('sent-rating-fill');
-  const sNote = document.getElementById('sent-rating-note');
-  if (sPct) sPct.textContent = `${startPct}% → ${nextPct}%`;
-  if (sFill) {
-    sFill.style.transition = 'none';
-    sFill.style.width = `${startPct}%`;
-    window.setTimeout(() => {
-      sFill.style.transition = 'width 0.9s cubic-bezier(0.2, 0.9, 0.2, 1)';
-      sFill.style.width = `${nextPct}%`;
-      if (sPct) sPct.textContent = `${nextPct}%`;
-    }, 160);
-  }
-  if (sNote) {
-    sNote.textContent = wasBroadcastPack
-      ? 'Одна ссылка на 10 000+ человек: каждому сервер выдаст личный номер 1..∞!'
-      : packShardRes?.shards > 0
-        ? `🎟 Часть билета ${packShardRes.shards}/4 · Друг откроет бочку → +20% к Суперпризу и дуэль 1×1!`
-        : '🎟 Друг откроет бочку → +20% к Суперпризу (Москва, 17.12) и дуэль 1×1!';
-  }
+  const tilPlayAva = document.getElementById('sent-play-til-ava');
+
   if (copyBtn) {
-    // Общая кнопка копирования ссылки — только для команды (team_prod / team_blog); обычные игроки отправляют личную 1-на-1!
     if (wasBroadcastPack && state.pack?.lastShareUrl) copyBtn.removeAttribute('hidden');
     else copyBtn.setAttribute('hidden', '');
   }
@@ -6637,43 +6746,24 @@ function showSentScreen({ wasLifeRefill = false, wasBroadcastPack = false, broad
   if (seedMetaEl) {
     if (wasBroadcastPack && state.pack?.lastShareUrl) {
       const pref = state.pack.lastBroadcastPrefix || (broadcastRole === 'blog' ? 'bl_team' : 'pr_team');
-      seedMetaEl.textContent = `🚀 Твоя одна общая ссылка (${pref}_1..∞): ${state.pack.lastShareUrl}`;
+      seedMetaEl.textContent = `Ссылка (${pref}_1..∞): ${state.pack.lastShareUrl}`;
       seedMetaEl.removeAttribute('hidden');
     } else {
       seedMetaEl.setAttribute('hidden', '');
     }
   }
-  const tilPlayAva = document.getElementById('sent-play-til-ava');
-  const duel1v1Btn = document.getElementById('btn-sent-duel-1v1');
+  tilPlayAva?.removeAttribute('hidden');
   if (wasBroadcastPack) {
-    tilPlayAva?.setAttribute('hidden', '');
-    duel1v1Btn?.setAttribute('hidden', '');
     const isBlog = broadcastRole === 'blog';
-    if (titleEl) {
-      titleEl.textContent = isBlog
-        ? '🔥 ГОТОВО! ТВОЯ ОБЩАЯ ССЫЛКА ДЛЯ STORIES И КАНАЛА'
-        : '🎬 ГОТОВО! ТВОЯ ОДНА ОБЩАЯ ССЫЛКА ДЛЯ ВСЕХ ДРУЗЕЙ';
-    }
     if (txt) {
       txt.textContent = isBlog
-        ? 'Скопируй эту одну ссылку в Stories, описание и Telegram-канал — каждый подписчик откроет именно твою бочку и получит номер 1..∞!'
-        : 'Кидай эту одну ссылку всем друзьям и в любые чаты без повторной упаковки — каждому сервер выдаст личный номер 1..∞!';
+        ? 'Общая ссылка для Stories и канала готова!'
+        : 'Общая ссылка готова! Дальше играй с Тилем.';
     }
-    if (btnTxt) {
-      btnTxt.textContent = isBlog
-        ? '🎬 НАЧАТЬ РАУНД ПРОТИВ ТИЛЯ →'
-        : '▶️ ПОИГРАТЬ В ЦЕХ — УРОВЕНЬ 1 (БЕЗ РОЗЫГРЫШЕЙ)';
-    }
+    if (btnTxt) btnTxt.textContent = isBlog ? 'Играть' : 'Поиграть в цех';
   } else {
-    tilPlayAva?.removeAttribute('hidden');
-    duel1v1Btn?.removeAttribute('hidden');
-    if (titleEl) titleEl.textContent = '🔥 ГОТОВО! БОЧКА УЛЕТЕЛА ДРУГУ!';
-    if (txt) {
-      txt.textContent = wasLifeRefill
-        ? '🔥 Друг упакован! Зачислено +6 ❤️ на Дуэль и против Тиля — жми в бой за билетом!'
-        : 'Дальше все раунды — ПРОТИВ ТИЛЯ на «Раз-два-три!» за билеты и Суперприз (Москва, 17.12).';
-    }
-    if (btnTxt) btnTxt.textContent = '🎬 НАЧАТЬ РАУНД ПРОТИВ ТИЛЯ →';
+    if (txt) txt.textContent = 'Выиграй Тиля, чтобы получить билет в кино!';
+    if (btnTxt) btnTxt.textContent = 'Играть';
   }
   showScreen('sent');
 }
@@ -7434,30 +7524,23 @@ function syncTrailerIntroLockUI(watchedSec = 0) {
 
   const modal = document.getElementById('modal-trailer');
   modal?.classList.toggle('is-intro-locked', locked);
-  document.getElementById('btn-close-trailer')?.classList.toggle('is-rescue-locked', locked);
-
-  for (const id of [
-    'btn-close-trailer',
-    'btn-trailer-open-yt-app',
-    'btn-trailer-like-yt',
-    'btn-trailer-sub-yt',
-    'btn-trailer-like-ig',
-  ]) {
-    const el = document.getElementById(id);
-    if (el) el.disabled = locked;
+  const closeBtn = document.getElementById('btn-close-trailer');
+  if (closeBtn) {
+    closeBtn.disabled = locked;
+    closeBtn.classList.toggle('is-rescue-locked', locked);
+    if (locked || state.trailer.afterL1ToPack || state.trailer.forRescue) {
+      closeBtn.setAttribute('hidden', '');
+    } else {
+      closeBtn.removeAttribute('hidden');
+    }
   }
-  document.querySelectorAll('.trailer-react-btn').forEach((btn) => {
-    btn.disabled = locked;
-  });
 
   const toPackBtn = document.getElementById('btn-trailer-to-pack');
   if (toPackBtn) {
+    toPackBtn.removeAttribute('hidden');
     toPackBtn.disabled = locked;
-    if (locked) {
-      toPackBtn.textContent = `⏳ СМОТРИ НАЧАЛО ТРЕЙЛЕРА (${rem}с)…`;
-    } else {
-      toPackBtn.textContent = '⚡ ДАЛЬШЕ — ЗАКАТАТЬ ДРУГА В БОЧКУ →';
-    }
+    toPackBtn.classList.toggle('is-ready', !locked);
+    toPackBtn.textContent = locked ? `Смотри трейлер... ${rem}` : 'Дальше';
   }
 }
 
@@ -7472,11 +7555,14 @@ function destroyVkTrailerPlayerAndIframe() {
   if (!slot) return;
   slot.querySelectorAll('iframe').forEach((f) => {
     f.removeAttribute('id');
+    f.style.pointerEvents = 'none';
+    f.style.display = 'none';
     try { f.src = 'about:blank'; } catch { /* ignore */ }
     try { f.remove(); } catch { /* ignore */ }
   });
   slot.textContent = '';
   slot.setAttribute('hidden', '');
+  try { window.focus?.(); } catch { /* ignore */ }
 }
 
 function mountVkTrailerPlayer() {
@@ -7496,8 +7582,6 @@ function mountVkTrailerPlayer() {
   if (customBar) {
     customBar.removeAttribute('hidden');
     customBar.querySelector('.trailer-progress-track')?.removeAttribute('hidden');
-    document.getElementById('trailer-time-readout')?.removeAttribute('hidden');
-    document.getElementById('btn-trailer-open-yt-app')?.removeAttribute('hidden');
   }
   updateTrailerProgressUI(0, 92, TRAILER_UNLOCK_SEC);
 
@@ -7587,20 +7671,15 @@ function mountVkTrailerPlayer() {
           const cur = Math.max(0, Number(ev?.time ?? player.getCurrentTime?.() ?? 0));
           const dur = Number(state.trailer.vkDuration || 0);
           state.trailer.vkTime = cur;
-          if (cur > state.trailer.maxTime) {
-            state.trailer.maxTime = Math.max(
-              Number(state.trailer.maxTime || 0),
-              Math.min(cur, Number(state.trailer.maxTime || 0) + 5.0)
-            );
+          const honestCur = Math.min(cur, Number(state.trailer.wallClockSec || 0) + 1.2);
+          if (honestCur > state.trailer.maxTime) {
+            state.trailer.maxTime = honestCur;
           }
           const targetSec = getEffectiveTrailerUnlockSec();
-          updateTrailerProgressUI(cur, dur > 0 ? dur : 92, targetSec);
           syncTrailerIntroLockUI(state.trailer.maxTime);
-          if (state.trailer.forRescue) {
-            updateTrailerRescueBanner(state.trailer.maxTime, targetSec);
-            if (state.trailer.maxTime >= targetSec && !state.trailer.unlocked40) {
-              unlockTrailerReward();
-            }
+          updateTrailerProgressUI(cur, dur > 0 ? dur : 92, targetSec);
+          if (state.trailer.forRescue && state.trailer.maxTime >= targetSec && !state.trailer.unlocked40) {
+            unlockTrailerReward();
           }
         });
 
@@ -7622,25 +7701,26 @@ function mountVkTrailerPlayer() {
     clearInterval(state.trailer.vkTimer);
     state.trailer.vkTimer = null;
   }
-  let visibleWallSec = 0;
+  let visibleWallMs = 0;
+  let lastTickAt = performance.now();
   syncTrailerIntroLockUI(0);
+  updateTrailerProgressUI(0, 92, TRAILER_UNLOCK_SEC);
   state.trailer.vkTimer = window.setInterval(() => {
+    const now = performance.now();
+    const dt = Math.min(500, Math.max(0, now - lastTickAt));
+    lastTickAt = now;
     if (!state.trailer.modalOpen || document.hidden) return;
-    visibleWallSec += 1;
-    state.trailer.wallClockSec = visibleWallSec;
-    state.trailer.maxTime = Math.max(Number(state.trailer.maxTime || 0), visibleWallSec);
+    visibleWallMs += dt;
+    const wallSec = visibleWallMs / 1000;
+    state.trailer.wallClockSec = wallSec;
+    state.trailer.maxTime = Math.max(Number(state.trailer.maxTime || 0), wallSec);
     syncTrailerIntroLockUI(state.trailer.maxTime);
     const targetSec = getEffectiveTrailerUnlockSec();
-    if (!state.trailer.vkReady || state.trailer.vkTime <= 0) {
-      updateTrailerProgressUI(state.trailer.maxTime, state.trailer.vkDuration || 92, targetSec);
+    updateTrailerProgressUI(state.trailer.vkTime || wallSec, state.trailer.vkDuration || 92, targetSec);
+    if (state.trailer.forRescue && state.trailer.maxTime >= targetSec && !state.trailer.unlocked40) {
+      unlockTrailerReward();
     }
-    if (state.trailer.forRescue) {
-      updateTrailerRescueBanner(state.trailer.maxTime, targetSec);
-      if (state.trailer.maxTime >= targetSec && !state.trailer.unlocked40) {
-        unlockTrailerReward();
-      }
-    }
-  }, 1000);
+  }, 250);
 }
 
 /* ============================================================================
@@ -7922,18 +8002,13 @@ function openTrailerModal({ forRescue = false, afterL1ToPack = false } = {}) {
   state.trailer.externalRescueDepartedAt = 0;
   recordFunnelEvent('trailer_open', state.tg?.user).catch(() => {});
 
-  const toPackBtn = document.getElementById('btn-trailer-to-pack');
-  if (toPackBtn) {
-    if (afterL1ToPack) toPackBtn.removeAttribute('hidden');
-    else toPackBtn.setAttribute('hidden', '');
-  }
+  document.getElementById('btn-trailer-to-pack')?.removeAttribute('hidden');
   audio.stopListening();
   audio.stopMuffledVoiceLoop();
   audio.setModalAudioDuck(true);
   syncExternalLikeButtonsUI();
 
   const modal = document.getElementById('modal-trailer');
-  const rescueBox = document.getElementById('trailer-rescue-box');
   const closeBtn = document.getElementById('btn-close-trailer');
 
   state.trailer.muted = false;
@@ -7944,33 +8019,31 @@ function openTrailerModal({ forRescue = false, afterL1ToPack = false } = {}) {
   modal?.removeAttribute('hidden');
 
   if (closeBtn) {
-    closeBtn.style.visibility = '';
     closeBtn.classList.toggle('is-rescue-locked', lockClose);
+    if (lockClose || afterL1ToPack || forRescue) closeBtn.setAttribute('hidden', '');
+    else closeBtn.removeAttribute('hidden');
   }
 
   if (forRescue) {
     state.trailer.unlocked40 = false;
-    rescueBox?.removeAttribute('hidden');
-    updateTrailerRescueBanner(0, TRAILER_UNLOCK_SEC);
-  } else {
-    rescueBox?.setAttribute('hidden', '');
   }
 
-  // v19.7: Единственный и официальный плеер трейлера — VK Видео (91.8 сек, autoplay=1 + js_api=1, 0 МБ трафика с GitHub Pages)
+  // Единственный и официальный плеер трейлера — VK Видео (91.8 сек, autoplay=1 + js_api=1, 0 МБ трафика с GitHub Pages)
   audio.stopOceanEasterEggAudio?.();
   syncTrailerIntroLockUI(0);
   mountVkTrailerPlayer();
 }
 
-function closeTrailerModal({ goToPack = false, force = false } = {}) {
+function closeTrailerModal({ goToPack = false, goToTilChallenge = false, force = false } = {}) {
   if (state.trailer.introLocked && !force) return;
   armWorkshopClickGuard(260);
-  const wasAfterL1ToPack = Boolean(state.trailer.afterL1ToPack || goToPack);
+  const goTil = Boolean(!goToPack && (state.trailer.afterL1ToPack || goToTilChallenge));
+  const goPackOnly = Boolean(goToPack);
   state.trailer.afterL1ToPack = false;
   state.trailer.introLocked = false;
   document.getElementById('btn-trailer-to-pack')?.setAttribute('hidden', '');
   state.trailer.modalOpen = false;
-  if (!wasAfterL1ToPack) syncSceneRenderPause();
+  if (!goTil && !goPackOnly) syncSceneRenderPause();
   state.trailer.externalRescueDepartedAt = 0;
   clearTrailerTimers();
   destroyVkTrailerPlayerAndIframe();
@@ -7982,17 +8055,15 @@ function closeTrailerModal({ goToPack = false, force = false } = {}) {
 
   audio.setModalAudioDuck(false);
 
-  if (wasAfterL1ToPack) {
+  if (goTil || goPackOnly) {
     recordFunnelEvent('trailer_complete', state.tg?.user).catch(() => {});
     markTrailerCompleted();
     state.trailer.unlocked40 = true;
-    state.profile.mustSendFriendPack = true;
+    state.profile.mustSendFriendPack = false;
     saveLocalV9Flags();
     state.pack.forLifeRefill = false;
-    document.getElementById('pack-mandatory-banner')?.setAttribute('hidden', '');
     window.setTimeout(() => {
-      showScreen('pack');
-      showToast('🛢 Быстро закатай друга в бочку — дальше все раунды против Тиля!');
+      showScreen(goPackOnly ? 'pack' : 'tilChallenge');
     }, 60);
     return;
   }
@@ -8000,7 +8071,6 @@ function closeTrailerModal({ goToPack = false, force = false } = {}) {
   if (state.trailer.forRescue && !state.trailer.unlocked40 && state.activeScreen === 'workshop' && !state.round.running) {
     const isL1PreTrailer = state.round.modeType === 'viral' && Number(state.round.rescueStage || 0) < 4;
     if (isL1PreTrailer) {
-      // На Ур.1 возвращаем в пустой цех с горящей кнопкой «Смотреть трейлер»
       enterWorkshopTrailerPrompt();
       return;
     }
@@ -8022,10 +8092,10 @@ function closeTrailerModal({ goToPack = false, force = false } = {}) {
 
 function updateTrailerProgressUI(cur, dur, targetSec = null) {
   const fill = document.getElementById('trailer-progress-fill');
-  const readout = document.getElementById('trailer-time-readout');
-  const pct = dur > 0 ? Math.min(100, (cur / dur) * 100) : 0;
+  const lockSec = Math.max(1, Number(targetSec || TRAILER_INTRO_LOCK_SEC));
+  const watched = Math.max(Number(state.trailer.introWatchedSec || 0), Math.min(Number(cur || 0), lockSec));
+  const pct = Math.min(100, Math.max(0, (watched / lockSec) * 100));
   if (fill) fill.style.width = `${pct.toFixed(1)}%`;
-  if (readout) readout.textContent = `${formatTimeMMSS(cur)} / ${formatTimeMMSS(dur)}`;
 
   if (state.trailer.forRescue && !state.trailer.unlocked40) {
     updateTrailerRescueBanner(state.trailer.maxTime, targetSec ?? TRAILER_UNLOCK_SEC);
@@ -8131,7 +8201,7 @@ function escapeHtmlSafe(str) {
 }
 
 let _openingDuelLock = false;
-async function openDuelTable(roomId = '', { autoAddTestBots = false, initialMode = 'classic', prefetchedHof = null, autoStartSoloTil = false } = {}) {
+async function openDuelTable(roomId = '', { autoAddTestBots = false, initialMode = 'classic', prefetchedHof = null, autoStartSoloTil = false, huntFriendBarrel = false } = {}) {
   if (_openingDuelLock && !roomId) return;
   _openingDuelLock = true;
   try {
@@ -8151,7 +8221,7 @@ async function openDuelTable(roomId = '', { autoAddTestBots = false, initialMode
 
     const cleanRoom = roomId || `d_${Math.random().toString(36).slice(2, 8)}`;
     scene?.setRenderPaused?.(false);
-    await duelCtrl?.openRoom(cleanRoom, { autoAddTestBots, initialMode, prefetchedHof, autoStartSoloTil });
+    await duelCtrl?.openRoom(cleanRoom, { autoAddTestBots, initialMode, prefetchedHof, autoStartSoloTil, huntFriendBarrel });
     showScreen('duel');
   } finally {
     _openingDuelLock = false;
@@ -9294,11 +9364,18 @@ function bindUIEvents() {
       await rebuildPackPortraitPreview(file);
       const confirmBox = document.getElementById('pack-uploaded-confirm');
       const thumbImg = document.getElementById('pack-uploaded-thumb');
+      const uploadLbl = document.getElementById('label-pack-upload-photo');
+      const sendUpBtn = document.getElementById('btn-pack-send-uploaded');
       if (thumbImg && state.pack?.processed?.dataUrl) {
         thumbImg.src = state.pack.processed.dataUrl;
       }
       confirmBox?.removeAttribute('hidden');
-      showToast('📸 Фото друга загружено — жми «Отправить эту бочку»!');
+      uploadLbl?.setAttribute('hidden', '');
+      if (sendUpBtn) {
+        sendUpBtn.disabled = false;
+        sendUpBtn.textContent = 'Отправить другу';
+        sendUpBtn.removeAttribute('hidden');
+      }
       Haptics.light();
     }
   });
@@ -9701,6 +9778,18 @@ function bindUIEvents() {
     Haptics.success();
   });
 
+  document.getElementById('btn-context-hint-ok')?.addEventListener('click', () => {
+    dismissContextHintModal();
+  });
+
+  document.getElementById('btn-til-challenge-play')?.addEventListener('click', async () => {
+    if (!audio._userMuted) await audio.unlock(true);
+    await openDuelTable('', {
+      autoStartSoloTil: true,
+      huntFriendBarrel: true,
+    });
+  });
+
   document.getElementById('btn-sent-play')?.addEventListener('click', async () => {
     if (!audio._userMuted) await audio.unlock(true);
     const wasProdFirst = getTeamSeedRole() === 'prod' && Number(state.profile?.currentLevel || 1) <= 1;
@@ -9708,12 +9797,7 @@ function bindUIEvents() {
       await startNewbieOnboardingRound();
       return;
     }
-    await openDuelTable('', { autoStartSoloTil: true });
-  });
-
-  document.getElementById('btn-sent-duel-1v1')?.addEventListener('click', async () => {
-    if (!audio._userMuted) await audio.unlock(true);
-    await openDuelTable('');
+    await openDuelTable('', { autoStartSoloTil: true, huntFriendBarrel: false });
   });
 
   document.getElementById('btn-pass-say-thanks')?.addEventListener('click', () => {
@@ -9818,7 +9902,15 @@ function bindUIEvents() {
   });
   document.getElementById('btn-trailer-to-pack')?.addEventListener('click', () => {
     if (state.trailer.introLocked) return;
-    closeTrailerModal({ goToPack: true });
+    if (state.trailer.forRescue) {
+      claimTrailerFifthLife();
+      return;
+    }
+    if (state.trailer.afterL1ToPack) {
+      closeTrailerModal({ goToTilChallenge: true });
+      return;
+    }
+    closeTrailerModal();
   });
   document.getElementById('btn-trailer-like-yt')?.addEventListener('click', () => {
     if (state.trailer.introLocked) return;

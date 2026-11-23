@@ -37,7 +37,7 @@ const INPUT_WATCHDOG_LOCK_MS = 2600;
  * Все промежуточные клики и таймеры идут строго через WebSocket в оперативной памяти (0 записей в БД).
  */
 export class WorkshopDuelController {
-  constructor({ scene, audio, getTgUser, getTicketShards, onCollectChipFromBarrel, canUseOceanRefill, onOpenPackForLives, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels, onOpenHallOfFame, loadDuelCandidates, onChallengeFriend, onOpenPackFriend, onRoomFull, onTriggerScreamerFx }) {
+  constructor({ scene, audio, getTgUser, getTicketShards, onCollectChipFromBarrel, canUseOceanRefill, onOpenPackForLives, onFoundFriendBarrel, onContextDiscoveryHint, onLifeLostPill, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels, onOpenHallOfFame, loadDuelCandidates, onChallengeFriend, onOpenPackFriend, onRoomFull, onTriggerScreamerFx }) {
     this.scene = scene;
     this.audio = audio;
     this.getTgUser = getTgUser;
@@ -58,12 +58,16 @@ export class WorkshopDuelController {
     this.onCollectChipFromBarrel = onCollectChipFromBarrel || null;
     this.canUseOceanRefill = canUseOceanRefill || null;
     this.onOpenPackForLives = onOpenPackForLives || null;
+    this.onFoundFriendBarrel = onFoundFriendBarrel || null;
+    this.onContextDiscoveryHint = onContextDiscoveryHint || null;
+    this.onLifeLostPill = onLifeLostPill || null;
     this.onRoomFull = onRoomFull || null;
     this.onTriggerScreamerFx = onTriggerScreamerFx || null;
     this.duelCandidates = { sent: [], branch: [], loaded: false };
     this.pickerTab = 'sent'; // 'sent' | 'branch'
     this.challengedUids = new Set();
     this.soloMode = false;
+    this.friendBarrelHunt = false;
     this.tilRoundIdx = 0;
     this.duelMode = 'classic'; // 'classic' | 'chips'
     this.selectedAnteTrophyId = null;
@@ -130,6 +134,7 @@ export class WorkshopDuelController {
 
   isExternalOverlayBlocking() {
     const blockingIds = [
+      'modal-context-hint',
       'screamer-overlay',
       'fx-scream',
       'fx-reveal',
@@ -164,7 +169,7 @@ export class WorkshopDuelController {
     return id;
   }
 
-  scheduleStepWhenUnblocked(fn, ms, maxWaitMs = 12000) {
+  scheduleStepWhenUnblocked(fn, ms, maxWaitMs = 120000) {
     const startedAt = Date.now();
     const check = () => {
       if (!this.active) return;
@@ -182,6 +187,10 @@ export class WorkshopDuelController {
     this.inputWatchdogInterval = window.setInterval(() => {
       if (!this.active) return;
       const now = Date.now();
+      if (this.isExternalOverlayBlocking()) {
+        this._phaseEnteredAt = now;
+        if (this._playerAnimating) this._playerAnimatingSince = now;
+      }
 
       if (this._playerAnimating && now - (this._playerAnimatingSince || 0) > INPUT_WATCHDOG_LOCK_MS) {
         if (!this.isExternalOverlayBlocking()) {
@@ -265,6 +274,7 @@ export class WorkshopDuelController {
     return {
       phase: this.phase,
       soloMode: this.soloMode,
+      friendBarrelHunt: Boolean(this.friendBarrelHunt),
       tilRoundIdx: this.tilRoundIdx,
       barrelCount: this.barrelCount,
       claimTimeLeft: this.claimTimeLeft,
@@ -458,7 +468,7 @@ export class WorkshopDuelController {
     this.renderLobbyUI();
   }
 
-  async openRoom(roomId, { autoAddTestBots = false, initialMode = 'classic', prefetchedHof = null, autoStartSoloTil = false } = {}) {
+  async openRoom(roomId, { autoAddTestBots = false, initialMode = 'classic', prefetchedHof = null, autoStartSoloTil = false, huntFriendBarrel = false } = {}) {
     this.leaveRoom(false);
     if (prefetchedHof?.ok) {
       this.hofCache = prefetchedHof;
@@ -472,6 +482,7 @@ export class WorkshopDuelController {
     this.active = true;
     this.setPhase('lobby');
     this.soloMode = false;
+    this.friendBarrelHunt = Boolean(huntFriendBarrel);
     this._playerAnimating = false;
     this._roundStarting = false;
     this.tilRoundIdx = 0;
@@ -561,7 +572,7 @@ export class WorkshopDuelController {
         })
         .catch(() => {});
       if (autoStartSoloTil) {
-        await this.startSoloDuel();
+        await this.startSoloDuel({ huntFriendBarrel: this.friendBarrelHunt });
       }
     }
   }
@@ -575,6 +586,7 @@ export class WorkshopDuelController {
         .catch(() => {});
     }
     this.active = false;
+    this.friendBarrelHunt = false;
     this.setPhase('idle');
     this._playerAnimating = false;
     this._roundStarting = false;
@@ -822,13 +834,11 @@ export class WorkshopDuelController {
     this.updateModeTabsUI();
     if (potEl) {
       if (isChipsMode) {
-        potEl.textContent = chipsUnlocked
-          ? '🪙 ДУЭЛЬ 1 НА 1 НА ФИШКИ (УР. 3+): двое ставят по фишке — победитель забирает карточку соперника!'
-          : '🔒 ДУЭЛЬ НА ФИШКИ: откроется на 3 уровне (пригласи 3 друзей). Обычная дуэль 1 на 1 доступна сразу!';
+        potEl.removeAttribute('hidden');
+        potEl.textContent = chipsUnlocked ? '🪙 Выбери фишку' : '🔒 Откроется на 3 уровне';
         potEl.classList.toggle('is-triple-bonus', chipsUnlocked);
       } else {
-        potEl.textContent =
-          '⚔️ В БОЧКАХ СПРЯТАНЫ: 🎟 ЧАСТЬ БИЛЕТА (4/4), 💎 ФИШКА, ❤️ +1 И ⭐ БАЛЛЫ · ОСТОРОЖНО: ☠️ СКРИМЕРЫ (−2 ❤️)!';
+        potEl.setAttribute('hidden', '');
         potEl.classList.remove('is-triple-bonus');
       }
     }
@@ -847,12 +857,12 @@ export class WorkshopDuelController {
           const vsTil = this.players.some((p) => p.isBot && (p.isTil || p.uid === TIL_BOT_UID));
           const vsBot = this.players.some((p) => p.isBot);
           miniStatus.textContent = isFinished
-            ? '🏁 ИТОГ'
+            ? 'ИТОГ'
             : vsTil
-              ? `🎬 ПРОТИВ ТИЛЯ · ${this.barrelCount || 6}`
+              ? `ТИЛЬ · ${this.barrelCount || 6}`
               : vsBot
-                ? `🤖 БОТ · ${this.barrelCount || 6}`
-                : `⚔️ 1×1 · ${this.barrelCount || 6}`;
+                ? `БОТ · ${this.barrelCount || 6}`
+                : `1×1 · ${this.barrelCount || 6}`;
         }
       } else {
         liveMiniBar.setAttribute('hidden', '');
@@ -860,9 +870,9 @@ export class WorkshopDuelController {
     }
 
     const shareLinkBtn = document.getElementById('btn-duel-share-link');
-    // v17.1: Убираем массовый пуш «на троих» — теперь точечный выбор 1 друга из списка ниже или личная ссылка 1×1!
     if (invite3Btn) invite3Btn.setAttribute('hidden', '');
     if (shareLinkBtn) {
+      shareLinkBtn.textContent = 'Отправить ссылку другу';
       if (count < MAX_DUEL_PLAYERS && (this.phase === 'lobby' || this.phase === 'finished')) {
         shareLinkBtn.removeAttribute('hidden');
       } else {
@@ -900,11 +910,7 @@ export class WorkshopDuelController {
           const st = document.createElement('strong');
           st.textContent = p.name || 'Игрок';
           const sub = document.createElement('span');
-          sub.textContent = p.uid === this.myUid
-            ? 'ВЫ · ИГРОК 1'
-            : isTil
-              ? '🎬 ТИЛЬ (РАЗМИНКА)'
-              : 'ДРУГ · ИГРОК 2';
+          sub.textContent = p.uid === this.myUid ? 'Вы' : isTil ? 'Тиль' : 'Друг';
           meta.append(st, sub);
           card.append(avaWrap, meta);
         } else {
@@ -918,9 +924,9 @@ export class WorkshopDuelController {
           const meta = document.createElement('div');
           meta.className = 'duel-slot-meta';
           const st = document.createElement('strong');
-          st.textContent = 'ЖДЁМ 1 ДРУГА (1×1)';
+          st.textContent = 'Ждём друга';
           const sub = document.createElement('span');
-          sub.textContent = 'Выбери из ветки ниже или скинь ссылку';
+          sub.textContent = 'Выбери ниже';
           meta.append(st, sub);
           card.append(avaWrap, meta);
         }
@@ -937,29 +943,25 @@ export class WorkshopDuelController {
     }
 
     if (startBtn) {
-      if (this.phase !== 'lobby') {
+      if (this.phase !== 'lobby' || (count < MAX_DUEL_PLAYERS && !isChipsMode)) {
         startBtn.setAttribute('hidden', '');
       } else {
         startBtn.removeAttribute('hidden');
         if (isChipsMode && !chipsUnlocked) {
           startBtn.disabled = true;
-          startBtn.textContent = '🔒 ОТКРОЕТСЯ НА 3 УРОВНЕ (НУЖНО 3 ДРУГА)';
+          startBtn.textContent = '🔒 Откроется на 3 уровне';
         } else if (isChipsMode && !this.selectedAnteTrophyId) {
           startBtn.disabled = true;
-          startBtn.textContent = '🪙 ВЫБЕРИ ФИШКУ НА КОН ВЫШЕ';
+          startBtn.textContent = '🪙 Выбери фишку выше';
         } else if (count < MAX_DUEL_PLAYERS) {
           startBtn.disabled = true;
-          startBtn.textContent = isChipsMode
-            ? '⏳ ВЫЗОВИ 1 ДРУГА (УР. 3+) С ФИШКОЙ'
-            : '⏳ ВЫБЕРИ 1 ДРУГА ВЫШЕ ИЛИ СКИНЬ ССЫЛКУ';
+          startBtn.textContent = 'Ждём друга…';
         } else if (!this.isHost()) {
           startBtn.disabled = true;
-          startBtn.textContent = '⏳ ЖДЁМ СТАРТА ОТ ХОСТА...';
+          startBtn.textContent = 'Ждём старта…';
         } else {
           startBtn.disabled = false;
-          startBtn.textContent = isChipsMode
-            ? '🪙 НА СЧЁТ ТРИ! БОЙ 1 НА 1 НА ФИШКИ'
-            : '🔥 НА СЧЁТ ТРИ! СТАРТ 1 НА 1';
+          startBtn.textContent = isChipsMode ? 'Старт на фишки' : 'Старт 1×1';
         }
       }
     }
@@ -997,14 +999,6 @@ export class WorkshopDuelController {
     const sentList = this.duelCandidates?.sent || [];
     const branchList = this.duelCandidates?.branch || [];
 
-    const head = document.createElement('div');
-    head.className = 'dfp-head';
-    const title = document.createElement('span');
-    title.className = 'dfp-title';
-    title.textContent = '👥 ВЫБЕРИ 1 ДРУГА НА ДУЭЛЬ (ТОЛЬКО ВДВОЁМ):';
-    head.appendChild(title);
-    host.appendChild(head);
-
     const tabs = document.createElement('div');
     tabs.className = 'dfp-tabs';
     tabs.setAttribute('role', 'tablist');
@@ -1013,7 +1007,7 @@ export class WorkshopDuelController {
     tabSent.type = 'button';
     tabSent.id = 'btn-dfp-tab-sent';
     tabSent.className = `dfp-tab${this.pickerTab === 'sent' ? ' is-active' : ''}`;
-    tabSent.textContent = `📨 Кому отправил (${sentList.length})`;
+    tabSent.textContent = `Мои друзья (${sentList.length})`;
     tabSent.addEventListener('click', () => {
       Haptics.light();
       this.pickerTab = 'sent';
@@ -1024,7 +1018,7 @@ export class WorkshopDuelController {
     tabBranch.type = 'button';
     tabBranch.id = 'btn-dfp-tab-branch';
     tabBranch.className = `dfp-tab${this.pickerTab === 'branch' ? ' is-active' : ''}`;
-    tabBranch.textContent = `🌳 Общая ветка (${branchList.length})`;
+    tabBranch.textContent = `Ветка (${branchList.length})`;
     tabBranch.addEventListener('click', () => {
       Haptics.light();
       this.pickerTab = 'branch';
@@ -1034,15 +1028,6 @@ export class WorkshopDuelController {
     tabs.append(tabSent, tabBranch);
     host.appendChild(tabs);
 
-    // OASIS UX-2: понятное 1-строчное пояснение разницы между «Кому отправил» и «Общей веткой»
-    const tabExplain = document.createElement('p');
-    tabExplain.className = 'dfp-tab-explain';
-    tabExplain.id = 'dfp-tab-explain';
-    tabExplain.textContent = this.pickerTab === 'branch'
-      ? 'Друзья твоих друзей по общей цепочке бочек (до 4 колен)'
-      : 'Друзья, кому ты уже кидал бочку (или кто прислал тебе)';
-    host.appendChild(tabExplain);
-
     const items = this.pickerTab === 'branch' ? branchList : sentList;
     const listEl = document.createElement('div');
     listEl.className = 'dfp-list';
@@ -1050,28 +1035,15 @@ export class WorkshopDuelController {
     if (!this.duelCandidates?.loaded) {
       const loadMsg = document.createElement('p');
       loadMsg.className = 'dfp-empty';
-      loadMsg.textContent = 'Загружаем друзей из твоей ветки…';
+      loadMsg.textContent = 'Загрузка…';
       listEl.appendChild(loadMsg);
     } else if (items.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'dfp-empty-box';
       const txt = document.createElement('p');
       txt.className = 'dfp-empty';
-      txt.textContent = this.pickerTab === 'branch'
-        ? 'В твоей общей ветке пока нет других игроков — отправь бочку первому другу или скинь ссылку 1×1 ниже!'
-        : 'Ты ещё никому не отправлял бочку — закатай друга (он появится здесь) или скинь ссылку 1×1 ниже!';
+      txt.textContent = 'Пока нет друзей — отправь ссылку ниже';
       empty.appendChild(txt);
-      if (this.onOpenPackFriend) {
-        const packBtn = document.createElement('button');
-        packBtn.type = 'button';
-        packBtn.className = 'btn-secondary btn-compact dfp-pack-btn';
-        packBtn.textContent = '🛢 ЗАКАТАТЬ ДРУГА В БОЧКУ';
-        packBtn.addEventListener('click', () => {
-          Haptics.light();
-          this.onOpenPackFriend();
-        });
-        empty.appendChild(packBtn);
-      }
       listEl.appendChild(empty);
     } else {
       items.slice(0, 15).forEach((friend) => {
@@ -1096,20 +1068,11 @@ export class WorkshopDuelController {
         const info = document.createElement('div');
         info.className = 'dfp-info';
         const nameEl = document.createElement('strong');
-        nameEl.textContent = friend.name || 'Друг из Цеха';
+        nameEl.textContent = friend.name || 'Друг';
         const tagEl = document.createElement('span');
-        if (this.pickerTab === 'branch') {
-          const hop = Number(friend.hop || 1);
-          tagEl.textContent = hop <= 1
-            ? 'Прямой друг в ветке'
-            : `Общая ветка · ${hop}-е колено`;
-        } else if (friend.relation === 'invited_by') {
-          tagEl.textContent = 'Прислал тебе бочку';
-        } else {
-          tagEl.textContent = friend.opened_barrel
-            ? 'Открыл твою бочку ✓'
-            : 'Ты отправил ему бочку';
-        }
+        tagEl.textContent = this.pickerTab === 'branch'
+          ? `Колено ${Math.max(1, Number(friend.hop || 1))}`
+          : friend.opened_barrel ? 'В игре' : 'Приглашён';
         info.append(nameEl, tagEl);
         left.append(ava, info);
 
@@ -1119,21 +1082,21 @@ export class WorkshopDuelController {
         btn.type = 'button';
         btn.className = `dfp-btn${alreadySent ? ' is-sent' : ''}`;
         btn.disabled = alreadySent;
-        btn.textContent = alreadySent ? '✓ ПОЗВАН' : '⚔️ ВЫЗВАТЬ 1×1';
+        btn.textContent = alreadySent ? '✓ Позван' : 'Вызвать';
         btn.addEventListener('click', async () => {
           Haptics.medium();
           this.challengedUids.add(key);
           btn.disabled = true;
           btn.classList.add('is-sent');
-          btn.textContent = '📡 ЗОВЁМ...';
+          btn.textContent = 'Зовём…';
           try {
             await this.onChallengeFriend?.(friend, this.roomId);
-            btn.textContent = '✓ ПОЗВАН';
+            btn.textContent = '✓ Позван';
           } catch {
             this.challengedUids.delete(key);
             btn.disabled = false;
             btn.classList.remove('is-sent');
-            btn.textContent = '⚔️ ВЫЗВАТЬ 1×1';
+            btn.textContent = 'Вызвать';
           }
         });
 
@@ -1145,16 +1108,16 @@ export class WorkshopDuelController {
     host.appendChild(listEl);
   }
 
-  /**
-   * v8.0: Мгновенный запуск дуэли «В одного (Соло)» за Банк Закрытой Премьеры (без ожидания друзей)
-   */
-  async startSoloDuel() {
+  async startSoloDuel({ huntFriendBarrel = undefined } = {}) {
     if (!this.active || this._soloStarting || this.phase !== 'lobby') return;
     this._soloStarting = true;
     const soloBtn = document.getElementById('btn-duel-play-solo');
     if (soloBtn) soloBtn.disabled = true;
     try {
       this.soloMode = true;
+      if (typeof huntFriendBarrel === 'boolean') {
+        this.friendBarrelHunt = huntFriendBarrel;
+      }
       const hasChallenger = this.players.some((p) => p.uid !== this.myUid);
       if (!hasChallenger) {
         this.players.push({
@@ -1203,8 +1166,8 @@ export class WorkshopDuelController {
         (i) => !prevOpened.includes(i)
       );
 
-      // Обновляем партию ТОЛЬКО на старте новой игры или когда добили все закрытые бочки!
-      const needFreshRack = !isFreeRerack || closedRemaining.length < contenders.length || !this.safeIndices.length;
+      const minNeed = this.friendBarrelHunt ? 1 : contenders.length;
+      const needFreshRack = !isFreeRerack || closedRemaining.length < minNeed || !this.safeIndices.length;
 
       let safeIndices = this.safeIndices;
       let openedIndices = prevOpened;
@@ -1220,52 +1183,79 @@ export class WorkshopDuelController {
           const j = Math.floor(Math.random() * (i + 1));
           [indices[i], indices[j]] = [indices[j], indices[i]];
         }
-        // v19.3: Раунды с возрастающей сложностью (6 -> 8 -> 10 -> 12 бочек):
-        // - 🎟 ЧАСТЬ БИЛЕТА (65% на старте, 100% на следующем раунде) -> 4/4 = целый билет!
-        // - 🪙 ФИШКА (коллекционная карточка + 150 ⭐) в КАЖДОМ заходе
-        // - ❤️ +1 ЖИЗНЬ (до макс 6 ❤️)
-        // - ⭐ БАЛЛЫ (350 / 250 / 150) + пустые (−1 ❤️) + скримеры (☠️ −2 ❤️)
-        batchHasTicket = (this.duelRoundsWithoutTicket || 0) >= 1 ? true : Math.random() < 0.65;
+        const isFriendHunt = Boolean(this.friendBarrelHunt && this.soloMode);
         const pointTiers = [350, 250, 150];
         barrelLoot = {};
         safeIndices = [];
         let cursor = 0;
 
-        if (batchHasTicket && cursor < barrelCount) {
-          const tIdx = indices[cursor++];
-          barrelLoot[tIdx] = { kind: 'ticket', value: 1000, label: '🎟 ЧАСТЬ БИЛЕТА!' };
-          safeIndices.push(tIdx);
-        }
+        if (isFriendHunt) {
+          batchHasTicket = false;
+          const fIdx = indices[cursor++];
+          barrelLoot[fIdx] = { kind: 'friend_barrel', value: 200, label: 'Пустая бочка для друга!' };
+          safeIndices.push(fIdx);
 
-        if (cursor < barrelCount) {
-          const cIdx = indices[cursor++];
-          barrelLoot[cIdx] = { kind: 'chip', value: 150, label: '💎 ФИШКА (+150 ⭐)' };
-          safeIndices.push(cIdx);
-        }
+          if (cursor < barrelCount) {
+            const cIdx = indices[cursor++];
+            barrelLoot[cIdx] = { kind: 'chip', value: 150, label: 'Фишка' };
+            safeIndices.push(cIdx);
+          }
+          if (cursor < barrelCount) {
+            const pIdx = indices[cursor++];
+            barrelLoot[pIdx] = { kind: 'points', value: 150, label: '+150' };
+            safeIndices.push(pIdx);
+          }
+          if (cursor < barrelCount) {
+            const lIdx = indices[cursor++];
+            barrelLoot[lIdx] = { kind: 'life', value: 1, label: '+1 жизнь' };
+            safeIndices.push(lIdx);
+          }
+          if (cursor < barrelCount) {
+            const eIdx = indices[cursor++];
+            barrelLoot[eIdx] = { kind: 'empty', value: 0, label: 'Пусто' };
+          }
+          while (cursor < barrelCount) {
+            const sIdx = indices[cursor++];
+            barrelLoot[sIdx] = { kind: 'screamer', value: -2, label: 'Потерял жизнь' };
+          }
+        } else {
+          batchHasTicket = (this.duelRoundsWithoutTicket || 0) >= 1 ? true : Math.random() < 0.65;
+          if (batchHasTicket && cursor < barrelCount) {
+            const tIdx = indices[cursor++];
+            barrelLoot[tIdx] = { kind: 'ticket', value: 1000, label: '🎟 Часть билета!' };
+            safeIndices.push(tIdx);
+          }
 
-        if (cursor < barrelCount) {
-          const lIdx = indices[cursor++];
-          barrelLoot[lIdx] = { kind: 'life', value: 1, label: '❤️ +1 ЖИЗНЬ' };
-          safeIndices.push(lIdx);
-        }
+          if (cursor < barrelCount) {
+            const cIdx = indices[cursor++];
+            barrelLoot[cIdx] = { kind: 'chip', value: 150, label: 'Фишка' };
+            safeIndices.push(cIdx);
+          }
 
-        const ptsSlots = barrelCount <= 6 ? (batchHasTicket ? 1 : 2) : barrelCount <= 8 ? 2 : 3;
-        for (let p = 0; p < ptsSlots && cursor < barrelCount; p++) {
-          const pIdx = indices[cursor++];
-          const val = pointTiers[p % pointTiers.length];
-          barrelLoot[pIdx] = { kind: 'points', value: val, label: `⭐ +${val}` };
-          safeIndices.push(pIdx);
-        }
+          if (cursor < barrelCount) {
+            const lIdx = indices[cursor++];
+            barrelLoot[lIdx] = { kind: 'life', value: 1, label: '+1 жизнь' };
+            safeIndices.push(lIdx);
+          }
 
-        const emptySlots = barrelCount <= 8 ? 1 : 2;
-        for (let e = 0; e < emptySlots && cursor < barrelCount; e++) {
-          const eIdx = indices[cursor++];
-          barrelLoot[eIdx] = { kind: 'empty', value: 0, label: '💨 ПУСТО (−1 ❤️)' };
-        }
+          const ptsSlots = barrelCount <= 6 ? (batchHasTicket ? 1 : 2) : barrelCount <= 8 ? 2 : 3;
+          for (let p = 0; p < ptsSlots && cursor < barrelCount; p++) {
+            const pIdx = indices[cursor++];
+            const val = pointTiers[p % pointTiers.length];
+            barrelLoot[pIdx] = { kind: 'points', value: val, label: `+${val}` };
+            safeIndices.push(pIdx);
+          }
 
-        while (cursor < barrelCount) {
-          const sIdx = indices[cursor++];
-          barrelLoot[sIdx] = { kind: 'screamer', value: -2, label: '☠️ СКРИМЕР (−2 ❤️)' };
+          const emptySlots = barrelCount <= 8 ? 1 : 2;
+          for (let e = 0; e < emptySlots && cursor < barrelCount; e++) {
+            const eIdx = indices[cursor++];
+            barrelLoot[eIdx] = { kind: 'empty', value: 0, label: 'Пусто' };
+          }
+
+          while (cursor < barrelCount) {
+            const sIdx = indices[cursor++];
+            barrelLoot[sIdx] = { kind: 'screamer', value: -2, label: 'Потерял жизнь' };
+          }
         }
         openedIndices = [];
         this.batchResolved = false;
@@ -1402,29 +1392,16 @@ export class WorkshopDuelController {
 
     const closedLeft = Math.max(0, this.barrelCount - this.openedIndices.length);
 
-    // Обратный отсчёт: РАЗ... ДВА... ТРИ — БЕЙ!
+    // Обратный отсчёт: 1 — 2 — 3!
     this.setPhase('countdown');
     this.renderLobbyUI();
     const banner = document.getElementById('duel-countdown-banner');
     const bannerText = document.getElementById('duel-countdown-text');
     const bannerSub = document.getElementById('duel-countdown-sub');
+    if (bannerSub) bannerSub.setAttribute('hidden', '');
     banner?.removeAttribute('hidden');
 
-    if (bannerSub) {
-      if (payload.isSuddenDeath) {
-        bannerSub.textContent = payload.resetRack
-          ? `⚡ СУПЕРФИНАЛ 1 НА 1: ВСЕ БОЧКИ ВСКРЫТЫ — НОВЫЕ ${this.barrelCount} БОЧЕК!`
-          : `⚡ СУПЕРФИНАЛ 1 НА 1 · ОСТАЛОСЬ ${closedLeft} ЗАКРЫТЫХ БОЧЕК ИЗ ${this.barrelCount}!`;
-      } else if (payload.isFreeRerack) {
-        bannerSub.textContent = payload.resetRack
-          ? `🔄 ВСЕ БОЧКИ ВСКРЫТЫ! НОВЫЕ ${this.barrelCount} БОЧЕК БЕЗ СПИСАНИЯ ЖИЗНЕЙ!`
-          : `🔥 ИГРАЕМ ДАЛЬШЕ — ОСТАЛОСЬ ${closedLeft} ЗАКРЫТЫХ БОЧЕК!`;
-      } else {
-        bannerSub.textContent = `В ЦЕХУ ${this.barrelCount} ЗАКРЫТЫХ БОЧЕК — ПРИГОТОВЬСЯ ХВАТАТЬ СВОЮ!`;
-      }
-    }
-
-    const steps = ['РАЗ...', 'ДВА...', 'ТРИ — БЕЙ!'];
+    const steps = ['1', '2', '3!'];
     steps.forEach((word, i) => {
       this.scheduleTimeout(() => {
         if (!this.active) return;
@@ -1435,6 +1412,11 @@ export class WorkshopDuelController {
         if (isGo) {
           Haptics.heavy();
           this.beginClaimWindow();
+          this.scheduleTimeout(() => {
+            if (this.active && this.phase === 'claim') {
+              banner?.setAttribute('hidden', '');
+            }
+          }, 420);
         } else {
           Haptics.light();
         }
@@ -1456,6 +1438,7 @@ export class WorkshopDuelController {
     const livesPill = document.getElementById('duel-lives-pill');
     const skipBtn = document.getElementById('btn-duel-skip-strike');
     const statusEl = document.getElementById('duel-live-mini-status');
+    const timerEl = document.getElementById('duel-live-timer');
     const pct = Math.max(0, Math.min(100, Math.round(Number(this.energy || 0))));
     const dl = Math.max(0, Math.round(Number(this.duelLives ?? 6)));
     const shards = Math.max(0, Math.min(4, Math.round(Number(this.getTicketShards?.() ?? 0))));
@@ -1467,12 +1450,16 @@ export class WorkshopDuelController {
     }
     if (livesEl) livesEl.textContent = String(dl);
     if (livesPill) livesPill.classList.toggle('is-low', dl <= 1);
+    if (timerEl) {
+      timerEl.textContent = `${Math.max(0, Number(this.claimTimeLeft || 0)).toFixed(1)}с`;
+      timerEl.classList.toggle('is-telegraph', this._tilState === 'telegraph');
+    }
     const closedLeft = Math.max(0, (this.barrelCount || 6) - (this.openedIndices?.length || 0));
     const roundDisplay = Math.max(1, Number(this.tilRoundIdx || 1));
     if (statusEl) {
       statusEl.textContent = this.soloMode
-        ? `🎬 Р${roundDisplay} (ТИЛЬ) · ${closedLeft}/${this.barrelCount || 6}`
-        : `⚔️ 1×1 · ${closedLeft}/${this.barrelCount || 6}`;
+        ? `Р${roundDisplay} (ТИЛЬ) · ${closedLeft}/${this.barrelCount || 6}`
+        : `1×1 · ${closedLeft}/${this.barrelCount || 6}`;
     }
     if (skipBtn) {
       const hasMyClaim = Object.values(this.claims || {}).some((c) => c.uid === this.myUid);
@@ -1489,11 +1476,6 @@ export class WorkshopDuelController {
     this.skippedThisTurn = true;
     this.syncEnergyUI();
     Haptics.light();
-    this.onToast?.(`⚡ Ход пропущен! Энергия сохранена (${this.energy}%) — бей по оставшимся бочкам в следующем раунде!`);
-    const bannerSub = document.getElementById('duel-countdown-sub');
-    if (bannerSub) {
-      bannerSub.textContent = `⏭ ТЫ СЭКОНОМИЛ ЭНЕРГИЮ (⚡ ${this.energy}%)! Ждём удар соперника...`;
-    }
   }
 
   continueBatchOrRematch() {
@@ -1520,24 +1502,23 @@ export class WorkshopDuelController {
       this.syncEnergyUI();
     }
     const closedLeft = Math.max(0, (this.barrelCount || 6) - (this.openedIndices?.length || 0));
-    // Пока НИКТО не нашёл 🎟 Билет и есть закрытые бочки — продолжаем драться по этой же партии!
-    const keepCurrentBatch = !this.batchResolved && closedLeft >= 2;
+    const keepCurrentBatch = !this.batchResolved && closedLeft >= (this.friendBarrelHunt ? 1 : 2);
     this.hostInitiateRound({ isFreeRerack: keepCurrentBatch });
   }
 
-  _pickFreeClosedBarrel(preferIdx = -1) {
-    if (
-      typeof preferIdx === 'number' &&
-      preferIdx >= 0 &&
-      preferIdx < this.barrelCount &&
-      !this.openedIndices.includes(preferIdx) &&
-      !this.claims[preferIdx]
-    ) {
+  _pickFreeClosedBarrel(preferIdx = -1, { forBot = false } = {}) {
+    const isAllowed = (b) => {
+      if (b < 0 || b >= this.barrelCount) return false;
+      if (this.openedIndices.includes(b) || this.claims[b]) return false;
+      if (forBot && this.friendBarrelHunt && this.barrelLoot?.[b]?.kind === 'friend_barrel') return false;
+      return true;
+    };
+    if (typeof preferIdx === 'number' && isAllowed(preferIdx)) {
       return preferIdx;
     }
     const free = [];
     for (let b = 0; b < this.barrelCount; b++) {
-      if (!this.openedIndices.includes(b) && !this.claims[b]) free.push(b);
+      if (isAllowed(b)) free.push(b);
     }
     if (!free.length) return -1;
     return free[Math.floor(Math.random() * free.length)];
@@ -1545,7 +1526,7 @@ export class WorkshopDuelController {
 
   _executeTilBotStrike(bot, preferIdx = -1) {
     if (!this.active || this.phase !== 'claim') return false;
-    const pick = this._pickFreeClosedBarrel(preferIdx);
+    const pick = this._pickFreeClosedBarrel(preferIdx, { forBot: true });
     this._tilTelegraphBarrel = -1;
     this.scene?.setBarrelTelegraph?.(-1, false);
     if (pick < 0) return false;
@@ -1608,9 +1589,6 @@ export class WorkshopDuelController {
       }
     }, 16000);
 
-    const bannerText = document.getElementById('duel-countdown-text');
-    const bannerSub = document.getElementById('duel-countdown-sub');
-
     // Не-соло боты в песочнице /testbog/ (с паузой при анимации/модалках)
     if (!this.soloMode) {
       this.players
@@ -1631,16 +1609,14 @@ export class WorkshopDuelController {
         if (!this.active || this.phase !== 'claim') return;
         this.audio.playChainRattle(0.95);
         this.scene.triggerScreamerShake(0.35);
-        this.onToast?.(`⛓ ${botSpec.name} гремит цепями из нокаута!`);
       }, 1500);
     }
 
-    const closedLeft = Math.max(0, this.barrelCount - this.openedIndices.length);
+    const timerEl = document.getElementById('duel-live-timer');
     let lastTs = performance.now();
     this.claimInterval = window.setInterval(() => {
       if (!this.active || this.phase !== 'claim') return;
       const now = performance.now();
-      // Предохранитель А: полностью ставим таймер Тиля и отсчёт на паузу во время удара игрока, показа лута, скримера и любых модалок!
       if (this._playerAnimating || this.isExternalOverlayBlocking()) {
         lastTs = now;
         return;
@@ -1650,14 +1626,13 @@ export class WorkshopDuelController {
       this.claimTimeLeft = Math.max(0, this.claimTimeLeft - dt);
       this._activeClaimElapsedMs += dt * 1000;
 
-      // Соло-бот Тиль: спокойный интервал (6.5–7.5с) + визуальный телеграф перед ударом!
       if (this.soloMode) {
         const tilBot = this.players.find((p) => p.isBot && this.contenderUids.includes(p.uid));
         if (tilBot) {
           const tilAlreadyClaimed = Object.values(this.claims).some((c) => c.uid === tilBot.uid);
           if (!tilAlreadyClaimed) {
             if (this._tilState === 'idle' && this._activeClaimElapsedMs >= pacing.tilTelegraphMs) {
-              const pick = this._pickFreeClosedBarrel();
+              const pick = this._pickFreeClosedBarrel(-1, { forBot: true });
               if (pick >= 0) {
                 this._tilState = 'telegraph';
                 this._tilTelegraphBarrel = pick;
@@ -1675,22 +1650,9 @@ export class WorkshopDuelController {
         }
       }
 
-      if (bannerText) {
-        bannerText.textContent =
-          this._tilState === 'telegraph' ? `ТИЛЬ ЦЕЛИТСЯ! ${this.claimTimeLeft.toFixed(1)}с` : `БЕЙ! ${this.claimTimeLeft.toFixed(1)}с`;
-      }
-      if (bannerSub) {
-        const myLocked = Object.values(this.claims).find((c) => c.uid === this.myUid);
-        const tilCode = this._tilTelegraphBarrel >= 0 ? BARREL_BATCH_CODES[this._tilTelegraphBarrel] || String(this._tilTelegraphBarrel + 1) : '';
-        bannerSub.textContent = amISpectator
-          ? 'Ты в нокауте — жми «Погреметь цепями» внизу!'
-          : this.skippedThisTurn
-            ? `⏭ Ход пропущен · Энергия сохранена (⚡ ${this.energy}%)`
-            : myLocked
-              ? `✓ Твоя бочка захвачена (⚡ ${this.energy}%)! Ждём вскрытия...`
-              : this._tilState === 'telegraph' && tilCode
-                ? `🎯 Тиль наводит лом на бочку №${tilCode} — успей ударить свою из ${closedLeft}!`
-                : `Бей любую из ${closedLeft} закрытых бочек (−25% ⚡) или жми «Пропустить»!`;
+      if (timerEl) {
+        timerEl.textContent = `${this.claimTimeLeft.toFixed(1)}с`;
+        timerEl.classList.toggle('is-telegraph', this._tilState === 'telegraph');
       }
 
       const claimedCount = new Set(Object.values(this.claims).map((c) => c.uid)).size;
@@ -1788,7 +1750,7 @@ export class WorkshopDuelController {
             this._playerAnimating = false;
             return;
           }
-          const pick = this._pickFreeClosedBarrel(tilWasOnSameBarrel ? -1 : this._tilTelegraphBarrel);
+          const pick = this._pickFreeClosedBarrel(tilWasOnSameBarrel ? -1 : this._tilTelegraphBarrel, { forBot: true });
           if (pick < 0) {
             this._playerAnimating = false;
             if (this.isHost()) this.finalizeClaimsAndBroadcastReveal();
@@ -1798,9 +1760,7 @@ export class WorkshopDuelController {
           this.scene?.setBarrelTelegraph?.(pick, true);
           this.scene?.triggerBarrelEerieFX?.(pick, 'knock_urgent');
           this.renderBarrelClaimBadges();
-          const bCode = BARREL_BATCH_CODES[pick] || String(pick + 1);
-          if (bannerText) bannerText.textContent = 'ХОД ТИЛЯ...';
-          if (bannerSub) bannerSub.textContent = `🎯 Тиль наводит лом на бочку №${bCode}!`;
+          document.getElementById('duel-live-timer')?.classList.add('is-telegraph');
 
           this.scheduleStepWhenUnblocked(() => {
             if (!this.active || this.phase !== 'claim') {
@@ -1847,7 +1807,6 @@ export class WorkshopDuelController {
       return;
     }
 
-    // Удаляем прежний выбор этого игрока, если был
     for (const k of Object.keys(this.claims)) {
       if (this.claims[k]?.uid === claim.uid) {
         delete this.claims[k];
@@ -1864,8 +1823,6 @@ export class WorkshopDuelController {
   finalizeClaimsAndBroadcastReveal() {
     if (this.phase !== 'claim') return;
 
-    // Если игрок сам не нажал удар (или нажал «Пропустить») — НЕ тратим его энергию!
-    // Авто-захват остаётся только для ботов/соперников, которые не успели ударить.
     for (const uid of this.contenderUids) {
       if (uid === this.myUid) {
         const hasMyClaim = Object.values(this.claims).some((c) => c.uid === this.myUid);
@@ -1876,7 +1833,9 @@ export class WorkshopDuelController {
       }
       const hasClaim = Object.values(this.claims).some((c) => c.uid === uid);
       if (!hasClaim) {
+        const isTilBot = uid === TIL_BOT_UID;
         for (let b = 0; b < this.barrelCount; b++) {
+          if (isTilBot && this.friendBarrelHunt && this.barrelLoot?.[b]?.kind === 'friend_barrel') continue;
           if (!this.openedIndices.includes(b) && !this.claims[b]) {
             const p = this.players.find((x) => x.uid === uid);
             this.claims[b] = {
@@ -1910,8 +1869,8 @@ export class WorkshopDuelController {
     const item = this.barrelLoot?.[idx];
     if (item) return item;
     return this.safeIndices.includes(idx)
-      ? { kind: 'points', value: 250, label: '⭐ +250' }
-      : { kind: 'empty', value: 0, label: '💨 ПУСТО' };
+      ? { kind: 'points', value: 150, label: '+150' }
+      : { kind: 'empty', value: 0, label: 'Пусто' };
   }
 
   async executeReveal(payload) {
@@ -1923,6 +1882,7 @@ export class WorkshopDuelController {
     this.clearAllTimers();
     this.scene?.setBarrelTelegraph?.(-1, false);
     this.scene.setInteractive(false);
+    document.getElementById('duel-countdown-banner')?.setAttribute('hidden', '');
 
     this.claims = payload.claims || this.claims;
     this.safeIndices = payload.safeIndices || this.safeIndices;
@@ -1932,10 +1892,6 @@ export class WorkshopDuelController {
       this.openedIndices = [...payload.openedIndices];
     }
 
-    const bannerText = document.getElementById('duel-countdown-text');
-    const bannerSub = document.getElementById('duel-countdown-sub');
-    if (bannerText) bannerText.textContent = 'ВСКРЫТИЕ БОЧЕК!';
-
     const entries = [];
     let anyScreamer = false;
     let anyPoints = false;
@@ -1943,7 +1899,7 @@ export class WorkshopDuelController {
     for (const [bStr, claim] of Object.entries(this.claims)) {
       const bIdx = Number(bStr);
       const loot = this.getLootForBarrel(bIdx);
-      if (claim.uid === this.myUid && loot.kind === 'ticket') {
+      if (claim.uid === this.myUid && (loot.kind === 'ticket' || loot.kind === 'friend_barrel')) {
         this.scene.triggerRevealDive?.(bIdx);
       } else {
         this.scene.triggerEmptyBarrelOpen(bIdx);
@@ -1961,6 +1917,9 @@ export class WorkshopDuelController {
 
     if (anyScreamer) {
       const randScreamerIdx = Math.floor(Math.random() * 7);
+      if (myEntry?.loot?.kind === 'screamer') {
+        this.onLifeLostPill?.();
+      }
       if (myEntry?.loot?.kind === 'screamer' && this.onTriggerScreamerFx) {
         this.onTriggerScreamerFx(1350, randScreamerIdx);
       } else {
@@ -1972,15 +1931,18 @@ export class WorkshopDuelController {
       this.audio.playLidBlowOff(Boolean(myEntry && myEntry.loot.value > 0));
     }
 
-    // v19.3: Баланс лута внутри бочек:
-    // - 🎟 ЧАСТЬ БИЛЕТА -> Победа в партии (+1/4 части билета)!
-    // - 🪙 ФИШКА -> Редкая коллекционная карточка в Коллекцию + 150 ⭐!
-    // - ❤️ +1 ЖИЗНЬ -> +1 дуэльная жизнь (максимум 6 ❤️)!
-    // - ⭐ БАЛЛЫ -> баллы летят прямо в шкалу Супер-приза!
-    // - 💨 ПУСТО -> −1 ❤️ · ☠️ СКРИМЕР -> −2 ❤️!
+    let foundFriendBarrel = false;
     if (myEntry) {
       const k = myEntry.loot.kind;
-      if (k === 'ticket' || k === 'points' || k === 'chip') {
+      if (k === 'friend_barrel') {
+        foundFriendBarrel = true;
+        Haptics.success();
+        this.onFlyRating?.({
+          count: 2,
+          label: myEntry.loot.label,
+          barrelIndex: myEntry.barrelIndex,
+        });
+      } else if (k === 'ticket' || k === 'points' || k === 'chip') {
         this.onFlyRating?.({
           count: k === 'ticket' ? 3 : 2,
           label: myEntry.loot.label,
@@ -1997,10 +1959,15 @@ export class WorkshopDuelController {
               }
             })
             .catch(() => {});
+          this.scheduleTimeout(() => {
+            if (this.active && this.phase === 'reveal') {
+              this.onContextDiscoveryHint?.(k);
+            }
+          }, 550);
         }
       } else if (k === 'life') {
         this.duelLives = Math.min(6, Math.max(1, Number(this.duelLives || 0) + 1));
-        this.onFlyLife?.({ count: 1, label: '+1 ❤️', barrelIndex: myEntry.barrelIndex });
+        this.onFlyLife?.({ count: 1, label: '+1 жизнь', barrelIndex: myEntry.barrelIndex });
       } else if (k === 'empty') {
         this.duelLives = Math.max(0, Number(this.duelLives || 0) - 1);
       } else if (k === 'screamer') {
@@ -2008,12 +1975,21 @@ export class WorkshopDuelController {
       }
     }
 
-    // Показываем прямо над каждой вскрытой бочкой, ЧТО выпало (🎟 БИЛЕТ / ⭐ +250 / ❤️ +1 / 💨 −1 ❤️ / ☠️ −2 ❤️)!
+    // Компактные метки прямо над вскрытыми бочками
     this.renderBarrelClaimBadges(true);
     this.syncEnergyUI();
 
-    // v13.0: К Тилю на Северное море — СТРОГО ТОЛЬКО ПРИ НУЛЕ ЖИЗНЕЙ (duelLives <= 0)!
-    // Если жизни ещё есть (> 0 ❤️), а энергия дошла до 0% — передышка (энергия восстанавливается до 100%) и играем дальше!
+    if (foundFriendBarrel) {
+      this.batchResolved = true;
+      this.friendBarrelHunt = false;
+      this.scheduleStepWhenUnblocked(() => {
+        if (!this.active) return;
+        this.clearBarrelClaimBadges();
+        this.onFoundFriendBarrel?.();
+      }, 1050, 120000);
+      return;
+    }
+
     if (this.duelLives > 0 && this.energy <= 0) {
       this.energy = 100;
       this.syncEnergyUI();
@@ -2021,24 +1997,14 @@ export class WorkshopDuelController {
     const ticketEntry = entries.find((e) => e.loot.kind === 'ticket') || null;
     const closedLeftNow = Math.max(0, (this.barrelCount || 10) - (this.openedIndices?.length || 0));
     const needTilNow = !ticketEntry && this.duelLives <= 0;
-    this.batchResolved = Boolean(ticketEntry || closedLeftNow < 2);
+    const minClosedContinue = this.friendBarrelHunt ? 1 : 2;
+    this.batchResolved = Boolean(ticketEntry || closedLeftNow < minClosedContinue);
 
     const summaryLine = entries
       .map((e) => `${e.claim.uid === this.myUid ? 'ТЫ' : e.claim.name}: ${e.loot.label}`)
-      .join('  vs  ');
+      .join(' · ');
 
-    if (bannerSub) {
-      bannerSub.textContent = ticketEntry
-        ? ticketEntry.claim.uid === this.myUid
-          ? `🎟 БИЛЕТ В КИНО ТВОЙ! (${summaryLine})`
-          : `💥 ${ticketEntry.claim.name.toUpperCase()} НАШЁЛ БИЛЕТ РАНЬШЕ! (${summaryLine})`
-        : needTilNow
-          ? `🌊 ЖИЗНИ НА НУЛЕ (❤️ 0) — ОТПРАВЛЯЕМСЯ К ТИЛЮ ЗА 6 ❤️!`
-          : `🔨 ИГРАЕМ ДАЛЬШЕ! ОСТАЛОСЬ ${closedLeftNow} БОЧЕК (${summaryLine})`;
-    }
-
-    // v19.5: Спокойный показ найденного лута (2.6–2.85с + пауза если открыт скример/модалка) до следующего раунда!
-    if (!ticketEntry && !needTilNow && closedLeftNow >= 2) {
+    if (!ticketEntry && !needTilNow && closedLeftNow >= minClosedContinue) {
       const pauseMs = anyScreamer ? LOOT_READ_SCREAMER_MS : LOOT_READ_PAUSE_MS;
       this.scheduleStepWhenUnblocked(() => {
         if (!this.active) return;
@@ -2046,7 +2012,7 @@ export class WorkshopDuelController {
         if (this.isHost()) {
           this.hostInitiateRound({ isFreeRerack: true });
         }
-      }, pauseMs);
+      }, pauseMs, 120000);
       return;
     }
 
@@ -2095,7 +2061,7 @@ export class WorkshopDuelController {
         serverTicketGranted: Boolean(serverTicketRes?.granted),
         serverTicketRes,
       });
-    }, RESULT_CARD_DELAY_MS);
+    }, RESULT_CARD_DELAY_MS, 120000);
   }
 
   showRoundResultCard(ticketWinner, settleRes, detail = {}) {
@@ -2109,9 +2075,9 @@ export class WorkshopDuelController {
 
     box?.removeAttribute('hidden');
     const mySkipped = !detail.myEntry;
-    const myLoot = detail.myEntry?.loot || { kind: 'skip', value: 0, label: '⏭ ПРОПУСТИЛ (⚡ СОХРАНЕНА)' };
+    const myLoot = detail.myEntry?.loot || { kind: 'skip', value: 0, label: 'Пропустил' };
     const oppName = detail.oppEntry?.claim?.name || TIL_BOT_NAME;
-    const oppLoot = detail.oppEntry?.loot || { kind: 'empty', value: 0, label: '💨 ПУСТО' };
+    const oppLoot = detail.oppEntry?.loot || { kind: 'empty', value: 0, label: 'Пусто' };
     const iFoundTicket = Boolean(ticketWinner && ticketWinner.uid === this.myUid);
     const oppFoundTicket = Boolean(ticketWinner && ticketWinner.uid !== this.myUid);
     const closedLeft = Math.max(0, (this.barrelCount || 10) - (this.openedIndices?.length || 0));
@@ -2177,81 +2143,78 @@ export class WorkshopDuelController {
       Haptics.success();
       const sRes = detail.serverTicketRes || {};
       if (serverTicketGranted) {
-        if (titleEl) titleEl.textContent = '🎟 4/4 — БИЛЕТ СКЛЕЕН В ДУЭЛИ! (+500 ⭐)';
+        if (titleEl) titleEl.textContent = '🎟 Билет 4/4 собран!';
         if (subEl) {
-          subEl.textContent = `Вскрыл призовую бочку раньше ${oppName} (${oppLoot.label})! 4 части склеились в целый бесплатный билет — подари его другу в Telegram!`;
+          subEl.textContent = 'Подари бесплатный билет другу в Telegram!';
         }
         this.scheduleTimeout(() => this.onOpenGoldenFork?.(), 900);
       } else if (sRes.reason === 'solo_cap_reached' || sRes.reason === 'friend_or_duel_required') {
-        if (titleEl) titleEl.textContent = '🎟 ПОЛБИЛЕТА УЖЕ У ТЕБЯ (2/4)! (+500 ⭐)';
+        if (titleEl) titleEl.textContent = '🎟 Полбилета уже у тебя (2/4)!';
         if (subEl) {
-          subEl.textContent =
-            'Полбилета уже у тебя (2/4)! Чтобы забрать 3/4 и 4/4, закатай друга или сыграй 1×1 с живым игроком.';
+          subEl.textContent = 'Чтобы забрать 3/4 и 4/4, закатай друга или сыграй 1×1.';
         }
       } else if (sRes.ok && !sRes.reason && Number(sRes.shards || 0) > 0) {
         const sh = Number(sRes.shards || 1);
-        if (titleEl) titleEl.textContent = `🎟 ПОБЕДА! СОБРАНА ЧАСТЬ БИЛЕТА ${sh}/4 (+500 ⭐)`;
+        if (titleEl) titleEl.textContent = `🎟 Билет: ${sh}/4!`;
         if (subEl) {
-          subEl.textContent = `Вскрыл призовую бочку раньше ${oppName}! У тебя уже ${sh} из 4 частей (${sh * 25}%) — собери 4/4 и подари другу бесплатный билет в кино!`;
+          subEl.textContent = `Собери 4/4 и забери билет в кино.`;
         }
       } else if (sRes.reason === 'seed_admin_excluded') {
-        if (titleEl) titleEl.textContent = '🛡 ПОБЕДА В ДУЭЛИ (РЕЖИМ КОМАНДЫ ПОСЕВА)';
+        if (titleEl) titleEl.textContent = '🛡 Победа в дуэли';
         if (subEl) {
-          subEl.textContent = `Победа над ${oppName}! Призовой пул билетов сохранён для реальных зрителей.`;
+          subEl.textContent = `Победа над ${oppName} (командный режим).`;
         }
       } else {
-        if (titleEl) titleEl.textContent = '🏆 ПОБЕДА В ДУЭЛИ! БОНУС +500 ⭐ В ТОП-20 МОСКВЫ!';
+        if (titleEl) titleEl.textContent = '🏆 Победа! +500 ⭐';
         if (subEl) {
-          subEl.textContent = `Вскрыл призовую бочку раньше ${oppName}! Дневная партия билетов на сегодня разобрана (новая откроется в 00:00 МСК) — вместо 4-й части зачислено +500 ⭐ в рейтинг Закрытого показа в Москве!`;
+          subEl.textContent = `Ты быстрее ${oppName}! Дневной лимит билетов выдан.`;
         }
       }
     } else if (outOfRounds) {
       Haptics.error();
-      if (titleEl) titleEl.textContent = '🔄 3 РАУНДА БЕЗ БИЛЕТА — ПОРА В ЦЕХ НА УРОВНИ!';
+      if (titleEl) titleEl.textContent = '🔄 Пора на уровни!';
       if (subEl) {
-        subEl.textContent = `${oppFoundTicket ? `${oppName} перехватил 🎟 билет!` : 'Бочки в партии кончились.'} Возвращайся на уровни цеха — спасай пацана и набивай ⭐ для шкалы Закрытого показа!`;
+        subEl.textContent = 'Бочки в партии закончились.';
       }
     } else if (oppFoundTicket) {
       Haptics.error();
-      const leftRounds = Math.max(1, (this.maxDuelRounds || 3) - this.duelRoundsWithoutTicket);
-      if (titleEl) titleEl.textContent = `💥 ПРОИГРАЛ! ${oppName.toUpperCase()} НАШЁЛ 🎟 БИЛЕТ!`;
+      if (titleEl) titleEl.textContent = `💥 ${oppName} забрал билет!`;
       if (subEl) {
         subEl.textContent = needTilRefill
           ? oceanAllowed
-            ? `У тебя закончились силы (❤️ ${this.duelLives} · ⚡ ${this.energy}%). Отправляемся к Тилю на берег — он зарядит 6 ❤️ жизней и ⚡ 100% на дуэль!`
-            : `У тебя закончились ❤️ жизни, а море уже заряжало их в эти сутки. Закатай нового друга в бочку — получишь +6 ❤️ прямо на дуэль!`
-          : `Ты открыл: ${myLoot.label}. Осталось попыток-раундов до возврата на уровни: ${leftRounds}. Жми новую партию!`;
+            ? 'Силы на нуле — летим к Тилю за +6 ❤️!'
+            : 'Жизни на нуле — закатай друга за +6 ❤️!'
+          : `Попробуй ещё раз против ${oppName}!`;
       }
     } else if (needTilRefill) {
       Haptics.error();
       if (oceanAllowed) {
-        if (titleEl) titleEl.textContent = `🌊 СИЛЫ НА НУЛЕ (❤️ ${this.duelLives} · ⚡ ${this.energy}%) — К ТИЛЮ!`;
+        if (titleEl) titleEl.textContent = '🌊 Силы на нуле — к Тилю!';
         if (subEl) {
-          subEl.textContent = `Итог хода: Ты (${myLoot.label}) vs ${oppName} (${oppLoot.label}). Тиль на берегу Северного моря даст минимум 6 ❤️ жизней и ⚡ 100% энергии на Дуэль!`;
+          subEl.textContent = 'Забери +6 ❤️ у моря и продолжай.';
         }
       } else {
-        if (titleEl) titleEl.textContent = '❤️ ЖИЗНИ НА НУЛЕ (0 ❤️) — ЗАКАТАЙ ДРУГА!';
+        if (titleEl) titleEl.textContent = '❤️ Жизни на нуле!';
         if (subEl) {
-          subEl.textContent =
-            'Море уже заряжало тебе 6 ❤️ за последние 24 часа. Закатай нового друга в бочку — получишь +6 ❤️ прямо на дуэль!';
+          subEl.textContent = 'Закатай друга в бочку и получи +6 ❤️.';
         }
       }
     } else {
       Haptics.light();
       const statusVerb = mySkipped
-        ? '⏭ ЭНЕРГИЯ СЭКОНОМЛЕНА — ЧАСТЬ БИЛЕТА ЕЩЁ В ЦЕХУ!'
+        ? '⏭ Ход пропущен'
         : myLoot.kind === 'life'
-          ? '❤️ +1 ЖИЗНЬ ИЗ БОЧКИ! ИЩЕМ 🎟 ЧАСТЬ БИЛЕТА ДАЛЬШЕ!'
+          ? '❤️ +1 жизнь!'
           : myLoot.kind === 'chip'
-            ? '💎 ФИШКА +150 ⭐ ИЗ БОЧКИ! ИЩЕМ 🎟 ЧАСТЬ БИЛЕТА ДАЛЬШЕ!'
+            ? '💎 Найдена фишка!'
             : myLoot.kind === 'points'
-              ? `⭐ ${myLoot.label} В РЕЙТИНГ! ЧАСТЬ БИЛЕТА ЕЩЁ В БОЧКАХ!`
+              ? `⭐ +${myLoot.value || 150} очков`
               : myLoot.kind === 'screamer'
-                ? '☠️ СКРИМЕР В БОЧКЕ (−2 ❤️)! ЖМЁМ ДАЛЬШЕ!'
-                : '💨 МИМО (−1 ❤️)! ЧАСТЬ БИЛЕТА ЕЩЁ В ОСТАВШИХСЯ БОЧКАХ!';
+                ? '☠️ Потерял жизнь (-2 ❤️)'
+                : '💨 Пусто (-1 ❤️)';
       if (titleEl) titleEl.textContent = statusVerb;
       if (subEl) {
-        subEl.textContent = `Ход: Ты (${myLoot.label}) vs ${oppName} (${oppLoot.label}) · В запасе ❤️ ${this.duelLives} и ⚡ ${this.energy}%. Осталось ${closedLeft} закрытых бочек — найди 🎟 Билет раньше соперника!`;
+        subEl.textContent = `❤️ ${this.duelLives} · осталось бочек: ${closedLeft}`;
       }
     }
 
@@ -2263,34 +2226,36 @@ export class WorkshopDuelController {
       }, 2400);
     }
 
+    const capHit = iFoundTicket && (detail.serverTicketRes?.reason === 'solo_cap_reached' || detail.serverTicketRes?.reason === 'friend_or_duel_required');
     if (rematchBtn) {
       if (needTilRefill) {
-        rematchBtn.textContent = oceanAllowed
-          ? '🌊 НА НЕБО К ТИЛЮ — ЗАБРАТЬ 6 ❤️ И ⚡ 100%'
-          : '🛢 ЗАКАТАТЬ ДРУГА (+6 ❤️ НА ДУЭЛЬ)';
+        rematchBtn.textContent = oceanAllowed ? '🌊 К Тилю (+6 ❤️)' : '🛢 Закатать друга (+6 ❤️)';
       } else if (!this.batchResolved && closedLeft >= 2) {
-        rematchBtn.textContent = `🔨 БИТЬ ДАЛЬШЕ (ИЩЕМ 🎟 БИЛЕТ · ${closedLeft} БОЧЕК · ❤️ ${this.duelLives} · ⚡ ${this.energy}%)`;
+        rematchBtn.textContent = '🔨 Бить дальше';
       } else {
         const nextB = [6, 8, 10, 12][Math.min(3, Math.max(0, Number(this.tilRoundIdx || 1)))];
         rematchBtn.textContent = this.soloMode
-          ? `🎬 СЛЕДУЮЩИЙ РАУНД ПРОТИВ ТИЛЯ (${nextB} БОЧЕК · ❤️ ${this.duelLives})`
-          : `🔄 РЕВАНШ 1 НА 1 (${nextB} БОЧЕК · СТАВКА 1 ❤️)`;
+          ? `Дальше (${nextB} бочек)`
+          : `Реванш 1×1 (${nextB} бочек)`;
       }
       rematchBtn.removeAttribute('hidden');
     }
     if (inviteLivesBtn) {
-      const capHit = iFoundTicket && (detail.serverTicketRes?.reason === 'solo_cap_reached' || detail.serverTicketRes?.reason === 'friend_or_duel_required');
-      inviteLivesBtn.textContent = capHit
-        ? '🛢 ЗАКАТАТЬ ДРУГА (ОТКРЫТЬ 3/4 И 4/4)'
-        : needTilRefill && !oceanAllowed
-          ? '🛢 ЗАКАТАТЬ НОВОГО ДРУГА (+6 ❤️ НА ДУЭЛЬ)'
-          : '🛢 ЗАКАТАТЬ НОВОГО ДРУГА (+3 ❤️ · +20% К ШКАЛЕ)';
-      inviteLivesBtn.removeAttribute('hidden');
+      if (capHit || (needTilRefill && !oceanAllowed)) {
+        inviteLivesBtn.textContent = capHit ? '🛢 Закатать друга (3/4 и 4/4)' : '🛢 Закатать друга (+6 ❤️)';
+        inviteLivesBtn.removeAttribute('hidden');
+      } else {
+        inviteLivesBtn.setAttribute('hidden', '');
+      }
     }
     const switchLobbyBtn = document.getElementById('btn-duel-switch-lobby');
     if (switchLobbyBtn) {
-      const capHit = iFoundTicket && (detail.serverTicketRes?.reason === 'solo_cap_reached' || detail.serverTicketRes?.reason === 'friend_or_duel_required');
-      switchLobbyBtn.textContent = capHit ? '⚔️ СЫГРАТЬ 1×1 С ЖИВЫМ ИГРОКОМ' : '👥 ВЫБРАТЬ ДРУГА 1 НА 1 (ОБЩАЯ ВЕТКА)';
+      if (capHit) {
+        switchLobbyBtn.textContent = '⚔️ Дуэль 1×1 с игроком';
+        switchLobbyBtn.removeAttribute('hidden');
+      } else {
+        switchLobbyBtn.setAttribute('hidden', '');
+      }
     }
 
     const resTrophyEl = document.getElementById('duel-result-trophy');
