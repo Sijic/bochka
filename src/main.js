@@ -388,7 +388,7 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1953'));
+    const mod = duelModCache || (await import('./duel.js?v=1954'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -6329,7 +6329,7 @@ async function handleQuick1TapPrankClick() {
     state.pack.screamerType = pickRandomPackScreamer();
     const inp = document.getElementById('input-custom-phrase');
     if (inp && !inp.value.trim()) inp.value = 'Вытащи меня из цеха — с нас поход в кино!';
-    if (!state.pack.processed) {
+    if (state.pack.userUploadedPhoto && !state.pack.processed) {
       await initPackConstructorDefaults();
     }
     await handleSealBarrelClick({ forceAutoAvatar: !state.pack.userUploadedPhoto });
@@ -6429,7 +6429,7 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
       pointsDelta: 0,
       livesDelta: Math.max(0, nextLives - prevLives),
     }).catch(() => {});
-    await syncUiStage(state.tg?.user, wasProducerFirstPack ? 1 : 3).catch(() => {});
+    syncUiStage(state.tg?.user, wasProducerFirstPack ? 1 : 3).catch(() => {});
 
     const sharePrefix =
       teamRole === 'blog'
@@ -6461,7 +6461,10 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
     // v15.0: Часть 1/4 билета выпадает сразу после отправки первой бочки другу на Уровне 2!
     let packShardRes = null;
     if (!isBroadcastPack && Number(state.profile?.ticketShards || 0) === 0 && Number(state.profile?.pendingTicketsCount || 0) === 0) {
-      packShardRes = await awardTicketShard('level2_pack', { silent: false }).catch(() => null);
+      packShardRes = await Promise.race([
+        awardTicketShard('level2_pack', { silent: false }).catch(() => null),
+        new Promise((resolve) => window.setTimeout(() => resolve(null), 4500)),
+      ]);
       if (packShardRes?.shards > 0) {
         syncTicketShardsUI({ pulse: true, justEarned: packShardRes.shards });
       }

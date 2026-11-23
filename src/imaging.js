@@ -7,21 +7,37 @@ export const DEMO_PORTRAITS = [
   resolveSiteAsset('assets/images_2.jpg'),
 ];
 
-export function loadImageElement(src) {
+export function loadImageElement(src, timeoutMs = 7000) {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    let timer = null;
+    const doneResolve = (val) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve(val);
+    };
+    const doneReject = (err) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      reject(err);
+    };
+    timer = setTimeout(() => doneReject(new Error('Image load timeout')), timeoutMs);
+
     const img = new Image();
     if (!String(src || '').startsWith('blob:') && !String(src || '').startsWith('data:')) {
       img.crossOrigin = 'anonymous';
     }
-    img.onload = () => resolve(img);
+    img.onload = () => doneResolve(img);
     img.onerror = (e) => {
       if (img.crossOrigin) {
         const retry = new Image();
-        retry.onload = () => resolve(retry);
-        retry.onerror = () => reject(e);
+        retry.onload = () => doneResolve(retry);
+        retry.onerror = () => doneReject(e);
         retry.src = src;
       } else {
-        reject(e);
+        doneReject(e);
       }
     };
     img.src = src;

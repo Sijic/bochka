@@ -2581,10 +2581,22 @@ export async function prepareNativeShareMessage({
     return { ok: false, fallback: true, preparedMessageId: '', shareUrl };
   }
   const initData = typeof window !== 'undefined' ? String(window.Telegram?.WebApp?.initData || '') : '';
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer =
+    controller && typeof setTimeout === 'function'
+      ? setTimeout(() => {
+          try {
+            controller.abort();
+          } catch {
+            /* ignore */
+          }
+        }, 3200)
+      : null;
   try {
     const res = await fetch(ENV.tgNotifyWebhook, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller ? controller.signal : undefined,
       body: JSON.stringify({
         clientAction: 'prepare_share_message',
         tgUserId: tgUser?.id || 0,
@@ -2608,6 +2620,8 @@ export async function prepareNativeShareMessage({
     };
   } catch {
     return { ok: false, fallback: true, preparedMessageId: '', shareUrl };
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
