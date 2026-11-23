@@ -394,7 +394,7 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1963'));
+    const mod = duelModCache || (await import('./duel.js?v=1964'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -7604,7 +7604,7 @@ function initVisibilityAndAntiSeekGuards() {
   vid.addEventListener('timeupdate', () => {
     if (state.trailer.usingYtFallback || state.trailer.usingVkFallback) return;
     if (!vid.seeking && vid.currentTime > state.trailer.maxTime) {
-      if (vid.currentTime - state.trailer.maxTime < 1.8) {
+      if (vid.currentTime - state.trailer.maxTime < 5.0) {
         state.trailer.maxTime = vid.currentTime;
       } else if (state.trailer.introLocked || (state.trailer.forRescue && !state.trailer.unlocked40)) {
         vid.currentTime = state.trailer.maxTime;
