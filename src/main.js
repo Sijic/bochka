@@ -359,7 +359,7 @@ async function ensureSceneReady() {
   if (sceneInitPromise) return sceneInitPromise;
   sceneInitPromise = (async () => {
     try {
-      const { WorkshopScene } = await import('./scene.js');
+      const { WorkshopScene } = await import('./scene.js?v=1965');
       if (scene) return scene;
       const canvas = document.getElementById('workshop-canvas');
       scene = new WorkshopScene(canvas, {
@@ -380,6 +380,7 @@ async function ensureSceneReady() {
         screamersPreloaded = true;
         window.setTimeout(() => preloadScreamerFrames(SCREAMER_META), 250);
       }
+      syncSceneRenderPause();
       return scene;
     } catch (err) {
       sceneInitPromise = null;
@@ -394,7 +395,7 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1964'));
+    const mod = duelModCache || (await import('./duel.js?v=1965'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -479,7 +480,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=1940'));
+  const mod = duelModCache || (await import('./duel.js?v=1965'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
@@ -2385,6 +2386,15 @@ function updateControlHintText() {
   }
 }
 
+const PAUSED_SCENE_SCREENS = new Set(['gate', 'pack', 'sent', 'finale', 'pass', 'ocean']);
+
+function syncSceneRenderPause() {
+  const shouldPause =
+    Boolean(state.trailer?.modalOpen) ||
+    (!duelCtrl?.isActive && PAUSED_SCENE_SCREENS.has(state.activeScreen));
+  scene?.setRenderPaused?.(shouldPause);
+}
+
 function showScreen(name) {
   state.activeScreen = name;
   if (name === 'workshop') armWorkshopClickGuard(260);
@@ -2435,6 +2445,7 @@ function showScreen(name) {
       el.classList.remove('is-visible');
     }
   }
+  syncSceneRenderPause();
 
   if (name === 'modeA') {
     updatePremiereBarsUI();
@@ -7889,6 +7900,7 @@ function setTrailerMuted(nextMuted = false) {
 function openTrailerModal({ forRescue = false, afterL1ToPack = false } = {}) {
   clearTrailerTimers();
   state.trailer.modalOpen = true;
+  syncSceneRenderPause();
   state.trailer.usingYtFallback = false;
   state.trailer.usingVkFallback = false;
   state.trailer.forRescue = Boolean(forRescue);
@@ -8037,6 +8049,7 @@ function closeTrailerModal({ goToPack = false, force = false } = {}) {
   document.getElementById('btn-trailer-to-pack')?.setAttribute('hidden', '');
   document.getElementById('btn-trailer-unmute-pill')?.setAttribute('hidden', '');
   state.trailer.modalOpen = false;
+  syncSceneRenderPause();
   state.trailer.usingYtFallback = false;
   state.trailer.ytStartedPlaying = false;
   state.trailer.externalRescueDepartedAt = 0;
@@ -8419,6 +8432,7 @@ async function openDuelTable(roomId = '', { autoAddTestBots = false, initialMode
     stopAirTimer();
     state.round.running = false;
     state.round.pausedForModal = false;
+    if (state.trailer.modalOpen) closeTrailerModal({ force: true });
     document.querySelectorAll('.modal-backdrop').forEach((m) => m.setAttribute('hidden', ''));
     closeBurgerDrawer();
     syncUiStage(state.tg?.user, 4).catch(() => {});
@@ -8428,6 +8442,7 @@ async function openDuelTable(roomId = '', { autoAddTestBots = false, initialMode
     refreshSoundButtonLabel();
 
     const cleanRoom = roomId || `d_${Math.random().toString(36).slice(2, 8)}`;
+    scene?.setRenderPaused?.(false);
     await duelCtrl?.openRoom(cleanRoom, { autoAddTestBots, initialMode, prefetchedHof, autoStartSoloTil });
     showScreen('duel');
   } finally {

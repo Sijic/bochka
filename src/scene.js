@@ -89,6 +89,7 @@ export class WorkshopScene {
     this._lastDirectStrikeAt = 0;
     this.goldenMode = false;
     this.contextLost = false;
+    this.renderPaused = false;
 
     this.diving = false;
     this.diveProgress = 0;
@@ -192,6 +193,21 @@ export class WorkshopScene {
         this._listenHoldTimer = null;
       }
       this.listeningIndex = -1;
+    }
+  }
+
+  setRenderPaused(flag) {
+    const next = Boolean(flag);
+    if (this.renderPaused === next) return;
+    this.renderPaused = next;
+    if (next) {
+      if (this.rafId) {
+        cancelAnimationFrame(this.rafId);
+        this.rafId = 0;
+      }
+    } else if (!this.rafId) {
+      this.clock?.getDelta?.();
+      this._animate();
     }
   }
 
@@ -1985,6 +2001,10 @@ export class WorkshopScene {
   }
 
   _animate() {
+    if (this.renderPaused) {
+      this.rafId = 0;
+      return;
+    }
     this.rafId = requestAnimationFrame(() => this._animate());
     let dt = Math.min(0.05, this.clock.getDelta());
     if (this.contextLost || document.hidden) return;
