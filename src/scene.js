@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { resolveSiteAsset } from './env.js';
 
-export const BARREL_BATCH_CODES = ['01', '19', '97', '12', '17', '26', '33', '48', '71', '84', '92', '99', '07', '14', '55', '88'];
+export const BARREL_BATCH_CODES = ['01', '19', '97', '12', '17', '26', '33', '48', '71', '84', '92', '99'];
 
 // v11.0: Огромный пул мужских и женских кратких имён для случайной надписи краской на бочках
 export const BARREL_SPRAY_NAMES = [
@@ -19,7 +19,7 @@ export const BARREL_SPRAY_NAMES = [
   'СЕНЯ', 'НАТАША', 'АЛЁНА', 'ДИНА', 'ТОМА', 'ИГОРЬ', 'АНДРЮХА', 'БОГДАН', 'ТАРАС', 'АЗАТ',
 ];
 
-function pickRandomBarrelNames(count = 16) {
+function pickRandomBarrelNames(count = 12) {
   const pool = BARREL_SPRAY_NAMES.slice();
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -193,7 +193,7 @@ export class WorkshopScene {
   }
 
   setActiveBarrelCount(count) {
-    const clean = Math.max(2, Math.min(this.barrels.length || 16, Math.round(Number(count) || 6)));
+    const clean = Math.max(2, Math.min(this.barrels.length || 12, Math.round(Number(count) || 6)));
     this.activeBarrelCount = clean;
     this.barrels.forEach((b, idx) => {
       b.group.visible = idx < clean;
@@ -203,7 +203,7 @@ export class WorkshopScene {
 
   resetRound({ targetIndex = 0, portraitUrl = '', golden = false, barrelCount = null } = {}) {
     if (typeof barrelCount === 'number' && !Number.isNaN(barrelCount)) {
-      this.activeBarrelCount = Math.max(2, Math.min(this.barrels.length || 16, Math.round(barrelCount)));
+      this.activeBarrelCount = Math.max(2, Math.min(this.barrels.length || 12, Math.round(barrelCount)));
     }
     this.diving = false;
     this.diveProgress = 0;
@@ -213,8 +213,6 @@ export class WorkshopScene {
     this.cameraRoll = 0;
     this.nextEerieCountdown = 3.8 + Math.random() * 2.4;
     this.interiorSpot.intensity = 0;
-    this.tilCueIndex = -1;
-    this.tilCueMode = 'off';
     this.setGoldenMode(golden);
 
     this.barrels.forEach((b, idx) => {
@@ -457,24 +455,6 @@ export class WorkshopScene {
     this.screamerStrobeColor = strobeColorHex;
     this.cameraRoll = (Math.random() > 0.5 ? 1 : -1) * Math.min(0.14, intensity * 0.26);
     this._impulseChains(1.75);
-  }
-
-  setTilBarrelCue(index = -1, mode = 'off') {
-    this.tilCueIndex = typeof index === 'number' ? index : -1;
-    this.tilCueMode = String(mode || 'off');
-    if (this.tilCueMode === 'go' && this.tilCueIndex >= 0) {
-      const b = this.barrels[this.tilCueIndex];
-      if (b && b.group.visible && !b.struck) {
-        const s = b.group.scale.y || 1;
-        this._spawnShockRing(b.group.position.clone().add(new THREE.Vector3(0, 1.35 * s, 0)), 0x4ade80);
-      }
-    } else if (this.tilCueMode === 'til' && this.tilCueIndex >= 0) {
-      const b = this.barrels[this.tilCueIndex];
-      if (b && b.group.visible) {
-        const s = b.group.scale.y || 1;
-        this._spawnShockRing(b.group.position.clone().add(new THREE.Vector3(0, 1.35 * s, 0)), 0xef4444);
-      }
-    }
   }
 
   /**
@@ -975,7 +955,7 @@ export class WorkshopScene {
     });
     this._sharedLidMat = sharedLidMat;
 
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < 12; i++) {
       const group = new THREE.Group();
       const batchCode = BARREL_BATCH_CODES[i] || `${i + 1}`;
       const maps = this._createBarrelPBRTextures(batchCode, i + 1, sharedSurfaceMaps);
@@ -1454,7 +1434,7 @@ export class WorkshopScene {
   _applyResponsiveCameraAndLayout() {
     const aspect = this.width / Math.max(1, this.height);
     this.isPortrait = aspect < 0.88;
-    const n = Math.max(1, Math.min(this.barrels.length || 16, this.activeBarrelCount || 6));
+    const n = Math.max(1, Math.min(this.barrels.length || 12, this.activeBarrelCount || 6));
 
     this.barrels.forEach((b, idx) => {
       b.group.visible = idx < n;
@@ -1481,23 +1461,6 @@ export class WorkshopScene {
         // Ур.2: 6 бочек зигзагом (2-2-2) со сдвигом по рядам, чтобы передние не перекрывали задние
         bScale = 0.9;
         coords.push([-0.42, -2.05], [0.42, -2.05], [-1.2, -0.85], [1.2, -0.85], [-0.42, 0.35], [0.42, 0.35]);
-      } else if (n >= 13) {
-        // v17.0 Ур.5: 16 бочек на мобильном — чёткая 4x4 амфитеатр-сетка (все 16 бочек видны и кликабельны!)
-        bScale = 0.62;
-        const rows = [
-          { count: 4, z: -2.25, halfW: 1.56, shift: -0.07 },
-          { count: 4, z: -1.35, halfW: 1.60, shift: 0.07 },
-          { count: 4, z: -0.45, halfW: 1.60, shift: -0.06 },
-          { count: n - 12, z: 0.45, halfW: 1.52, shift: 0.06 },
-        ];
-        for (const rSpec of rows) {
-          for (let i = 0; i < rSpec.count; i++) {
-            const t = rSpec.count === 1 ? 0 : (i / (rSpec.count - 1)) * 2 - 1;
-            const x = t * rSpec.halfW + rSpec.shift;
-            const z = rSpec.z - (1 - Math.abs(t)) * 0.12;
-            coords.push([x, z]);
-          }
-        }
       } else if (n >= 11) {
         // 12 бочек (Пресс-цех) на мобильном: 3 шахматных ряда по 4 бочки
         bScale = 0.72;
@@ -1557,7 +1520,7 @@ export class WorkshopScene {
       }
 
       this.camera.fov = 50;
-      const crowdPull = n >= 13 ? 1.32 : n >= 11 ? 1.22 : n >= 9 ? 1.15 : n >= 7 ? 1.09 : 1.0;
+      const crowdPull = n >= 11 ? 1.22 : n >= 9 ? 1.15 : n >= 7 ? 1.09 : 1.0;
       const distScale = Math.max(1, 0.52 / Math.max(0.32, aspect)) * crowdPull;
       // Кино-угол ~27°: видны и задние бочки с номерами, и высокие светящиеся окна цеха из фильма!
       const elev = (27 * Math.PI) / 180;
@@ -1613,24 +1576,6 @@ export class WorkshopScene {
           b.group.scale.setScalar(bScale);
           b.bodyMesh.rotation.y = Math.PI - a * 0.65;
         }
-      } else if (n >= 13) {
-        // v17.0 Ур.5 (16 бочек на десктопе): 3 полукруга 6 + 5 + 5
-        const ringSpecs = [
-          { count: 6, r: 3.85, cz: 1.35, maxA: 1.24, shift: 0 },
-          { count: 5, r: 2.75, cz: 1.58, maxA: 1.08, shift: 0.08 },
-          { count: n - 11, r: 1.75, cz: 1.88, maxA: 0.88, shift: -0.05 },
-        ];
-        let ptr = 0;
-        for (const rs of ringSpecs) {
-          for (let i = 0; i < rs.count && ptr < n; i++) {
-            const t = rs.count === 1 ? 0 : (i / (rs.count - 1)) * 2 - 1;
-            const a = t * rs.maxA + rs.shift;
-            const b = this.barrels[ptr++];
-            b.group.position.set(Math.sin(a) * rs.r, 0, rs.cz - Math.cos(a) * rs.r);
-            b.group.scale.setScalar(0.74);
-            b.bodyMesh.rotation.y = Math.PI - a * 0.58;
-          }
-        }
       } else {
         const backCount = n === 12 ? 7 : n === 10 ? 6 : Math.ceil(n / 2);
         const frontCount = n - backCount;
@@ -1675,7 +1620,7 @@ export class WorkshopScene {
       }
 
       this.camera.fov = 42;
-      const crowdAdjust = n >= 13 ? 1.28 : n >= 11 ? 1.18 : n >= 7 ? 1.12 : 1.0;
+      const crowdAdjust = n >= 11 ? 1.18 : n >= 7 ? 1.12 : 1.0;
       const wideAdjust = (aspect < 1.35 ? 1.14 : 1.0) * crowdAdjust;
       // Кино-угол 20° как в кадре factory_hall.jpg: бочки стоят на переднем плане, за ними огромные светящиеся окна и мостик цеха!
       const elevD = (20 * Math.PI) / 180;
@@ -2155,12 +2100,12 @@ export class WorkshopScene {
         this._spawnRustDust(new THREE.Vector3(rx, 0.22, rz), 2);
       }
 
-      // Расходящиеся круги по воде (floorRipples) вокруг случайной закрытой бочки (атмосфера без спойлера цели!)
+      // Расходящиеся круги по воде (floorRipples) раз в 2.5с вокруг случайной закрытой бочки (без спойлера цели!)
       this.boilerTargetRippleTimer -= dt;
       if (this.boilerTargetRippleTimer <= 0) {
         this.boilerTargetRippleTimer = 2.5;
-        const closed = this.barrels.filter((b) => b && b.group.visible && !b.struck);
-        const tb = closed.length ? closed[Math.floor(Math.random() * closed.length)] : null;
+        const closedBarrels = this.barrels.filter((b, i) => i < this.activeBarrelCount && b.group.visible && !b.struck);
+        const tb = closedBarrels.length > 0 ? closedBarrels[Math.floor(Math.random() * closedBarrels.length)] : null;
         if (tb) {
           this._spawnFloorRipple(tb.group.position.x, tb.group.position.z, 0.155);
           this.boilerRipplesSpawned += 1;
@@ -2306,31 +2251,7 @@ export class WorkshopScene {
         b.dentUniforms.uDentHeat.value = Math.max(0, b.dentUniforms.uDentHeat.value - dt * 1.15);
       }
 
-      const isTilCue = b.index === this.tilCueIndex && this.tilCueMode && this.tilCueMode !== 'off' && !b.struck;
-      let targetRingOp = b.index === this.hoveredIndex && this.interactive ? 0.68 : 0.0;
-      if (isTilCue) {
-        const pulse = 0.68 + 0.30 * Math.sin(this.elapsed * (this.tilCueMode === 'go' ? 14 : 7));
-        if (this.tilCueMode === 'go') {
-          b.ringMesh.material.color.setHex(0x4ade80);
-          b.bodyMat.emissive.setHex(0x16a34a);
-          b.bodyMat.emissiveIntensity = 0.45 + 0.25 * Math.sin(this.elapsed * 14);
-          targetRingOp = 0.96;
-        } else if (this.tilCueMode === 'til') {
-          b.ringMesh.material.color.setHex(0xef4444);
-          b.bodyMat.emissive.setHex(0x991b1b);
-          b.bodyMat.emissiveIntensity = 0.52;
-          targetRingOp = 0.90;
-        } else {
-          b.ringMesh.material.color.setHex(0xf59e0b);
-          b.bodyMat.emissive.setHex(0x523406);
-          b.bodyMat.emissiveIntensity = 0.25 + 0.18 * Math.sin(this.elapsed * 7);
-          targetRingOp = pulse;
-        }
-      } else {
-        b.ringMesh.material.color.setHex(0xeab308);
-        b.bodyMat.emissive.setHex(this.goldenMode ? 0x3b2804 : 0x000000);
-        b.bodyMat.emissiveIntensity = this.goldenMode ? 0.35 : 0.0;
-      }
+      const targetRingOp = b.index === this.hoveredIndex && this.interactive ? 0.68 : 0.0;
       b.ringMesh.material.opacity += (targetRingOp - b.ringMesh.material.opacity) * Math.min(1, dt * 10);
 
       if (b.lidFlying) {

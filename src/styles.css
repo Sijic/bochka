@@ -3757,14 +3757,9 @@ body[data-screen="ocean"] .toast {
    ============================================================================ */
 
 /* Стадии 1 и 2: чистый 3D-цех без верхней шапки (но меню ☰ всегда доступно по кнопке в углу!) */
-/* v16.0: Чистая верхняя шапка (логотип + кнопка звука + иконка меню ☰) всегда видна на всех стадиях! */
 body[data-ui-stage="1"] #topbar,
 body[data-ui-stage="2"] #topbar {
-  display: flex !important;
-  z-index: 60 !important;
-}
-#topbar {
-  z-index: 60 !important;
+  display: none !important;
 }
 
 /* Стадия 1/2 Экран входа (#screen-gate): ТОЛЬКО лого БОЧКА, 18+ и вход со звуком */
@@ -8240,51 +8235,19 @@ body.is-duel-active .topbar {
   border-radius: 4px;
 }
 
-
 /* ============================================================================
-   БОЧКА v16.0: DUOLINGO + NOTCOIN + 5 БУКВ + ELF YOURSELF + ВИДЕО-АРТЕФАКТЫ
-   Максимум воздуха, 1 экран = 1 действие, 0 мелькающих тостов, 360x740 & 390x844
+   v19.0: ЧИСТЫЕ ДОПОЛНЕНИЯ К v15.5 (ЗВУК, CALLOUT, VK ТРЕЙЛЕР, ДУЭЛЬ 1×1, ЗАЛ СЛАВЫ, МОРЕ)
    ============================================================================ */
 
-/* Чистая шапка в стиле Duolingo: в основных экранах v16.0 оставляем только логотип, звук и меню */
-body[data-screen="gate"] #top-ticket-shards,
-body[data-screen="gate"] #top-rating-pill,
-body[data-screen="gate"] #top-lives-pill,
-body[data-screen="gate"] #nav-leaderboard,
-body[data-screen="gate"] #nav-prize,
-body[data-screen="til16"] #top-ticket-shards,
-body[data-screen="til16"] #top-rating-pill,
-body[data-screen="til16"] #top-lives-pill,
-body[data-screen="til16"] #nav-leaderboard,
-body[data-screen="til16"] #nav-prize,
-body[data-screen="pack"] #top-ticket-shards,
-body[data-screen="pack"] #top-rating-pill,
-body[data-screen="pack"] #top-lives-pill,
-body[data-screen="pack"] #nav-leaderboard,
-body[data-screen="pack"] #nav-prize,
-body[data-screen="sent"] #top-ticket-shards,
-body[data-screen="sent"] #top-rating-pill,
-body[data-screen="sent"] #top-lives-pill,
-body[data-screen="sent"] #nav-leaderboard,
-body[data-screen="sent"] #nav-prize,
-body[data-screen="ocean"] #top-ticket-shards,
-body[data-screen="ocean"] #top-rating-pill,
-body[data-screen="ocean"] #top-lives-pill,
-body[data-screen="ocean"] #nav-leaderboard,
-body[data-screen="ocean"] #nav-prize {
-  display: none !important;
-}
-
-/* Постоянная кнопка звука в углу шапки */
 .sound-corner-btn {
   appearance: none;
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
   border: 1px solid rgba(250, 204, 21, 0.42);
   background: rgba(24, 24, 28, 0.92);
   color: #fef08a;
-  font-size: 17px;
+  font-size: 15px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -8295,67 +8258,42 @@ body[data-screen="ocean"] #nav-prize {
 .sound-corner-btn:active {
   transform: scale(0.92);
 }
-.sound-corner-btn.is-muted {
+.sound-corner-btn.is-muted,
+.hud-slim-sound-btn.is-muted {
   border-color: rgba(255, 255, 255, 0.22);
   background: rgba(24, 24, 28, 0.72);
   color: #a1a1aa;
 }
 
-/* Главный стартовый экран v16.0 (воздух + 1 экран = 1 действие) */
-.gate-v16-clean {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 20px 18px 16px !important;
-  border-radius: 18px !important;
-  background: rgba(15, 15, 20, 0.95) !important;
-  border: 1px solid rgba(250, 204, 21, 0.35) !important;
-}
-.gate-v16-hero {
-  display: flex;
+.hud-slim-sound-btn {
+  appearance: none;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  text-align: left;
-}
-.gate-v16-til-avatar {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 3px solid #facc15;
-  box-shadow: 0 0 18px rgba(250, 204, 21, 0.35);
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  border: 1px solid rgba(234, 179, 8, 0.42);
+  background: rgba(15, 19, 27, 0.88);
+  color: #fef08a;
+  font-size: 13px;
+  cursor: pointer;
   flex-shrink: 0;
 }
-.gate-v16-title-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.gate-v16-title-wrap .metal-logo {
-  margin: 0;
-  font-size: 34px;
-  line-height: 1;
-}
-.gate-v16-title-wrap .gate-subtitle {
-  display: block !important;
-  margin: 3px 0 0;
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  color: #fde047;
-}
+
 .gate-v16-friend-callout {
+  margin: 8px 0 4px;
   background: linear-gradient(135deg, rgba(234, 179, 8, 0.2), rgba(24, 24, 28, 0.9));
   border: 1.5px solid rgba(250, 204, 21, 0.75);
   border-radius: 12px;
-  padding: 12px;
+  padding: 11px 12px;
   display: flex;
   flex-direction: column;
   gap: 4px;
   text-align: center;
 }
 .gate-v16-friend-callout strong {
-  font-size: 15px;
+  font-size: 14.5px;
   color: #fef08a;
   line-height: 1.25;
 }
@@ -8363,711 +8301,197 @@ body[data-screen="ocean"] #nav-prize {
   font-size: 12px;
   color: #e4e4e7;
 }
-.gate-v16-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 2px;
+
+/* VK Видео плеер в модалке трейлера (РФ/СНГ без VPN) */
+.vk-trailer-iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: #000000;
 }
-.gate-v16-main-cta {
-  padding: 15px 16px !important;
-  font-size: 16px !important;
-  font-weight: 800 !important;
-  border-radius: 13px !important;
-  box-shadow: 0 6px 20px rgba(234, 179, 8, 0.32);
+#yt-fallback-slot {
+  width: 100%;
+  height: 100%;
 }
-.gate-v16-sec-cta {
-  padding: 12px 14px !important;
-  font-size: 14px !important;
-  border-radius: 12px !important;
+#modal-trailer .trailer-custom-bar {
+  justify-content: center;
 }
-.gate-dot-sep {
-  color: #52525b;
+#modal-trailer #btn-trailer-open-yt-app {
+  width: 100%;
+  justify-content: center;
+  padding: 9px 14px;
+  font-size: 12.5px;
+}
+.trailer-director-strip {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: rgba(234, 179, 8, 0.11);
+  border: 1px solid rgba(234, 179, 8, 0.34);
+  font-size: 11.5px;
+  line-height: 1.38;
+  color: #e5e7eb;
+  text-align: center;
+}
+.trailer-director-strip strong {
+  color: #f5ce6b;
 }
 
-/* Шкала-пазл билета по референсу «5 букв» Т-Банка */
-.v16-ticket-puzzle {
-  background: rgba(24, 24, 30, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+/* Выбор 1 соперника (1×1): «Кому отправил» или «Общая ветка (4 колена)» */
+.duel-friend-picker {
+  margin: 8px 0 10px;
+  padding: 10px;
   border-radius: 14px;
-  padding: 11px 12px;
+  background: rgba(10, 13, 19, 0.92);
+  border: 1px solid rgba(250, 204, 21, 0.34);
   display: flex;
   flex-direction: column;
   gap: 8px;
-  text-align: left;
 }
-.v16-ticket-puzzle.is-ready {
-  border-color: rgba(250, 204, 21, 0.8);
-  background: linear-gradient(135deg, rgba(113, 63, 18, 0.35), rgba(24, 24, 30, 0.95));
-}
-.v16-tp-head {
+.dfp-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
 }
-.v16-tp-title {
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  color: #f4f4f5;
-}
-.v16-tp-counter {
-  font-family: 'JetBrains Mono', monospace;
-  color: #facc15;
-  font-size: 13px;
-}
-.v16-tp-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 7px;
-}
-.v16-tp-cell {
-  height: 40px;
-  border-radius: 9px;
-  border: 1.5px dashed rgba(255, 255, 255, 0.22);
-  background: rgba(15, 15, 20, 0.78);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-  transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
-}
-.v16-tp-cell.is-filled {
-  border-style: solid;
-  border-color: #facc15;
-  background: linear-gradient(180deg, rgba(250, 204, 21, 0.28), rgba(202, 138, 4, 0.18));
-  box-shadow: 0 0 12px rgba(250, 204, 21, 0.22);
-}
-.v16-tp-num {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  font-weight: 700;
-  color: #a1a1aa;
-}
-.v16-tp-cell.is-filled .v16-tp-num {
-  color: #fef08a;
-}
-.v16-tp-mark {
-  font-size: 12px;
-  font-weight: 900;
-  color: #52525b;
-  line-height: 1;
-}
-.v16-tp-cell.is-filled .v16-tp-mark {
-  color: #4ade80;
-}
-.v16-tp-rule {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.35;
-  color: #e4e4e7;
-}
-.v16-tp-next {
-  font-size: 11.5px;
-  font-weight: 700;
-  color: #facc15;
-}
-
-/* ============================================================================
-   ЦЕНТРАЛЬНЫЙ 3-ФАЗНЫЙ РЕЖИМ «ИГРАТЬ С ТИЛЕМ» (#screen-til-v16)
-   ============================================================================ */
-.screen-til-v16 {
-  position: fixed;
-  inset: 0;
-  z-index: 18;
-  background: radial-gradient(circle at 50% 25%, #231d12 0%, #0d0d11 72%);
-  overflow-y: auto;
-  padding: calc(var(--safe-top, 0px) + 56px) 14px calc(var(--safe-bottom, 0px) + 18px);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.til16-play-wrap,
-.til16-victory-wrap {
-  width: min(100%, 420px);
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.til16-play-wrap {
-  min-height: calc(100dvh - 82px);
-  justify-content: space-between;
-}
-.til16-top-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.til16-back-btn {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(24, 24, 30, 0.9);
-  color: #f4f4f5;
-  font-size: 18px;
-  font-weight: 800;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.til16-progress-col {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.til16-progress-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  font-size: 12.5px;
-}
-.til16-progress-title {
-  font-weight: 700;
-  color: #f4f4f5;
-}
-.til16-progress-pct {
-  font-family: 'JetBrains Mono', monospace;
-  color: #facc15;
-  font-size: 13px;
-}
-.til16-progress-track {
-  position: relative;
-  height: 14px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  overflow: hidden;
-}
-.til16-progress-fill {
-  height: 100%;
-  width: 0%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #eab308, #fde047, #4ade80);
-  transition: width 0.12s ease-out;
-}
-.til16-prog-mark {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: rgba(0, 0, 0, 0.45);
-}
-.til16-lvl-pill {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  font-weight: 800;
-  color: #0d0d0d;
-  background: #facc15;
-  padding: 5px 8px;
-  border-radius: 8px;
-  flex-shrink: 0;
-}
-.til16-phase-row {
-  text-align: center;
-}
-.til16-phase-pill {
-  display: inline-block;
-  font-size: 11.5px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  color: #fef08a;
-  background: rgba(250, 204, 21, 0.12);
-  border: 1px solid rgba(250, 204, 21, 0.35);
-  padding: 5px 12px;
-  border-radius: 999px;
-}
-.til16-speech-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-}
-.til16-speech-ava {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2.5px solid #facc15;
-  flex-shrink: 0;
-}
-.til16-speech-bubble {
-  position: relative;
-  background: #1f1f27;
-  border: 1.5px solid rgba(255, 255, 255, 0.22);
-  color: #ffffff;
-  font-size: 16px;
-  font-weight: 800;
-  padding: 10px 16px;
-  border-radius: 16px;
-  min-width: 150px;
-  text-align: center;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
-}
-.til16-speech-bubble[data-mood="go"],
-.til16-speech-bubble[data-mood="good"] {
-  border-color: #4ade80;
-  color: #bbf7d0;
-  background: rgba(20, 83, 45, 0.55);
-}
-.til16-speech-bubble[data-mood="danger"] {
-  border-color: #ef4444;
-  color: #fecaca;
-  background: rgba(127, 29, 29, 0.72);
-}
-.til16-speech-bubble[data-mood="warn"] {
-  border-color: #f59e0b;
-  color: #fef3c7;
-}
-.til16-speech-bubble.is-pop {
-  animation: tilPop 0.22s ease-out;
-}
-@keyframes tilPop {
-  0% { transform: scale(0.9); }
-  65% { transform: scale(1.06); }
-  100% { transform: scale(1); }
-}
-
-.til16-stage-btn {
-  position: relative;
-  appearance: none;
-  width: 100%;
-  min-height: 290px;
-  flex: 1;
-  max-height: 390px;
-  border-radius: 24px;
-  border: 3px solid rgba(255, 255, 255, 0.16);
-  background: radial-gradient(circle at 50% 48%, rgba(42, 36, 24, 0.92), rgba(14, 14, 18, 0.96));
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 16px;
-  cursor: pointer;
-  touch-action: manipulation;
-  user-select: none;
-  -webkit-user-select: none;
-  overflow: hidden;
-  transition: border-color 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
-}
-.til16-stage-btn[data-signal="go"] {
-  border-color: #22c55e;
-  box-shadow: 0 0 34px rgba(34, 197, 94, 0.35), inset 0 0 28px rgba(34, 197, 94, 0.16);
-  background: radial-gradient(circle at 50% 48%, rgba(20, 83, 45, 0.52), rgba(12, 16, 14, 0.96));
-}
-.til16-stage-btn[data-signal="freeze"] {
-  border-color: #ef4444;
-  box-shadow: 0 0 42px rgba(239, 68, 68, 0.55), inset 0 0 38px rgba(239, 68, 68, 0.28);
-  background: radial-gradient(circle at 50% 48%, rgba(127, 29, 29, 0.65), rgba(20, 10, 12, 0.97));
-}
-.til16-stage-btn[data-signal="sprint"] {
-  border-color: #facc15;
-  box-shadow: 0 0 40px rgba(250, 204, 21, 0.45), inset 0 0 30px rgba(250, 204, 21, 0.2);
-}
-.til16-stage-btn[data-signal="caught"] {
-  border-color: #f97316;
-  box-shadow: 0 0 30px rgba(249, 115, 22, 0.45);
-}
-.til16-barrel-art {
-  width: min(72vw, 240px);
-  height: auto;
-  max-height: 215px;
-  object-fit: contain;
-  pointer-events: none;
-  filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.7));
-  transition: transform 0.08s ease;
-}
-.til16-barrel-art.is-hit {
-  animation: barrelTapKick 0.12s ease-out;
-}
-.til16-barrel-art.is-hit-strong {
-  animation: barrelTapHard 0.16s ease-out;
-}
-@keyframes barrelTapKick {
-  0% { transform: scale(1); }
-  50% { transform: scale(0.93) rotate(-2deg); }
-  100% { transform: scale(1); }
-}
-@keyframes barrelTapHard {
-  0% { transform: scale(1); }
-  30% { transform: scale(0.9) rotate(-4deg); }
-  65% { transform: scale(1.04) rotate(3deg); }
-  100% { transform: scale(1); }
-}
-.til16-signal-banner {
-  font-family: 'Oswald', sans-serif;
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  padding: 6px 20px;
-  border-radius: 12px;
-  color: #f4f4f5;
-  background: rgba(0, 0, 0, 0.55);
-  border: 1.5px solid rgba(255, 255, 255, 0.2);
-}
-.til16-stage-btn[data-signal="go"] .til16-signal-banner {
-  background: #16a34a;
-  border-color: #86efac;
-  color: #ffffff;
-}
-.til16-stage-btn[data-signal="freeze"] .til16-signal-banner {
-  background: #dc2626;
-  border-color: #fecaca;
-  color: #ffffff;
-}
-.til16-stage-btn[data-signal="sprint"] .til16-signal-banner {
-  background: #eab308;
-  border-color: #fef08a;
-  color: #0d0d0d;
-}
-.til16-bottom-hint {
-  text-align: center;
-  font-size: 13.5px;
-  font-weight: 600;
-  color: #d4d4d8;
-  padding: 4px 6px;
-}
-.til16-burst-layer {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-.til16-pop {
-  position: absolute;
-  font-family: 'Oswald', sans-serif;
-  font-size: 22px;
-  font-weight: 700;
-  color: #fde047;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.85);
-  animation: popRise 0.65s ease-out forwards;
-}
-.til16-pop.is-green { color: #4ade80; }
-.til16-pop.is-red { color: #f87171; }
-@keyframes popRise {
-  0% { opacity: 1; transform: translate(-50%, 0) scale(0.85); }
-  100% { opacity: 0; transform: translate(-50%, -56px) scale(1.18); }
-}
-
-/* Победный экран «Приглашение в кино от Тиля Швайгера» + русский режиссёр */
-.til16-victory-head {
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.til16-win-badge {
-  display: inline-block;
-  margin: 0 auto;
-  font-size: 11px;
-  font-weight: 800;
-  color: #0d0d0d;
-  background: #facc15;
-  padding: 4px 10px;
-  border-radius: 999px;
-}
-.til16-victory-wrap {
-  gap: 9px;
-  padding-top: 6px;
-}
-.til16-win-title {
-  margin: 2px 0 0;
-  font-family: 'Oswald', sans-serif;
-  font-size: 20px;
-  line-height: 1.15;
-  color: #ffffff;
-}
-.til-victory-video-frame {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 16 / 8.2;
-  border-radius: 14px;
-  overflow: hidden;
-  border: 2px solid rgba(250, 204, 21, 0.65);
-  background: #09090b;
-  cursor: pointer;
-}
-.til-victory-video-el,
-.til-victory-poster {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.til-victory-video-frame.is-playing .til-victory-poster {
-  animation: subtleKenBurns 7s ease-in-out infinite alternate;
-}
-@keyframes subtleKenBurns {
-  0% { transform: scale(1); }
-  100% { transform: scale(1.07); }
-}
-.til-victory-grad {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.35) 0%, rgba(0, 0, 0, 0.15) 45%, rgba(0, 0, 0, 0.88) 100%);
-}
-.til-victory-pill {
-  position: absolute;
-  top: 10px;
-  left: 10px;
+.dfp-title {
+  font-family: var(--font-mono);
   font-size: 10.5px;
-  font-weight: 800;
-  background: rgba(9, 9, 11, 0.82);
-  border: 1px solid rgba(250, 204, 21, 0.55);
-  color: #fef08a;
-  padding: 4px 8px;
-  border-radius: 6px;
-}
-.til-victory-play-btn {
-  position: absolute;
-  top: 46%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  border: 2px solid #facc15;
-  background: rgba(9, 9, 11, 0.72);
-  color: #fef08a;
-  font-size: 20px;
-  cursor: pointer;
-}
-.til-victory-caption {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  text-align: left;
-}
-.til-victory-cap-main {
-  font-size: 13.5px;
-  color: #ffffff;
-}
-.til-victory-cap-sub {
-  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   color: #fde047;
 }
-.til-victory-bar {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.22);
-}
-.til-victory-bar-fill {
-  height: 100%;
-  width: 12%;
-  background: #facc15;
-  transition: width 0.2s linear;
-}
-.til16-director-card,
-.v16-director-highlight {
-  background: linear-gradient(135deg, rgba(180, 83, 9, 0.24), rgba(24, 24, 30, 0.96));
-  border: 1.5px solid rgba(250, 204, 21, 0.5);
-  border-radius: 14px;
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  text-align: left;
-}
-.v16-director-badge {
-  display: inline-block;
-  align-self: flex-start;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  color: #0d0d0d;
-  background: #fde047;
-  padding: 3px 8px;
-  border-radius: 6px;
-}
-.til16-director-title,
-.v16-director-h {
-  font-size: 14.5px;
-  color: #ffffff;
-  line-height: 1.3;
-}
-.til16-director-text,
-.v16-director-p {
-  margin: 0;
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: #e4e4e7;
-}
-.til16-victory-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-.til16-victory-sub-row {
+.dfp-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 6px;
 }
-
-/* ============================================================================
-   СПОКОЙНАЯ КАРТОЧКА DUOLINGO (ВМЕСТО МЕЛЬКАЮЩИХ ТОСТОВ) + ВИДЕО-КРУЖОК АРТЕФАКТА
-   ============================================================================ */
-.duo-card-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 140;
-  background: rgba(5, 5, 8, 0.78);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding: 14px 12px calc(var(--safe-bottom, 0px) + 18px);
-  opacity: 0;
-  transition: opacity 0.18s ease;
-}
-.duo-card-backdrop.is-shown {
-  opacity: 1;
-}
-.duo-card-sheet {
-  width: min(100%, 400px);
-  background: #14141a;
-  border: 1.5px solid rgba(250, 204, 21, 0.55);
-  border-radius: 20px;
-  padding: 20px 18px 18px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  text-align: center;
-  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.72);
-}
-.duo-card-badge {
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  color: #0d0d0d;
-  background: #facc15;
-  padding: 4px 11px;
-  border-radius: 999px;
-}
-.duo-card-ico {
-  font-size: 34px;
-  line-height: 1;
-}
-.duo-card-title {
-  margin: 0;
-  font-family: 'Oswald', sans-serif;
-  font-size: 22px;
-  color: #ffffff;
-}
-.duo-card-body {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.45;
-  color: #e4e4e7;
-}
-.duo-card-actions {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 4px;
-}
-.duo-card-btn {
-  padding: 13px 16px !important;
-  font-size: 15px !important;
-  font-weight: 800 !important;
-  border-radius: 12px !important;
-}
-
-/* Круглый плеер видео-кружка артефакта */
-.v16-circle-player {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-}
-.v16-circle-ring {
-  position: relative;
-  width: 196px;
-  height: 196px;
-  border-radius: 50%;
-  border: 4px solid #facc15;
-  box-shadow: 0 0 26px rgba(250, 204, 21, 0.35);
-  overflow: hidden;
-  background: #09090b;
+.dfp-tab {
+  min-height: 34px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+  font-size: 11.5px;
+  font-weight: 700;
   cursor: pointer;
+  transition: all 0.14s ease;
 }
-.v16-circle-video,
-.v16-circle-poster {
+.dfp-tab.is-active {
+  background: rgba(250, 204, 21, 0.2);
+  border-color: rgba(250, 204, 21, 0.72);
+  color: #fef08a;
+}
+.dfp-tab-explain {
+  margin: 0;
+  padding: 2px 2px 0;
+  font-size: 11px;
+  line-height: 1.3;
+  color: #94a3b8;
+}
+.dfp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 170px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.dfp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.dfp-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.dfp-ava {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f59e0b, #b45309);
+  color: #0d0d0d;
+  font-weight: 800;
+  font-size: 12px;
+  border: 1.5px solid rgba(250, 204, 21, 0.65);
+}
+.dfp-ava img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: block;
 }
-.v16-circle-ring.is-playing .v16-circle-poster {
-  animation: subtleKenBurns 5s ease-in-out infinite alternate;
+.dfp-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
-.v16-circle-live-sweep {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.6);
-  pointer-events: none;
+.dfp-info strong {
+  font-size: 12.5px;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.v16-circle-lvl-pill {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
+.dfp-info span {
+  font-size: 10.5px;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dfp-btn {
+  flex-shrink: 0;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 9px;
+  border: 1px solid rgba(250, 204, 21, 0.65);
+  background: linear-gradient(135deg, #facc15, #eab308);
+  color: #0d0d0d;
+  font-size: 11px;
   font-weight: 800;
-  background: rgba(9, 9, 11, 0.82);
-  color: #fef08a;
-  padding: 3px 8px;
-  border-radius: 999px;
+  cursor: pointer;
   white-space: nowrap;
 }
-.v16-circle-stub-btn,
-.v16-circle-play-overlay {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  border: 2px solid #facc15;
-  background: rgba(9, 9, 11, 0.72);
-  color: #fef08a;
-  font-size: 18px;
-  cursor: pointer;
+.dfp-btn.is-sent {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: rgba(34, 197, 94, 0.65);
+  color: #86efac;
+  cursor: default;
 }
-.v16-circle-stub-progress {
-  width: 180px;
-  height: 5px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
-  overflow: hidden;
+.dfp-empty-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 6px 4px;
+  text-align: center;
 }
-.v16-circle-stub-progress-fill {
-  height: 100%;
-  width: 0%;
-  background: #facc15;
-  transition: width 0.18s linear;
+.dfp-empty {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.38;
+  color: #94a3b8;
 }
-.v16-circle-stub-caption {
-  font-size: 12px;
-  color: #fde047;
-  max-width: 280px;
+.dfp-pack-btn {
+  font-size: 11.5px !important;
 }
 
-/* Зал славы v16.0: 2 понятные вкладки-полки */
+/* Зал славы: 2 полки («Артефакты фильма» + «Трофеи друзей») */
 .hof-tabs-v16 {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -9123,759 +8547,25 @@ body[data-screen="ocean"] #nav-prize {
   margin-top: 12px;
 }
 
-/* Простая упаковка друга в бочку (#screen-pack v16.0) */
-.pack-v16 {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.pack-v16-photo-stage {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  text-align: center;
-}
-.pack-v16-preview {
-  width: 146px !important;
-  height: 146px !important;
-  border-radius: 50%;
-  border: 3px solid #facc15;
+/* Мобильный анти-вылет экрана Северного моря (#screen-ocean на 360px) */
+.screen-ocean {
+  width: 100%;
+  max-width: 100vw;
   overflow: hidden;
-  box-shadow: 0 0 20px rgba(250, 204, 21, 0.25);
+  box-sizing: border-box;
 }
-.pack-v16-photo-note {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.4;
-  color: #e4e4e7;
-  max-width: 310px;
-}
-.pack-v16-upload-row {
-  display: flex;
-  gap: 8px;
+.screen-ocean .ocean-ui-layer {
   width: 100%;
-}
-.pack-v16-upload-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 12px 14px;
-  border-radius: 12px;
-}
-.pack-v16-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-.pack-v16-skip-btn {
-  font-size: 12.5px !important;
-  padding: 11px 12px !important;
-  border-radius: 11px !important;
-}
-
-/* Модалка «О фильме» v16.0 */
-.v16-about-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  text-align: left;
-  max-width: 390px;
-}
-.v16-about-close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-}
-.v16-about-title {
-  margin: 0;
-  font-family: 'Oswald', sans-serif;
-  font-size: 22px;
-  color: #ffffff;
-}
-.v16-about-facts {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  background: rgba(24, 24, 30, 0.85);
-  border-radius: 12px;
-  padding: 10px 12px;
-}
-.v16-about-fact-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 12px;
-}
-.v16-af-k {
-  color: #a1a1aa;
-}
-.v16-af-v {
-  color: #f4f4f5;
-  text-align: right;
-}
-.v16-about-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-
-/* ============================================================================
-   БОЧКА v16.1: ВОЗВРАТ БЕРЕГА СЕВЕРНОГО МОРЯ, ВТОРОГО ЧЕЛОВЕКА, БОЧКИ И МУЗЫКИ
-   + ВСТРОЕННЫЙ VK ВИДЕО ПЛЕЕР (РФ / РБ / КЗ БЕЗ VPN)
-   ============================================================================ */
-.screen-til-v16 {
-  background: #10161c !important;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-.screen-til-v16 .til16-ocean-bg,
-.screen-til-v16 .til16-ocean-waves {
-  position: fixed !important;
-  inset: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  top: 0 !important;
-  bottom: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  z-index: 1;
-  pointer-events: none;
-}
-.screen-til-v16 .til16-sea-photo {
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: cover !important;
-  object-position: 31% 100% !important;
-  filter: contrast(1.04) saturate(0.96);
-}
-@media (min-width: 720px) {
-  .screen-til-v16 .til16-sea-photo {
-    object-position: center 55% !important;
-  }
-}
-.screen-til-v16 .ocean-surf-shimmer {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(16, 24, 32, 0.74) 0%, rgba(16, 24, 32, 0.16) 34%, transparent 62%, rgba(10, 14, 19, 0.62) 100%);
-  pointer-events: none;
-}
-
-/* Мягкая светофор-виньетка по краям экрана (не закрывает море и второго человека!) */
-.til16-signal-vignette {
-  position: fixed;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  transition: box-shadow 0.16s ease;
-}
-.til16-signal-vignette[data-signal="go"] {
-  box-shadow: inset 0 0 0 4px rgba(34, 197, 94, 0.85), inset 0 0 42px rgba(34, 197, 94, 0.32);
-}
-.til16-signal-vignette[data-signal="freeze"] {
-  box-shadow: inset 0 0 0 5px rgba(239, 68, 68, 0.95), inset 0 0 70px rgba(220, 38, 38, 0.52);
-}
-.til16-signal-vignette[data-signal="sprint"] {
-  box-shadow: inset 0 0 0 4px rgba(250, 204, 21, 0.9), inset 0 0 48px rgba(234, 179, 8, 0.36);
-}
-.til16-signal-vignette[data-signal="caught"] {
-  box-shadow: inset 0 0 0 5px rgba(249, 115, 22, 0.92), inset 0 0 60px rgba(234, 88, 12, 0.46);
-}
-
-.til16-play-wrap,
-.til16-victory-wrap {
-  position: relative;
-  z-index: 5;
-}
-.til16-victory-wrap {
-  background: rgba(12, 14, 18, 0.84);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(250, 204, 21, 0.28);
-  border-radius: 18px;
-  padding: 12px 12px 14px;
-}
-
-/* Верхняя зона в небе над морем */
-.til16-sky-hud {
-  background: rgba(14, 19, 25, 0.68);
-  backdrop-filter: blur(7px);
-  -webkit-backdrop-filter: blur(7px);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 16px;
-  padding: 10px 11px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-/* Прозрачная открытая пляжная зона — море и сидящий человек слева ПОЛНОСТЬЮ ОТКРЫТЫ! */
-.til16-stage-btn.til16-beach-stage {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  min-height: 290px;
-  flex: 1;
-  max-height: none;
-  padding: 0 0 6px;
-  justify-content: flex-end;
-  align-items: flex-end;
-  gap: 8px;
-}
-.til16-barrel-anchor {
-  width: clamp(205px, 60vw, 275px);
-  margin-left: auto;
-  margin-right: 0;
-  display: flex;
-  justify-content: flex-end;
-  pointer-events: none;
-}
-.til16-stage-btn.til16-beach-stage .til16-barrel-art {
-  width: 100%;
-  max-height: none;
-  filter: drop-shadow(0 16px 20px rgba(0, 0, 0, 0.78));
-}
-.til16-stage-btn.til16-beach-stage[data-signal="go"] .til16-barrel-art {
-  filter: drop-shadow(0 0 18px rgba(34, 197, 94, 0.72)) drop-shadow(0 16px 20px rgba(0, 0, 0, 0.78));
-}
-.til16-stage-btn.til16-beach-stage[data-signal="freeze"] .til16-barrel-art {
-  filter: drop-shadow(0 0 22px rgba(239, 68, 68, 0.85)) drop-shadow(0 16px 20px rgba(0, 0, 0, 0.78));
-}
-.til16-stage-btn.til16-beach-stage[data-signal="sprint"] .til16-barrel-art {
-  filter: drop-shadow(0 0 20px rgba(250, 204, 21, 0.85)) drop-shadow(0 16px 20px rgba(0, 0, 0, 0.78));
-}
-.til16-stage-btn.til16-beach-stage .til16-signal-banner {
-  align-self: center;
-  margin-top: 2px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.65);
-}
-.til16-bottom-hint {
-  background: rgba(10, 14, 19, 0.72);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  border-radius: 10px;
-  padding: 6px 10px;
-  color: #f4f4f5;
-}
-
-/* Встроенный VK Видео плеер в модалке трейлера */
-.vk-trailer-iframe {
-  width: 100%;
-  height: 100%;
-  border: 0;
-  display: block;
-  background: #000000;
-}
-#yt-fallback-slot {
-  width: 100%;
-  height: 100%;
-}
-#modal-trailer .trailer-custom-bar {
-  justify-content: center;
-}
-#modal-trailer #btn-trailer-open-yt-app {
-  width: 100%;
-  justify-content: center;
-  padding: 10px 14px;
-  font-size: 13px;
-}
-
-/* ============================================================================
-   v17.0: ЧИСТЫЙ ПРОХОД DUOLINGO + СХВАТКА С ТИЛЕМ В 3D-БОЧКИ (МИНИМУМ КНОПОК!)
-   ============================================================================ */
-
-/* Убираем перегруз из верхнего бара 3D-цеха — только Шаг + 3 удара + Звук + Меню */
-#screen-workshop #hud-lives-pill,
-#screen-workshop #hud-pts-pill,
-#screen-workshop #hud-ticket-shards,
-#screen-workshop .hud-slim-o2,
-#screen-workshop .hud-slim-airbar,
-#screen-workshop #hud-ticket-pool-bar {
-  display: none !important;
-}
-
-#screen-workshop .hud-slim {
-  padding: calc(max(6px, var(--safe-top, env(safe-area-inset-top, 0px)))) 10px 6px !important;
-  gap: 8px !important;
-  align-items: center;
-}
-
-.hud-slim-sound-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 32px;
-  border-radius: 8px;
-  border: 1px solid rgba(234, 179, 8, 0.38);
-  background: rgba(15, 19, 27, 0.88);
-  color: #f8fafc;
-  font-size: 15px;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.hud-slim-sound-btn.is-muted {
-  border-color: rgba(248, 113, 113, 0.45);
-  opacity: 0.85;
-}
-
-/* Во время схватки с Тилем в 3D-бочки прячем квадраты ударов и верхнюю подсказку цеха */
-body[data-til-duel="1"] #screen-workshop #attempts-squares,
-body[data-til-duel="1"] #screen-workshop #hud-top-stack,
-body[data-til-duel="1"] #screen-workshop #hud-hint-text {
-  display: none !important;
-}
-body[data-til-duel="1"] #screen-workshop #hud-mode-tag {
-  color: #f5ce6b;
-}
-
-/* Полоса про русского режиссёра и 1 главная кнопка «Дальше» под трейлером VK */
-.trailer-director-strip {
-  margin-top: 8px;
-  padding: 8px 10px;
-  border-radius: 9px;
-  background: rgba(234, 179, 8, 0.11);
-  border: 1px solid rgba(234, 179, 8, 0.34);
-  font-size: 11.5px;
-  line-height: 1.38;
-  color: #e5e7eb;
-  text-align: center;
-}
-.trailer-director-strip strong {
-  color: #f5ce6b;
-}
-
-.trailer-duolingo-next-btn {
-  margin-top: 10px;
-  min-height: 46px;
-  font-size: 13.5px;
-  font-weight: 800;
-  letter-spacing: 0.03em;
-}
-
-.pack-skip-til-link {
-  display: block;
-  width: 100%;
-  margin-top: 6px;
-  text-align: center;
-  font-size: 12px;
-  color: #9ca3af;
-  padding: 6px 4px;
-}
-
-/* HUD 3D-схватки с Тилем поверх 3D-цеха (pointer-events: none — не мешает кликам по бочкам!) */
-.til3d-duel-host {
-  position: fixed;
-  inset: 0;
-  z-index: 25;
-  pointer-events: none;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: calc(max(8px, var(--safe-top, env(safe-area-inset-top, 0px))) + 46px) 10px calc(max(12px, var(--safe-bottom, env(safe-area-inset-bottom, 0px))) + 8px);
-}
-.til3d-duel-host[hidden] {
-  display: none !important;
-}
-.til3d-hud {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
-  height: 100%;
-  width: 100%;
-  pointer-events: none;
-}
-
-.til3d-score-card {
-  width: min(360px, 100%);
-  background: rgba(11, 14, 20, 0.86);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(234, 179, 8, 0.42);
-  border-radius: 12px;
-  padding: 8px 11px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.52);
-}
-
-.til3d-step-badge {
-  font-size: 9.5px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #f5ce6b;
-  text-align: center;
-  margin-bottom: 5px;
-}
-
-.til3d-score-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.til3d-side {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.til3d-side-lbl {
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  color: #cbd5e1;
-}
-.til3d-side-val {
-  font-family: 'Oswald', 'Inter', sans-serif;
-  font-size: 20px;
-  line-height: 1;
-  color: #ffffff;
-}
-.til3d-side.is-me .til3d-side-val { color: #4ade80; }
-.til3d-side.is-til .til3d-side-val { color: #f87171; }
-.til3d-vs {
-  font-size: 10px;
-  font-weight: 900;
-  color: #f5ce6b;
-  letter-spacing: 0.1em;
-}
-.til3d-dots {
-  display: inline-flex;
-  gap: 4px;
-}
-.til3d-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.16);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-}
-.til3d-dot.is-me.is-on {
-  background: #4ade80;
-  border-color: #86efac;
-  box-shadow: 0 0 8px rgba(74, 222, 128, 0.7);
-}
-.til3d-dot.is-til.is-on {
-  background: #ef4444;
-  border-color: #fca5a5;
-  box-shadow: 0 0 8px rgba(239, 68, 68, 0.7);
-}
-
-.til3d-speech-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-top: 5px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-.til3d-ava {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 1.5px solid #eab308;
-  flex-shrink: 0;
-}
-.til3d-bubble {
-  font-size: 11.5px;
-  line-height: 1.3;
-  color: #e2e8f0;
-  font-weight: 600;
-}
-
-.til3d-signal {
-  margin-top: 8px;
-  padding: 7px 16px;
-  border-radius: 99px;
-  font-family: 'Oswald', 'Inter', sans-serif;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
-  transition: transform 0.12s ease, background 0.15s ease;
-}
-.til3d-signal.is-wait {
-  background: rgba(245, 158, 11, 0.22);
-  border: 1.5px solid rgba(245, 158, 11, 0.78);
-  color: #fde68a;
-}
-.til3d-signal.is-go {
-  background: linear-gradient(135deg, #22c55e, #15803d);
-  border: 2px solid #bbf7d0;
-  color: #ffffff;
-  transform: scale(1.06);
-  box-shadow: 0 0 24px rgba(34, 197, 94, 0.75);
-}
-.til3d-signal.is-win {
-  background: linear-gradient(135deg, #eab308, #b45309);
-  border: 1.5px solid #fef08a;
-  color: #0b0e14;
-}
-.til3d-signal.is-caught {
-  background: linear-gradient(135deg, #dc2626, #991b1b);
-  border: 1.5px solid #fca5a5;
-  color: #ffffff;
-}
-
-.til3d-barrel-pin {
-  position: fixed;
-  transform: translate(-50%, -100%);
-  z-index: 28;
-  pointer-events: auto;
-  padding: 6px 12px;
-  border-radius: 99px;
-  font-family: 'Oswald', 'Inter', sans-serif;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  white-space: nowrap;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.65);
-}
-.til3d-barrel-pin.is-wait {
-  background: rgba(15, 20, 28, 0.88);
-  border: 1.5px solid #f59e0b;
-  color: #fde68a;
-}
-.til3d-barrel-pin.is-go {
-  background: linear-gradient(135deg, #22c55e, #16a34a);
-  border: 2px solid #dcfce7;
-  color: #ffffff;
-  animation: til3dPinPulse 0.45s ease-in-out infinite alternate;
-}
-.til3d-barrel-pin.is-caught {
-  background: #dc2626;
-  border: 1.5px solid #fecaca;
-  color: #ffffff;
-}
-@keyframes til3dPinPulse {
-  from { transform: translate(-50%, -100%) scale(1); }
-  to { transform: translate(-50%, -106%) scale(1.1); }
-}
-
-.til3d-bottom-hint {
-  margin-top: auto;
-  padding: 6px 12px;
-  border-radius: 99px;
-  background: rgba(11, 14, 20, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  color: #cbd5e1;
-  font-size: 11px;
-  text-align: center;
-  max-width: 340px;
-}
-
-/* ==========================================================================
-   v17.1: Кнопка «⚔️ 1×1» в шапке цеха + Дуэль строго 1×1 (выбор из «Кому отправил» и «Общей ветки»)
-   ========================================================================== */
-.hud-slim-duel-btn {
-  pointer-events: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 34px;
-  padding: 0 10px;
-  border-radius: 99px;
-  border: 1px solid rgba(250, 204, 21, 0.55);
-  background: linear-gradient(135deg, rgba(250, 204, 21, 0.18), rgba(234, 88, 12, 0.22));
-  color: #fde047;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: transform 0.12s ease, background 0.15s ease;
-}
-.hud-slim-duel-btn:active {
-  transform: scale(0.95);
-}
-
-.duel-slots-row.duel-slots-2p {
-  display: grid !important;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  gap: 8px !important;
-}
-
-.duel-top-panel {
-  max-height: calc(100dvh - 24px - var(--safe-top) - var(--safe-bottom));
-  overflow-y: auto;
-  border-radius: 16px;
-}
-
-.duel-friend-picker {
-  margin: 8px 0 10px;
-  padding: 10px;
-  border-radius: 14px;
-  background: rgba(10, 13, 19, 0.92);
-  border: 1px solid rgba(250, 204, 21, 0.34);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.dfp-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.dfp-title {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: #fde047;
-}
-
-.dfp-tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-
-.dfp-tab {
-  min-height: 34px;
-  padding: 6px 8px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.04);
-  color: #cbd5e1;
-  font-size: 11.5px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.14s ease;
-}
-
-.dfp-tab.is-active {
-  background: rgba(250, 204, 21, 0.2);
-  border-color: rgba(250, 204, 21, 0.72);
-  color: #fef08a;
-}
-
-.dfp-tab-explain {
-  margin: 0;
-  padding: 2px 2px 0;
-  font-size: 11px;
-  line-height: 1.3;
-  color: #94a3b8;
-}
-
-.dfp-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 182px;
-  overflow-y: auto;
-  padding-right: 2px;
-}
-
-.dfp-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 7px 8px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.dfp-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.dfp-ava {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #f59e0b, #b45309);
-  color: #0d0d0d;
-  font-weight: 800;
-  font-size: 12px;
-  border: 1.5px solid rgba(250, 204, 21, 0.65);
-}
-
-.dfp-ava img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.dfp-info {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.dfp-info strong {
-  font-size: 12.5px;
-  color: #f8fafc;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.dfp-info span {
-  font-size: 10.5px;
-  color: #94a3b8;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.dfp-btn {
-  flex-shrink: 0;
-  min-height: 32px;
-  padding: 0 10px;
-  border-radius: 9px;
-  border: 1px solid rgba(250, 204, 21, 0.65);
-  background: linear-gradient(135deg, #facc15, #eab308);
-  color: #0d0d0d;
-  font-size: 11px;
-  font-weight: 800;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.dfp-btn.is-sent {
-  background: rgba(34, 197, 94, 0.2);
-  border-color: rgba(34, 197, 94, 0.65);
-  color: #86efac;
-  cursor: default;
-}
-
-.dfp-empty-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 6px 4px;
-  text-align: center;
-}
-
-.dfp-empty {
-  margin: 0;
-  font-size: 11.5px;
-  line-height: 1.38;
-  color: #94a3b8;
-}
-
-.dfp-pack-btn {
-  font-size: 11.5px !important;
+  max-width: 100vw;
+  box-sizing: border-box;
+}
+.screen-ocean .ocean-top-box,
+.screen-ocean .ocean-bottom-card {
+  max-width: calc(100vw - 20px);
+  box-sizing: border-box;
+}
+.screen-ocean .ocean-tap-prompt-badge {
+  max-width: min(240px, calc(100vw - 24px));
+  white-space: normal;
+  box-sizing: border-box;
 }
