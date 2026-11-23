@@ -388,7 +388,7 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1952'));
+    const mod = duelModCache || (await import('./duel.js?v=1953'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -1816,7 +1816,7 @@ function armWorkshopClickGuard(ms = 360) {
 }
 
 function closeBurgerDrawer() {
-  armWorkshopClickGuard(360);
+  armWorkshopClickGuard(260);
   document.getElementById('burger-backdrop')?.setAttribute('hidden', '');
   document.getElementById('burger-drawer')?.setAttribute('hidden', '');
   document.getElementById('btn-burger-menu')?.setAttribute('aria-expanded', 'false');
@@ -1994,6 +1994,7 @@ async function bootstrap() {
       setLang: (l) => setLang(l),
       strikeBarrel: async (idx) => {
         await ensureSceneReady();
+        state._workshopClickGuardUntil = 0;
         const b = scene?.barrels?.[idx];
         return handleBarrelStrike(idx, b ? b.group.position.clone() : null);
       },
@@ -2373,7 +2374,7 @@ function updateControlHintText() {
 
 function showScreen(name) {
   state.activeScreen = name;
-  if (name === 'workshop') armWorkshopClickGuard(360);
+  if (name === 'workshop') armWorkshopClickGuard(260);
   document.body.setAttribute('data-screen', name);
   if (name === 'ocean') {
     window.requestAnimationFrame(positionOceanToast);
@@ -7776,7 +7777,7 @@ function openTrailerModal({ forRescue = false, afterL1ToPack = false } = {}) {
 }
 
 function closeTrailerModal({ goToPack = false } = {}) {
-  armWorkshopClickGuard(360);
+  armWorkshopClickGuard(260);
   const wasAfterL1ToPack = Boolean(state.trailer.afterL1ToPack || goToPack);
   state.trailer.afterL1ToPack = false;
   document.getElementById('btn-trailer-to-pack')?.setAttribute('hidden', '');
