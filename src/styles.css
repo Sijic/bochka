@@ -2006,7 +2006,14 @@ body[data-screen="ocean"] .toast {
   margin: 8px 0 10px;
 }
 .pack-quick-1tap-btn {
-  min-height: 58px;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px 14px !important;
+  text-align: center;
+  min-height: 62px;
   font-size: 15px !important;
   box-shadow: 0 0 24px rgba(234, 179, 8, 0.35);
 }
