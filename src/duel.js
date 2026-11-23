@@ -1411,7 +1411,15 @@ export class WorkshopDuelController {
       return true;
     }
 
-    if (this.openedIndices.includes(barrelIndex) || this.scene.barrels?.[barrelIndex]?.struck) {
+    const existing = this.claims[barrelIndex];
+    if (existing && existing.uid !== this.myUid) {
+      Haptics.error();
+      const bCode = BARREL_BATCH_CODES[barrelIndex] || String(barrelIndex + 1);
+      this.onToast?.(`⚔️ Вы ударили в одну бочку №${bCode}! ${existing.name} успел чуть раньше — бей по другой закрытой!`);
+      return true;
+    }
+
+    if (this.openedIndices.includes(barrelIndex) || (!existing && this.scene.barrels?.[barrelIndex]?.struck)) {
       Haptics.light();
       this.onToast?.('🛢 Эта бочка уже вскрыта в прошлом заходе! Бей по закрытой!');
       return true;
@@ -1430,14 +1438,6 @@ export class WorkshopDuelController {
     if (this.energy < 25) {
       this.energy = 100;
       this.syncEnergyUI();
-    }
-
-    const existing = this.claims[barrelIndex];
-    if (existing && existing.uid !== this.myUid) {
-      Haptics.error();
-      const bCode = BARREL_BATCH_CODES[barrelIndex] || String(barrelIndex + 1);
-      this.onToast?.(`⚔️ Вы ударили в одну бочку №${bCode}! ${existing.name} успел чуть раньше — бей по другой закрытой!`);
-      return true;
     }
 
     // Каждый удар тратит 25% энергии (можно пропустить и сэкономить!)

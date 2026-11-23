@@ -1821,6 +1821,9 @@ button:disabled {
   font-weight: 700;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.85);
 }
+body.is-duel-active .toast {
+  top: calc(138px + var(--safe-top));
+}
 
 /* v14.3.2: На экране Тиля (#screen-ocean) тост НИКОГДА не перекрывает ни верхнюю плашку .ocean-top-box, ни бочку, ни нижние кнопки!
    Точный top вычисляется динамически от .ocean-top-box.bottom + 12px в showToast()/positionOceanToast(), ниже безопасный fallback. */
