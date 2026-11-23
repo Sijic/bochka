@@ -357,7 +357,7 @@ async function ensureSceneReady() {
   if (sceneInitPromise) return sceneInitPromise;
   sceneInitPromise = (async () => {
     try {
-      const { WorkshopScene } = await import('./scene.js?v=1970');
+      const { WorkshopScene } = await import('./scene.js?v=1971');
       if (scene) return scene;
       const canvas = document.getElementById('workshop-canvas');
       scene = new WorkshopScene(canvas, {
@@ -393,7 +393,7 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1970'));
+    const mod = duelModCache || (await import('./duel.js?v=1971'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -478,7 +478,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=1970'));
+  const mod = duelModCache || (await import('./duel.js?v=1971'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
@@ -7472,12 +7472,10 @@ function destroyVkTrailerPlayerAndIframe() {
   if (!slot) return;
   slot.querySelectorAll('iframe').forEach((f) => {
     f.removeAttribute('id');
-    f.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;pointer-events:none;opacity:0;';
     try { f.src = 'about:blank'; } catch { /* ignore */ }
-    window.setTimeout(() => {
-      try { f.remove(); } catch { /* ignore */ }
-    }, 250);
+    try { f.remove(); } catch { /* ignore */ }
   });
+  slot.textContent = '';
   slot.setAttribute('hidden', '');
 }
 
@@ -7972,7 +7970,7 @@ function closeTrailerModal({ goToPack = false, force = false } = {}) {
   state.trailer.introLocked = false;
   document.getElementById('btn-trailer-to-pack')?.setAttribute('hidden', '');
   state.trailer.modalOpen = false;
-  syncSceneRenderPause();
+  if (!wasAfterL1ToPack) syncSceneRenderPause();
   state.trailer.externalRescueDepartedAt = 0;
   clearTrailerTimers();
   destroyVkTrailerPlayerAndIframe();
@@ -7992,8 +7990,10 @@ function closeTrailerModal({ goToPack = false, force = false } = {}) {
     saveLocalV9Flags();
     state.pack.forLifeRefill = false;
     document.getElementById('pack-mandatory-banner')?.setAttribute('hidden', '');
-    showScreen('pack');
-    showToast('🛢 Быстро закатай друга в бочку — дальше все раунды против Тиля!');
+    window.setTimeout(() => {
+      showScreen('pack');
+      showToast('🛢 Быстро закатай друга в бочку — дальше все раунды против Тиля!');
+    }, 60);
     return;
   }
 
