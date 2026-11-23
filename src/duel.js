@@ -21,7 +21,7 @@ const TIL_AVATAR_URL = './public/sprites/til_avatar.webp?v=1543';
  * Все промежуточные клики и таймеры идут строго через WebSocket в оперативной памяти (0 записей в БД).
  */
 export class WorkshopDuelController {
-  constructor({ scene, audio, getTgUser, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels, onOpenHallOfFame, loadDuelCandidates, onChallengeFriend, onOpenPackFriend, onRoomFull }) {
+  constructor({ scene, audio, getTgUser, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels, onOpenHallOfFame, loadDuelCandidates, onChallengeFriend, onOpenPackFriend, onRoomFull, onTriggerScreamerFx }) {
     this.scene = scene;
     this.audio = audio;
     this.getTgUser = getTgUser;
@@ -39,10 +39,12 @@ export class WorkshopDuelController {
     this.onChallengeFriend = onChallengeFriend || null;
     this.onOpenPackFriend = onOpenPackFriend || null;
     this.onRoomFull = onRoomFull || null;
+    this.onTriggerScreamerFx = onTriggerScreamerFx || null;
     this.duelCandidates = { sent: [], branch: [], loaded: false };
     this.pickerTab = 'sent'; // 'sent' | 'branch'
     this.challengedUids = new Set();
     this.soloMode = false;
+    this.tilRoundIdx = 0;
     this.duelMode = 'classic'; // 'classic' | 'chips'
     this.selectedAnteTrophyId = null;
     this.selectedAnteTrophyMeta = null;
@@ -51,7 +53,7 @@ export class WorkshopDuelController {
     this._trophiesMod = null;
     this.energy = 100;
     this.duelLives = 6; // v12.0: Минимум 6 жизней именно на Дуэль (Тиль всегда пополняет минимум до 6 ❤️!)
-    this.duelRoundsWithoutTicket = 0; // Если не нашёл билет за 3 раунда -> возврат на уровни искать пацана!
+    this.duelRoundsWithoutTicket = 0;
     this.maxDuelRounds = 3;
     this.batchResolved = false; // true, когда кто-то выбил 🎟 Билет или бочки кончились
     this.skippedThisTurn = false;
@@ -69,7 +71,7 @@ export class WorkshopDuelController {
     this.phase = 'idle'; // 'lobby' | 'countdown' | 'claim' | 'reveal' | 'finished'
     this.roundKey = '';
     this.antePaidForRound = '';
-    this.barrelCount = 10;
+    this.barrelCount = 6;
     this.safeIndices = [];
     this.barrelLoot = {}; // { [idx]: { kind: 'ticket'|'points'|'empty'|'screamer', value, label } }
     this.batchHasTicket = false;
@@ -112,7 +114,7 @@ export class WorkshopDuelController {
 
   async loadTrophiesMod() {
     if (!this._trophiesMod) {
-      this._trophiesMod = await import('./trophies.js?v=155');
+      this._trophiesMod = await import('./trophies.js?v=1910');
     }
     return this._trophiesMod;
   }
@@ -120,6 +122,7 @@ export class WorkshopDuelController {
   bindModeTabsOnce() {
     const tabClassic = document.getElementById('btn-duel-tab-classic');
     const tabChips = document.getElementById('btn-duel-tab-chips');
+    const switchLobbyBtn = document.getElementById('btn-duel-switch-lobby');
     if (tabClassic && !tabClassic.dataset.bound) {
       tabClassic.dataset.bound = '1';
       tabClassic.addEventListener('click', () => {
@@ -134,6 +137,45 @@ export class WorkshopDuelController {
         this.setDuelMode('chips', { forceRefresh: true });
       });
     }
+    if (switchLobbyBtn && !switchLobbyBtn.dataset.bound) {
+      switchLobbyBtn.dataset.bound = '1';
+      switchLobbyBtn.addEventListener('click', () => {
+        this.returnToLobby();
+      });
+    }
+  }
+
+  returnToLobby() {
+    if (!this.active) return;
+    this.clearAllTimers();
+    this.clearBarrelClaimBadges();
+    this.phase = 'lobby';
+    this.soloMode = false;
+    this.duelRoundsWithoutTicket = 0;
+    this.tilRoundIdx = 0;
+    this.openedIndices = [];
+    this.claims = {};
+    this.players = this.players.filter((p) => !p.isBot);
+    if (!this.players.length) {
+      this.players = [
+        {
+          uid: this.myUid,
+          name: this.myName,
+          avatar: this.myAvatar,
+          joinedAt: Date.now(),
+          isBot: false,
+        },
+      ];
+    }
+    document.getElementById('duel-result-box')?.setAttribute('hidden', '');
+    document.getElementById('duel-live-mini-bar')?.setAttribute('hidden', '');
+    document.getElementById('duel-countdown-banner')?.setAttribute('hidden', '');
+    const overlay = document.getElementById('duel-overlay');
+    overlay?.classList.remove('is-playing', 'is-finished');
+    this.scene?.resetRound?.({ barrelCount: 6, targetIndex: 0, golden: false });
+    this.scene?.setInteractive?.(false);
+    this.renderLobbyUI();
+    this.refreshFriendPicker();
   }
 
   updateModeTabsUI() {
@@ -233,7 +275,7 @@ export class WorkshopDuelController {
     this.renderLobbyUI();
   }
 
-  async openRoom(roomId, { autoAddTestBots = false, initialMode = 'classic', prefetchedHof = null } = {}) {
+  async openRoom(roomId, { autoAddTestBots = false, initialMode = 'classic', prefetchedHof = null, autoStartSoloTil = false } = {}) {
     this.leaveRoom(false);
     if (prefetchedHof?.ok) {
       this.hofCache = prefetchedHof;
@@ -246,6 +288,10 @@ export class WorkshopDuelController {
     this.roomId = String(roomId || `d_${Math.random().toString(36).slice(2, 8)}`).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 28);
     this.active = true;
     this.phase = 'lobby';
+    this.soloMode = false;
+    this.tilRoundIdx = 0;
+    this.barrelCount = 6;
+    this.duelRoundsWithoutTicket = 0;
     this.duelMode = 'classic';
     this.selectedAnteTrophyId = null;
     this.selectedAnteTrophyMeta = null;
@@ -298,7 +344,7 @@ export class WorkshopDuelController {
     }
 
     this.scene.resetRound({
-      barrelCount: 10,
+      barrelCount: 6,
       targetIndex: 0,
       golden: false,
     });
@@ -326,6 +372,9 @@ export class WorkshopDuelController {
           this.updateModeTabsUI();
         })
         .catch(() => {});
+      if (autoStartSoloTil) {
+        await this.startSoloDuel();
+      }
     }
   }
 
@@ -592,12 +641,12 @@ export class WorkshopDuelController {
           const vsTil = this.players.some((p) => p.isBot && (p.isTil || p.uid === TIL_BOT_UID));
           const vsBot = this.players.some((p) => p.isBot);
           miniStatus.textContent = isFinished
-            ? '🏁 ИТОГ ДУЭЛИ 1 НА 1'
+            ? '🏁 ИТОГ РАУНДА'
             : vsTil
-              ? '🎬 РАЗМИНКА С ТИЛЕМ (ПОКА ЖДЁМ ДРУГА)'
+              ? `🎬 ПРОТИВ ТИЛЯ · ${this.barrelCount || 6} БОЧЕК`
               : vsBot
                 ? '🤖 БОЙ 1 НА 1 С БОТОМ'
-                : '⚔️ ДУЭЛЬ 1 НА 1 · 2 ДРУГА';
+                : `⚔️ ДУЭЛЬ 1 НА 1 · ${this.barrelCount || 6} БОЧЕК`;
         }
       } else {
         liveMiniBar.setAttribute('hidden', '');
@@ -934,15 +983,18 @@ export class WorkshopDuelController {
     }
 
     const contenders = suddenDeathContenders || this.players.map((p) => p.uid);
-    const barrelCount = 10;
-    const safeCount = 5;
+    const TIERS = [6, 8, 10, 12];
+    const roundIdx = Math.max(0, Number(this.tilRoundIdx || 0));
+    const barrelCount = isFreeRerack
+      ? (this.barrelCount || 6)
+      : TIERS[Math.min(TIERS.length - 1, roundIdx)];
 
     const prevOpened = isFreeRerack ? [...this.openedIndices] : [];
     const closedRemaining = Array.from({ length: barrelCount }, (_, i) => i).filter(
       (i) => !prevOpened.includes(i)
     );
 
-    // Обновляем партию из 10 бочек ТОЛЬКО на старте новой игры или когда добили все закрытые бочки!
+    // Обновляем партию ТОЛЬКО на старте новой игры или когда добили все закрытые бочки!
     const needFreshRack = !isFreeRerack || closedRemaining.length < contenders.length || !this.safeIndices.length;
 
     let safeIndices = this.safeIndices;
@@ -951,33 +1003,37 @@ export class WorkshopDuelController {
     let batchHasTicket = Boolean(this.batchHasTicket);
 
     if (needFreshRack) {
+      if (!isFreeRerack) {
+        this.tilRoundIdx = roundIdx + 1;
+      }
       const indices = Array.from({ length: barrelCount }, (_, i) => i);
       for (let i = indices.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [indices[i], indices[j]] = [indices[j], indices[i]];
       }
-      // v12.5: Сбалансированная, напряжённая Охота за Билетом в партии из 10 бочек:
-      // - 🎟 БИЛЕТ В КИНО — РЕДКИЙ (~35% партий в Раундах 1-2, гарантирован на 3-м раунде если ещё не выпадал!)
-      // - ТОЛЬКО 1 редкая бочка ❤️ +1 ЖИЗНЬ (макс 6 ❤️, больше не раздувается!)
-      // - 2-3 бочки ⭐ БАЛЛЫ (350 / 250 / 150 ⭐)
-      // - 3 пустых (💨 −1 ❤️) + 2-3 скримера (☠️ −2 ❤️ — реальная опасность быстро потерять жизни!)
-      batchHasTicket = (this.duelRoundsWithoutTicket || 0) >= 2 ? true : Math.random() < 0.35;
+      // v19.1: Раунды с возрастающей сложностью (6 -> 8 -> 10 -> 12 бочек):
+      // - 🎟 БИЛЕТ В КИНО (~45% на старте, 100% на следующем раунде)
+      // - ❤️ +1 ЖИЗНЬ (до макс 6 ❤️)
+      // - ⭐ БАЛЛЫ (350 / 250 / 150) + пустые (−1 ❤️) + скримеры (☠️ −2 ❤️)
+      batchHasTicket = (this.duelRoundsWithoutTicket || 0) >= 1 ? true : Math.random() < 0.45;
       const pointTiers = [350, 250, 150];
       barrelLoot = {};
       safeIndices = [];
       let cursor = 0;
 
-      if (batchHasTicket) {
+      if (batchHasTicket && cursor < barrelCount) {
         const tIdx = indices[cursor++];
         barrelLoot[tIdx] = { kind: 'ticket', value: 1000, label: '🎟 БИЛЕТ В КИНО!' };
         safeIndices.push(tIdx);
       }
 
-      const lIdx = indices[cursor++];
-      barrelLoot[lIdx] = { kind: 'life', value: 1, label: '❤️ +1 ЖИЗНЬ' };
-      safeIndices.push(lIdx);
+      if (cursor < barrelCount) {
+        const lIdx = indices[cursor++];
+        barrelLoot[lIdx] = { kind: 'life', value: 1, label: '❤️ +1 ЖИЗНЬ' };
+        safeIndices.push(lIdx);
+      }
 
-      const ptsSlots = batchHasTicket ? 2 : 3;
+      const ptsSlots = barrelCount <= 6 ? (batchHasTicket ? 1 : 2) : (batchHasTicket ? 2 : 3);
       for (let p = 0; p < ptsSlots && cursor < barrelCount; p++) {
         const pIdx = indices[cursor++];
         const val = pointTiers[p % pointTiers.length];
@@ -985,7 +1041,8 @@ export class WorkshopDuelController {
         safeIndices.push(pIdx);
       }
 
-      for (let e = 0; e < 3 && cursor < barrelCount; e++) {
+      const emptySlots = barrelCount <= 6 ? 1 : barrelCount <= 8 ? 2 : 3;
+      for (let e = 0; e < emptySlots && cursor < barrelCount; e++) {
         const eIdx = indices[cursor++];
         barrelLoot[eIdx] = { kind: 'empty', value: 0, label: '💨 ПУСТО (−1 ❤️)' };
       }
@@ -1040,7 +1097,7 @@ export class WorkshopDuelController {
       this.roundParticipants = Array.from(new Set(this.contenderUids));
     }
     this.spectatorUids = payload.spectatorUids || [];
-    this.barrelCount = payload.barrelCount || 10;
+    this.barrelCount = payload.barrelCount || 6;
     this.safeIndices = payload.safeIndices || [0, 2, 4, 6, 8];
     this.barrelLoot = payload.barrelLoot || this.barrelLoot || {};
     this.batchHasTicket = Boolean(payload.batchHasTicket);
@@ -1128,12 +1185,12 @@ export class WorkshopDuelController {
     if (bannerSub) {
       if (payload.isSuddenDeath) {
         bannerSub.textContent = payload.resetRack
-          ? '⚡ СУПЕРФИНАЛ 1 НА 1: ВСЕ БОЧКИ ВСКРЫТЫ — НОВЫЕ 10 БОЧЕК!'
+          ? `⚡ СУПЕРФИНАЛ 1 НА 1: ВСЕ БОЧКИ ВСКРЫТЫ — НОВЫЕ ${this.barrelCount} БОЧЕК!`
           : `⚡ СУПЕРФИНАЛ 1 НА 1 · ОСТАЛОСЬ ${closedLeft} ЗАКРЫТЫХ БОЧЕК ИЗ ${this.barrelCount}!`;
       } else if (payload.isFreeRerack) {
         bannerSub.textContent = payload.resetRack
-          ? '🔄 ВСЕ 10 БОЧЕК ВСКРЫТЫ! НОВАЯ ПАРТИЯ БЕЗ СПИСАНИЯ ЖИЗНЕЙ!'
-          : `🔥 НИЧЬЯ! БОЧКИ НЕ ОБНОВЛЯЮТСЯ — ОСТАЛОСЬ ${closedLeft} ЗАКРЫТЫХ!`;
+          ? `🔄 ВСЕ БОЧКИ ВСКРЫТЫ! НОВЫЕ ${this.barrelCount} БОЧЕК БЕЗ СПИСАНИЯ ЖИЗНЕЙ!`
+          : `🔥 ИГРАЕМ ДАЛЬШЕ — ОСТАЛОСЬ ${closedLeft} ЗАКРЫТЫХ БОЧЕК!`;
       } else {
         bannerSub.textContent = `В ЦЕХУ ${this.barrelCount} ЗАКРЫТЫХ БОЧЕК — ПРИГОТОВЬСЯ ХВАТАТЬ СВОЮ!`;
       }
@@ -1179,10 +1236,12 @@ export class WorkshopDuelController {
     }
     if (livesEl) livesEl.textContent = String(dl);
     if (livesPill) livesPill.classList.toggle('is-low', dl <= 1);
-    const closedLeft = Math.max(0, (this.barrelCount || 10) - (this.openedIndices?.length || 0));
-    const curRound = Math.min(this.maxDuelRounds || 3, (this.duelRoundsWithoutTicket || 0) + 1);
+    const closedLeft = Math.max(0, (this.barrelCount || 6) - (this.openedIndices?.length || 0));
+    const roundDisplay = Math.max(1, Number(this.tilRoundIdx || 1));
     if (statusEl) {
-      statusEl.textContent = `🎟 РАУНД ${curRound}/${this.maxDuelRounds || 3} · ЗАКРЫТО ${closedLeft}/${this.barrelCount || 10}`;
+      statusEl.textContent = this.soloMode
+        ? `🎬 РАУНД ${roundDisplay} (С ТИЛЕМ) · ${closedLeft}/${this.barrelCount || 6}`
+        : `⚔️ ДУЭЛЬ 1×1 · ${closedLeft}/${this.barrelCount || 6}`;
     }
     if (skipBtn) {
       const hasMyClaim = Object.values(this.claims || {}).some((c) => c.uid === this.myUid);
@@ -1208,17 +1267,6 @@ export class WorkshopDuelController {
 
   continueBatchOrRematch() {
     if (!this.active) return;
-    // Если 3 раунда подряд не нашёл билет — возвращаемся в цех на уровни (искать пацана и набивать ⭐)!
-    if (this.duelRoundsWithoutTicket >= (this.maxDuelRounds || 3)) {
-      this.duelRoundsWithoutTicket = 0;
-      document.getElementById('duel-result-box')?.setAttribute('hidden', '');
-      if (this.onReturnToLevels) {
-        this.onReturnToLevels();
-      } else {
-        this.leaveRoom(true);
-      }
-      return;
-    }
     // Если кончились дуэльные жизни (СТРОГО 0 ❤️!) — на Небо к Тилю (он даёт 6 ❤️ + ⚡ 100%)!
     if (this.duelLives <= 0) {
       if (this.onDuelDefeatToTil) {
@@ -1233,7 +1281,7 @@ export class WorkshopDuelController {
       this.energy = 100;
       this.syncEnergyUI();
     }
-    const closedLeft = Math.max(0, (this.barrelCount || 10) - (this.openedIndices?.length || 0));
+    const closedLeft = Math.max(0, (this.barrelCount || 6) - (this.openedIndices?.length || 0));
     // Пока НИКТО не нашёл 🎟 Билет и есть закрытые бочки — продолжаем драться по этой же партии!
     const keepCurrentBatch = !this.batchResolved && closedLeft >= 2;
     this.hostInitiateRound({ isFreeRerack: keepCurrentBatch });
@@ -1505,7 +1553,11 @@ export class WorkshopDuelController {
     for (const [bStr, claim] of Object.entries(this.claims)) {
       const bIdx = Number(bStr);
       const loot = this.getLootForBarrel(bIdx);
-      this.scene.triggerEmptyBarrelOpen(bIdx);
+      if (claim.uid === this.myUid && loot.kind === 'ticket') {
+        this.scene.triggerRevealDive?.(bIdx);
+      } else {
+        this.scene.triggerEmptyBarrelOpen(bIdx);
+      }
       if (!this.openedIndices.includes(bIdx)) {
         this.openedIndices.push(bIdx);
       }
@@ -1518,8 +1570,12 @@ export class WorkshopDuelController {
     const oppEntry = entries.find((e) => e.claim.uid !== this.myUid) || null;
 
     if (anyScreamer) {
-      this.audio.playMiniScreamer(0);
-      this.scene.triggerScreamerShake(0.45);
+      if (myEntry?.loot?.kind === 'screamer' && this.onTriggerScreamerFx) {
+        this.onTriggerScreamerFx(1350);
+      } else {
+        this.audio.playMiniScreamer(0);
+        this.scene.triggerScreamerShake(0.45);
+      }
     }
     if (anyPoints) {
       this.audio.playLidBlowOff(Boolean(myEntry && myEntry.loot.value > 0));
@@ -1694,9 +1750,9 @@ export class WorkshopDuelController {
       this.duelRoundsWithoutTicket = (this.duelRoundsWithoutTicket || 0) + 1;
     }
 
-    const outOfRounds = !iFoundTicket && this.duelRoundsWithoutTicket >= (this.maxDuelRounds || 3);
-    // v13.0: К Тилю — СТРОГО ТОЛЬКО при 0 ❤️ жизней!
-    const needTilRefill = !iFoundTicket && !outOfRounds && this.duelLives <= 0;
+    const outOfRounds = false; // v19.1: Все последующие раунды идут против Тиля (6->8->10->12 бочек) без отката в пустой цех!
+    // v13.0: К Тилю на Северное море — СТРОГО ТОЛЬКО при 0 ❤️ жизней!
+    const needTilRefill = !iFoundTicket && this.duelLives <= 0;
 
     if (iFoundTicket) {
       Haptics.success();
@@ -1769,15 +1825,15 @@ export class WorkshopDuelController {
     }
 
     if (rematchBtn) {
-      if (outOfRounds) {
-        rematchBtn.textContent = '▶ НА УРОВНИ ЦЕХА — ИСКАТЬ ПАЦАНА И НАБИВАТЬ ⭐';
-      } else if (needTilRefill) {
+      if (needTilRefill) {
         rematchBtn.textContent = '🌊 НА НЕБО К ТИЛЮ — ЗАБРАТЬ 6 ❤️ И ⚡ 100%';
       } else if (!this.batchResolved && closedLeft >= 2) {
         rematchBtn.textContent = `🔨 БИТЬ ДАЛЬШЕ (ИЩЕМ 🎟 БИЛЕТ · ${closedLeft} БОЧЕК · ❤️ ${this.duelLives} · ⚡ ${this.energy}%)`;
       } else {
-        const nextR = Math.min(this.maxDuelRounds || 3, (this.duelRoundsWithoutTicket || 0) + 1);
-        rematchBtn.textContent = `🔄 НОВАЯ ПАРТИЯ ЗА БИЛЕТОМ (РАУНД ${nextR}/${this.maxDuelRounds || 3} · ❤️ ${this.duelLives})`;
+        const nextB = [6, 8, 10, 12][Math.min(3, Math.max(0, Number(this.tilRoundIdx || 1)))];
+        rematchBtn.textContent = this.soloMode
+          ? `🎬 СЛЕДУЮЩИЙ РАУНД ПРОТИВ ТИЛЯ (${nextB} БОЧЕК · ❤️ ${this.duelLives})`
+          : `🔄 РЕВАНШ 1 НА 1 (${nextB} БОЧЕК · СТАВКА 1 ❤️)`;
       }
       rematchBtn.removeAttribute('hidden');
     }

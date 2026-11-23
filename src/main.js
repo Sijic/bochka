@@ -367,7 +367,7 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1900'));
+    const mod = duelModCache || (await import('./duel.js?v=1910'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -385,6 +385,7 @@ async function ensureDuelReady() {
         showToast('🔒 За тем столом 1×1 уже играют двое — открыли тебе новый стол!');
         openDuelTable('').catch(() => {});
       },
+      onTriggerScreamerFx: (durMs) => triggerMiniScreamer(null, durMs),
       onProfileSync: (patch) => {
         state.profile = { ...state.profile, ...patch };
         if (patch && patch.ticketShards != null) {
@@ -425,9 +426,7 @@ async function ensureDuelReady() {
         });
       },
       onReturnToLevels: () => {
-        duelCtrl?.leaveRoom(false);
-        showToast('🔄 3 раунда дуэли без части билета — возвращаемся в цех спасать пацана и набивать ⭐!');
-        startDemoRound();
+        duelCtrl?.startSoloDuel?.();
       },
     });
     return duelCtrl;
@@ -436,7 +435,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=1900'));
+  const mod = duelModCache || (await import('./duel.js?v=1910'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
@@ -444,7 +443,7 @@ async function createWatchChannelLazy(barrelId, opts) {
 let trophiesModCache = null;
 async function loadTrophiesMod() {
   if (!trophiesModCache) {
-    trophiesModCache = await import('./trophies.js?v=1900');
+    trophiesModCache = await import('./trophies.js?v=1910');
   }
   return trophiesModCache;
 }
@@ -2640,19 +2639,14 @@ async function enterWorkshopGate(withSound) {
       showScreen('pack');
       showToast('🔒 Отправь друга в бочке, чтобы выиграть билет и продолжить на супер-приз!');
     } else {
-      // v13.1: Если игрок уже проходил уровни и вышел из приложения — возвращаем СТРОГО на его сохранённый уровень и удары!
+      // v19.1: Если игрок уже упаковал друга или ушёл дальше Ур.1 — сразу открываем раунды против Тиля / Дуэль 1×1!
       const snap = passiveRegen?.snapshot || readSessionResume();
       const resumeLvl = Math.max(Number(state.profile?.currentLevel || 1), Number(snap?.currentLevel || 1));
-      const hasSavedProgress = resumeLvl >= 2 || Boolean(state.profile?.hasPlayedSolo);
-      if (hasSavedProgress) {
-        state.profile.currentLevel = resumeLvl;
-        const resumeAttempts = snap && snap.attemptsLeft != null ? Math.max(0, Math.min(3, Number(snap.attemptsLeft))) : 3;
-        await startDemoRound({ resumeAttempts });
-        if (resumeAttempts <= 0 && Number(state.profile?.lives || 0) <= 0) {
-          openLivesRecoveryModal({ forLevel: resumeLvl });
-        } else if (!passiveRegen?.dailyLifeGranted && !passiveRegen?.hourlyStrikesGranted) {
-          showToast(`💾 Прогресс восстановлен: Уровень ${resumeLvl} · ❤️ ${state.profile.lives} · 🟨 ${state.round.attemptsLeft}/3 ударов`);
-        }
+      const alreadyPacked = Number(state.profile?.packedCount || 0) >= 1;
+      if (alreadyPacked || resumeLvl >= 3) {
+        await syncUiStage(state.tg?.user, 4).catch(() => {});
+        applyProgressiveDisclosureUI({ forceStage: 4 });
+        await openDuelTable('');
       } else {
         await startNewbieOnboardingRound();
       }
@@ -4479,7 +4473,7 @@ function createVictimCardDataUrl(sourceImgUrl = '') {
   }
 }
 
-function triggerMiniScreamer(explicitVariant = null) {
+function triggerMiniScreamer(explicitVariant = null, durationMsOverride = null) {
   const isLevel1Intro =
     explicitVariant === null &&
     Boolean(state.round?.isDemo) &&
@@ -4552,7 +4546,7 @@ function triggerMiniScreamer(explicitVariant = null) {
   el.style.animation = 'none';
   void el.offsetWidth;
   el.style.animation = '';
-  const showMs = 3250;
+  const showMs = Number(durationMsOverride) > 300 ? Number(durationMsOverride) : 3250;
   if (screamerPlayer) {
     imgEl?.setAttribute('hidden', '');
     screamerPlayer.play({
@@ -6380,7 +6374,11 @@ function showSentScreen({ wasLifeRefill = false, wasBroadcastPack = false, broad
       seedMetaEl.setAttribute('hidden', '');
     }
   }
+  const tilPlayAva = document.getElementById('sent-play-til-ava');
+  const duel1v1Btn = document.getElementById('btn-sent-duel-1v1');
   if (wasBroadcastPack) {
+    tilPlayAva?.setAttribute('hidden', '');
+    duel1v1Btn?.setAttribute('hidden', '');
     const isBlog = broadcastRole === 'blog';
     if (titleEl) {
       titleEl.textContent = isBlog
@@ -6394,17 +6392,18 @@ function showSentScreen({ wasLifeRefill = false, wasBroadcastPack = false, broad
     }
     if (btnTxt) {
       btnTxt.textContent = isBlog
-        ? `▶️ ИГРАТЬ ДАЛЬШЕ — УРОВЕНЬ ${spec.level} (${spec.barrelCount} ${formatBarrelWord(spec.barrelCount)})`
+        ? '🎬 НАЧАТЬ РАУНД ПРОТИВ ТИЛЯ →'
         : '▶️ ПОИГРАТЬ В ЦЕХ — УРОВЕНЬ 1 (БЕЗ РОЗЫГРЫШЕЙ)';
     }
   } else {
-    if (titleEl) titleEl.textContent = 'КРАСАВА! БОЧКА УЛЕТЕЛА ДРУГУ!';
+    tilPlayAva?.removeAttribute('hidden');
+    duel1v1Btn?.removeAttribute('hidden');
+    if (titleEl) titleEl.textContent = '🔥 ГОТОВО! БОЧКА УЛЕТЕЛА ДРУГУ!';
     if (txt) {
-      txt.textContent = wasLifeRefill
-        ? `Бочка улетела другу — у тебя снова ровно 3 ❤️ жизни! Возвращайся на Уровень ${spec.level}!`
-        : `У тебя ровно 3 ❤️ жизни (9 ударов)! Впереди Уровень ${spec.level} (${spec.barrelCount} ${formatBarrelWord(spec.barrelCount).toLowerCase()}) — ищи билет в кино!`;
+      txt.textContent =
+        'Дальше все раунды — ПРОТИВ ТИЛЯ ШВАЙГЕРА за билеты в кино и Суперприз (Москва, 17 декабря)! Вся механика та же — на «Раз-два-три!» ищи нужную бочку быстрее Тиля. А когда друг зайдёт — сможешь вызвать его 1 на 1!';
     }
-    if (btnTxt) btnTxt.textContent = `▶️ ИГРАТЬ УРОВЕНЬ ${spec.level} (${spec.barrelCount} ${formatBarrelWord(spec.barrelCount)})`;
+    if (btnTxt) btnTxt.textContent = '🎬 НАЧАТЬ РАУНД ПРОТИВ ТИЛЯ →';
   }
   showScreen('sent');
 }
@@ -6715,9 +6714,22 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
     if (packText) packText.textContent = `🔄 ПОПРОБОВАТЬ СНОВА (УРОВЕНЬ ${completedLvl})`;
     cinemaBtn?.setAttribute('hidden', '');
   } else if (completedLvl === 1) {
-    state.finaleMode = 'l1_reply_yes';
-    if (nextEl) nextEl.textContent = 'Отправь другу: «Я тебя нашёл!» и разреши уведомления от бота — чтобы получать ответы друзей, вызовы в Дуэли и бесплатные билеты в кино!';
-    if (packText) packText.textContent = '🍿 ОТПРАВИТЬ ДРУГУ И РАЗРЕШИТЬ ПУШИ → РАУНД 2';
+    const alreadyWatchedTrailer = Boolean(state.trailer?.unlocked40 || getQuestState()?.trailerDone);
+    if (!alreadyWatchedTrailer) {
+      state.finaleMode = 'l1_to_trailer_then_pack';
+      if (nextEl) {
+        nextEl.textContent =
+          'Друг найден! Посмотри официальный трейлер фильма «БОЧКА» (VK Видео) — и сразу закатай своего друга в ответную бочку!';
+      }
+      if (packText) packText.textContent = '🎬 СМОТРЕТЬ ТРЕЙЛЕР → ЗАКАТАТЬ ДРУГА';
+    } else {
+      state.finaleMode = 'l1_to_pack';
+      if (nextEl) {
+        nextEl.textContent =
+          'Друг найден! Теперь быстро закатай своего друга в бочку — дальше все раунды идут против Тиля Швайгера за билеты в кино!';
+      }
+      if (packText) packText.textContent = '🛢 ЗАКАТАТЬ ДРУГА В БОЧКУ (+3 ❤️)';
+    }
     cinemaBtn?.setAttribute('hidden', '');
   } else if (r.lastShardAward?.merged && r.lastShardAward?.granted && Number(state.profile.pendingTicketsCount || 0) > 0) {
     state.finaleMode = 'next';
@@ -7499,11 +7511,17 @@ function setTrailerMuted(nextMuted = false) {
   syncTrailerMuteButton();
 }
 
-function openTrailerModal({ forRescue = false } = {}) {
+function openTrailerModal({ forRescue = false, afterL1ToPack = false } = {}) {
   state.trailer.modalOpen = true;
   state.trailer.usingYtFallback = true;
   state.trailer.forRescue = Boolean(forRescue);
+  state.trailer.afterL1ToPack = Boolean(afterL1ToPack);
   state.trailer.externalRescueDepartedAt = 0;
+  const toPackBtn = document.getElementById('btn-trailer-to-pack');
+  if (toPackBtn) {
+    if (afterL1ToPack) toPackBtn.removeAttribute('hidden');
+    else toPackBtn.setAttribute('hidden', '');
+  }
   audio.stopListening();
   audio.stopMuffledVoiceLoop();
   audio.setModalAudioDuck(true);
@@ -7589,7 +7607,10 @@ function openTrailerModal({ forRescue = false } = {}) {
   }
 }
 
-function closeTrailerModal() {
+function closeTrailerModal({ goToPack = false } = {}) {
+  const wasAfterL1ToPack = Boolean(state.trailer.afterL1ToPack || goToPack);
+  state.trailer.afterL1ToPack = false;
+  document.getElementById('btn-trailer-to-pack')?.setAttribute('hidden', '');
   state.trailer.modalOpen = false;
   state.trailer.usingYtFallback = false;
   state.trailer.ytStartedPlaying = false;
@@ -7619,6 +7640,18 @@ function closeTrailerModal() {
   }
   audio.setModalAudioDuck(false);
   syncTrailerPlayButton();
+
+  if (wasAfterL1ToPack) {
+    markTrailerCompleted();
+    state.trailer.unlocked40 = true;
+    state.profile.mustSendFriendPack = true;
+    saveLocalV9Flags();
+    state.pack.forLifeRefill = false;
+    document.getElementById('pack-mandatory-banner')?.setAttribute('hidden', '');
+    showScreen('pack');
+    showToast('🛢 Быстро закатай друга в бочку — дальше все раунды против Тиля!');
+    return;
+  }
 
   if (state.trailer.forRescue && !state.trailer.unlocked40 && state.activeScreen === 'workshop' && !state.round.running) {
     const isL1PreTrailer = state.round.modeType === 'viral' && Number(state.round.rescueStage || 0) < 4;
@@ -7950,7 +7983,7 @@ function escapeHtmlSafe(str) {
 }
 
 let _openingDuelLock = false;
-async function openDuelTable(roomId = '', { autoAddTestBots = false, initialMode = 'classic', prefetchedHof = null } = {}) {
+async function openDuelTable(roomId = '', { autoAddTestBots = false, initialMode = 'classic', prefetchedHof = null, autoStartSoloTil = false } = {}) {
   if (_openingDuelLock && !roomId) return;
   _openingDuelLock = true;
   try {
@@ -7968,7 +8001,7 @@ async function openDuelTable(roomId = '', { autoAddTestBots = false, initialMode
     refreshSoundButtonLabel();
 
     const cleanRoom = roomId || `d_${Math.random().toString(36).slice(2, 8)}`;
-    await duelCtrl?.openRoom(cleanRoom, { autoAddTestBots, initialMode, prefetchedHof });
+    await duelCtrl?.openRoom(cleanRoom, { autoAddTestBots, initialMode, prefetchedHof, autoStartSoloTil });
     showScreen('duel');
   } finally {
     _openingDuelLock = false;
@@ -9131,6 +9164,13 @@ function bindUIEvents() {
     if (file) {
       state.pack.userUploadedPhoto = true;
       await rebuildPackPortraitPreview(file);
+      const confirmBox = document.getElementById('pack-uploaded-confirm');
+      const thumbImg = document.getElementById('pack-uploaded-thumb');
+      if (thumbImg && state.pack?.processed?.dataUrl) {
+        thumbImg.src = state.pack.processed.dataUrl;
+      }
+      confirmBox?.removeAttribute('hidden');
+      showToast('📸 Фото друга загружено — жми «Отправить эту бочку»!');
       Haptics.light();
     }
   });
@@ -9378,6 +9418,9 @@ function bindUIEvents() {
   });
 
   document.getElementById('btn-pack-quick-1tap')?.addEventListener('click', () => handleQuick1TapPrankClick());
+  document.getElementById('btn-pack-send-uploaded')?.addEventListener('click', () => {
+    handleSealBarrelClick({ forceAutoAvatar: false });
+  });
   document.getElementById('btn-seal-barrel')?.addEventListener('click', () => handleSealBarrelClick());
   document.getElementById('input-pair-receipt-file')?.addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
@@ -9477,16 +9520,27 @@ function bindUIEvents() {
   });
 
   document.getElementById('btn-pack-revenge')?.addEventListener('click', async () => {
-    if (state.finaleMode === 'l1_reply_yes') {
-      // v15.4.2: Запрашиваем разрешение на пуши от бота сразу после 1-й игры (внутри живого тапа игрока!)
+    if (state.finaleMode === 'l1_to_trailer_then_pack') {
       requestAndSyncWriteAccess();
-      // Уровень 1 Кнопка 1: мгновенно шлём ответ в фоне и без задержки запускаем Уровень 2 (6 бочек — найди пустую)!
-      sendLevel1FriendReply({ pack: state.incomingPack, replyType: 'cinema_accept', viewerTgUser: state.tg?.user }).catch(() => {});
-      showToast('🍿 Другу ушло: «Нашёл тебя! Идём в кино!» · Раунд 2 (6 бочек — найди пустую)!');
-      Haptics.success();
-      state.profile.currentLevel = 2;
+      if (state.incomingPack) {
+        sendLevel1FriendReply({ pack: state.incomingPack, replyType: 'cinema_accept', viewerTgUser: state.tg?.user }).catch(() => {});
+      }
       if (!audio._userMuted) audio.unlock(true).catch(() => {});
-      startDemoRound();
+      openTrailerModal({ forRescue: false, afterL1ToPack: true });
+      return;
+    }
+    if (state.finaleMode === 'l1_to_pack' || state.finaleMode === 'l1_reply_yes') {
+      requestAndSyncWriteAccess();
+      if (state.incomingPack) {
+        sendLevel1FriendReply({ pack: state.incomingPack, replyType: 'cinema_accept', viewerTgUser: state.tg?.user }).catch(() => {});
+      }
+      state.profile.mustSendFriendPack = true;
+      saveLocalV9Flags();
+      state.pack.forLifeRefill = false;
+      document.getElementById('pack-mandatory-banner')?.setAttribute('hidden', '');
+      showScreen('pack');
+      showToast('🛢 Быстро закатай друга в бочку — дальше все раунды против Тиля!');
+      Haptics.success();
       return;
     }
     if (state.finaleMode === 'recover_lives') {
@@ -9521,15 +9575,17 @@ function bindUIEvents() {
 
   document.getElementById('btn-sent-play')?.addEventListener('click', async () => {
     if (!audio._userMuted) await audio.unlock(true);
-    if (Number(state.profile?.currentLevel || 1) <= 1) {
+    const wasProdFirst = getTeamSeedRole() === 'prod' && Number(state.profile?.currentLevel || 1) <= 1;
+    if (wasProdFirst) {
       await startNewbieOnboardingRound();
       return;
     }
-    state.pendingLevelStartFly = {
-      lives: Math.min(3, Math.max(1, Number(state.profile?.lives || 3))),
-      strikes: 3,
-    };
-    startDemoRound();
+    await openDuelTable('', { autoStartSoloTil: true });
+  });
+
+  document.getElementById('btn-sent-duel-1v1')?.addEventListener('click', async () => {
+    if (!audio._userMuted) await audio.unlock(true);
+    await openDuelTable('');
   });
 
   document.getElementById('btn-pass-say-thanks')?.addEventListener('click', () => {
@@ -9629,6 +9685,9 @@ function bindUIEvents() {
   });
 
   document.getElementById('btn-close-trailer')?.addEventListener('click', () => closeTrailerModal());
+  document.getElementById('btn-trailer-to-pack')?.addEventListener('click', () => {
+    closeTrailerModal({ goToPack: true });
+  });
   document.getElementById('btn-trailer-like-yt')?.addEventListener('click', () => handleExternalTrailerLike('yt'));
   document.getElementById('btn-trailer-sub-yt')?.addEventListener('click', () => handleExternalTrailerLike('yt_sub'));
   document.getElementById('btn-trailer-like-ig')?.addEventListener('click', () => handleExternalTrailerLike('ig'));

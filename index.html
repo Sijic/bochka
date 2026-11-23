@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0d0d'/%3E%3Crect x='8' y='4' width='16' height='24' rx='2' fill='none' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='11' x2='25' y2='11' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='21' x2='25' y2='21' stroke='%23eab308' stroke-width='2'/%3E%3C/svg%3E" />
   <title>БОЧКА — Заводской триллер | Вызволи друга за 3 удара ломом</title>
-  <meta name="bochka-build" content="v19.0.0-v155-clean" />
+  <meta name="bochka-build" content="v19.1.0-til-flow" />
   <meta name="description" content="Четыре цеха завода, заваренные 200-литровые бочки и 30 секунд кислорода. Запиши фото и голос друга на дно бочки, проверь его слух и забери допуск на закрытую Премьеру 17 декабря." />
 
   <!-- Open Graph / Telegram / WhatsApp Link Preview -->
@@ -44,7 +44,7 @@
   }
   </script>
 
-  <link rel="modulepreload" href="./src/main.js?v=1900" />
+  <link rel="modulepreload" href="./src/main.js?v=1910" />
   <link rel="modulepreload" href="./src/backend.js" />
   <link rel="modulepreload" href="./src/env.js" />
   <link rel="modulepreload" href="./vendor/three.module.min.js" />
@@ -65,8 +65,8 @@
     .gate-legal-line{margin-top:8px;text-align:center;line-height:1.3}
     .legal-inline-link{background:none;border:0;padding:0;margin:0;color:#9ca3af;font:inherit;font-size:11px;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
   </style>
-  <link rel="stylesheet" href="./src/styles.css?v=1900" media="print" onload="this.media='all'" />
-  <noscript><link rel="stylesheet" href="./src/styles.css?v=1900" /></noscript>
+  <link rel="stylesheet" href="./src/styles.css?v=1910" media="print" onload="this.media='all'" />
+  <noscript><link rel="stylesheet" href="./src/styles.css?v=1910" /></noscript>
 </head>
 <body data-ui-stage="1" data-blitz-unlocked="0">
   <!-- 3D Three.js Industrial Workshop Canvas -->
@@ -670,8 +670,21 @@
         </button>
       </div>
 
+      <!-- 2-я быстрая кнопка: сразу загрузить фото друга из галереи без раскрытия аккордеона -->
+      <div class="pack-quick-photo-box">
+        <label class="btn-secondary btn-full pack-upload-direct-btn" for="input-photo-file">
+          <span>📸 ЗАГРУЗИТЬ ФОТО ДРУГА</span>
+        </label>
+        <div class="pack-uploaded-confirm" id="pack-uploaded-confirm" hidden>
+          <img id="pack-uploaded-thumb" alt="Фото друга" class="pack-uploaded-thumb" />
+          <button type="button" class="btn-primary btn-full" id="btn-pack-send-uploaded">
+            🔥 ОТПРАВИТЬ ЭТУ БОЧКУ ДРУГУ (+3 ❤️)
+          </button>
+        </div>
+      </div>
+
       <details class="pack-custom-details" id="pack-custom-details">
-        <summary>📸 Загрузить фото ДРУГА из галереи или записать крик (3 сек) ▾</summary>
+        <summary>⚙️ Дополнительно: селфи, шаблоны или свой крик (3 сек) ▾</summary>
 
       <div class="pack-top-row">
         <div class="barrel-mouth-preview pack-mini-preview">
@@ -878,8 +891,12 @@
       <button type="button" class="btn-secondary btn-full" id="btn-sent-copy-blogger-invite" hidden style="margin-bottom:8px;">
         🔥 СКОПИРОВАТЬ ЭТУ ЖЕ БОЧКУ КАК ВХОД ДЛЯ БЛОГЕРА (bi_...)
       </button>
-      <button type="button" class="btn-primary btn-full" id="btn-sent-play">
-        <span id="btn-sent-play-text">▶️ ИГРАТЬ УРОВЕНЬ 3</span>
+      <button type="button" class="btn-primary btn-full btn-duel-solo-til" id="btn-sent-play">
+        <img src="./public/sprites/til_avatar.webp?v=1543" alt="Тиль Швайгер" class="duel-btn-til-ava" id="sent-play-til-ava" />
+        <span id="btn-sent-play-text">🎬 НАЧАТЬ РАУНД ПРОТИВ ТИЛЯ →</span>
+      </button>
+      <button type="button" class="btn-secondary btn-full" id="btn-sent-duel-1v1" style="margin-top:8px;">
+        ⚔️ ВЫБРАТЬ ДРУГА 1 НА 1 (ВЕТКА)
       </button>
     </div>
   </section>
@@ -1169,6 +1186,10 @@
         🎬 <strong>Триллер «БОЧКА» · В кино с 17 декабря</strong> — реж. <strong>Алексей Звонцов</strong> (Россия). В главной роли — <strong>Тиль Швайгер</strong>.
       </div>
 
+      <button type="button" class="btn-primary btn-full trailer-to-pack-btn" id="btn-trailer-to-pack" hidden>
+        ⚡ ДАЛЬШЕ — ЗАКАТАТЬ ДРУГА В БОЧКУ →
+      </button>
+
       <div class="trailer-rescue-box" id="trailer-rescue-box" hidden>
         <p class="trailer-rescue-status" id="trailer-rescue-status">
           До +3 ❤️ (9 ударов): 20 сек (перемотка вперёд отключена)
@@ -1387,6 +1408,9 @@
         </button>
         <button type="button" class="btn-secondary btn-full" id="btn-duel-invite-lives">
           📲 ПОЗВАТЬ НОВОГО ДРУГА (+2 ❤️ ЗА ВХОД + 400 ⭐)
+        </button>
+        <button type="button" class="btn-ghost btn-full btn-compact" id="btn-duel-switch-lobby">
+          👥 ВЫБРАТЬ ДРУГА 1 НА 1 (ОБЩАЯ ВЕТКА)
         </button>
       </div>
     </div>
@@ -1643,6 +1667,6 @@
   <!-- Toast уведомления -->
   <div class="toast" id="toast" hidden></div>
 
-  <script type="module" src="./src/main.js?v=1900"></script>
+  <script type="module" src="./src/main.js?v=1910"></script>
 </body>
 </html>

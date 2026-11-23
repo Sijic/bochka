@@ -8576,3 +8576,44 @@ body.is-duel-active .topbar {
   white-space: normal;
   box-sizing: border-box;
 }
+
+/* v19.1: 2-кнопочная быстрая упаковка друга + кнопка «Дальше» под VK трейлером */
+.pack-quick-photo-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.pack-upload-direct-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 800;
+  text-align: center;
+}
+.pack-uploaded-confirm {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(250, 204, 21, 0.55);
+}
+.pack-uploaded-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #facc15;
+  flex-shrink: 0;
+}
+.trailer-to-pack-btn {
+  margin-top: 10px;
+  min-height: 46px;
+  font-size: 13.5px;
+  font-weight: 800;
+}
