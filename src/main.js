@@ -387,7 +387,7 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1930'));
+    const mod = duelModCache || (await import('./duel.js?v=1931'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -407,19 +407,11 @@ async function ensureDuelReady() {
         openDuelTable('').catch(() => {});
       },
       onTriggerScreamerFx: (durMs, variant = null) => triggerMiniScreamer(variant, durMs),
-      onCollectChipFromBarrel: ({ barrelIndex = -1 } = {}) => {
-        const pos = barrelIndex >= 0 ? scene?.projectBarrelScreenPos?.(barrelIndex, 1.08) : null;
-        flyRewardToHud({
-          type: 'rating',
-          count: 3,
-          label: '🪙 +ФИШКА',
-          startX: pos?.visible ? pos.x : null,
-          startY: pos?.visible ? pos.y : null,
-        });
+      onCollectChipFromBarrel: () => {
         rollRareMovieCardLazy('duel_barrel')
           .then((res) => {
             if (res?.dropped && res?.trophy?.title) {
-              showToast(`🪙 ФИШКА ИЗ БОЧКИ: «${res.trophy.title}» (+150 ⭐)!`);
+              showToast(`💎 ФИШКА ИЗ БОЧКИ: «${res.trophy.title}» (+150 ⭐)!`);
             }
           })
           .catch(() => {});
@@ -474,7 +466,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=1930'));
+  const mod = duelModCache || (await import('./duel.js?v=1931'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
@@ -482,7 +474,7 @@ async function createWatchChannelLazy(barrelId, opts) {
 let trophiesModCache = null;
 async function loadTrophiesMod() {
   if (!trophiesModCache) {
-    trophiesModCache = await import('./trophies.js?v=1930');
+    trophiesModCache = await import('./trophies.js?v=1931');
   }
   return trophiesModCache;
 }
@@ -1411,6 +1403,7 @@ function flyRewardToHud({ type = 'lives', count = 3, label = '+1 ❤️', startX
         : type === 'rating'
           ? 'hud-pts-pill'
           : 'hud-lives-pill';
+  const duelTargetId = type === 'rating' ? 'duel-shards-pill' : type === 'lives' ? 'duel-lives-pill' : '';
   const fallbackId =
     type === 'lives'
       ? 'top-lives-pill'
@@ -1418,10 +1411,16 @@ function flyRewardToHud({ type = 'lives', count = 3, label = '+1 ❤️', startX
         ? 'top-rating-pill'
         : 'nav-leaderboard';
   let targetEl = document.getElementById(targetId);
+  if ((!targetEl || targetEl.getBoundingClientRect().width === 0) && duelTargetId) {
+    targetEl = document.getElementById(duelTargetId);
+  }
   if (!targetEl || targetEl.getBoundingClientRect().width === 0) {
     targetEl = document.getElementById(fallbackId);
   }
-  const rect = targetEl ? targetEl.getBoundingClientRect() : { left: window.innerWidth * 0.5, top: 24, width: 20, height: 20 };
+  const candidateRect = targetEl ? targetEl.getBoundingClientRect() : null;
+  const rect = candidateRect && candidateRect.width > 0
+    ? candidateRect
+    : { left: window.innerWidth * 0.5, top: 28, width: 20, height: 20 };
   const destX = rect.left + rect.width * 0.5;
   const destY = rect.top + rect.height * 0.5;
   const originX = startX ?? window.innerWidth * 0.5;

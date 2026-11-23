@@ -634,7 +634,7 @@ export class WorkshopDuelController {
         potEl.classList.toggle('is-triple-bonus', chipsUnlocked);
       } else {
         potEl.textContent =
-          '⚔️ В БОЧКАХ СПРЯТАНЫ: 🎟 ЧАСТЬ БИЛЕТА (4/4), 🪙 ФИШКА, ❤️ +1 И ⭐ БАЛЛЫ · ОСТОРОЖНО: ☠️ СКРИМЕРЫ (−2 ❤️)!';
+          '⚔️ В БОЧКАХ СПРЯТАНЫ: 🎟 ЧАСТЬ БИЛЕТА (4/4), 💎 ФИШКА, ❤️ +1 И ⭐ БАЛЛЫ · ОСТОРОЖНО: ☠️ СКРИМЕРЫ (−2 ❤️)!';
         potEl.classList.remove('is-triple-bonus');
       }
     }
@@ -1042,7 +1042,7 @@ export class WorkshopDuelController {
 
       if (cursor < barrelCount) {
         const cIdx = indices[cursor++];
-        barrelLoot[cIdx] = { kind: 'chip', value: 150, label: '🪙 ФИШКА (+150 ⭐)' };
+        barrelLoot[cIdx] = { kind: 'chip', value: 150, label: '💎 ФИШКА (+150 ⭐)' };
         safeIndices.push(cIdx);
       }
 
@@ -1614,7 +1614,7 @@ export class WorkshopDuelController {
       const k = myEntry.loot.kind;
       if (k === 'ticket' || k === 'points' || k === 'chip') {
         this.onFlyRating?.({
-          count: k === 'ticket' ? 4 : 3,
+          count: k === 'ticket' ? 3 : 2,
           label: myEntry.loot.label,
           barrelIndex: myEntry.barrelIndex,
         });
@@ -1847,7 +1847,7 @@ export class WorkshopDuelController {
         : myLoot.kind === 'life'
           ? '❤️ +1 ЖИЗНЬ ИЗ БОЧКИ! ИЩЕМ 🎟 ЧАСТЬ БИЛЕТА ДАЛЬШЕ!'
           : myLoot.kind === 'chip'
-            ? '🪙 ФИШКА +150 ⭐ ИЗ БОЧКИ! ИЩЕМ 🎟 ЧАСТЬ БИЛЕТА ДАЛЬШЕ!'
+            ? '💎 ФИШКА +150 ⭐ ИЗ БОЧКИ! ИЩЕМ 🎟 ЧАСТЬ БИЛЕТА ДАЛЬШЕ!'
             : myLoot.kind === 'points'
               ? `⭐ ${myLoot.label} В РЕЙТИНГ! ЧАСТЬ БИЛЕТА ЕЩЁ В БОЧКАХ!`
               : myLoot.kind === 'screamer'
