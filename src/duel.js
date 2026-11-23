@@ -21,7 +21,7 @@ const TIL_AVATAR_URL = './public/sprites/til_avatar.webp?v=1543';
  * Все промежуточные клики и таймеры идут строго через WebSocket в оперативной памяти (0 записей в БД).
  */
 export class WorkshopDuelController {
-  constructor({ scene, audio, getTgUser, getTicketShards, onCollectChipFromBarrel, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels, onOpenHallOfFame, loadDuelCandidates, onChallengeFriend, onOpenPackFriend, onRoomFull, onTriggerScreamerFx }) {
+  constructor({ scene, audio, getTgUser, getTicketShards, onCollectChipFromBarrel, canUseOceanRefill, onOpenPackForLives, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels, onOpenHallOfFame, loadDuelCandidates, onChallengeFriend, onOpenPackFriend, onRoomFull, onTriggerScreamerFx }) {
     this.scene = scene;
     this.audio = audio;
     this.getTgUser = getTgUser;
@@ -40,6 +40,8 @@ export class WorkshopDuelController {
     this.onOpenPackFriend = onOpenPackFriend || null;
     this.getTicketShards = getTicketShards || null;
     this.onCollectChipFromBarrel = onCollectChipFromBarrel || null;
+    this.canUseOceanRefill = canUseOceanRefill || null;
+    this.onOpenPackForLives = onOpenPackForLives || null;
     this.onRoomFull = onRoomFull || null;
     this.onTriggerScreamerFx = onTriggerScreamerFx || null;
     this.duelCandidates = { sent: [], branch: [], loaded: false };
@@ -1289,8 +1291,15 @@ export class WorkshopDuelController {
 
   continueBatchOrRematch() {
     if (!this.active) return;
-    // Если кончились дуэльные жизни (СТРОГО 0 ❤️!) — на Небо к Тилю (он даёт 6 ❤️ + ⚡ 100%)!
+    // Если кончились дуэльные жизни (СТРОГО 0 ❤️!) — на Небо к Тилю (1 раз/24ч -> 6 ❤️), иначе упаковка друга!
     if (this.duelLives <= 0) {
+      const oceanAllowed = this.canUseOceanRefill ? Boolean(this.canUseOceanRefill()) : true;
+      if (!oceanAllowed && this.onOpenPackForLives) {
+        document.getElementById('duel-result-box')?.setAttribute('hidden', '');
+        this.onToast?.('🛢 Море уже заряжало жизни сегодня (1 раз / 24 ч) — закатай нового друга за +6 ❤️!');
+        this.onOpenPackForLives();
+        return;
+      }
       if (this.onDuelDefeatToTil) {
         document.getElementById('duel-result-box')?.setAttribute('hidden', '');
         this.onToast?.('🌊 Жизни на нуле (0 ❤️) — к Тилю на берег зарядить 6 ❤️ на дуэль!');
@@ -1699,8 +1708,11 @@ export class WorkshopDuelController {
 
     let serverTicketRes = null;
     if (ticketEntry && ticketEntry.claim.uid === this.myUid) {
-      serverTicketRes = await awardTicketShardServer(this.getTgUser?.(), 'duel').catch(() => ({
+      const hasRealOpponent = this.players.some((p) => !p.isBot && p.uid !== this.myUid);
+      const shardSource = this.soloMode || !hasRealOpponent ? 'solo_til' : 'duel';
+      serverTicketRes = await awardTicketShardServer(this.getTgUser?.(), shardSource).catch(() => ({
         ok: false,
+        source: shardSource,
         shards: 0,
         mergedTicket: false,
         granted: false,
@@ -1745,17 +1757,24 @@ export class WorkshopDuelController {
     const closedLeft = Math.max(0, (this.barrelCount || 10) - (this.openedIndices?.length || 0));
 
     const serverTicketGranted = Boolean(detail.serverTicketGranted);
-    if (iFoundTicket && detail.serverTicketRes?.ok && !detail.serverTicketRes.reason) {
-      const immediatePatch = {
-        ticketShards: detail.serverTicketRes.mergedTicket ? 0 : Number(detail.serverTicketRes.shards || 0),
-      };
-      if (serverTicketGranted) {
-        immediatePatch.hasPendingTicket = true;
-        if (detail.serverTicketRes.pendingTicketsCount != null) {
-          immediatePatch.pendingTicketsCount = Number(detail.serverTicketRes.pendingTicketsCount);
+    if (iFoundTicket && detail.serverTicketRes?.ok) {
+      const sRes = detail.serverTicketRes;
+      const isSoftCap = sRes.reason === 'solo_cap_reached' || sRes.reason === 'friend_or_duel_required';
+      if (!sRes.reason || isSoftCap) {
+        const immediatePatch = {
+          ticketShards: sRes.mergedTicket ? 0 : Math.max(0, Math.min(3, Number(sRes.shards || 0))),
+        };
+        if (sRes.premierePoints != null) {
+          immediatePatch.premierePoints = Number(sRes.premierePoints);
         }
+        if (serverTicketGranted) {
+          immediatePatch.hasPendingTicket = true;
+          if (sRes.pendingTicketsCount != null) {
+            immediatePatch.pendingTicketsCount = Number(sRes.pendingTicketsCount);
+          }
+        }
+        this.onProfileSync?.(immediatePatch);
       }
-      this.onProfileSync?.(immediatePatch);
     }
     // Начисляем +500 ⭐ очки в рейтинг за найденную 🎟 часть билета (баллы и фишки уже начислены при вскрытии в executeReveal)
     const myPointsEarned = iFoundTicket ? 500 : 0;
@@ -1790,8 +1809,9 @@ export class WorkshopDuelController {
     }
 
     const outOfRounds = false; // v19.1: Все последующие раунды идут против Тиля (6->8->10->12 бочек) без отката в пустой цех!
-    // v13.0: К Тилю на Северное море — СТРОГО ТОЛЬКО при 0 ❤️ жизней!
+    // v19.4: К Тилю на Северное море при 0 ❤️ — максимум 1 раз в 24 часа; иначе предлагаем закатать друга за +6 ❤️!
     const needTilRefill = !iFoundTicket && this.duelLives <= 0;
+    const oceanAllowed = needTilRefill ? (this.canUseOceanRefill ? Boolean(this.canUseOceanRefill()) : true) : false;
 
     if (iFoundTicket) {
       Haptics.success();
@@ -1802,6 +1822,12 @@ export class WorkshopDuelController {
           subEl.textContent = `Вскрыл призовую бочку раньше ${oppName} (${oppLoot.label})! 4 части склеились в целый бесплатный билет — подари его другу в Telegram!`;
         }
         this.scheduleTimeout(() => this.onOpenGoldenFork?.(), 900);
+      } else if (sRes.reason === 'solo_cap_reached' || sRes.reason === 'friend_or_duel_required') {
+        if (titleEl) titleEl.textContent = '🎟 ПОЛБИЛЕТА УЖЕ У ТЕБЯ (2/4)! (+500 ⭐)';
+        if (subEl) {
+          subEl.textContent =
+            'Полбилета уже у тебя (2/4)! Чтобы забрать 3/4 и 4/4, закатай друга или сыграй 1×1 с живым игроком.';
+        }
       } else if (sRes.ok && !sRes.reason && Number(sRes.shards || 0) > 0) {
         const sh = Number(sRes.shards || 1);
         if (titleEl) titleEl.textContent = `🎟 ПОБЕДА! СОБРАНА ЧАСТЬ БИЛЕТА ${sh}/4 (+500 ⭐)`;
@@ -1831,14 +1857,24 @@ export class WorkshopDuelController {
       if (titleEl) titleEl.textContent = `💥 ПРОИГРАЛ! ${oppName.toUpperCase()} НАШЁЛ 🎟 БИЛЕТ!`;
       if (subEl) {
         subEl.textContent = needTilRefill
-          ? `У тебя закончились силы (❤️ ${this.duelLives} · ⚡ ${this.energy}%). Отправляемся к Тилю на берег — он зарядит 6 ❤️ жизней и ⚡ 100% на дуэль!`
+          ? oceanAllowed
+            ? `У тебя закончились силы (❤️ ${this.duelLives} · ⚡ ${this.energy}%). Отправляемся к Тилю на берег — он зарядит 6 ❤️ жизней и ⚡ 100% на дуэль!`
+            : `У тебя закончились ❤️ жизни, а море уже заряжало их в эти сутки. Закатай нового друга в бочку — получишь +6 ❤️ прямо на дуэль!`
           : `Ты открыл: ${myLoot.label}. Осталось попыток-раундов до возврата на уровни: ${leftRounds}. Жми новую партию!`;
       }
     } else if (needTilRefill) {
       Haptics.error();
-      if (titleEl) titleEl.textContent = `🌊 СИЛЫ НА НУЛЕ (❤️ ${this.duelLives} · ⚡ ${this.energy}%) — К ТИЛЮ!`;
-      if (subEl) {
-        subEl.textContent = `Итог хода: Ты (${myLoot.label}) vs ${oppName} (${oppLoot.label}). Тиль на берегу Северного моря даст минимум 6 ❤️ жизней и ⚡ 100% энергии на Дуэль!`;
+      if (oceanAllowed) {
+        if (titleEl) titleEl.textContent = `🌊 СИЛЫ НА НУЛЕ (❤️ ${this.duelLives} · ⚡ ${this.energy}%) — К ТИЛЮ!`;
+        if (subEl) {
+          subEl.textContent = `Итог хода: Ты (${myLoot.label}) vs ${oppName} (${oppLoot.label}). Тиль на берегу Северного моря даст минимум 6 ❤️ жизней и ⚡ 100% энергии на Дуэль!`;
+        }
+      } else {
+        if (titleEl) titleEl.textContent = '❤️ ЖИЗНИ НА НУЛЕ (0 ❤️) — ЗАКАТАЙ ДРУГА!';
+        if (subEl) {
+          subEl.textContent =
+            'Море уже заряжало тебе 6 ❤️ за последние 24 часа. Закатай нового друга в бочку — получишь +6 ❤️ прямо на дуэль!';
+        }
       }
     } else {
       Haptics.light();
@@ -1859,7 +1895,7 @@ export class WorkshopDuelController {
       }
     }
 
-    if (needTilRefill && this.onDuelDefeatToTil) {
+    if (needTilRefill && oceanAllowed && this.onDuelDefeatToTil) {
       this.scheduleTimeout(() => {
         if (!this.active || this.phase !== 'finished') return;
         box?.setAttribute('hidden', '');
@@ -1869,7 +1905,9 @@ export class WorkshopDuelController {
 
     if (rematchBtn) {
       if (needTilRefill) {
-        rematchBtn.textContent = '🌊 НА НЕБО К ТИЛЮ — ЗАБРАТЬ 6 ❤️ И ⚡ 100%';
+        rematchBtn.textContent = oceanAllowed
+          ? '🌊 НА НЕБО К ТИЛЮ — ЗАБРАТЬ 6 ❤️ И ⚡ 100%'
+          : '🛢 ЗАКАТАТЬ ДРУГА (+6 ❤️ НА ДУЭЛЬ)';
       } else if (!this.batchResolved && closedLeft >= 2) {
         rematchBtn.textContent = `🔨 БИТЬ ДАЛЬШЕ (ИЩЕМ 🎟 БИЛЕТ · ${closedLeft} БОЧЕК · ❤️ ${this.duelLives} · ⚡ ${this.energy}%)`;
       } else {
@@ -1881,8 +1919,18 @@ export class WorkshopDuelController {
       rematchBtn.removeAttribute('hidden');
     }
     if (inviteLivesBtn) {
-      inviteLivesBtn.textContent = '🛢 ЗАКАТАТЬ НОВОГО ДРУГА (+3 ❤️ · +20% К ШКАЛЕ)';
+      const capHit = iFoundTicket && (detail.serverTicketRes?.reason === 'solo_cap_reached' || detail.serverTicketRes?.reason === 'friend_or_duel_required');
+      inviteLivesBtn.textContent = capHit
+        ? '🛢 ЗАКАТАТЬ ДРУГА (ОТКРЫТЬ 3/4 И 4/4)'
+        : needTilRefill && !oceanAllowed
+          ? '🛢 ЗАКАТАТЬ НОВОГО ДРУГА (+6 ❤️ НА ДУЭЛЬ)'
+          : '🛢 ЗАКАТАТЬ НОВОГО ДРУГА (+3 ❤️ · +20% К ШКАЛЕ)';
       inviteLivesBtn.removeAttribute('hidden');
+    }
+    const switchLobbyBtn = document.getElementById('btn-duel-switch-lobby');
+    if (switchLobbyBtn) {
+      const capHit = iFoundTicket && (detail.serverTicketRes?.reason === 'solo_cap_reached' || detail.serverTicketRes?.reason === 'friend_or_duel_required');
+      switchLobbyBtn.textContent = capHit ? '⚔️ СЫГРАТЬ 1×1 С ЖИВЫМ ИГРОКОМ' : '👥 ВЫБРАТЬ ДРУГА 1 НА 1 (ОБЩАЯ ВЕТКА)';
     }
 
     const resTrophyEl = document.getElementById('duel-result-trophy');
@@ -1915,6 +1963,12 @@ export class WorkshopDuelController {
   }
 
   showNoLivesPrompt() {
+    const oceanAllowed = this.canUseOceanRefill ? Boolean(this.canUseOceanRefill()) : true;
+    if (!oceanAllowed && this.onOpenPackForLives) {
+      this.onToast?.('🛢 Море уже заряжало жизни сегодня (1 раз / 24 ч) — закатай нового друга за +6 ❤️!');
+      this.onOpenPackForLives();
+      return;
+    }
     if (this.onDuelDefeatToTil) {
       this.onToast?.('⚡ Энергия на нуле — в подвал к Бочке Тиля на 12 сек!');
       this.onDuelDefeatToTil({ roomId: this.roomId, solo: this.soloMode });

@@ -2680,6 +2680,20 @@ export async function awardTicketShardServer(tgUser = null, source = 'level') {
   }
   const prof = getLocalPreviewProfile();
   const prev = Math.max(0, Math.min(3, Number(prof.ticketShards || 0)));
+  if (source === 'solo_til' && prev >= 2) {
+    return {
+      ok: true,
+      source,
+      shards: prev,
+      prevShards: prev,
+      mergedTicket: false,
+      granted: false,
+      duplicateBlocked: false,
+      reason: 'solo_cap_reached',
+      fallbackPoints: 500,
+      pendingTicketsCount: Number(prof.pendingTicketsCount || 0),
+    };
+  }
   const next = prev + 1;
   if (next >= 4) {
     prof.ticketShards = 0;

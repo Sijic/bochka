@@ -387,7 +387,7 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1931'));
+    const mod = duelModCache || (await import('./duel.js?v=1940'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -395,6 +395,12 @@ async function ensureDuelReady() {
       audio,
       getTgUser: () => state.tg?.user || null,
       getTicketShards: () => Number(state.profile?.ticketShards || 0),
+      canUseOceanRefill: () => canClaimOceanRefillToday(),
+      onOpenPackForLives: () => {
+        state.pack.forLifeRefill = true;
+        duelCtrl?.leaveRoom(false);
+        showScreen('pack');
+      },
       onOpenHallOfFame: () => openHallOfFameModal().catch(() => {}),
       loadDuelCandidates: () => fetchDuelFriendCandidates(state.tg?.user || null),
       onChallengeFriend: (friend, roomId) => challengeSpecificFriend1v1(friend, roomId),
@@ -466,7 +472,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=1931'));
+  const mod = duelModCache || (await import('./duel.js?v=1940'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
@@ -474,7 +480,7 @@ async function createWatchChannelLazy(barrelId, opts) {
 let trophiesModCache = null;
 async function loadTrophiesMod() {
   if (!trophiesModCache) {
-    trophiesModCache = await import('./trophies.js?v=1931');
+    trophiesModCache = await import('./trophies.js?v=1940');
   }
   return trophiesModCache;
 }
@@ -749,6 +755,13 @@ function enforceTelegramAccountIsolation(tgUser) {
   }
 }
 
+const OCEAN_REFILL_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+function canClaimOceanRefillToday() {
+  const last = Number(state.profile?.lastOceanRefillAt || 0);
+  return !(last > 0 && Date.now() - last < OCEAN_REFILL_COOLDOWN_MS);
+}
+
 function loadLocalV9Flags() {
   try {
     const raw = JSON.parse(localStorage.getItem(V9_PROGRESS_STORAGE_KEY) || '{}');
@@ -757,6 +770,7 @@ function loadLocalV9Flags() {
       state.profile.seedFirstPackDone = Boolean(raw.seedFirstPackDone);
       state.profile.ticketShards = Math.max(0, Math.min(3, Math.round(Number(raw.ticketShards || 0))));
       state.profile.friendsShardAwardedCount = Math.max(0, Math.round(Number(raw.friendsShardAwardedCount || 0)));
+      state.profile.lastOceanRefillAt = Math.max(0, Number(raw.lastOceanRefillAt || 0));
       const cnt = Math.max(0, Math.round(Number(raw.pendingTicketsCount || 0)));
       const exp = Number(raw.ticketsExpireAt || 0);
       if (cnt > 0 && exp > Date.now()) {
@@ -780,6 +794,7 @@ function saveLocalV9Flags() {
         seedFirstPackDone: Boolean(state.profile.seedFirstPackDone),
         ticketShards: Math.max(0, Math.min(3, Math.round(Number(state.profile.ticketShards || 0)))),
         friendsShardAwardedCount: Math.max(0, Math.round(Number(state.profile.friendsShardAwardedCount || 0))),
+        lastOceanRefillAt: Math.max(0, Number(state.profile.lastOceanRefillAt || 0)),
         pendingTicketsCount: Math.max(0, Math.round(Number(state.profile.pendingTicketsCount || 0))),
         ticketsExpireAt: Number(state.profile.ticketsExpireAt || 0),
       })
@@ -910,6 +925,22 @@ async function awardTicketShard(source = 'level', { silent = false } = {}) {
     }
     return { merged: true, granted: true, shards: 0, res };
   }
+  if (res.reason === 'solo_cap_reached' || res.reason === 'friend_or_duel_required') {
+    const keepShards = Math.max(0, Math.min(3, Number(res.shards ?? state.profile?.ticketShards ?? 2)));
+    const bonusFallback = Number(res.fallbackPoints || 500);
+    state.profile.ticketShards = keepShards;
+    state.profile.premierePoints = Math.max(
+      Number(res.premierePoints || 0),
+      Number(state.profile.premierePoints || 0) + bonusFallback
+    );
+    saveLocalV9Flags();
+    syncTicketShardsUI({ pulse: true });
+    updatePremiereBarsUI();
+    if (!silent) {
+      showToast('🎟 Полбилета уже у тебя (2/4)! Чтобы забрать 3/4 и 4/4, закатай друга или сыграй 1×1 с живым игроком (+500 ⭐)!');
+    }
+    return { merged: false, granted: false, soloCapReached: true, fallbackPoints: bonusFallback, shards: keepShards, res };
+  }
   if (res.reason && res.reason !== 'local_preview') {
     const bonusFallback = Number(res.fallbackPoints || 500);
     state.profile.ticketShards = 0;
@@ -960,6 +991,7 @@ function mergeFreshProfile(freshProfile, { preserveProgress = true } = {}) {
       seedFirstPackDone: Boolean(freshProfile.hasBroadcastBarrel),
       hasBroadcastBarrel: Boolean(freshProfile.hasBroadcastBarrel),
       repeatLinkEntered: false,
+      lastOceanRefillAt: 0,
     };
     state.profile = cleanMerged;
     state.uiStage = Math.min(2, Math.max(1, Number(freshProfile.uiStage || 1)));
@@ -1977,6 +2009,7 @@ async function bootstrap() {
       getSentTickets: () => readSentTicketsLedger(),
       getResumeSnapshot: () => readSessionResume(),
       applyPassiveRegen: (opts) => applyPassiveDailyLifeAndHourlyStrikes(opts || {}),
+      canClaimOceanRefillToday: () => canClaimOceanRefillToday(),
     };
   }
 
@@ -3820,6 +3853,8 @@ async function finishOceanTapperGame() {
   state.oceanTapper.energy = 100;
 
   const taps = Math.max(15, state.oceanTapper.taps);
+  const refillAllowed = canClaimOceanRefillToday();
+  state.oceanTapper.refilledThisVisit = refillAllowed;
   const countEl = document.getElementById('ocean-tap-count');
   const fillEl = document.getElementById('ocean-tap-fill');
   const subEl = document.getElementById('ocean-pulse-sub');
@@ -3828,40 +3863,61 @@ async function finishOceanTapperGame() {
 
   if (countEl) countEl.textContent = '100';
   if (fillEl) fillEl.style.width = '100%';
-  if (subEl) subEl.textContent = '⚡ 100% ПРОБИТО! ТИЛЬ ЗАРЯДИЛ 6 ❤️ НА ДУЭЛЬ И +3 ❤️ В ЦЕХ!';
-  if (pill) {
-    pill.removeAttribute('hidden');
-    pill.textContent = '⚡ ТИЛЬ ЗАРЯДИЛ 100% ПУЛЬСА И 6 ❤️ НА ДУЭЛЬ! Поделись открыткой с рейтингом или жми «← В ЦЕХ»!';
-  }
-  if (promptEl) {
-    promptEl.textContent = '⚡ 100% ПУЛЬСА ПРОБИТО! 6 ❤️ ЗАРЯЖЕНО!';
+  if (refillAllowed) {
+    if (subEl) subEl.textContent = '⚡ 100% ПРОБИТО! ТИЛЬ ЗАРЯДИЛ 6 ❤️ НА ДУЭЛЬ И +3 ❤️ В ЦЕХ!';
+    if (pill) {
+      pill.removeAttribute('hidden');
+      pill.textContent = '⚡ ТИЛЬ ЗАРЯДИЛ 100% ПУЛЬСА И 6 ❤️ НА ДУЭЛЬ! Поделись открыткой с рейтингом или жми «← В ЦЕХ»!';
+    }
+    if (promptEl) {
+      promptEl.textContent = '⚡ 100% ПУЛЬСА ПРОБИТО! 6 ❤️ ЗАРЯЖЕНО!';
+    }
+  } else {
+    if (subEl) subEl.textContent = '🌊 100% ПРОБИТО! Море уже заряжало жизни за последние 24 часа — закатай друга за +6 ❤️!';
+    if (pill) {
+      pill.removeAttribute('hidden');
+      pill.textContent = '⏳ Пополнение жизней от моря — строго 1 раз в 24 часа. Чтобы получить +6 ❤️ сейчас, закатай нового друга!';
+    }
+    if (promptEl) {
+      promptEl.textContent = '⏳ ЛИМИТ МОРЯ (1 РАЗ / 24 Ч) — ПОПОЛНИ ❤️ ЧЕРЕЗ ДРУГА!';
+    }
   }
   const backBtn = document.getElementById('btn-ocean-back');
   if (backBtn) {
-    backBtn.textContent = state.oceanTapper.returnDuel ? '⚡ В ДУЭЛЬ (6 ❤️)' : '← В ЦЕХ (+3 ❤️)';
+    backBtn.textContent = !refillAllowed
+      ? '🛢 ЗАКАТАТЬ ДРУГА (+6 ❤️)'
+      : state.oceanTapper.returnDuel
+        ? '⚡ В ДУЭЛЬ (6 ❤️)'
+        : '← В ЦЕХ (+3 ❤️)';
     backBtn.removeAttribute('hidden');
   }
   Haptics.success();
 
-  const reward = await claimOceanTapperReward(state.tg?.user, Math.max(1, taps)).catch(() => ({ livesAwarded: 3 }));
-  const v8Refill = await awardV8LevelProgress(state.tg?.user, { level: state.profile.currentLevel || 6, pointsDelta: 0, livesDelta: 3 }).catch(() => null);
-  state.profile.easterEggClaimed = true;
-  state.profile.lives = capEarlyLivesIfNoRealFriends(Math.max(3, Number(v8Refill?.lives ?? reward?.lives ?? state.profile.lives ?? 3)));
-  if (duelCtrl) {
-    duelCtrl.refillFromTil?.();
-  }
-  if (reward?.hasPendingTicket || reward?.giftAwarded) state.profile.hasPendingTicket = true;
-  updatePremiereBarsUI();
-  refreshHudLevelLabel();
-  flyRewardToHud({ type: 'lives', count: 3, label: '+3 ❤️' });
-  showToast('⚡ Достучался до Тиля (100%)! Получено 6 ❤️ на дуэль и +3 ❤️ в цех!');
-  // v15.5: 50% шанс дропа официальной номерной карточки фильма после экрана Тиля (+10% на Ур. 4 Зала)
-  rollRareMovieCardLazy('til').catch(() => {});
+  if (refillAllowed) {
+    state.profile.lastOceanRefillAt = Date.now();
+    saveLocalV9Flags();
+    const reward = await claimOceanTapperReward(state.tg?.user, Math.max(1, taps)).catch(() => ({ livesAwarded: 3 }));
+    const v8Refill = await awardV8LevelProgress(state.tg?.user, { level: state.profile.currentLevel || 6, pointsDelta: 0, livesDelta: 3 }).catch(() => null);
+    state.profile.easterEggClaimed = true;
+    state.profile.lives = capEarlyLivesIfNoRealFriends(Math.max(3, Number(v8Refill?.lives ?? reward?.lives ?? state.profile.lives ?? 3)));
+    if (duelCtrl) {
+      duelCtrl.refillFromTil?.();
+    }
+    if (reward?.hasPendingTicket || reward?.giftAwarded) state.profile.hasPendingTicket = true;
+    updatePremiereBarsUI();
+    refreshHudLevelLabel();
+    flyRewardToHud({ type: 'lives', count: 3, label: '+3 ❤️' });
+    showToast('⚡ Достучался до Тиля (100%)! Получено 6 ❤️ на дуэль и +3 ❤️ в цех!');
+    // v15.5: 50% шанс дропа официальной номерной карточки фильма после экрана Тиля (+10% на Ур. 4 Зала)
+    rollRareMovieCardLazy('til').catch(() => {});
 
-  if (state.oceanTapper.returnDuel) {
-    window.setTimeout(() => {
-      handleReturnFromOcean(false);
-    }, 1100);
+    if (state.oceanTapper.returnDuel) {
+      window.setTimeout(() => {
+        handleReturnFromOcean(false);
+      }, 1100);
+    }
+  } else {
+    showToast('⏳ Пополнение жизней от моря доступно 1 раз в 24 часа — закатай друга за +6 ❤️!');
   }
 }
 
@@ -3889,24 +3945,38 @@ async function handleReturnFromOcean(openGiftModalAfter = false) {
     clearInterval(state.oceanTapper.timer);
     state.oceanTapper.timer = null;
   }
-  if (state.oceanTapper.running || (!state.profile.easterEggClaimed && state.oceanTapper.taps === 0)) {
+  const refillAllowed = Boolean(state.oceanTapper.refilledThisVisit || canClaimOceanRefillToday());
+  if (refillAllowed && (state.oceanTapper.running || (!state.profile.easterEggClaimed && state.oceanTapper.taps === 0))) {
     state.oceanTapper.running = false;
+    state.profile.lastOceanRefillAt = Date.now();
+    saveLocalV9Flags();
     const reward = await claimOceanTapperReward(state.tg?.user, Math.max(1, state.oceanTapper.taps));
     state.profile.easterEggClaimed = true;
     if (typeof reward.lives === 'number') state.profile.lives = reward.lives;
     if (reward.hasPendingTicket || reward.giftAwarded) state.profile.hasPendingTicket = true;
     updatePremiereBarsUI();
+  } else {
+    state.oceanTapper.running = false;
   }
 
   audio.stopOceanEasterEggAudio();
 
+  if (!state.oceanTapper.refilledThisVisit && !canClaimOceanRefillToday() && state.oceanTapper.taps > 0) {
+    state.oceanTapper.returnDuel = null;
+    state.pack.forLifeRefill = true;
+    showScreen('pack');
+    return;
+  }
+
   if (state.oceanTapper.returnDuel) {
     const rd = state.oceanTapper.returnDuel;
     state.oceanTapper.returnDuel = null;
-    await openDuelTable(rd.roomId || '');
-    duelCtrl?.refillFromTil?.();
-    if (rd.solo) {
-      showToast('🌊 Тиль зарядил 6 ❤️ жизней и ⚡ 100% энергии — снова в Дуэль за 🎟 билетами!');
+    await openDuelTable(rd.roomId || '', { autoStartSoloTil: Boolean(rd.solo) });
+    if (state.oceanTapper.refilledThisVisit) {
+      duelCtrl?.refillFromTil?.();
+      if (rd.solo) {
+        showToast('🌊 Тиль зарядил 6 ❤️ жизней и ⚡ 100% энергии — снова в Дуэль за 🎟 билетами!');
+      }
     }
     return;
   }
@@ -6302,8 +6372,13 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
           : Math.max(3, prevRoundLvl + 1);
     state.profile.currentLevel = targetNextLevel;
     const prevLives = Math.max(0, Number(state.profile.lives || 0));
-    const nextLives = capEarlyLivesIfNoRealFriends(Math.max(3, prevLives + 3));
+    const nextLives = wasLifeRefill
+      ? Math.max(6, prevLives + 6)
+      : capEarlyLivesIfNoRealFriends(Math.max(3, prevLives + 3));
     state.profile.lives = nextLives;
+    if (wasLifeRefill) {
+      duelCtrl?.refillFromTil?.();
+    }
     awardV8LevelProgress(state.tg?.user, {
       level: targetNextLevel,
       pointsDelta: 0,
@@ -6447,8 +6522,9 @@ function showSentScreen({ wasLifeRefill = false, wasBroadcastPack = false, broad
     duel1v1Btn?.removeAttribute('hidden');
     if (titleEl) titleEl.textContent = '🔥 ГОТОВО! БОЧКА УЛЕТЕЛА ДРУГУ!';
     if (txt) {
-      txt.textContent =
-        'Дальше все раунды — ПРОТИВ ТИЛЯ на «Раз-два-три!» за билеты и Суперприз (Москва, 17.12).';
+      txt.textContent = wasLifeRefill
+        ? '🔥 Друг упакован! Зачислено +6 ❤️ на Дуэль и против Тиля — жми в бой за билетом!'
+        : 'Дальше все раунды — ПРОТИВ ТИЛЯ на «Раз-два-три!» за билеты и Суперприз (Москва, 17.12).';
     }
     if (btnTxt) btnTxt.textContent = '🎬 НАЧАТЬ РАУНД ПРОТИВ ТИЛЯ →';
   }
@@ -9819,6 +9895,7 @@ function bindUIEvents() {
     duelCtrl?.continueBatchOrRematch();
   });
   document.getElementById('btn-duel-invite-lives')?.addEventListener('click', () => {
+    state.pack.forLifeRefill = true;
     duelCtrl?.leaveRoom(false);
     showScreen('pack');
   });
