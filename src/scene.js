@@ -94,6 +94,7 @@ export class WorkshopScene {
     this.diveStartLook = new THREE.Vector3();
 
     this.shakeIntensity = 0;
+    this.hitstopTimer = 0;
     this.flashIntensity = 0;
     this.screamerStrobe = 0;
     this.screamerStrobeColor = 0xdc2626;
@@ -367,6 +368,7 @@ export class WorkshopScene {
     if (b.dentUniforms.uDentHeat) b.dentUniforms.uDentHeat.value = 1.0;
 
     this.shakeIntensity = Math.max(this.shakeIntensity || 0, 0.28);
+    this.hitstopTimer = 0.045;
     this.cameraRoll = (Math.random() > 0.5 ? 1 : -1) * 0.038;
     this.strikeLight.color.setHex(0xffb732);
     this.strikeLight.position.copy(hitWorld).add(new THREE.Vector3(0, 0.18, 0.32));
@@ -1925,8 +1927,12 @@ export class WorkshopScene {
 
   _animate() {
     this.rafId = requestAnimationFrame(() => this._animate());
-    const dt = Math.min(0.05, this.clock.getDelta());
+    let dt = Math.min(0.05, this.clock.getDelta());
     if (this.contextLost || document.hidden) return;
+    if (this.hitstopTimer > 0) {
+      this.hitstopTimer = Math.max(0, this.hitstopTimer - dt);
+      dt *= 0.08;
+    }
     // Авто-адаптация DPR: если на слабом/нагруженном устройстве кадр > 28мс, мягко снижаем DPR до 0.85 для 60 FPS!
     if (this._perfFrames < 36) {
       this._perfFrames += 1;

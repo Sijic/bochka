@@ -271,26 +271,30 @@ class WorkshopAudio {
           }
         }
       };
+      const pauseAudioForBackground = () => {
+        this._pausedByVisibility = true;
+        if (this.ctx) {
+          try {
+            this.master?.gain?.cancelScheduledValues?.(this.ctx.currentTime);
+            this.master?.gain?.setValueAtTime?.(0.0, this.ctx.currentTime);
+          } catch { /* ignore */ }
+          if (this.ctx.state === 'running') {
+            this.ctx.suspend().then(() => this._emitState()).catch(() => {});
+          }
+        }
+      };
       document.addEventListener('pointerdown', wakeAudio, { passive: true, capture: true });
       document.addEventListener('touchstart', wakeAudio, { passive: true, capture: true });
       document.addEventListener('click', wakeAudio, { passive: true, capture: true });
       document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
-          this._pausedByVisibility = true;
-          if (this.ctx) {
-            try {
-              this.master?.gain?.cancelScheduledValues?.(this.ctx.currentTime);
-              this.master?.gain?.setValueAtTime?.(0.0, this.ctx.currentTime);
-            } catch { /* ignore */ }
-            if (this.ctx.state === 'running') {
-              this.ctx.suspend().then(() => this._emitState()).catch(() => {});
-            }
-          }
+          pauseAudioForBackground();
         } else {
           this._pausedByVisibility = false;
           wakeAudio();
         }
       });
+      window.addEventListener('pagehide', pauseAudioForBackground);
     }
 
     if (this.enabled && !this.loadingStarted) {

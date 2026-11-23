@@ -367,7 +367,7 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1911'));
+    const mod = duelModCache || (await import('./duel.js?v=1920'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -435,7 +435,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=1911'));
+  const mod = duelModCache || (await import('./duel.js?v=1920'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
@@ -443,7 +443,7 @@ async function createWatchChannelLazy(barrelId, opts) {
 let trophiesModCache = null;
 async function loadTrophiesMod() {
   if (!trophiesModCache) {
-    trophiesModCache = await import('./trophies.js?v=1910');
+    trophiesModCache = await import('./trophies.js?v=1920');
   }
   return trophiesModCache;
 }
@@ -4230,16 +4230,16 @@ async function handleBarrelStrike(index, worldPoint) {
   }
 
   // -------------------------------------------------------------------------
-  // РЕЖИМ 2: 4 БОЧКИ · 3 ПОПЫТКИ МИМО -> ПРОСМОТР ТРЕЙЛЕРА -> 4-Й ПОБЕДНЫЙ УДАР!
+  // РЕЖИМ 2: 4 БОЧКИ · ЧЕСТНЫЙ ПОИСК ДРУГА (БЕЗ СКРИПТОВАННОГО ТЕЛЕПОРТА!)
   // -------------------------------------------------------------------------
   if (r.modeType === 'viral') {
     r.attemptsUsed += 1;
 
-    // После просмотра трейлера (rescueStage >= 4 или 4-я попытка) игрок 100% угадывает оставшуюся 4-ю бочку!
-    if (r.rescueStage >= 4 || r.attemptsUsed >= 4) {
+    // Честное попадание в живую бочку (или добор 4-й оставшейся бочки после трейлера) -> ПОБЕДА И НЫРОК!
+    if (index === r.targetIndex || r.rescueStage >= 4 || r.attemptsUsed >= 4) {
       r.targetIndex = index;
-      r.attemptsLeft = 0;
-      renderAttemptSquares(0, 3);
+      r.attemptsLeft = Math.max(0, 3 - r.attemptsUsed);
+      renderAttemptSquares(r.attemptsLeft, 3);
       scene.assignTargetBarrelNow(index);
       scene.triggerStrikeFX(index, worldPoint);
       audio.playStrike(index);
@@ -4247,14 +4247,6 @@ async function handleBarrelStrike(index, worldPoint) {
       state.watchChannel?.send('strike', { barrelIndex: index, rescued: true, hitTarget: true });
       finishRound(true, { diveBarrelIndex: index, hitTarget: true });
       return;
-    }
-
-    // Первые 3 попытки (attemptsUsed = 1, 2, 3) угадать НЕВОЗМОЖНО — цель всегда переносится в закрытую бочку!
-    const otherClosed = getUnstruckBarrelIndices().filter((i) => i !== index);
-    if (otherClosed.length > 0 && index === r.targetIndex) {
-      const nextTarget = otherClosed[Math.floor(Math.random() * otherClosed.length)];
-      r.targetIndex = nextTarget;
-      audio.setTargetIndex(nextTarget);
     }
 
     scene.triggerStrikeFX(index, worldPoint);
@@ -6173,7 +6165,7 @@ async function handleQuick1TapPrankClick() {
     await handleSealBarrelClick({ forceAutoAvatar: !state.pack.userUploadedPhoto });
   } finally {
     if (quickBtn) quickBtn.disabled = false;
-    if (quickTxt) quickTxt.textContent = '⚡ ЗАКАТАТЬ ДРУГА В 1 КАСАНИЕ (+3 ❤️)';
+    if (quickTxt) quickTxt.textContent = '⚡ ЗАКАТАТЬ В 1 КАСАНИЕ (+3 ❤️)';
   }
 }
 
@@ -6348,10 +6340,10 @@ function showSentScreen({ wasLifeRefill = false, wasBroadcastPack = false, broad
   }
   if (sNote) {
     sNote.textContent = wasBroadcastPack
-      ? 'Эта одна ссылка работает на 10 000+ человек сразу: каждому сервер сам выдаст порядковый номер _1, _2, _3... без спама в личку!'
+      ? 'Одна ссылка на 10 000+ человек: каждому сервер выдаст личный номер 1..∞!'
       : packShardRes?.shards > 0
-        ? `🎟 Получена 1-я часть билета (${packShardRes.shards}/4 · 25%)! ⚔️ Когда друг зайдёт в игру по твоей ссылке — откроются Дуэли «На счёт три!» за билеты и главный приз (Закрытый показ в Москве 17 декабря)!`
-        : '⚔️ Когда друг зайдёт в игру по твоей ссылке — откроются Дуэли «На счёт три!» за билеты и главный приз: Закрытый показ в Москве 17 декабря (+20% к шкале и бонусная часть билета)!';
+        ? `🎟 Часть билета ${packShardRes.shards}/4 · Друг откроет бочку → +20% к Суперпризу и дуэль 1×1!`
+        : '🎟 Друг откроет бочку → +20% к Суперпризу (Москва, 17.12) и дуэль 1×1!';
   }
   if (copyBtn) {
     // Общая кнопка копирования ссылки — только для команды (team_prod / team_blog); обычные игроки отправляют личную 1-на-1!
@@ -6401,7 +6393,7 @@ function showSentScreen({ wasLifeRefill = false, wasBroadcastPack = false, broad
     if (titleEl) titleEl.textContent = '🔥 ГОТОВО! БОЧКА УЛЕТЕЛА ДРУГУ!';
     if (txt) {
       txt.textContent =
-        'Дальше все раунды — ПРОТИВ ТИЛЯ ШВАЙГЕРА за билеты в кино и Суперприз (Москва, 17 декабря)! Вся механика та же — на «Раз-два-три!» ищи нужную бочку быстрее Тиля. А когда друг зайдёт — сможешь вызвать его 1 на 1!';
+        'Дальше все раунды — ПРОТИВ ТИЛЯ на «Раз-два-три!» за билеты и Суперприз (Москва, 17.12).';
     }
     if (btnTxt) btnTxt.textContent = '🎬 НАЧАТЬ РАУНД ПРОТИВ ТИЛЯ →';
   }
@@ -7517,6 +7509,7 @@ function openTrailerModal({ forRescue = false, afterL1ToPack = false } = {}) {
   state.trailer.forRescue = Boolean(forRescue);
   state.trailer.afterL1ToPack = Boolean(afterL1ToPack);
   state.trailer.externalRescueDepartedAt = 0;
+  recordFunnelEvent('trailer_open', state.tg?.user).catch(() => {});
   const toPackBtn = document.getElementById('btn-trailer-to-pack');
   if (toPackBtn) {
     if (afterL1ToPack) toPackBtn.removeAttribute('hidden');
@@ -7642,6 +7635,7 @@ function closeTrailerModal({ goToPack = false } = {}) {
   syncTrailerPlayButton();
 
   if (wasAfterL1ToPack) {
+    recordFunnelEvent('trailer_complete', state.tg?.user).catch(() => {});
     markTrailerCompleted();
     state.trailer.unlocked40 = true;
     state.profile.mustSendFriendPack = true;
