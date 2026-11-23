@@ -3778,11 +3778,9 @@ body[data-ui-stage="2"] #topbar {
   display: none !important;
 }
 
-/* Стадия 1/2 Экран входа (#screen-gate): ТОЛЬКО лого БОЧКА, 18+ и вход со звуком */
+/* Стадия 1/2 Экран входа (#screen-gate): лого БОЧКА, короткий призыв и вход со звуком */
 body[data-ui-stage="1"] #screen-gate .gate-top-meta .mono-tag,
 body[data-ui-stage="2"] #screen-gate .gate-top-meta .mono-tag,
-body[data-ui-stage="1"] #screen-gate .gate-subtitle,
-body[data-ui-stage="2"] #screen-gate .gate-subtitle,
 body[data-ui-stage="1"] #screen-gate .gate-teaser,
 body[data-ui-stage="2"] #screen-gate .gate-teaser,
 body[data-ui-stage="1"] #screen-gate .gate-footer,
@@ -7209,8 +7207,9 @@ body.is-duel-active .topbar {
     margin: 2px 0 2px !important;
   }
   #screen-gate .gate-subtitle {
-    font-size: 10.5px !important;
-    margin-bottom: 6px !important;
+    font-size: 14px !important;
+    line-height: 1.35 !important;
+    margin-bottom: 14px !important;
   }
   #screen-gate .premiere-hero-banner {
     padding: 7px 9px !important;
