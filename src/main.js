@@ -277,6 +277,7 @@ const state = {
     introWatchedSec: 0,
     usingVkFallback: false,
     introStallTimer: null,
+    introWatchTimer: null,
     muted: false,
     maxTime: 0,
     unlocked40: false,
@@ -393,7 +394,7 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1961'));
+    const mod = duelModCache || (await import('./duel.js?v=1962'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -7383,6 +7384,10 @@ function clearTrailerTimers() {
     clearTimeout(state.trailer.introStallTimer);
     state.trailer.introStallTimer = null;
   }
+  if (state.trailer.introWatchTimer) {
+    clearInterval(state.trailer.introWatchTimer);
+    state.trailer.introWatchTimer = null;
+  }
   if (state.trailer.vkTimer) {
     clearInterval(state.trailer.vkTimer);
     state.trailer.vkTimer = null;
@@ -7452,6 +7457,10 @@ function mountVkTrailerIframeFallback() {
   if (state.trailer.introStallTimer) {
     clearTimeout(state.trailer.introStallTimer);
     state.trailer.introStallTimer = null;
+  }
+  if (state.trailer.introWatchTimer) {
+    clearInterval(state.trailer.introWatchTimer);
+    state.trailer.introWatchTimer = null;
   }
   const vid = document.getElementById('trailer-video');
   const slot = document.getElementById('yt-fallback-slot');
@@ -7982,12 +7991,35 @@ function openTrailerModal({ forRescue = false, afterL1ToPack = false } = {}) {
     };
     tryAutoplay();
 
-    state.trailer.introStallTimer = window.setTimeout(() => {
-      state.trailer.introStallTimer = null;
-      if (state.trailer.modalOpen && !state.trailer.usingVkFallback && vid.paused && vid.readyState < 2) {
-        mountVkTrailerIframeFallback();
+    let prevCt = 0;
+    let stalledTicks = 0;
+    let visibleWallSec = 0;
+    state.trailer.introWatchTimer = window.setInterval(() => {
+      if (!state.trailer.modalOpen || state.trailer.usingVkFallback || document.hidden) return;
+      visibleWallSec += 1;
+      const curCt = Number(vid.currentTime || 0);
+      if (curCt - prevCt < 0.15) {
+        stalledTicks += 1;
+      } else {
+        stalledTicks = 0;
+        prevCt = curCt;
       }
-    }, 3500);
+      if (stalledTicks >= 4 && curCt < 0.25 && vid.readyState < 2) {
+        mountVkTrailerIframeFallback();
+        return;
+      }
+      if (state.trailer.introLocked) {
+        if (curCt > 0 || vid.readyState >= 1 || visibleWallSec >= 3) {
+          const effectiveSec = Math.max(Number(state.trailer.maxTime || 0), Math.max(0, visibleWallSec - 2));
+          state.trailer.maxTime = effectiveSec;
+          syncTrailerIntroLockUI(effectiveSec);
+        }
+      }
+      if (!state.trailer.introLocked && !state.trailer.forRescue && state.trailer.introWatchTimer) {
+        clearInterval(state.trailer.introWatchTimer);
+        state.trailer.introWatchTimer = null;
+      }
+    }, 1000);
   } else {
     mountVkTrailerIframeFallback();
   }
