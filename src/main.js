@@ -394,7 +394,7 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1962'));
+    const mod = duelModCache || (await import('./duel.js?v=1963'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -7468,6 +7468,8 @@ function mountVkTrailerIframeFallback() {
   document.getElementById('btn-trailer-unmute-pill')?.setAttribute('hidden', '');
   if (vid) {
     try { vid.pause(); } catch { /* ignore */ }
+    vid.removeAttribute('src');
+    try { vid.load(); } catch { /* ignore */ }
     vid.setAttribute('hidden', '');
   }
   if (customBar) {
@@ -8054,6 +8056,8 @@ function closeTrailerModal({ goToPack = false, force = false } = {}) {
   if (vid) {
     try { vid.pause(); } catch { /* ignore */ }
     vid.muted = true;
+    vid.removeAttribute('src');
+    try { vid.load(); } catch { /* ignore */ }
     vid.setAttribute('hidden', '');
   }
   if (state.ytPlayer) {
