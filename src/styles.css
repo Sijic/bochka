@@ -8697,6 +8697,38 @@ body.is-duel-active .topbar {
   overflow-y: auto !important;
 }
 
+#trailer-video-wrap {
+  position: relative;
+}
+
+.trailer-unmute-pill {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 6;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(250, 204, 21, 0.85);
+  background: rgba(12, 14, 18, 0.88);
+  color: #fde047;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+#modal-trailer.is-intro-locked button:not(#btn-trailer-unmute-pill) {
+  pointer-events: none !important;
+  opacity: 0.42 !important;
+  cursor: not-allowed !important;
+  filter: grayscale(0.45);
+}
+
+#modal-trailer.is-intro-locked #btn-close-trailer {
+  opacity: 0.2 !important;
+}
+
 .duel-barrel-badge.is-telegraph .duel-badge-ava {
   border-color: #ef4444;
   box-shadow: 0 0 22px rgba(239, 68, 68, 0.95);
