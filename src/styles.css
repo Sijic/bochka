@@ -9902,20 +9902,32 @@ body.is-duel-spotlight-active .duel-live-mini-bar.duel-vs-hud {
 }
 
 @media (max-width: 480px) {
-  .duel-live-mini-bar.duel-vs-hud { padding: 5px 6px !important; }
+  .duel-live-mini-bar.duel-vs-hud {
+    width: min(calc(100vw - 8px), 780px) !important;
+    max-width: min(calc(100vw - 8px), 780px) !important;
+    padding: 5px 5px !important;
+  }
   .duel-vs-row { gap: 4px; }
-  .duel-vs-side { gap: 4px; }
-  .duel-vs-ava { width: 28px; height: 28px; }
-  .duel-vs-ava-menu-lbl { font-size: 7px; padding: 1px 3.5px; }
-  .duel-vs-center { min-width: 42px; }
-  .duel-vs-num { font-size: 9.5px; }
+  .duel-vs-side { gap: 3px; }
+  .duel-vs-ava { width: 26px; height: 26px; }
+  .duel-vs-ava-menu-lbl { font-size: 6.5px; padding: 1px 3px; }
+  .duel-vs-center { min-width: 38px; }
+  .duel-vs-num { font-size: 9px; }
   .duel-vs-loot-row { gap: 2px; }
   .duel-vs-hud .duel-shards-pill,
-  .duel-vs-chip-pill,
-  .duel-vs-pts-pill,
-  .duel-vs-opp-pill { font-size: 8.5px; padding: 1px 2.5px; }
-  .duel-vs-hud .ticket-stub-mini.is-duel { width: 18px; height: 10px; padding: 1px 2px; gap: 1px; }
-  .duel-vs-hud .chip-token-ico { width: 10px; height: 10px; }
+  .duel-vs-hud .duel-vs-chip-pill,
+  .duel-vs-hud .duel-vs-pts-pill,
+  .duel-vs-hud .duel-vs-opp-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px !important;
+    font-size: 8px !important;
+    line-height: 1.15;
+    padding: 1px 2.5px !important;
+    letter-spacing: -0.02em;
+  }
+  .duel-vs-hud .ticket-stub-mini.is-duel { width: 16px; height: 9px; padding: 1px 1.5px; gap: 1px; }
+  .duel-vs-hud .chip-token-ico { width: 9px; height: 9px; }
   .trophy-pick-grid { grid-template-columns: 1fr; gap: 8px; }
   .trophy-pick-item {
     flex-direction: row;
