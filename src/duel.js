@@ -2265,10 +2265,15 @@ export class WorkshopDuelController {
       ticketBtn.disabled = true;
       chipBtn.disabled = true;
       ptsBtn.disabled = true;
+      this._trophyPickerOpen = false;
+      modal.setAttribute('hidden', '');
+      this.audio?.playRewardChime?.();
+      Haptics.success();
 
       let pickedRes = { kind };
       try {
         if (kind === 'ticket') {
+          this.onFlyRating?.({ type: 'ticket', count: 3, label: '🎟 +1/4 билета' });
           const sRes = await awardTicketShardServer(this.getTgUser?.(), 'til_trophy').catch(() => null);
           pickedRes.serverTicketRes = sRes;
           pickedRes.serverTicketGranted = Boolean(sRes?.granted);
@@ -2281,24 +2286,19 @@ export class WorkshopDuelController {
             if (sRes.pendingTicketsCount != null) patch.pendingTicketsCount = Number(sRes.pendingTicketsCount);
             this.onProfileSync?.(patch);
           }
-          this.onFlyRating?.({ type: 'ticket', count: 3, label: '🎟 +1/4 билета' });
         } else if (kind === 'chip') {
           this.sessionStats.playerChips += 1;
+          this.onFlyRating?.({ type: 'chip', count: 3, label: '💎 Новая фишка' });
           this.onCollectChipFromBarrel?.({ barrelIndex: -1, loot: { kind: 'chip', value: 150, label: '💎 Новая фишка' } });
           const bankRes = await claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: 150, solo: true }).catch(() => null);
           if (bankRes?.ok) this.onProfileSync?.({ premierePoints: bankRes.premierePoints });
-          this.onFlyRating?.({ type: 'chip', count: 3, label: '💎 Новая фишка' });
         } else {
           this.sessionStats.playerPoints += 300;
+          this.onFlyRating?.({ type: 'points', count: 3, label: '+300 ⭐' });
           const bankRes = await claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: 300, solo: true }).catch(() => null);
           if (bankRes?.ok) this.onProfileSync?.({ premierePoints: bankRes.premierePoints });
-          this.onFlyRating?.({ type: 'points', count: 3, label: '+300 ⭐' });
         }
-        this.audio?.playRewardChime?.();
-        Haptics.success();
       } finally {
-        this._trophyPickerOpen = false;
-        modal.setAttribute('hidden', '');
         this.syncEnergyUI();
         onResolved?.(pickedRes);
       }
