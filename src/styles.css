@@ -9664,6 +9664,7 @@ body.is-duel-spotlight-active .duel-live-mini-bar.duel-vs-hud {
   top: calc(env(safe-area-inset-top, 0px) + 52px);
   right: 10px;
   z-index: 620;
+  pointer-events: auto;
   display: inline-flex;
   align-items: center;
   gap: 5px;
