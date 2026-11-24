@@ -6869,30 +6869,93 @@ body.is-duel-active .topbar {
   border-color: #fef08a;
 }
 .ticket-stub-mini {
-  display: grid;
+  display: inline-grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 2px;
   width: 30px;
   height: 14px;
-  padding: 2px;
+  padding: 2px 3px;
   border-radius: 3px;
-  background: rgba(10, 10, 12, 0.9);
-  border: 1px dashed rgba(250, 204, 21, 0.55);
+  background: rgba(15, 17, 22, 0.94);
+  border: 1.5px solid rgba(203, 213, 225, 0.72);
   position: relative;
+  vertical-align: middle;
+  flex-shrink: 0;
+  overflow: visible;
 }
+.ticket-stub-mini::before,
+.ticket-stub-mini::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(10, 12, 16, 0.98);
+  border: 1px solid rgba(203, 213, 225, 0.72);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.ticket-stub-mini::before { left: -3.5px; }
+.ticket-stub-mini::after { right: -3.5px; }
 .ticket-stub-mini .shard-q {
   display: block;
   width: 100%;
   height: 100%;
   border-radius: 1px;
-  background: rgba(148, 163, 184, 0.22);
+  background: rgba(148, 163, 184, 0.2);
   transition: background 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
 }
 .ticket-stub-mini .shard-q.is-filled {
-  background: linear-gradient(180deg, #fef08a 0%, #eab308 100%);
-  box-shadow: 0 0 6px rgba(250, 204, 21, 0.85);
+  background: linear-gradient(180deg, #ffffff 0%, #cbd5e1 100%);
+  box-shadow: 0 0 6px rgba(248, 250, 252, 0.65);
   transform: scale(1.04);
 }
+.ticket-stub-mini.is-complete {
+  border-color: #f8fafc;
+  box-shadow: 0 0 10px rgba(248, 250, 252, 0.55);
+}
+.ticket-stub-mini.is-duel {
+  width: 24px;
+  height: 12px;
+  padding: 1.5px 2.5px;
+  gap: 1.5px;
+}
+.ticket-stub-mini.is-duel::before,
+.ticket-stub-mini.is-duel::after {
+  width: 4px;
+  height: 4px;
+}
+.ticket-stub-mini.is-duel::before { left: -2.5px; }
+.ticket-stub-mini.is-duel::after { right: -2.5px; }
+.ticket-stub-mini.is-lg {
+  width: 46px;
+  height: 24px;
+  padding: 3px 4px;
+  gap: 2.5px;
+  border-width: 2px;
+}
+.ticket-stub-mini.is-lg::before,
+.ticket-stub-mini.is-lg::after {
+  width: 7px;
+  height: 7px;
+}
+.ticket-stub-mini.is-lg::before { left: -4.5px; }
+.ticket-stub-mini.is-lg::after { right: -4.5px; }
+.ticket-stub-mini.is-xl {
+  width: 58px;
+  height: 30px;
+  padding: 3.5px 5px;
+  gap: 3px;
+  border-width: 2px;
+}
+.ticket-stub-mini.is-xl::before,
+.ticket-stub-mini.is-xl::after {
+  width: 8px;
+  height: 8px;
+}
+.ticket-stub-mini.is-xl::before { left: -5px; }
+.ticket-stub-mini.is-xl::after { right: -5px; }
 
 .premiere-hero-banner {
   width: 100%;
@@ -7253,8 +7316,8 @@ body.is-duel-active .topbar {
 /* 3. Яркая анимация зажигания нового осколка в шапке + 4-сегментный кинобилет на экране победы! */
 @keyframes shardCellPop {
   0% { transform: scale(0.35); background: #ffffff; box-shadow: 0 0 16px #ffffff; }
-  55% { transform: scale(1.6); background: #fef08a; box-shadow: 0 0 18px #facc15; }
-  100% { transform: scale(1.06); background: linear-gradient(180deg, #fef08a 0%, #eab308 100%); box-shadow: 0 0 8px rgba(250, 204, 21, 0.9); }
+  55% { transform: scale(1.55); background: #f8fafc; box-shadow: 0 0 16px rgba(248, 250, 252, 0.9); }
+  100% { transform: scale(1.04); background: linear-gradient(180deg, #ffffff 0%, #cbd5e1 100%); box-shadow: 0 0 6px rgba(248, 250, 252, 0.65); }
 }
 .ticket-stub-mini .shard-q.is-just-earned {
   animation: shardCellPop 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;

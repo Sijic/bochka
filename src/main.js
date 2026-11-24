@@ -886,9 +886,10 @@ function syncTicketShardsUI({ pulse = false, showFullFlash = false, justEarned =
     const el = document.getElementById(id);
     if (el) el.textContent = label;
   }
-  for (const pillId of ['top-ticket-shards', 'hud-ticket-shards']) {
+  for (const pillId of ['top-ticket-shards', 'hud-ticket-shards', 'duel-shards-pill']) {
     const pill = document.getElementById(pillId);
     if (!pill) continue;
+    pill.querySelector('.ticket-stub-mini')?.classList.toggle('is-complete', shards >= 4 || Boolean(showFullFlash));
     pill.querySelectorAll('.shard-q').forEach((qEl) => {
       const idx = Number(qEl.getAttribute('data-shard') || 0);
       qEl.classList.toggle('is-filled', idx <= shards);
@@ -917,9 +918,9 @@ function createTicketShardDataUrl(shards = 1, merged = false) {
       const x = 18 + (i - 1) * 56;
       const filled = i <= count;
       const isNew = i === count;
-      const fill = filled ? 'url(#goldG)' : '#1e293b';
-      const stroke = isNew ? '#ffffff' : filled ? '#facc15' : '#475569';
-      const textCol = filled ? '#111827' : '#64748b';
+      const fill = filled ? 'url(#monoG)' : '#1e293b';
+      const stroke = isNew ? '#ffffff' : filled ? '#cbd5e1' : '#475569';
+      const textCol = filled ? '#0f172a' : '#64748b';
       return (
         `<rect x="${x}" y="52" width="48" height="62" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="${isNew ? 3 : 1.5}" ${filled ? '' : 'stroke-dasharray="4 3"'}/>` +
         `<text x="${x + 24}" y="82" text-anchor="middle" font-family="monospace" font-size="14" font-weight="900" fill="${textCol}">${i}/4</text>` +
@@ -930,11 +931,11 @@ function createTicketShardDataUrl(shards = 1, merged = false) {
   const title = merged ? '4/4 БИЛЕТ СКЛЕЕН!' : `ЧАСТЬ БИЛЕТА ${count}/4`;
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="260" height="160" viewBox="0 0 260 160">` +
-    `<defs><linearGradient id="goldG" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#fef08a"/><stop offset="55%" stop-color="#eab308"/><stop offset="100%" stop-color="#b45309"/></linearGradient></defs>` +
-    `<rect x="4" y="4" width="252" height="152" rx="14" fill="#0f141d" stroke="#facc15" stroke-width="2.5"/>` +
-    `<text x="130" y="34" text-anchor="middle" font-family="monospace" font-size="14" font-weight="900" fill="#fef08a">${title}</text>` +
+    `<defs><linearGradient id="monoG" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#ffffff"/><stop offset="60%" stop-color="#cbd5e1"/><stop offset="100%" stop-color="#94a3b8"/></linearGradient></defs>` +
+    `<rect x="4" y="4" width="252" height="152" rx="14" fill="#0f141d" stroke="#cbd5e1" stroke-width="2.5"/>` +
+    `<text x="130" y="34" text-anchor="middle" font-family="monospace" font-size="14" font-weight="900" fill="#f8fafc">${title}</text>` +
     `${cells}` +
-    `<text x="130" y="139" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="700" fill="#e2e8f0">КИНОБИЛЕТ «БОЧКА» · 17 ДЕКАБРЯ</text>` +
+    `<text x="130" y="139" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="700" fill="#cbd5e1">КИНОБИЛЕТ «БОЧКА» · 17 ДЕКАБРЯ</text>` +
     `</svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
@@ -2739,6 +2740,20 @@ function showContextHintModal({
       chipIco.className = 'chip-token-ico is-lg';
       chipIco.setAttribute('aria-hidden', 'true');
       iconEl.replaceChildren(chipIco);
+      iconEl.removeAttribute('hidden');
+    } else if (String(kind || '') === 'ticket') {
+      const stub = document.createElement('span');
+      stub.className = 'ticket-stub-mini is-lg';
+      stub.setAttribute('aria-hidden', 'true');
+      const filled = Math.max(1, Math.min(4, Number(state.profile?.ticketShards || 1)));
+      if (filled >= 4) stub.classList.add('is-complete');
+      for (let q = 1; q <= 4; q++) {
+        const qi = document.createElement('i');
+        qi.className = q <= filled ? 'shard-q is-filled' : 'shard-q';
+        qi.setAttribute('data-shard', String(q));
+        stub.appendChild(qi);
+      }
+      iconEl.replaceChildren(stub);
       iconEl.removeAttribute('hidden');
     } else if (icon) {
       iconEl.textContent = icon;

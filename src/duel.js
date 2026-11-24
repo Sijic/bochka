@@ -1686,6 +1686,31 @@ export class WorkshopDuelController {
     this.syncEnergyUI();
   }
 
+  _syncTicketStubEl(stubEl, filledCount = 0) {
+    if (!stubEl) return;
+    const count = Math.max(0, Math.min(4, Math.round(Number(filledCount || 0))));
+    stubEl.classList.toggle('is-complete', count >= 4);
+    stubEl.querySelectorAll('.shard-q').forEach((qEl) => {
+      const idx = Number(qEl.getAttribute('data-shard') || 0);
+      qEl.classList.toggle('is-filled', idx <= count);
+    });
+  }
+
+  _buildTicketStubEl(filledCount = 1, sizeClass = 'is-xl') {
+    const stub = document.createElement('span');
+    stub.className = `ticket-stub-mini ${sizeClass}`.trim();
+    stub.setAttribute('aria-hidden', 'true');
+    const count = Math.max(0, Math.min(4, Math.round(Number(filledCount || 0))));
+    if (count >= 4) stub.classList.add('is-complete');
+    for (let q = 1; q <= 4; q++) {
+      const qi = document.createElement('i');
+      qi.className = q <= count ? 'shard-q is-filled' : 'shard-q';
+      qi.setAttribute('data-shard', String(q));
+      stub.appendChild(qi);
+    }
+    return stub;
+  }
+
   syncEnergyUI() {
     const valEl = document.getElementById('duel-energy-val');
     const fillEl = document.getElementById('duel-energy-fill');
@@ -1726,6 +1751,7 @@ export class WorkshopDuelController {
       pAvaEl.onerror = () => { pAvaEl.src = FIGHTER_AVATARS[0]; };
     }
     if (shardsEl) shardsEl.textContent = `${shards}/4`;
+    this._syncTicketStubEl(document.getElementById('duel-ticket-stub'), shards);
     if (valEl) valEl.textContent = `${pct}%`;
     if (fillEl) {
       fillEl.style.width = `${pct}%`;
@@ -1769,7 +1795,11 @@ export class WorkshopDuelController {
           : 0;
       oEnergyFill.style.width = `${oppPct}%`;
     }
-    if (oTicketsEl) oTicketsEl.textContent = String(this.sessionStats?.oppTickets || 0);
+    if (oTicketsEl) {
+      const oppTk = Math.max(0, Number(this.sessionStats?.oppTickets || 0));
+      oTicketsEl.textContent = String(oppTk);
+      this._syncTicketStubEl(document.getElementById('duel-opp-ticket-stub'), Math.min(4, oppTk));
+    }
     if (oChipsEl) oChipsEl.textContent = String(this.sessionStats?.oppChips || 0);
     if (oPtsEl) oPtsEl.textContent = String(this.sessionStats?.oppPoints || 0);
 
@@ -2258,6 +2288,9 @@ export class WorkshopDuelController {
       chipToken.className = 'chip-token-ico is-xl';
       chipToken.setAttribute('aria-hidden', 'true');
       icoEl.replaceChildren(chipToken);
+    } else if (kind === 'ticket') {
+      const ticketFilled = Math.max(1, Math.min(4, Number(this.getTicketShards?.() || 0) || 1));
+      icoEl.replaceChildren(this._buildTicketStubEl(ticketFilled, 'is-xl'));
     } else {
       icoEl.textContent = icoMap[kind] || '🎁';
     }
@@ -2296,6 +2329,7 @@ export class WorkshopDuelController {
     const friends = Math.max(0, Math.round(Number(profStats.friendsBrought ?? 0)));
     const ticketLocked = !isPvp1x1 && shards >= 2 && friends < 1;
 
+    this._syncTicketStubEl(document.getElementById('trophy-pick-ticket-stub'), Math.max(1, Math.min(4, shards + 1)));
     ticketBtn.classList.toggle('is-locked', ticketLocked);
     if (lockBadge) {
       if (ticketLocked) lockBadge.removeAttribute('hidden');
