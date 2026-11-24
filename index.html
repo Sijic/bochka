@@ -1561,12 +1561,19 @@
     </div>
   </div>
 
-  <!-- Кинематографичный переход 0 жизней: затянуло в бочку -> крышка захлопнулась -> небо -->
+  <!-- Кинематографичный 4-актный переход 0 жизней: затягивает в бочку -> лицо над краем -> крышка -> темнота -> небо -->
   <div class="barrel-trap-cinematic" id="barrel-trap-cinematic" hidden aria-hidden="true">
-    <div class="barrel-tunnel-fx"></div>
-    <div class="barrel-iron-lid"></div>
-    <div class="barrel-trap-caption" id="barrel-trap-caption">Ты в бочке...</div>
-    <div class="barrel-heaven-flash"></div>
+    <div class="barrel-pov-tunnel">
+      <div class="barrel-pov-rings"></div>
+      <div class="barrel-pov-aperture">
+        <div class="barrel-pov-ceiling"></div>
+        <img src="./public/sprites/til_avatar.webp?v=2000" alt="" class="barrel-closer-face" id="barrel-closer-face" />
+        <div class="barrel-iron-lid" id="barrel-iron-lid"></div>
+      </div>
+    </div>
+    <div class="barrel-pitch-black" id="barrel-pitch-black"></div>
+    <div class="barrel-heaven-flash" id="barrel-heaven-flash"></div>
+    <div class="barrel-trap-caption" id="barrel-trap-caption"></div>
   </div>
 
   <!-- Повторное поражение в бочке (когда море 1×/24ч уже использовано) -->

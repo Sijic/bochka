@@ -4316,9 +4316,32 @@ function checkSecret1997Combo(index, worldPoint, alreadyStruck) {
 
 let defeatCinematicActive = false;
 
+const BARREL_CLOSER_CAST = [
+  { id: 'til', name: 'Тиль', src: './public/sprites/til_avatar.webp?v=2000' },
+  { id: 'father', name: 'Отец', src: './public/sprites/horror_hero_warden.webp?v=2000' },
+  { id: 'ola', name: 'Ола', src: './public/sprites/horror_hero_mechanic.webp?v=2000' },
+  { id: 'girl', name: 'Девушка', src: './public/sprites/fighter_4.webp?v=2000' },
+];
+let _lastBarrelCloserIdx = -1;
+
+function pickNextBarrelCloser() {
+  let prev = _lastBarrelCloserIdx;
+  try {
+    const raw = window.localStorage?.getItem('bochka_last_closer_idx_v20');
+    if (raw != null && raw !== '') prev = Number(raw);
+  } catch { /* ignore */ }
+  const next = Number.isFinite(prev) && prev >= 0 ? (prev + 1) % BARREL_CLOSER_CAST.length : 0;
+  _lastBarrelCloserIdx = next;
+  try {
+    window.localStorage?.setItem('bochka_last_closer_idx_v20', String(next));
+  } catch { /* ignore */ }
+  return BARREL_CLOSER_CAST[next];
+}
+
 /**
- * Единая кинематографичная сцена поражения при 0 ❤️:
- * скрежет + затягивание в бочку (900 мс) -> тяжёлая крышка + «Ты в бочке...» -> белая вспышка (2.5 с) -> Море или Попап друга.
+ * Единая 4-актная POV-сцена поражения при 0 ❤️:
+ * 1) затягивает вниз в бочку -> 2) взгляд вверх на край круга (каждый раз новое лицо: Тиль/Отец/Ола/Девушка)
+ * -> 3) тяжёлая крышка захлопывается + полная темнота -> 4) «Ты на небе» (1 раз/сутки) или попап друга.
  */
 function playBarrelDefeatCinematic({ oceanAllowed = true, roomId = '', solo = true } = {}) {
   if (defeatCinematicActive) return;
@@ -4335,28 +4358,52 @@ function playBarrelDefeatCinematic({ oceanAllowed = true, roomId = '', solo = tr
 
   const overlay = document.getElementById('barrel-trap-cinematic');
   const captionEl = document.getElementById('barrel-trap-caption');
+  const closerEl = document.getElementById('barrel-closer-face');
+  const closer = pickNextBarrelCloser();
+
+  if (closerEl) {
+    closerEl.src = closer.src;
+    closerEl.alt = closer.name;
+  }
   if (captionEl) captionEl.textContent = '☠️ 0 ЖИЗНЕЙ — ЗАТЯГИВАЕТ В БОЧКУ!';
 
   if (overlay) {
-    overlay.classList.remove('is-lid-slammed', 'is-heaven-flash', 'is-pulling');
+    overlay.classList.remove('is-pulling', 'is-closer-looming', 'is-lid-slammed', 'is-pitch-dark', 'is-heaven-flash');
     overlay.removeAttribute('hidden');
     void overlay.offsetWidth;
     overlay.classList.add('is-pulling');
   }
 
   window.setTimeout(() => {
+    overlay?.classList.add('is-closer-looming');
+    if (captionEl) captionEl.textContent = `👁 ${closer.name} смотрит сверху и закрывает крышку…`;
+  }, 520);
+
+  window.setTimeout(() => {
     audio.playLidSlamShut?.();
     Haptics.error();
-    if (captionEl) captionEl.textContent = '🔒 КРЫШКА ЗАХЛОПНУЛАСЬ...';
     overlay?.classList.add('is-lid-slammed');
-  }, 900);
+    if (captionEl) captionEl.textContent = '🔒 КРЫШКА ЗАХЛОПНУЛАСЬ…';
+  }, 1480);
 
   window.setTimeout(() => {
-    overlay?.classList.add('is-heaven-flash');
-  }, 1900);
+    overlay?.classList.add('is-pitch-dark');
+  }, 1880);
+
+  const finishDelay = oceanAllowed ? 3350 : 2900;
+  if (oceanAllowed) {
+    window.setTimeout(() => {
+      overlay?.classList.add('is-heaven-flash');
+      if (captionEl) captionEl.textContent = '☁️ ТЫ НА НЕБЕ — 1 РАЗ В СУТКИ МОЖНО ДОСТУЧАТЬСЯ И ВЕРНУТЬСЯ В ЦЕХ!';
+    }, 2320);
+  } else {
+    window.setTimeout(() => {
+      if (captionEl) captionEl.textContent = '🔒 НА НЕБО УЖЕ ХОДИЛ СЕГОДНЯ — ПОЗОВИ ДРУГА!';
+    }, 2250);
+  }
 
   window.setTimeout(() => {
-    overlay?.classList.remove('is-pulling', 'is-lid-slammed', 'is-heaven-flash');
+    overlay?.classList.remove('is-pulling', 'is-closer-looming', 'is-lid-slammed', 'is-pitch-dark', 'is-heaven-flash');
     overlay?.setAttribute('hidden', '');
     defeatCinematicActive = false;
     duelCtrl?.leaveRoom?.(false);
@@ -4366,7 +4413,7 @@ function playBarrelDefeatCinematic({ oceanAllowed = true, roomId = '', solo = tr
       const trappedModal = document.getElementById('modal-barrel-trapped');
       trappedModal?.removeAttribute('hidden');
     }
-  }, 2500);
+  }, finishDelay);
 }
 
 /**

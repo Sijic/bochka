@@ -9726,7 +9726,7 @@ body.is-duel-spotlight-active .duel-live-mini-bar.duel-vs-hud {
   font-weight: 800;
 }
 
-/* Defeat Barrel Trap Cinematic (2.5s) */
+/* Defeat 4-Act POV Barrel Trap Cinematic */
 .barrel-trap-cinematic:not([hidden]) {
   position: fixed;
   inset: 0;
@@ -9734,82 +9734,153 @@ body.is-duel-spotlight-active .duel-live-mini-bar.duel-vs-hud {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at 50% 42%, rgba(30, 41, 59, 0.92) 0%, rgba(12, 16, 24, 0.97) 52%, #040507 100%);
+  background: #020306;
   pointer-events: auto;
   overflow: hidden;
 }
 
-.barrel-tunnel-fx {
+.barrel-pov-tunnel {
   position: absolute;
-  inset: -25%;
-  background: radial-gradient(circle at 50% 45%, rgba(250, 204, 21, 0.24) 0%, rgba(71, 85, 105, 0.52) 24%, rgba(15, 23, 42, 0.92) 56%, #05070b 82%);
-  border: 16px solid #475569;
-  box-shadow: inset 0 0 60px rgba(239, 68, 68, 0.35), 0 0 0 6px rgba(250, 204, 21, 0.22);
+  inset: -12%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 44%, #1e293b 0%, #0f172a 32%, #05070c 64%, #020305 100%);
+  transform: scale(1.55);
+}
+
+.barrel-trap-cinematic.is-pulling .barrel-pov-tunnel {
+  animation: barrelTunnelPull 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.barrel-pov-rings {
+  position: absolute;
+  inset: 0;
+  background: repeating-radial-gradient(
+    circle at 50% 44%,
+    transparent 0 28px,
+    rgba(148, 163, 184, 0.08) 28px 31px,
+    rgba(0, 0, 0, 0.55) 31px 48px
+  );
+  pointer-events: none;
+}
+
+.barrel-pov-aperture {
+  position: relative;
+  width: min(74vw, 330px);
+  height: min(74vw, 330px);
+  margin-top: -6vh;
   border-radius: 50%;
-  animation: barrelTunnelPull 0.95s ease-in forwards;
+  overflow: hidden;
+  border: 12px solid #475569;
+  background: #0b1120;
+  box-shadow:
+    inset 0 0 42px rgba(0, 0, 0, 0.92),
+    0 0 0 8px #1e293b,
+    0 0 70px rgba(0, 0, 0, 0.95);
+}
+
+.barrel-pov-ceiling {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 24%, rgba(148, 163, 184, 0.35) 0%, rgba(51, 65, 85, 0.55) 36%, #0f172a 85%);
+}
+
+.barrel-closer-face {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 22%;
+  opacity: 0;
+  transform: translateY(-24%) scale(1.24);
+  transition: opacity 0.4s ease, transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+  filter: contrast(1.12) brightness(0.92);
+}
+
+.barrel-trap-cinematic.is-closer-looming .barrel-closer-face {
+  opacity: 1;
+  transform: translateY(0%) scale(1.04);
 }
 
 .barrel-iron-lid {
   position: absolute;
-  width: min(92vw, 520px);
-  height: min(92vw, 520px);
+  inset: -6%;
+  z-index: 3;
   border-radius: 50%;
-  background: radial-gradient(circle at 36% 32%, #64748b 0%, #334155 42%, #1e293b 72%, #0f172a 100%);
-  border: 10px solid #94a3b8;
-  box-shadow: inset 0 0 42px rgba(239, 68, 68, 0.28), 0 24px 60px #000;
+  background: radial-gradient(circle at 38% 34%, #64748b 0%, #334155 42%, #1e293b 74%, #090d14 100%);
+  border: 8px solid #94a3b8;
+  box-shadow: inset 0 0 36px rgba(0, 0, 0, 0.85), -14px 14px 36px rgba(0, 0, 0, 0.95);
+  transform: translate(110%, -35%) rotate(22deg);
   opacity: 0;
-  animation: barrelLidSlam 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.35s forwards;
+  transition: transform 0.42s cubic-bezier(0.18, 0.95, 0.32, 1), opacity 0.12s ease;
 }
 
-.barrel-trap-caption {
-  position: relative;
-  z-index: 3;
-  padding: 10px 18px;
-  border-radius: 14px;
-  background: rgba(15, 23, 42, 0.92);
-  border: 2px solid rgba(248, 113, 113, 0.85);
-  font-size: clamp(16px, 4.4vw, 22px);
-  font-weight: 900;
-  color: #fef2f2;
-  letter-spacing: 0.04em;
-  text-align: center;
-  max-width: min(90vw, 440px);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.85), 0 0 24px rgba(239, 68, 68, 0.45);
-  text-shadow: 0 2px 12px #000;
+.barrel-trap-cinematic.is-lid-slammed .barrel-iron-lid {
+  opacity: 1;
+  transform: translate(0, 0) rotate(0deg);
+}
+
+.barrel-pitch-black {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: #000000;
   opacity: 0;
-  animation: barrelCaptionFade 0.3s ease 0.05s forwards;
+  transition: opacity 0.32s ease;
+  pointer-events: none;
+}
+
+.barrel-trap-cinematic.is-pitch-dark .barrel-pitch-black {
+  opacity: 1;
 }
 
 .barrel-heaven-flash {
   position: absolute;
   inset: 0;
-  z-index: 4;
-  background: #f8fafc;
+  z-index: 5;
+  background: radial-gradient(circle at 50% 42%, #ffffff 0%, #e0f2fe 52%, #bae6fd 100%);
   opacity: 0;
-  animation: barrelHeavenFlash 0.55s ease-in-out 2.05s forwards;
+  transition: opacity 0.55s ease;
+  pointer-events: none;
+}
+
+.barrel-trap-cinematic.is-heaven-flash .barrel-heaven-flash {
+  opacity: 0.94;
+}
+
+.barrel-trap-caption {
+  position: fixed;
+  bottom: calc(9vh + var(--safe-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  padding: 10px 18px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.94);
+  border: 2px solid rgba(248, 113, 113, 0.85);
+  font-size: clamp(14.5px, 4vw, 20px);
+  font-weight: 900;
+  color: #fef2f2;
+  letter-spacing: 0.03em;
+  text-align: center;
+  width: max-content;
+  max-width: min(92vw, 440px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.85), 0 0 24px rgba(239, 68, 68, 0.45);
+  text-shadow: 0 2px 12px #000;
+}
+
+.barrel-trap-cinematic.is-heaven-flash .barrel-trap-caption {
+  border-color: rgba(56, 189, 248, 0.9);
+  background: rgba(12, 74, 110, 0.94);
+  color: #f0f9ff;
+  box-shadow: 0 10px 32px rgba(14, 165, 233, 0.45);
 }
 
 @keyframes barrelTunnelPull {
-  0% { transform: scale(1.65); opacity: 0.9; }
-  100% { transform: scale(0.75); opacity: 1; }
-}
-
-@keyframes barrelLidSlam {
-  0% { transform: translateY(-100vh) scale(1.25); opacity: 1; }
-  80% { transform: translateY(6px) scale(0.98); opacity: 1; }
-  100% { transform: translateY(0) scale(1); opacity: 1; }
-}
-
-@keyframes barrelCaptionFade {
-  0% { opacity: 0; transform: scale(0.92); }
-  25% { opacity: 1; transform: scale(1); }
-  100% { opacity: 1; transform: scale(1); }
-}
-
-@keyframes barrelHeavenFlash {
-  0% { opacity: 0; }
-  65% { opacity: 0.96; }
-  100% { opacity: 1; }
+  0% { transform: scale(1.55); opacity: 0.85; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 @media (max-width: 480px) {
