@@ -13,6 +13,12 @@ ALTER TABLE public.users
 ALTER TABLE public.daily_metrics
   ADD COLUMN IF NOT EXISTS trailer_watched_full integer NOT NULL DEFAULT 0;
 
+ALTER TABLE public.user_trophies
+  DROP CONSTRAINT IF EXISTS user_trophies_trophy_type_check;
+ALTER TABLE public.user_trophies
+  ADD CONSTRAINT user_trophies_trophy_type_check
+  CHECK (trophy_type = ANY (ARRAY['friend_barrel'::text, 'movie_card'::text, 'friend_joined'::text]));
+
 CREATE OR REPLACE FUNCTION public.bump_daily_metric(p_field text, p_delta integer DEFAULT 1)
  RETURNS void
  LANGUAGE plpgsql
