@@ -15,6 +15,10 @@ const SUPABASE_TIMEOUT_MS = 12000;
 const SUPABASE_RETRIES = 2;
 
 export async function resilientFetch(input, init = {}) {
+  const urlStr = typeof input === 'string' ? input : String(input?.url || '');
+  const method = String(init?.method || (typeof input !== 'string' ? input?.method : '') || 'GET').toUpperCase();
+  const isStorageWrite = urlStr.includes('/storage/v1/object/') && method !== 'GET' && method !== 'HEAD';
+  const timeoutMs = isStorageWrite ? 28000 : SUPABASE_TIMEOUT_MS;
   let lastErr = null;
   for (let attempt = 0; attempt <= SUPABASE_RETRIES; attempt += 1) {
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -32,7 +36,7 @@ export async function resilientFetch(input, init = {}) {
           try {
             controller.abort();
           } catch { /* ignore */ }
-        }, SUPABASE_TIMEOUT_MS)
+        }, timeoutMs)
       : null;
 
     try {
@@ -52,7 +56,7 @@ export async function resilientFetch(input, init = {}) {
       if (timerId) clearTimeout(timerId);
       if (externalSignal) externalSignal.removeEventListener('abort', onExtAbort);
       lastErr = err;
-      if (externalSignal?.aborted || attempt >= SUPABASE_RETRIES) {
+      if (externalSignal?.aborted || attempt >= SUPABASE_RETRIES || (isStorageWrite && err?.name === 'AbortError')) {
         throw err;
       }
       await new Promise((r) => setTimeout(r, 450 * (attempt + 1)));
