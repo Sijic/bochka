@@ -9413,7 +9413,7 @@ body.is-air-hint-active #screen-workshop {
   position: fixed;
   inset: 0;
   pointer-events: none !important;
-  z-index: 84;
+  z-index: 86;
   overflow: hidden;
 }
 
@@ -9423,33 +9423,75 @@ body.is-air-hint-active #screen-workshop {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   pointer-events: none !important;
-  animation: lootPopRise 1.15s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: lootPopRise 1.65s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
+.barrel-loot-popout .blp-ico,
 .barrel-loot-popout-ico {
-  font-size: 46px;
+  font-size: 48px;
   line-height: 1;
-  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.85));
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.92)) drop-shadow(0 0 12px rgba(250, 204, 21, 0.45));
 }
 
+.barrel-loot-popout .blp-lbl,
 .barrel-loot-popout-lbl {
-  padding: 2px 9px;
+  padding: 5px 12px;
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.94);
-  border: 1.5px solid #facc15;
+  background: rgba(10, 14, 24, 0.96);
+  border: 2px solid #facc15;
   color: #fef08a;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 900;
+  letter-spacing: 0.02em;
   white-space: nowrap;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.88), 0 0 18px rgba(250, 204, 21, 0.45);
+}
+
+.barrel-loot-popout.is-ticket .blp-lbl {
+  background: linear-gradient(135deg, #713f12, #1c1917);
+  border-color: #fde047;
+  color: #fef9c3;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.9), 0 0 22px rgba(250, 204, 21, 0.72);
+}
+
+.barrel-loot-popout.is-energy .blp-lbl {
+  border-color: #38bdf8;
+  color: #e0f2fe;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.88), 0 0 18px rgba(56, 189, 248, 0.58);
+}
+
+.barrel-loot-popout.is-chip .blp-lbl {
+  border-color: #c084fc;
+  color: #f3e8ff;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.88), 0 0 18px rgba(192, 132, 252, 0.58);
+}
+
+.barrel-loot-popout.is-life .blp-lbl {
+  border-color: #4ade80;
+  color: #dcfce7;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.88), 0 0 18px rgba(74, 222, 128, 0.55);
+}
+
+.barrel-loot-popout.is-screamer .blp-lbl {
+  background: linear-gradient(135deg, #7f1d1d, #1c1917);
+  border-color: #f87171;
+  color: #fee2e2;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.9), 0 0 20px rgba(248, 113, 113, 0.65);
+}
+
+.barrel-loot-popout.is-empty .blp-lbl {
+  border-color: #94a3b8;
+  color: #e2e8f0;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.85);
 }
 
 @keyframes lootPopRise {
-  0% { opacity: 0; transform: translate(-50%, -15%) scale(0.45); }
-  22% { opacity: 1; transform: translate(-50%, -65%) scale(1.16); }
-  72% { opacity: 1; transform: translate(-50%, -95%) scale(1.0); }
-  100% { opacity: 0; transform: translate(-50%, -125%) scale(0.88); }
+  0% { opacity: 0; transform: translate(-50%, -15%) scale(0.55); }
+  16% { opacity: 1; transform: translate(-50%, -65%) scale(1.16); }
+  76% { opacity: 1; transform: translate(-50%, -95%) scale(1.0); }
+  100% { opacity: 0; transform: translate(-50%, -125%) scale(0.92); }
 }
 
 /* Structured First-Discovery Pause Card + Spotlight */
@@ -9573,7 +9615,7 @@ body.is-duel-spotlight-active .duel-live-mini-bar.duel-vs-hud {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #040507;
+  background: radial-gradient(circle at 50% 42%, rgba(30, 41, 59, 0.92) 0%, rgba(12, 16, 24, 0.97) 52%, #040507 100%);
   pointer-events: auto;
   overflow: hidden;
 }
@@ -9581,10 +9623,11 @@ body.is-duel-spotlight-active .duel-live-mini-bar.duel-vs-hud {
 .barrel-tunnel-fx {
   position: absolute;
   inset: -25%;
-  background: radial-gradient(circle at center, rgba(18, 22, 28, 0.25) 12%, #050608 58%, #000 100%);
-  border: 18px solid #1f242c;
+  background: radial-gradient(circle at 50% 45%, rgba(250, 204, 21, 0.24) 0%, rgba(71, 85, 105, 0.52) 24%, rgba(15, 23, 42, 0.92) 56%, #05070b 82%);
+  border: 16px solid #475569;
+  box-shadow: inset 0 0 60px rgba(239, 68, 68, 0.35), 0 0 0 6px rgba(250, 204, 21, 0.22);
   border-radius: 50%;
-  animation: barrelTunnelPull 1.05s ease-in forwards;
+  animation: barrelTunnelPull 0.95s ease-in forwards;
 }
 
 .barrel-iron-lid {
@@ -9592,23 +9635,30 @@ body.is-duel-spotlight-active .duel-live-mini-bar.duel-vs-hud {
   width: min(92vw, 520px);
   height: min(92vw, 520px);
   border-radius: 50%;
-  background: radial-gradient(circle at 38% 35%, #374151 0%, #111827 58%, #030712 100%);
-  border: 10px solid #4b5563;
-  box-shadow: inset 0 0 40px #000, 0 24px 60px #000;
+  background: radial-gradient(circle at 36% 32%, #64748b 0%, #334155 42%, #1e293b 72%, #0f172a 100%);
+  border: 10px solid #94a3b8;
+  box-shadow: inset 0 0 42px rgba(239, 68, 68, 0.28), 0 24px 60px #000;
   opacity: 0;
-  animation: barrelLidSlam 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.95s forwards;
+  animation: barrelLidSlam 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.35s forwards;
 }
 
 .barrel-trap-caption {
   position: relative;
   z-index: 3;
-  font-size: 24px;
+  padding: 10px 18px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 2px solid rgba(248, 113, 113, 0.85);
+  font-size: clamp(16px, 4.4vw, 22px);
   font-weight: 900;
-  color: #f8fafc;
-  letter-spacing: 0.06em;
-  text-shadow: 0 2px 16px #000;
+  color: #fef2f2;
+  letter-spacing: 0.04em;
+  text-align: center;
+  max-width: min(90vw, 440px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.85), 0 0 24px rgba(239, 68, 68, 0.45);
+  text-shadow: 0 2px 12px #000;
   opacity: 0;
-  animation: barrelCaptionFade 1.05s ease 1.15s forwards;
+  animation: barrelCaptionFade 0.3s ease 0.05s forwards;
 }
 
 .barrel-heaven-flash {
@@ -9621,7 +9671,7 @@ body.is-duel-spotlight-active .duel-live-mini-bar.duel-vs-hud {
 }
 
 @keyframes barrelTunnelPull {
-  0% { transform: scale(2.4); opacity: 0.2; }
+  0% { transform: scale(1.65); opacity: 0.9; }
   100% { transform: scale(0.75); opacity: 1; }
 }
 

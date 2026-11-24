@@ -1825,10 +1825,14 @@ function getRealFriendsCount() {
 }
 
 let _prevDuel1x1Unlocked = null;
+let _duel1x1UnlockAnnounced = false;
 function syncDuel1x1Visibility({ announceUnlock = false } = {}) {
   const hasFriend = getRealFriendsCount() >= 1;
   const wasUnlocked = _prevDuel1x1Unlocked;
   _prevDuel1x1Unlocked = hasFriend;
+  if (wasUnlocked === null) {
+    _duel1x1UnlockAnnounced = hasFriend;
+  }
 
   for (const id of ['btn-hud-duel-1x1', 'btn-burger-duel-1x1', 'btn-sent-duel-1x1']) {
     const btn = document.getElementById(id);
@@ -1838,14 +1842,15 @@ function syncDuel1x1Visibility({ announceUnlock = false } = {}) {
   }
   document.body.setAttribute('data-duel-1x1-unlocked', hasFriend ? '1' : '0');
 
-  if (hasFriend && wasUnlocked === false && announceUnlock) {
+  if (hasFriend && !_duel1x1UnlockAnnounced && announceUnlock) {
+    _duel1x1UnlockAnnounced = true;
     const hudBtn = document.getElementById('btn-hud-duel-1x1');
     if (hudBtn) {
       hudBtn.classList.remove('is-duel-unlock-pop');
       void hudBtn.offsetWidth;
       hudBtn.classList.add('is-duel-unlock-pop');
     }
-    showToast('⚔️ Друг в игре! Открыта кнопка «Дуэль 1×1»!', { className: 'is-special-knock', durationMs: 4800 });
+    showToast('⚔️ Друг в игре! Открыта кнопка «Дуэль 1×1»!', { className: 'is-special-knock', durationMs: 5200 });
   }
   return hasFriend;
 }
@@ -4215,7 +4220,7 @@ function playBarrelDefeatCinematic({ oceanAllowed = true, roomId = '', solo = tr
 
   const overlay = document.getElementById('barrel-trap-cinematic');
   const captionEl = document.getElementById('barrel-trap-caption');
-  if (captionEl) captionEl.textContent = 'Ты в бочке...';
+  if (captionEl) captionEl.textContent = '☠️ 0 ЖИЗНЕЙ — ЗАТЯГИВАЕТ В БОЧКУ!';
 
   if (overlay) {
     overlay.classList.remove('is-lid-slammed', 'is-heaven-flash', 'is-pulling');
@@ -4227,6 +4232,7 @@ function playBarrelDefeatCinematic({ oceanAllowed = true, roomId = '', solo = tr
   window.setTimeout(() => {
     audio.playLidSlamShut?.();
     Haptics.error();
+    if (captionEl) captionEl.textContent = '🔒 КРЫШКА ЗАХЛОПНУЛАСЬ...';
     overlay?.classList.add('is-lid-slammed');
   }, 900);
 
