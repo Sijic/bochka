@@ -2055,7 +2055,7 @@ export class WorkshopDuelController {
     const tilMax = Math.max(1, Number(this.tilMaxLives || (oppIsTil ? 3 : 6)));
     if (oLivesEl) oLivesEl.textContent = String(tilHp);
     if (oHpFill) oHpFill.style.width = `${Math.min(100, Math.round((tilHp / tilMax) * 100))}%`;
-    if (oNameEl) oNameEl.textContent = oppIsTil ? `Тиль ⚡${oppStrikes}/${oppMaxStrikes}` : `${String(opp.name || 'Соперник').slice(0, 9)} ⚡${oppStrikes}/${oppMaxStrikes}`;
+    if (oNameEl) oNameEl.textContent = oppIsTil ? `Тиль ⚡${oppStrikes}/${oppMaxStrikes}` : `${String(opp.name || 'Соперник').slice(0, 10)} ⚡${oppStrikes}/${oppMaxStrikes}`;
     if (oAvaEl) {
       const oFallback = oppIsTil ? TIL_AVATAR_URL : getFallbackFighterAvatar(opp?.uid || opp?.name || 'opp');
       const oSrc = oppIsTil ? TIL_AVATAR_URL : (opp?.avatar || oFallback);
