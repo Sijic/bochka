@@ -86,11 +86,12 @@ const IDLE_HINT_DELAY_MS = 2700;
  * Все промежуточные клики и таймеры идут строго через WebSocket в оперативной памяти (0 записей в БД).
  */
 export class WorkshopDuelController {
-  constructor({ scene, audio, getTgUser, getPlayerAvatar, getProfileStats, getTicketShards, onCollectChipFromBarrel, canUseOceanRefill, onOpenPackForLives, onFoundFriendBarrel, onContextDiscoveryHint, onLifeLostPill, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDefeatCinematic, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels, onOpenHallOfFame, loadDuelCandidates, onChallengeFriend, onOpenPackFriend, onRoomFull, onTriggerScreamerFx }) {
+  constructor({ scene, audio, getTgUser, getPlayerAvatar, getHasRealFriends, getProfileStats, getTicketShards, onCollectChipFromBarrel, canUseOceanRefill, onOpenPackForLives, onFoundFriendBarrel, onContextDiscoveryHint, onLifeLostPill, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDefeatCinematic, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels, onOpenHallOfFame, loadDuelCandidates, onChallengeFriend, onOpenPackFriend, onRoomFull, onTriggerScreamerFx }) {
     this.scene = scene;
     this.audio = audio;
     this.getTgUser = getTgUser;
     this.getPlayerAvatar = getPlayerAvatar || null;
+    this.getHasRealFriends = getHasRealFriends || null;
     this.getProfileStats = getProfileStats || null;
     this.onProfileSync = onProfileSync;
     this.onToast = onToast;
@@ -600,6 +601,7 @@ export class WorkshopDuelController {
     this.setPhase('lobby');
     this.soloMode = false;
     this.friendBarrelHunt = Boolean(huntFriendBarrel);
+    this.joinedViaDuelLink = Boolean(String(roomId || '').trim()) && !autoStartSoloTil;
     this._playerAnimating = false;
     this._roundStarting = false;
     this.tilRoundIdx = 0;
@@ -952,17 +954,32 @@ export class WorkshopDuelController {
     return buildDuelShareLinks(this.roomId);
   }
 
+  has1x1Access() {
+    const profStats = this.getProfileStats?.() || {};
+    const count = Math.max(Number(profStats.friendsCount || 0), Number(profStats.friendsBrought || 0));
+    const hasRealOpp = Array.isArray(this.players) && this.players.some((p) => !p.isBot && p.uid !== this.myUid);
+    return Boolean(this.getHasRealFriends?.() || count >= 1 || hasRealOpp || this.joinedViaDuelLink || Number(this.hofCache?.invitedFriends || 0) >= 1);
+  }
+
   renderLobbyUI() {
     const slotsEl = document.getElementById('duel-slots-row');
     const potEl = document.getElementById('duel-pot-banner');
     const startBtn = document.getElementById('btn-duel-start-go');
     const invite3Btn = document.getElementById('btn-duel-invite-third');
     const roomTag = document.getElementById('duel-room-code');
+    const headingEl = document.querySelector('#duel-top-panel .duel-main-heading');
+    const tabsEl = document.getElementById('duel-mode-tabs');
+    const show1x1 = this.has1x1Access();
 
     if (roomTag) roomTag.textContent = `СТОЛ #${this.roomId.toUpperCase()}`;
+    if (headingEl) headingEl.textContent = show1x1 ? '⚔️ Дуэль 1×1' : '🥊 Бой с Тилем';
+    if (tabsEl) {
+      if (show1x1) tabsEl.removeAttribute('hidden');
+      else tabsEl.setAttribute('hidden', '');
+    }
 
     const count = this.players.length;
-    const isChipsMode = this.duelMode === 'chips';
+    const isChipsMode = show1x1 && this.duelMode === 'chips';
     const chipsUnlocked = Boolean(this.hofCache?.chipDuelUnlocked);
     this.updateModeTabsUI();
     if (potEl) {
@@ -1076,7 +1093,7 @@ export class WorkshopDuelController {
     }
 
     if (startBtn) {
-      if (this.phase !== 'lobby' || (count < MAX_DUEL_PLAYERS && !isChipsMode)) {
+      if (!show1x1 || this.phase !== 'lobby' || (count < MAX_DUEL_PLAYERS && !isChipsMode)) {
         startBtn.setAttribute('hidden', '');
       } else {
         startBtn.removeAttribute('hidden');
@@ -1121,7 +1138,7 @@ export class WorkshopDuelController {
   renderFriendPickerUI() {
     const host = document.getElementById('duel-friend-picker');
     if (!host) return;
-    const showPicker = this.phase === 'lobby' && this.players.length < MAX_DUEL_PLAYERS;
+    const showPicker = this.phase === 'lobby' && this.players.length < MAX_DUEL_PLAYERS && (this.has1x1Access() || isTestBogSessionActive());
     if (!showPicker) {
       host.setAttribute('hidden', '');
       return;
@@ -1353,7 +1370,7 @@ export class WorkshopDuelController {
         } else {
           const diff = getTilDifficultyProfile(this.duelLives, Math.max(0, Number(this.tilRoundIdx || 1) - 1));
           if (!isFreeRerack) {
-            this.tilMaxLives = diff.tier === 'rage' ? 4 : 3;
+            this.tilMaxLives = this.soloMode ? (diff.tier === 'rage' ? 4 : 3) : 6;
             this.tilLives = this.tilMaxLives;
           }
           batchHasTicket = (this.duelRoundsWithoutTicket || 0) >= 1 ? true : Math.random() < 0.65;
@@ -1473,6 +1490,10 @@ export class WorkshopDuelController {
     this.batchHasTicket = Boolean(payload.batchHasTicket);
     this.openedIndices = Array.isArray(payload.openedIndices) ? [...payload.openedIndices] : [];
     this.claims = {};
+    if (!payload.isFreeRerack && !this.soloMode) {
+      this.tilMaxLives = 6;
+      this.tilLives = 6;
+    }
 
     document.getElementById('duel-result-box')?.setAttribute('hidden', '');
     document.getElementById('btn-duel-start-go')?.setAttribute('hidden', '');
@@ -1505,7 +1526,7 @@ export class WorkshopDuelController {
           this.setPhase('lobby');
           const msg =
             ante.reason === 'level_required'
-              ? '🔒 Дуэль на фишки откроется на 3 уровне (пригласи 3 друзей)!'
+              ? '🔒 Дуэль на фишки откроется после 1-го подключённого друга!'
               : ante.reason === 'trophy_required' || ante.reason === 'trophy_not_found'
                 ? '🪙 Сначала выбери свободную фишку из Зала славы!'
                 : ante.reason === 'trophy_locked'
@@ -1639,6 +1660,9 @@ export class WorkshopDuelController {
       }
     }
     this.syncEnergyUI();
+    if (this.active && this.phase === 'lobby') {
+      this.renderLobbyUI();
+    }
   }
 
   refillFromTil() {
@@ -1699,7 +1723,9 @@ export class WorkshopDuelController {
       const hpDenom = Math.max(6, dl > 12 ? 18 : dl > 6 ? 12 : 6);
       pHpFill.style.width = `${Math.min(100, Math.round((dl / hpDenom) * 100))}%`;
     }
-    if (pChipsEl) pChipsEl.textContent = String(Math.max(0, Number(profStats.chipsCount || this.sessionStats?.playerChips || 0)));
+    if (pChipsEl) {
+      pChipsEl.textContent = String(Math.max(0, Number(this.hofCache?.totalCount || 0), Number(profStats.chipsCount || 0), Number(this.sessionStats?.playerChips || 0)));
+    }
     const totalPts = Math.max(0, Math.round(Number(profStats.premierePoints ?? this.sessionStats?.playerPoints ?? 0)));
     if (pPtsEl) pPtsEl.textContent = String(totalPts);
 
@@ -1709,15 +1735,16 @@ export class WorkshopDuelController {
 
     const opp = this.players.find((p) => p.uid !== this.myUid) || null;
     const oppIsTil = !opp || Boolean(opp.isBot || opp.isTil || opp.uid === TIL_BOT_UID);
-    const tilHp = Math.max(0, Number(this.tilLives ?? 3));
-    const tilMax = Math.max(1, Number(this.tilMaxLives || 3));
+    const tilHp = Math.max(0, Number(this.tilLives ?? (oppIsTil ? 3 : 6)));
+    const tilMax = Math.max(1, Number(this.tilMaxLives || (oppIsTil ? 3 : 6)));
     if (oLivesEl) oLivesEl.textContent = String(tilHp);
     if (oHpFill) oHpFill.style.width = `${Math.min(100, Math.round((tilHp / tilMax) * 100))}%`;
     if (oNameEl) oNameEl.textContent = oppIsTil ? 'Тиль ⚡' : `${String(opp.name || 'Соперник').slice(0, 10)} ⚡`;
     if (oAvaEl) {
-      const oSrc = oppIsTil ? TIL_AVATAR_URL : (opp?.avatar || getFallbackFighterAvatar(opp?.uid || opp?.name));
+      const oFallback = oppIsTil ? TIL_AVATAR_URL : getFallbackFighterAvatar(opp?.uid || opp?.name || 'opp');
+      const oSrc = oppIsTil ? TIL_AVATAR_URL : (opp?.avatar || oFallback);
       if (oAvaEl.getAttribute('src') !== oSrc) oAvaEl.src = oSrc;
-      oAvaEl.onerror = () => { oAvaEl.src = TIL_AVATAR_URL; };
+      oAvaEl.onerror = () => { oAvaEl.src = oFallback; };
     }
     if (oEnergyFill) {
       const chargeDur = Math.max(800, diff.tilTelegraphMs + diff.tilTelegraphDurMs);
@@ -2223,8 +2250,9 @@ export class WorkshopDuelController {
     }, 1850);
   }
 
-  openTilTrophyPicker({ onResolved } = {}) {
+  openTilTrophyPicker({ onResolved, isPvp1x1 = false, opponentName = '' } = {}) {
     const modal = document.getElementById('modal-til-trophy-pick');
+    const titleEl = document.getElementById('trophy-pick-title');
     const ticketBtn = document.getElementById('btn-trophy-pick-ticket');
     const chipBtn = document.getElementById('btn-trophy-pick-chip');
     const ptsBtn = document.getElementById('btn-trophy-pick-points');
@@ -2235,10 +2263,16 @@ export class WorkshopDuelController {
       return;
     }
 
+    if (titleEl) {
+      titleEl.textContent = isPvp1x1
+        ? `Ты обыграл ${opponentName || 'друга'} в дуэли 1×1! Забери ОДИН трофей:`
+        : 'Ты обыграл Тиля! Забери у него ОДИН трофей:';
+    }
+
     const profStats = this.getProfileStats?.() || {};
     const shards = Math.max(0, Math.round(Number(this.getTicketShards?.() ?? profStats.ticketShards ?? 0)));
     const friends = Math.max(0, Math.round(Number(profStats.friendsBrought ?? 0)));
-    const ticketLocked = shards >= 2 && friends < 1;
+    const ticketLocked = !isPvp1x1 && shards >= 2 && friends < 1;
 
     ticketBtn.classList.toggle('is-locked', ticketLocked);
     if (lockBadge) {
@@ -2274,7 +2308,7 @@ export class WorkshopDuelController {
       try {
         if (kind === 'ticket') {
           this.onFlyRating?.({ type: 'ticket', count: 3, label: '🎟 +1/4 билета' });
-          const sRes = await awardTicketShardServer(this.getTgUser?.(), 'til_trophy').catch(() => null);
+          const sRes = await awardTicketShardServer(this.getTgUser?.(), isPvp1x1 ? 'duel' : 'til_trophy').catch(() => null);
           pickedRes.serverTicketRes = sRes;
           pickedRes.serverTicketGranted = Boolean(sRes?.granted);
           if (sRes?.ok) {
@@ -2290,12 +2324,12 @@ export class WorkshopDuelController {
           this.sessionStats.playerChips += 1;
           this.onFlyRating?.({ type: 'chip', count: 3, label: '💎 Новая фишка' });
           this.onCollectChipFromBarrel?.({ barrelIndex: -1, loot: { kind: 'chip', value: 150, label: '💎 Новая фишка' } });
-          const bankRes = await claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: 150, solo: true }).catch(() => null);
+          const bankRes = await claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: 150, solo: !isPvp1x1 }).catch(() => null);
           if (bankRes?.ok) this.onProfileSync?.({ premierePoints: bankRes.premierePoints });
         } else {
           this.sessionStats.playerPoints += 300;
           this.onFlyRating?.({ type: 'points', count: 3, label: '+300 ⭐' });
-          const bankRes = await claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: 300, solo: true }).catch(() => null);
+          const bankRes = await claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: 300, solo: !isPvp1x1 }).catch(() => null);
           if (bankRes?.ok) this.onProfileSync?.({ premierePoints: bankRes.premierePoints });
         }
       } finally {
@@ -2491,7 +2525,7 @@ export class WorkshopDuelController {
     const ticketEntry = entries.find((e) => e.loot.kind === 'ticket') || null;
     const closedLeftNow = Math.max(0, (this.barrelCount || 10) - (this.openedIndices?.length || 0));
     const needTilNow = this.duelLives <= 0;
-    const tilKnockedOut = Boolean(this.soloMode && !this.friendBarrelHunt && this.tilLives <= 0 && !needTilNow);
+    const tilKnockedOut = Boolean(!this.friendBarrelHunt && this.tilLives <= 0 && !needTilNow);
     const minClosedContinue = this.friendBarrelHunt ? 1 : 2;
     this.batchResolved = Boolean(ticketEntry || tilKnockedOut || closedLeftNow < minClosedContinue);
 
@@ -2572,6 +2606,45 @@ export class WorkshopDuelController {
           tgUser: this.getTgUser?.(),
         }).catch(() => ({ potLives: 0, winnerLives: null, winnerPoints: null, goldenTicketDropped: false }))
       : { potLives: 0, winnerLives: null, winnerPoints: null, goldenTicketDropped: false };
+
+    const playerWonLive1x1 = Boolean(
+      !this.soloMode &&
+      !this.friendBarrelHunt &&
+      !needTilNow &&
+      ((ticketEntry && ticketEntry.claim.uid === this.myUid) || tilKnockedOut)
+    );
+
+    if (playerWonLive1x1) {
+      const oppPlayer = this.players.find((p) => p.uid !== this.myUid) || null;
+      const oppLabel = oppEntry?.claim?.name || oppPlayer?.name || 'друга';
+      this.scheduleStepWhenUnblocked(() => {
+        if (!this.active) return;
+        this.clearBarrelClaimBadges();
+        document.getElementById('duel-countdown-banner')?.setAttribute('hidden', '');
+        document.getElementById('duel-spectator-bar')?.setAttribute('hidden', '');
+        this.openTilTrophyPicker({
+          isPvp1x1: true,
+          opponentName: oppLabel,
+          onResolved: (picked) => {
+            if (!this.active) return;
+            this.setPhase('finished');
+            this.spectatorUids = [];
+            this.showRoundResultCard(ticketEntry?.claim || { uid: this.myUid, name: this.myName }, settleRes, {
+              myEntry,
+              oppEntry,
+              summaryLine,
+              ticketFound: picked?.kind === 'ticket',
+              serverTicketGranted: Boolean(picked?.serverTicketGranted),
+              serverTicketRes: picked?.serverTicketRes || null,
+              tilTrophyPicked: picked?.kind || 'points',
+              tilDefeatedByPlayer: true,
+              pvp1x1WonByPlayer: true,
+            });
+          },
+        });
+      }, RESULT_CARD_DELAY_MS, 120000);
+      return;
+    }
 
     let serverTicketRes = null;
     if (ticketEntry && ticketEntry.claim.uid === this.myUid) {
@@ -2685,11 +2758,12 @@ export class WorkshopDuelController {
 
     if (pickedTrophy) {
       Haptics.success();
+      const winPrefix = detail.pvp1x1WonByPlayer ? '🏆 Дуэль 1×1' : 'Трофей Тиля';
       if (pickedTrophy === 'chip') {
-        if (titleEl) titleEl.textContent = '💎 Трофей Тиля: Новая фишка!';
+        if (titleEl) titleEl.textContent = `💎 ${winPrefix}: Новая фишка!`;
         if (subEl) subEl.textContent = 'Фишка добавлена в твою коллекцию (+150 ⭐).';
       } else if (pickedTrophy === 'points') {
-        if (titleEl) titleEl.textContent = '⭐ Трофей Тиля: +300 очков!';
+        if (titleEl) titleEl.textContent = `⭐ ${winPrefix}: +300 очков!`;
         if (subEl) subEl.textContent = 'Твоя шкала до суперприза выросла.';
       } else {
         const sRes = detail.serverTicketRes || {};
@@ -2700,7 +2774,7 @@ export class WorkshopDuelController {
         } else {
           const sh = Number(sRes.shards ?? (this.getTicketShards?.() || 1));
           if (titleEl) titleEl.textContent = `🎟 Билет: ${sh}/4!`;
-          if (subEl) subEl.textContent = 'Трофей Тиля забран — двигайся к 4/4.';
+          if (subEl) subEl.textContent = `${winPrefix} забран — двигайся к 4/4.`;
         }
       }
     } else if (iFoundTicket) {
@@ -2815,7 +2889,7 @@ export class WorkshopDuelController {
     }
     const switchLobbyBtn = document.getElementById('btn-duel-switch-lobby');
     if (switchLobbyBtn) {
-      if (capHit) {
+      if (capHit && this.has1x1Access()) {
         switchLobbyBtn.textContent = '⚔️ Дуэль 1×1 с игроком';
         switchLobbyBtn.removeAttribute('hidden');
       } else {

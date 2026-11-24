@@ -90,6 +90,7 @@ import {
   fetchTicketPoolStatus,
   uploadPairTicketReceipt,
   fetchTelegramUserAvatarFallback,
+  claimSpecialKnockBonus,
 } from './backend.js';
 import { HorrorScreamerPlayer, preloadScreamerFrames } from './screamer-fx.js';
 
@@ -473,11 +474,13 @@ async function ensureDuelReady() {
       audio,
       getTgUser: () => state.tg?.user || null,
       getPlayerAvatar: () => getPlayerAvatarUrl(state.tg?.user),
+      getHasRealFriends: () => getRealFriendsCount() >= 1,
       getProfileStats: () => ({
         lives: Number(state.profile?.lives || 0),
         premierePoints: Number(state.profile?.premierePoints || 0),
         ticketShards: Number(state.profile?.ticketShards || 0),
         friendsBrought: Number(state.profile?.friendsBrought || 0),
+        friendsCount: getRealFriendsCount(),
         chipsCount: Number(state.profile?.chipsCount || 0),
       }),
       getTicketShards: () => Number(state.profile?.ticketShards || 0),
@@ -1074,6 +1077,7 @@ function mergeFreshProfile(freshProfile, { preserveProgress = true } = {}) {
     state.uiStage = Math.min(2, Math.max(1, Number(freshProfile.uiStage || 1)));
     saveLocalV9Flags();
     syncTicketShardsUI();
+    syncDuel1x1Visibility();
     return;
   }
 
@@ -1108,6 +1112,17 @@ function mergeFreshProfile(freshProfile, { preserveProgress = true } = {}) {
     Number(prev.lastOceanRefillAt || 0),
     Number(freshProfile.lastOceanRefillAt || 0)
   );
+  merged.lastSpecialKnockAt = Math.max(
+    0,
+    Number(prev.lastSpecialKnockAt || 0),
+    Number(freshProfile.lastSpecialKnockAt || 0)
+  );
+  merged.friendsCount = Math.max(
+    Number(prev.friendsCount || 0),
+    Number(freshProfile.friendsCount || 0),
+    Number(merged.friendsBrought || 0),
+    merged.hasSocialConnection ? 1 : 0
+  );
   if (typeof merged.lives === 'number') {
     merged.lives = capEarlyLivesIfNoRealFriends(merged.lives);
   }
@@ -1115,6 +1130,7 @@ function mergeFreshProfile(freshProfile, { preserveProgress = true } = {}) {
   duelCtrl?.syncFromProfile?.(state.profile);
   saveLocalV9Flags();
   syncTicketShardsUI();
+  syncDuel1x1Visibility();
 }
 
 /* ============================================================================
@@ -1795,6 +1811,45 @@ function formatBarrelWord(n) {
   return 'БОЧКА';
 }
 
+function getRealFriendsCount() {
+  return Math.max(
+    0,
+    Math.round(
+      Math.max(
+        Number(state.profile?.friendsCount || 0),
+        Number(state.profile?.friendsBrought || 0),
+        state.profile?.hasSocialConnection ? 1 : 0
+      )
+    )
+  );
+}
+
+let _prevDuel1x1Unlocked = null;
+function syncDuel1x1Visibility({ announceUnlock = false } = {}) {
+  const hasFriend = getRealFriendsCount() >= 1;
+  const wasUnlocked = _prevDuel1x1Unlocked;
+  _prevDuel1x1Unlocked = hasFriend;
+
+  for (const id of ['btn-hud-duel-1x1', 'btn-burger-duel-1x1', 'btn-sent-duel-1x1']) {
+    const btn = document.getElementById(id);
+    if (!btn) continue;
+    if (hasFriend) btn.removeAttribute('hidden');
+    else btn.setAttribute('hidden', '');
+  }
+  document.body.setAttribute('data-duel-1x1-unlocked', hasFriend ? '1' : '0');
+
+  if (hasFriend && wasUnlocked === false && announceUnlock) {
+    const hudBtn = document.getElementById('btn-hud-duel-1x1');
+    if (hudBtn) {
+      hudBtn.classList.remove('is-duel-unlock-pop');
+      void hudBtn.offsetWidth;
+      hudBtn.classList.add('is-duel-unlock-pop');
+    }
+    showToast('⚔️ Друг в игре! Открыта кнопка «Дуэль 1×1»!', { className: 'is-special-knock', durationMs: 4800 });
+  }
+  return hasFriend;
+}
+
 function applyProgressiveDisclosureUI({ forceStage = null, skipPromoteFromSocial = false } = {}) {
   const temuModal = document.getElementById('modal-temu-unlock');
   const temuOpen = Boolean(temuModal && !temuModal.hasAttribute('hidden'));
@@ -1841,6 +1896,7 @@ function applyProgressiveDisclosureUI({ forceStage = null, skipPromoteFromSocial
   if (packRevengeBtn) {
     packRevengeBtn.classList.toggle('btn-temu-pulse', nextStage <= 2);
   }
+  syncDuel1x1Visibility();
 }
 
 function syncBurgerMenuLocks() {
@@ -1898,9 +1954,10 @@ function syncBurgerMenuLocks() {
   setLock(
     'btn-burger-duel',
     false,
-    '⚔️ ДУЭЛЬ «НА СЧЁТ ТРИ!» (ОБЫЧНАЯ / НА ФИШКИ)',
-    '⚔️ ДУЭЛЬ «НА СЧЁТ ТРИ!»'
+    '🥊 ИГРАТЬ С ТИЛЕМ',
+    '🥊 ИГРАТЬ С ТИЛЕМ'
   );
+  syncDuel1x1Visibility();
 }
 
 function openBurgerDrawer() {
@@ -2167,6 +2224,22 @@ async function bootstrap() {
         };
       },
       getPlayerAvatar: () => getPlayerAvatarUrl(state.tg?.user),
+      getRealFriendsCount: () => getRealFriendsCount(),
+      getSpecialKnockState: () => ({
+        lastResult: state.lastSpecialKnockResult || null,
+        lastAt: Number(state.profile?.lastSpecialKnockAt || 0),
+      }),
+      refreshProfileAndUI: async () => {
+        const prev = getRealFriendsCount();
+        const p = await fetchPlayerProfile(state.tg?.user);
+        if (p) {
+          mergeFreshProfile(p, { preserveProgress: true });
+          updatePremiereBarsUI();
+          refreshHudLevelLabel();
+          syncDuel1x1Visibility({ announceUnlock: prev === 0 && getRealFriendsCount() > 0 });
+        }
+        return { profile: state.profile, friendsCount: getRealFriendsCount() };
+      },
       simulateVkTimeUpdate: (sec, dur = 91.8) => handleVkTrailerTimeProgress(Number(sec || 0), Number(dur || 91.8), false),
     };
   }
@@ -3444,6 +3517,9 @@ async function startViralFriendRound(pack) {
       if (lockRes.isSelf) {
         showToast('📌 Это твоя собственная бочка — перешли её реальному другу в Telegram, чтобы получить +20% к Премьере и обрывок 3/4!');
       } else if (pack?.id) {
+        state.profile.hasSocialConnection = true;
+        state.profile.friendsCount = Math.max(1, Number(state.profile.friendsCount || 0));
+        syncDuel1x1Visibility({ announceUnlock: true });
         // v15.5: При вскрытии чужой личной бочки кладём фото-фишку в Зал славы игрока (лениво)
         collectBarrelTrophyLazy(pack.id).catch(() => {});
       }
@@ -4021,11 +4097,39 @@ function renderAttemptSquares(attemptsLeft, totalCount = null) {
   }
 }
 
+let _specialKnockBusy = false;
+async function triggerSpecialKnockBonus(source = 'ocean_rhythm') {
+  if (_specialKnockBusy) return null;
+  _specialKnockBusy = true;
+  try {
+    const res = await claimSpecialKnockBonus(state.tg?.user, source).catch(() => null);
+    state.lastSpecialKnockResult = res;
+    if (!res) return null;
+    if (res.granted) {
+      state.profile.lives = Math.min(30, Math.max(1, Number(res.lives ?? (Number(state.profile?.lives || 0) + 3))));
+      state.profile.lastSpecialKnockAt = Number(res.lastSpecialKnockAt || Date.now());
+      duelCtrl?.syncFromProfile?.(state.profile);
+      updatePremiereBarsUI();
+      refreshHudLevelLabel();
+      flyRewardToHud({ type: 'lives', count: 3, label: '+3 ❤️' });
+      audio.playRewardChime?.();
+      Haptics.success();
+      showToast('Спец-стук сработал! +3 доп. жизни!', { className: 'is-special-knock', durationMs: 5200 });
+    } else if (res.reason === 'special_knock_cooldown') {
+      Haptics.error();
+      showToast('⏳ Спец-стук уже использован за последние 24 часа — бонус не дублируется!', { durationMs: 3600 });
+    }
+    return res;
+  } finally {
+    _specialKnockBusy = false;
+  }
+}
+
 /* ============================================================================
-   СЕКРЕТНАЯ ПАСХАЛКА «ДОСТУЧАТЬСЯ ДО НЕБЕС»: №19 -> №97 -> 3 УДАРА (НА 3..10 БОЧКАХ!)
+   СЕКРЕТНАЯ ПАСХАЛКА «ДОСТУЧАТЬСЯ ДО НЕБЕС»: №19 -> №97 -> 3 УДАРА + СПЕЦ-СТУК (+3 ❤️)
    ============================================================================ */
 function checkSecret1997Combo(index, worldPoint, alreadyStruck) {
-  if (duelCtrl?.isActive || state.watchingBarrelId || state.uiStage <= 2) return false;
+  if (duelCtrl?.isActive || state.watchingBarrelId) return false;
   if (
     state.round.modeType === 'viral' &&
     !alreadyStruck &&
@@ -4038,9 +4142,9 @@ function checkSecret1997Combo(index, worldPoint, alreadyStruck) {
   const c = state.easterCombo;
   const batchCode = BARREL_BATCH_CODES[index] || '';
 
-  // Фаза 2: после 19 -> 97 ждём 3 быстрых повторных удара строго по УЖЕ ОТКРЫТОЙ бочке
+  // Фаза 2: после 19 -> 97 ждём 3 быстрых повторных удара строго по УЖЕ ОТКРЫТОЙ бочке (уровень 3+)
   if (c.stage === 2) {
-    if (!alreadyStruck) {
+    if (!alreadyStruck || state.uiStage <= 2) {
       state.easterCombo = { stage: 0, lastAt: 0, knocks: 0 };
       return false;
     }
@@ -4062,9 +4166,10 @@ function checkSecret1997Combo(index, worldPoint, alreadyStruck) {
     return false;
   }
 
-  // Фаза 1 -> 2: удар по бочке №97 сразу после бочки №19 (закрытую бочку не перехватываем)
+  // Секретная комбинация 19 -> 97 в цеху -> СПЕЦ-СТУК (+3 ❤️, 1 раз/24ч) и переход в фазу 2 на 3+ уровне
   if (c.stage === 1 && now - c.lastAt <= 5500 && batchCode === '97') {
-    state.easterCombo = { stage: 2, lastAt: now, knocks: 0 };
+    state.easterCombo = state.uiStage > 2 ? { stage: 2, lastAt: now, knocks: 0 } : { stage: 0, lastAt: 0, knocks: 0 };
+    triggerSpecialKnockBonus('workshop_1997').catch(() => {});
     if (alreadyStruck) {
       scene.triggerStrikeFX(index, worldPoint);
       audio.playStrike(index);
@@ -4235,6 +4340,7 @@ function resetOceanTapperUI() {
     timeLeft: 0,
     timer: null,
     lastTapAt: 0,
+    rhythmTimes: [],
     returnDuel: keepDuel,
   };
 
@@ -4315,6 +4421,24 @@ function handleOceanBarrelTap() {
   const now = performance.now();
   if (now - state.oceanTapper.lastTapAt < 30) return;
   state.oceanTapper.lastTapAt = now;
+
+  // Секретный ритмический «Спец-стук» на море: 3 быстрых удара -> пауза -> 2 быстрых удара (+3 ❤️, 1 раз/24ч)
+  const rArr = Array.isArray(state.oceanTapper.rhythmTimes) ? state.oceanTapper.rhythmTimes : [];
+  rArr.push(now);
+  if (rArr.length > 8) rArr.shift();
+  state.oceanTapper.rhythmTimes = rArr;
+  if (rArr.length >= 5) {
+    const [t0, t1, t2, t3, t4] = rArr.slice(-5);
+    const burst1 = (t1 - t0) <= 480 && (t2 - t1) <= 480;
+    const midPause = (t3 - t2) >= 450 && (t3 - t2) <= 2200;
+    const burst2 = (t4 - t3) <= 480;
+    if (burst1 && midPause && burst2) {
+      state.oceanTapper.rhythmTimes = [];
+      audio.playStrike(2);
+      Haptics.heavy();
+      triggerSpecialKnockBonus('ocean_rhythm').catch(() => {});
+    }
+  }
 
   if (state.oceanTapper.finished) return;
   if (!state.oceanTapper.running) {
@@ -8403,13 +8527,16 @@ function initLiveFriendFeedbackMonitor() {
 
       if (newlyOpened.length > 0 || nextBrought > baselineFriendsBrought) {
         baselineFriendsBrought = Math.max(baselineFriendsBrought, nextBrought);
+        syncDuel1x1Visibility({ announceUnlock: true });
+        loadTrophiesMod().then((m) => m.fetchHallOfFame(state.tg?.user)).catch(() => {});
         const first = newlyOpened[0];
         const friendLabel = first?.friend_name || (first?.friend_username ? `@${first.friend_username}` : 'Друг');
         Haptics.success();
         showToast(
           newlyOpened.length > 0
-            ? `🔥 Кент «${friendLabel}» вскрыл твою бочку! +500 ⭐ и +6 ❤️`
-            : '🔥 Твой друг зашёл в игру по бочке! +500 ⭐ и +6 ❤️'
+            ? `🔥 Друг «${friendLabel}» вскрыл твою бочку! +500 ⭐, +6 ❤️ и именная «Фишка друга» в коллекции!`
+            : '🔥 Твой друг зашёл в игру по бочке! +500 ⭐, +6 ❤️ и «Фишка друга»!',
+          { className: 'is-special-knock', durationMs: 5200 }
         );
       }
     } finally {
@@ -9366,6 +9493,17 @@ function bindUIEvents() {
   });
   document.getElementById('btn-burger-duel')?.addEventListener('click', () => {
     closeBurgerDrawer();
+    openDuelTable();
+  });
+  document.getElementById('btn-burger-duel-1x1')?.addEventListener('click', () => {
+    closeBurgerDrawer();
+    openDuelTable();
+  });
+  document.getElementById('btn-hud-duel-1x1')?.addEventListener('click', () => {
+    closeBurgerDrawer();
+    openDuelTable();
+  });
+  document.getElementById('btn-sent-duel-1x1')?.addEventListener('click', () => {
     openDuelTable();
   });
   document.getElementById('btn-burger-sound')?.addEventListener('click', async () => {
@@ -10700,20 +10838,23 @@ function positionOceanToast() {
   el.style.top = `${targetTop}px`;
 }
 
-function showToast(text) {
+function showToast(text, { className = '', durationMs = null } = {}) {
   const el = document.getElementById('toast');
   if (!el) return;
   el.textContent = text;
+  el.classList.remove('is-special-knock');
+  if (className) el.classList.add(className);
   el.removeAttribute('hidden');
   positionOceanToast();
   if (state.activeScreen === 'ocean') {
     window.requestAnimationFrame(positionOceanToast);
   }
   if (toastTimer) clearTimeout(toastTimer);
-  const durationMs = state.activeScreen === 'ocean' ? 1800 : 4600;
+  const ttl = Number(durationMs) > 0 ? Number(durationMs) : (state.activeScreen === 'ocean' ? 1800 : 4600);
   toastTimer = window.setTimeout(() => {
+    el.classList.remove('is-special-knock');
     el.setAttribute('hidden', '');
-  }, durationMs);
+  }, ttl);
 }
 
 bootstrap();

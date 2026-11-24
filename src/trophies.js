@@ -6,7 +6,7 @@
 import { getCloudDb, getViewerUid } from './backend.js';
 import { getCachedMediaSlots, getUnlockedArtifactLevels, openArtifactPlayerModal } from './v16_ux.js';
 
-export const CHIP_DUEL_UNLOCK_INVITES = 3;
+export const CHIP_DUEL_UNLOCK_INVITES = 1;
 
 export const RARITY_META = Object.freeze({
   common: { label: 'ДРУГ', cls: 'rarity-common' },
@@ -16,12 +16,29 @@ export const RARITY_META = Object.freeze({
   legendary: { label: 'ЛЕГЕНДА', cls: 'rarity-legendary' },
 });
 
-const FALLBACK_IMG = './public/sprites/hero_boy_live.webp';
+const FIGHTER_PORTRAITS = [
+  './public/sprites/fighter_1.webp',
+  './public/sprites/fighter_2.webp',
+  './public/sprites/fighter_3.webp',
+  './public/sprites/fighter_4.webp',
+  './public/sprites/fighter_5.webp',
+  './public/sprites/fighter_6.webp',
+];
+const FALLBACK_IMG = FIGHTER_PORTRAITS[0];
 const CARD_ART_VERSION = 'v=1553';
 
-function safeImgUrl(url) {
+function fighterFallbackFor(seed) {
+  const s = String(seed || 'bochka');
+  let h = 0;
+  for (let i = 0; i < s.length; i += 1) {
+    h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  }
+  return FIGHTER_PORTRAITS[h % FIGHTER_PORTRAITS.length];
+}
+
+function safeImgUrl(url, fallbackSeed = '') {
   const s = String(url || '').trim();
-  if (!s) return FALLBACK_IMG;
+  if (!s) return fallbackSeed ? fighterFallbackFor(fallbackSeed) : FALLBACK_IMG;
   if (
     s.startsWith('./') ||
     s.startsWith('/') ||
@@ -182,28 +199,36 @@ export async function cancelDuelChips(tgUser = null, roundKey = '') {
 }
 
 function buildChipLidNode(trophy, { compact = false, selected = false, onClick = null } = {}) {
+  const isFriendJoined = trophy.trophy_type === 'friend_joined';
   const meta = RARITY_META[trophy.rarity] || RARITY_META.common;
+  const pillLabel = isFriendJoined ? 'ФИШКА ДРУГА' : meta.label;
   const btn = el(
     'button',
-    `hof-chip-item ${meta.cls}${compact ? ' is-compact' : ''}${selected ? ' is-selected' : ''}${trophy.locked_in_duel_id ? ' is-locked-chip' : ''}`
+    `hof-chip-item ${meta.cls}${isFriendJoined ? ' is-friend-joined' : ''}${compact ? ' is-compact' : ''}${selected ? ' is-selected' : ''}${trophy.locked_in_duel_id ? ' is-locked-chip' : ''}`
   );
   btn.type = 'button';
   btn.dataset.trophyId = String(trophy.id || '');
+  btn.dataset.trophyType = String(trophy.trophy_type || 'friend_barrel');
   btn.dataset.rarity = String(trophy.rarity || 'common');
+  if (trophy.label) btn.dataset.friendName = String(trophy.label);
 
   const ring = el('div', 'hof-chip-lid');
   const img = document.createElement('img');
-  img.src = safeImgUrl(trophy.image_url);
+  const fbSrc = fighterFallbackFor(trophy.barrel_id || trophy.label || trophy.id);
+  img.src = safeImgUrl(trophy.image_url, trophy.barrel_id || trophy.label || trophy.id);
   img.alt = String(trophy.label || 'Фишка');
   img.loading = 'lazy';
   img.decoding = 'async';
+  img.onerror = () => {
+    if (img.src !== fbSrc) img.src = fbSrc;
+  };
   ring.appendChild(img);
 
   const serialTxt = formatSerial(trophy.serial_number, trophy.max_supply);
   if (serialTxt) {
     ring.appendChild(el('span', 'hof-chip-serial', serialTxt));
   }
-  if (trophy.won_from_name) {
+  if (!isFriendJoined && trophy.won_from_name) {
     ring.appendChild(el('span', 'hof-chip-stolen-badge', '⚔️'));
   }
   if (trophy.locked_in_duel_id) {
@@ -211,10 +236,10 @@ function buildChipLidNode(trophy, { compact = false, selected = false, onClick =
   }
 
   btn.appendChild(ring);
-  btn.appendChild(el('span', 'hof-chip-rarity-pill', meta.label));
-  btn.appendChild(el('span', 'hof-chip-label', trophy.label || 'Фишка'));
+  btn.appendChild(el('span', 'hof-chip-rarity-pill', pillLabel));
+  btn.appendChild(el('span', 'hof-chip-label', trophy.label || 'Друг'));
 
-  if (trophy.won_from_name && !compact) {
+  if (!isFriendJoined && trophy.won_from_name && !compact) {
     btn.appendChild(el('span', 'hof-chip-won-mini', `от ${trophy.won_from_name}`));
   }
 
@@ -228,11 +253,13 @@ function showTrophyDetailOverlay(modalHost, trophy) {
   let ov = modalHost.querySelector('#hof-detail-overlay');
   if (ov) ov.remove();
 
+  const isFriendJoined = trophy.trophy_type === 'friend_joined';
   const meta = RARITY_META[trophy.rarity] || RARITY_META.common;
+  const pillLabel = isFriendJoined ? 'ФИШКА ДРУГА' : meta.label;
   ov = el('div', 'hof-detail-overlay');
   ov.id = 'hof-detail-overlay';
 
-  const card = el('div', `hof-detail-card ${meta.cls}`);
+  const card = el('div', `hof-detail-card ${meta.cls}${isFriendJoined ? ' is-friend-joined' : ''}`);
   const closeBtn = el('button', 'icon-close hof-detail-close', '✕');
   closeBtn.type = 'button';
   closeBtn.setAttribute('aria-label', 'Закрыть просмотр фишки');
@@ -241,17 +268,17 @@ function showTrophyDetailOverlay(modalHost, trophy) {
 
   const artWrap = el('div', 'hof-detail-art');
   const img = document.createElement('img');
-  img.src = safeImgUrl(trophy.image_url);
+  img.src = safeImgUrl(trophy.image_url, trophy.barrel_id || trophy.label || trophy.id);
   img.alt = String(trophy.label || 'Фишка');
   artWrap.appendChild(img);
 
-  if (trophy.won_from_name) {
+  if (!isFriendJoined && trophy.won_from_name) {
     artWrap.appendChild(el('div', 'hof-stolen-stamp', `ОТОБРАЛ У ${String(trophy.won_from_name).toUpperCase()}`));
   }
   card.appendChild(artWrap);
 
   const tags = el('div', 'hof-detail-tags');
-  tags.appendChild(el('span', `hof-detail-pill ${meta.cls}`, meta.label));
+  tags.appendChild(el('span', `hof-detail-pill ${meta.cls}`, pillLabel));
   const serialTxt = formatSerial(trophy.serial_number, trophy.max_supply);
   if (serialTxt) {
     tags.appendChild(el('span', 'hof-detail-pill hof-detail-serial', serialTxt));
@@ -267,12 +294,14 @@ function showTrophyDetailOverlay(modalHost, trophy) {
         ? `Официальная номерная карточка фильма «БОЧКА» (${serialTxt}).`
         : 'Официальная коллекционная карточка фильма «БОЧКА».'
     );
+  } else if (isFriendJoined) {
+    historyLines.push('Именная «Фишка друга» — выдана за первое подключение друга к твоей бочке. Доступна в коллекции и в дуэлях 1×1!');
   } else if (trophy.rarity === 'blogger') {
     historyLines.push('Редкая блогерская фишка цеха — собрана при вскрытии бочки автора.');
   } else {
     historyLines.push('Личная фото-фишка из твоей ветки — собрана при вскрытии бочки друга.');
   }
-  if (trophy.won_from_name) {
+  if (!isFriendJoined && trophy.won_from_name) {
     historyLines.push(`Трофей добыт в «Дуэли на фишки»: отобрал у ${trophy.won_from_name}.`);
   }
   if (trophy.locked_in_duel_id) {
@@ -492,7 +521,8 @@ export function renderHallOfFameModal(bodyEl, data, { onInviteFriend, onOpenChip
   };
   tabArt.addEventListener('click', () => setActiveTab('artifacts'));
   tabFriends.addEventListener('click', () => setActiveTab('friends'));
-  setActiveTab(initialTab === 'friends' ? 'friends' : 'artifacts');
+  const defaultTab = initialTab === 'friends' || (trophies.length > 0 && initialTab !== 'artifacts') ? 'friends' : 'artifacts';
+  setActiveTab(defaultTab);
 }
 
 export function renderDuelChipPicker(

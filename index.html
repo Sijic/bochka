@@ -150,7 +150,8 @@
       <button type="button" class="burger-item" id="btn-burger-leaderboard">🏆 РЕЙТИНГ ТОП-20 НА ПРЕМЬЕРУ (⭐ + 🛢)</button>
       <button type="button" class="burger-item burger-item-gold" id="btn-burger-hall-of-fame">🪙 ЗАЛ СЛАВЫ (<span id="burger-trophies-count">0</span>)</button>
       <button type="button" class="burger-item is-active" id="nav-workshop" data-i18n="navWorkshop">ЦЕХ</button>
-      <button type="button" class="burger-item burger-item-gold" id="btn-burger-duel">⚔️ ДУЭЛЬ 1×1 / ИГРАТЬ С ТИЛЕМ</button>
+      <button type="button" class="burger-item burger-item-gold" id="btn-burger-duel">🥊 ИГРАТЬ С ТИЛЕМ</button>
+      <button type="button" class="burger-item burger-item-gold" id="btn-burger-duel-1x1" hidden>⚔️ ДУЭЛЬ 1×1 С ДРУГОМ</button>
       <button type="button" class="burger-item" id="btn-burger-ocean">🌊 СЕВЕРНОЕ МОРЕ (19·97 · ТИЛЬ)</button>
       <button type="button" class="burger-item" id="nav-trailer" data-i18n="navTrailer">🎬 ТРЕЙЛЕР (VK ВИДЕО)</button>
       <button type="button" class="burger-item" id="btn-burger-kinopoisk">🎬 БУДУ СМОТРЕТЬ (КИНОПОИСК) ↗</button>
@@ -307,9 +308,10 @@
       </div>
       <span class="hud-slim-o2"><strong id="air-seconds">30.0</strong> <small>O₂</small></span>
       <button type="button" class="hud-slim-sound-btn" id="btn-hud-sound" aria-label="Переключить звук" title="Звук вкл / выкл">🔊</button>
-      <button type="button" class="hud-slim-menu-btn" id="btn-hud-menu" aria-label="Меню цеха" title="Меню: пригласить друга, дуэль 1×1, билеты, рейтинг">☰</button>
+      <button type="button" class="hud-slim-menu-btn" id="btn-hud-menu" aria-label="Меню цеха" title="Меню: пригласить друга, билеты, рейтинг">☰</button>
       <div class="hud-slim-airbar"><div class="air-bar-fill" id="air-bar-fill"></div></div>
     </div>
+    <button type="button" class="hud-duel-1x1-btn" id="btn-hud-duel-1x1" hidden>⚔️ Дуэль 1×1</button>
     <div class="hud-top-stack" id="hud-top-stack" hidden>
       <div class="hud-task-banner" id="hud-task-banner" hidden></div>
       <div class="hud-ticket-pool-bar" id="hud-ticket-pool-bar" hidden>
@@ -764,6 +766,9 @@
       </button>
       <button type="button" class="btn-primary btn-full til-hero-cta" id="btn-sent-play">
         <span id="btn-sent-play-text">Играть</span>
+      </button>
+      <button type="button" class="btn-secondary btn-full btn-compact" id="btn-sent-duel-1x1" hidden>
+        ⚔️ Дуэль 1×1 с другом
       </button>
     </div>
   </section>

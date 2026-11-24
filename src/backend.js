@@ -831,6 +831,12 @@ export async function fetchPlayerProfile(tgUser = null) {
           kpVerified: Boolean(data.kp_verified),
           packedCount: srvPacked,
           friendsBrought: Number(data.friends_brought || 0),
+          friendsCount: Math.max(
+            Number(data.friends_count || 0),
+            Number(data.friends_brought || 0),
+            data.has_social_connection ? 1 : 0
+          ),
+          lastSpecialKnockAt: data.last_special_knock_at ? Date.parse(data.last_special_knock_at) || 0 : 0,
           temuSurgeClaimed: Boolean(data.temu_surge_claimed),
           hasSocialConnection: Boolean(data.has_social_connection),
           isSeedAdmin: Boolean(data.is_seed_admin),
@@ -1517,6 +1523,74 @@ export async function claimOceanTapperReward(tgUser = null, taps = 1) {
 // Совместимость со старым вызовом
 export async function claimEasterEgg1997Bonus(tgUser = null) {
   return claimOceanTapperReward(tgUser, 1);
+}
+
+const SPECIAL_KNOCK_LOCAL_KEY = 'bochka_special_knock_at_v1';
+
+/**
+ * Секретный «Спец-стук» (+3 доп. жизни, строго 1 раз в 24 часа на уровне БД):
+ * ритмический стук на море (3 быстрых -> пауза -> 2 удара) или код 19 -> 97 в цеху.
+ */
+export async function claimSpecialKnockBonus(tgUser = null, source = 'ocean_rhythm') {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  if (db && !isTestBogActive()) {
+    try {
+      const { data, error } = await db.rpc('claim_special_knock_rpc', {
+        p_uid: uid,
+        p_source: source,
+      });
+      if (!error && data?.ok) {
+        const lastAt = data.last_special_knock_at ? Date.parse(data.last_special_knock_at) || Date.now() : 0;
+        if (lastAt) safeWrite(`${SPECIAL_KNOCK_LOCAL_KEY}_${uid}`, String(lastAt));
+        const prof = getLocalPreviewProfile();
+        if (typeof data.lives === 'number') prof.lives = data.lives;
+        prof.lastSpecialKnockAt = lastAt;
+        saveLocalPreviewProfile(prof);
+        return {
+          ok: true,
+          granted: Boolean(data.granted),
+          reason: data.reason || (data.granted ? 'granted' : 'special_knock_cooldown'),
+          source: data.source || source,
+          lives: Number(data.lives ?? prof.lives ?? 3),
+          livesAdded: Number(data.lives_added || 0),
+          lastSpecialKnockAt: lastAt,
+          retryAfterSec: Number(data.retry_after_sec || 0),
+        };
+      }
+    } catch { /* fallback below */ }
+  }
+
+  const now = Date.now();
+  const prevAt = Number(safeRead(`${SPECIAL_KNOCK_LOCAL_KEY}_${uid}`) || 0);
+  const prof = getLocalPreviewProfile();
+  if (prevAt > 0 && now - prevAt < 24 * 60 * 60 * 1000) {
+    return {
+      ok: true,
+      granted: false,
+      reason: 'special_knock_cooldown',
+      source,
+      lives: Number(prof.lives || 3),
+      livesAdded: 0,
+      lastSpecialKnockAt: prevAt,
+      retryAfterSec: Math.max(1, Math.ceil((prevAt + 24 * 60 * 60 * 1000 - now) / 1000)),
+    };
+  }
+  const nextLives = Math.min(30, Math.max(0, Number(prof.lives || 0)) + 3);
+  prof.lives = nextLives;
+  prof.lastSpecialKnockAt = now;
+  saveLocalPreviewProfile(prof);
+  safeWrite(`${SPECIAL_KNOCK_LOCAL_KEY}_${uid}`, String(now));
+  return {
+    ok: true,
+    granted: true,
+    reason: 'granted',
+    source,
+    lives: nextLives,
+    livesAdded: 3,
+    lastSpecialKnockAt: now,
+    retryAfterSec: 86400,
+  };
 }
 
 /* ============================================================================
@@ -2727,6 +2801,7 @@ export async function claimPersonalBarrelOpen(barrelId, viewerTgUser = null) {
         jackpotPoints: Number(data.jackpot_points || 0),
         jackpotLives: Number(data.jackpot_lives || 0),
         friendChipMinted: Boolean(data.friend_chip_minted),
+        friendChip: data.friend_chip || null,
         senderShardRes: data.sender_shard_res || null,
         inheritedSeedPrefix: data.inherited_seed_prefix || '',
         inheritedRootCode: data.inherited_root_code || '',
