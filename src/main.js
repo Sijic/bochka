@@ -1951,13 +1951,14 @@ function syncBurgerMenuLocks() {
     '🔒 ЗАКАТАТЬ ДРУГА (ОТКРОЕТСЯ С УР. 2)'
   );
   const sentLedger = readSentTicketsLedger().filter((x) => x.status === 'waiting_24h' || x.status === 'opened_unactivated');
+  const ticketShards = Math.max(0, Math.min(3, Math.round(Number(state.profile?.ticketShards || 0))));
   setLock(
     'btn-burger-send-tickets',
     tickets <= 0 && sentLedger.length === 0,
     tickets > 0
-      ? `🎟 ПОДАРИТЬ БИЛЕТ ДРУГУ (${tickets})`
-      : `🎟 СТАТУС ОТПРАВЛЕННЫХ БИЛЕТОВ (${sentLedger.length})`,
-    '🔒 ПОДАРИТЬ БИЛЕТ ДРУГУ (0 — ВЫБЕЙ НА УР. 3)'
+      ? `🎟 ПОДАРИТЬ БИЛЕТЫ ДРУЗЬЯМ (${tickets} · ${ticketShards}/4)`
+      : `🎟 СТАТУС ОТПРАВЛЕННЫХ БИЛЕТОВ (${sentLedger.length} · ${ticketShards}/4)`,
+    `🔒 ПОДАРИТЬ БИЛЕТ ДРУГУ (${tickets} · ${ticketShards}/4)`
   );
   setLock(
     'btn-burger-leaderboard',
