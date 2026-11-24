@@ -479,6 +479,7 @@ async function ensureDuelReady() {
         lives: Number(state.profile?.lives || 0),
         premierePoints: Number(state.profile?.premierePoints || 0),
         ticketShards: Number(state.profile?.ticketShards || 0),
+        pendingTicketsCount: Math.max(0, Math.round(Number(state.profile?.pendingTicketsCount || 0))),
         friendsBrought: Number(state.profile?.friendsBrought || 0),
         friendsCount: getRealFriendsCount(),
         chipsCount: Number(state.profile?.chipsCount || 0),
@@ -884,15 +885,23 @@ function saveLocalV9Flags() {
 }
 
 function syncTicketShardsUI({ pulse = false, showFullFlash = false, justEarned = 0 } = {}) {
+  const whole = Math.max(0, Math.round(Number(state.profile?.pendingTicketsCount || 0)));
   const shards = showFullFlash ? 4 : Math.max(0, Math.min(3, Math.round(Number(state.profile?.ticketShards || 0))));
-  const label = `${shards}/4`;
-  for (const id of ['top-shards-count', 'hud-shards-count', 'burger-shards-count']) {
+  const fullLabel = `${whole} · ${shards}/4`;
+  const shardLabel = `${shards}/4`;
+  const titleHint = `Целых билетов: ${whole} · Четвертинки: ${shards}/4`;
+  for (const id of ['top-shards-count', 'hud-shards-count', 'mode-a-rb-tickets']) {
     const el = document.getElementById(id);
-    if (el) el.textContent = label;
+    if (el) el.textContent = fullLabel;
   }
-  for (const pillId of ['top-ticket-shards', 'hud-ticket-shards', 'duel-shards-pill']) {
+  const burgerShards = document.getElementById('burger-shards-count');
+  if (burgerShards) burgerShards.textContent = shardLabel;
+  for (const pillId of ['top-ticket-shards', 'hud-ticket-shards', 'duel-shards-pill', 'mode-a-rb-tickets-wrap']) {
     const pill = document.getElementById(pillId);
     if (!pill) continue;
+    if (pillId === 'top-ticket-shards' || pillId === 'hud-ticket-shards') {
+      pill.title = titleHint;
+    }
     pill.querySelector('.ticket-stub-mini')?.classList.toggle('is-complete', shards >= 4 || Boolean(showFullFlash));
     pill.querySelectorAll('.shard-q').forEach((qEl) => {
       const idx = Number(qEl.getAttribute('data-shard') || 0);
@@ -1317,6 +1326,8 @@ function syncPendingTicketsFloatingUI() {
   const burgerCnt = document.getElementById('burger-tickets-count');
   const cnt = Math.max(0, Math.round(Number(state.profile.pendingTicketsCount || 0)));
   if (burgerCnt) burgerCnt.textContent = String(cnt);
+  syncTicketShardsUI();
+  duelCtrl?.syncEnergyUI?.();
   if (!btn) return;
   if (cnt <= 0) {
     btn.setAttribute('hidden', '');
@@ -3094,6 +3105,7 @@ async function renderModeARankBoard() {
   if (ptsEl) ptsEl.textContent = bonusPct > 0 ? `${effPts} (+${bonusPct}%)` : String(effPts);
   if (chipsEl) chipsEl.textContent = String(chipsFallback);
   if (friendsEl) friendsEl.textContent = String(friends);
+  syncTicketShardsUI();
   if (nextEl) {
     nextEl.textContent = nextTier
       ? `До «${nextTier.label}»: ${Math.max(0, nextTier.min - effPts)} ⭐`

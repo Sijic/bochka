@@ -2009,6 +2009,7 @@ export class WorkshopDuelController {
     const pct = Math.max(0, Math.min(100, Math.round((myCur / myMax) * 100)));
     const dl = Math.max(0, Math.round(Number(this.duelLives ?? 6)));
     const profStats = this.getProfileStats?.() || {};
+    const wholeTickets = Math.max(0, Math.round(Number(profStats.pendingTicketsCount || 0)));
     const shards = Math.max(0, Math.min(4, Math.round(Number(this.getTicketShards?.() ?? profStats.ticketShards ?? 0))));
     const roundDisplay = Math.max(1, Number(this.tilRoundIdx || 1));
     const diff = getTilDifficultyProfile(dl, roundDisplay - 1);
@@ -2018,7 +2019,9 @@ export class WorkshopDuelController {
       if (pAvaEl.getAttribute('src') !== targetSrc) pAvaEl.src = targetSrc;
       pAvaEl.onerror = () => { pAvaEl.src = FIGHTER_AVATARS[0]; };
     }
-    if (shardsEl) shardsEl.textContent = `${shards}/4`;
+    if (shardsEl) shardsEl.textContent = `${wholeTickets}·${shards}/4`;
+    const shardsPillEl = document.getElementById('duel-shards-pill');
+    if (shardsPillEl) shardsPillEl.title = `Целых билетов: ${wholeTickets} · Четвертинки: ${shards}/4`;
     this._syncTicketStubEl(document.getElementById('duel-ticket-stub'), shards);
     if (valEl) valEl.textContent = `${myStrikes}/${myMaxStrikes}`;
     const enPill = document.getElementById('duel-energy-pill');
@@ -2066,9 +2069,11 @@ export class WorkshopDuelController {
       oEnergyFill.style.width = `${oppPct}%`;
     }
     if (oTicketsEl) {
-      const oppTk = Math.max(0, Number(this.sessionStats?.oppTickets || 0));
-      oTicketsEl.textContent = String(oppTk);
-      this._syncTicketStubEl(document.getElementById('duel-opp-ticket-stub'), Math.min(4, oppTk));
+      const oppTk = Math.max(0, Math.round(Number(this.sessionStats?.oppTickets || 0)));
+      const oppWhole = Math.floor(oppTk / 4);
+      const oppRem = oppTk % 4;
+      oTicketsEl.textContent = `${oppWhole}·${oppRem}/4`;
+      this._syncTicketStubEl(document.getElementById('duel-opp-ticket-stub'), oppRem || (oppTk > 0 ? 4 : 0));
     }
     if (oChipsEl) oChipsEl.textContent = String(this.sessionStats?.oppChips || 0);
     if (oPtsEl) oPtsEl.textContent = String(this.sessionStats?.oppPoints || 0);

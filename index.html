@@ -89,14 +89,14 @@
         <span class="topbar-meter-text" id="top-premiere-pct">0%</span>
       </button>
 
-      <button type="button" class="nav-link top-shards-pill" id="top-ticket-shards" title="Сборка билета другу из 4 частей (25% × 4 = 1 целый бесплатный билет)">
+      <button type="button" class="nav-link top-shards-pill" id="top-ticket-shards" title="Целые билеты · четвертинки (4/4 = 1 целый)">
         <span class="ticket-stub-mini" aria-hidden="true">
           <i class="shard-q" data-shard="1"></i>
           <i class="shard-q" data-shard="2"></i>
           <i class="shard-q" data-shard="3"></i>
           <i class="shard-q" data-shard="4"></i>
         </span>
-        <strong id="top-shards-count">0/4</strong>
+        <strong id="top-shards-count">0 · 0/4</strong>
       </button>
 
       <button type="button" class="nav-link top-rating-pill" id="top-rating-pill" title="Суперприз: 20 приглашений на Закрытый показ в Москве 17 декабря">
@@ -280,6 +280,10 @@
       <div class="mode-a-rb-stats" id="mode-a-rb-stats">
         <span class="mode-a-rb-stat">⭐ <strong id="mode-a-rb-pts">0</strong> / 5 000</span>
         <span class="mode-a-rb-stat"><span class="chip-token-ico" aria-hidden="true"></span> <strong id="mode-a-rb-chips">0</strong></span>
+        <span class="mode-a-rb-stat" id="mode-a-rb-tickets-wrap" title="Целые билеты · четвертинки (4/4 = 1 целый)">
+          <span class="ticket-stub-mini is-duel" id="mode-a-ticket-stub" aria-hidden="true"><i class="shard-q" data-shard="1"></i><i class="shard-q" data-shard="2"></i><i class="shard-q" data-shard="3"></i><i class="shard-q" data-shard="4"></i></span>
+          <strong id="mode-a-rb-tickets">0 · 0/4</strong>
+        </span>
         <span class="mode-a-rb-stat">👥 <strong id="mode-a-rb-friends">0</strong></span>
         <span class="mode-a-rb-next" id="mode-a-rb-next">До след. ранга: 700 ⭐</span>
       </div>
@@ -307,14 +311,14 @@
           <span class="attempt-sq is-live"></span>
           <span class="attempt-sq is-live"></span>
         </div>
-        <button type="button" class="hud-shards-pill" id="hud-ticket-shards" title="Собери 4 куска билета — подари другу бесплатный билет в кино!">
+        <button type="button" class="hud-shards-pill" id="hud-ticket-shards" title="Целые билеты · четвертинки (4/4 = 1 целый)">
           <span class="ticket-stub-mini" aria-hidden="true">
             <i class="shard-q" data-shard="1"></i>
             <i class="shard-q" data-shard="2"></i>
             <i class="shard-q" data-shard="3"></i>
             <i class="shard-q" data-shard="4"></i>
           </span>
-          <strong id="hud-shards-count">0/4</strong>
+          <strong id="hud-shards-count">0 · 0/4</strong>
         </button>
         <span class="hud-pts-pill hud-rating-pill" id="hud-pts-pill" title="Суперприз: 20 приглашений на Закрытый показ в Москве 17 декабря">
           <span class="hud-rating-label">🏆 <strong id="hud-rating-pct">0%</strong></span>
@@ -1188,7 +1192,7 @@
               <span class="duel-energy-track"><span class="duel-energy-fill" id="duel-energy-fill" style="width:100%"></span></span>
             </div>
             <div class="duel-vs-loot-row">
-              <span class="duel-shards-pill" id="duel-shards-pill" title="Части билета (4/4)"><span class="ticket-stub-mini is-duel" id="duel-ticket-stub" aria-hidden="true"><i class="shard-q" data-shard="1"></i><i class="shard-q" data-shard="2"></i><i class="shard-q" data-shard="3"></i><i class="shard-q" data-shard="4"></i></span> <strong id="duel-shards-val">0/4</strong></span>
+              <span class="duel-shards-pill" id="duel-shards-pill" title="Целые билеты · четвертинки (4/4 = 1 целый)"><span class="ticket-stub-mini is-duel" id="duel-ticket-stub" aria-hidden="true"><i class="shard-q" data-shard="1"></i><i class="shard-q" data-shard="2"></i><i class="shard-q" data-shard="3"></i><i class="shard-q" data-shard="4"></i></span> <strong id="duel-shards-val">0·0/4</strong></span>
               <span class="duel-vs-chip-pill" id="duel-vs-player-chips" title="Фишки"><span class="chip-token-ico" aria-hidden="true"></span> <strong id="duel-vs-player-chips-val">0</strong></span>
               <span class="duel-vs-pts-pill" id="duel-vs-player-pts" title="Очки в бою">⭐ <strong id="duel-vs-player-pts-val">0</strong></span>
             </div>
@@ -1217,7 +1221,7 @@
               <span class="duel-vs-num" id="duel-vs-opp-name">Тиль ⚡</span>
             </div>
             <div class="duel-vs-loot-row is-opp" id="duel-vs-opp-loot">
-              <span class="duel-vs-opp-pill"><span class="ticket-stub-mini is-duel is-opp" id="duel-opp-ticket-stub" aria-hidden="true"><i class="shard-q" data-shard="1"></i><i class="shard-q" data-shard="2"></i><i class="shard-q" data-shard="3"></i><i class="shard-q" data-shard="4"></i></span> <strong id="duel-vs-opp-tickets-val">0</strong></span>
+              <span class="duel-vs-opp-pill"><span class="ticket-stub-mini is-duel is-opp" id="duel-opp-ticket-stub" aria-hidden="true"><i class="shard-q" data-shard="1"></i><i class="shard-q" data-shard="2"></i><i class="shard-q" data-shard="3"></i><i class="shard-q" data-shard="4"></i></span> <strong id="duel-vs-opp-tickets-val">0·0/4</strong></span>
               <span class="duel-vs-opp-pill"><span class="chip-token-ico" aria-hidden="true"></span> <strong id="duel-vs-opp-chips-val">0</strong></span>
               <span class="duel-vs-opp-pill">⭐ <strong id="duel-vs-opp-pts-val">0</strong></span>
             </div>
