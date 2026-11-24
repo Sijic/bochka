@@ -483,6 +483,7 @@ async function ensureDuelReady() {
         friendsBrought: Number(state.profile?.friendsBrought || 0),
         friendsCount: getRealFriendsCount(),
         chipsCount: Number(state.profile?.chipsCount || 0),
+        trophiesCount: Number(state.profile?.trophiesCount ?? state.profile?.chipsCount ?? 0),
         currentLevel: Math.max(1, Number(state.profile?.currentLevel || 1)),
       }),
       getTicketShards: () => Number(state.profile?.ticketShards || 0),
@@ -511,15 +512,30 @@ async function ensureDuelReady() {
         openDuelTable('').catch(() => {});
       },
       onTriggerScreamerFx: (durMs, variant = null) => triggerMiniScreamer(variant, durMs),
-      onCollectChipFromBarrel: () => {
-        state.profile.chipsCount = Number(state.profile?.chipsCount || 0) + 1;
-        rollRareMovieCardLazy('duel_barrel')
+      onCollectChipFromBarrel: ({ source = 'duel_barrel' } = {}) => {
+        return rollRareMovieCardLazy(source)
           .then((res) => {
-            if (res?.dropped && res?.trophy?.title) {
-              showToast(`🪙 ФИШКА ИЗ БОЧКИ: «${res.trophy.title}» (+150 ⭐)!`);
+            if (res?.ok && res.totalCount != null) {
+              state.profile.trophiesCount = Number(res.totalCount || 0);
+              state.profile.chipsCount = Number(res.totalCount || 0);
+              if (duelCtrl) {
+                const prevList = Array.isArray(duelCtrl.hofCache?.trophies) ? duelCtrl.hofCache.trophies : [];
+                const nextList = res.dropped && res.trophy
+                  ? [res.trophy, ...prevList.filter((x) => x.id !== res.trophy.id)]
+                  : prevList;
+                duelCtrl.hofCache = {
+                  ...(duelCtrl.hofCache || {}),
+                  ok: true,
+                  totalCount: state.profile.trophiesCount,
+                  trophies: nextList,
+                };
+                duelCtrl.syncEnergyUI?.();
+              }
+              renderModeARankBoard();
             }
+            return res;
           })
-          .catch(() => {});
+          .catch(() => null);
       },
       onProfileSync: (patch) => {
         state.profile = { ...state.profile, ...patch };
@@ -601,6 +617,15 @@ async function openHallOfFameModal() {
 
   const mod = await loadTrophiesMod();
   const data = await mod.fetchHallOfFame(state.tg?.user || null);
+  if (data?.ok) {
+    state.profile.trophiesCount = Math.max(0, Number(data.totalCount || 0));
+    state.profile.chipsCount = state.profile.trophiesCount;
+    if (duelCtrl) {
+      duelCtrl.hofCache = data;
+      duelCtrl.syncEnergyUI?.();
+    }
+    renderModeARankBoard();
+  }
   mod.renderHallOfFameModal(body, data, {
     onInviteFriend: () => {
       modal.setAttribute('hidden', '');
@@ -646,7 +671,7 @@ async function rollRareMovieCardLazy(source) {
       const num = res.trophy.serial_number
         ? ` #${String(res.trophy.serial_number).padStart(3, '0')}/${res.trophy.max_supply || 100}`
         : '';
-      showToast(`🃏 Карточка фильма «${res.trophy.label}»${num} в Зале славы!`);
+      showToast(`🪙 Фишка «${res.trophy.label}»${num} добавлена в Зал славы!`);
     }
     return res;
   } catch {

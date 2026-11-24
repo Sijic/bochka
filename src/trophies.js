@@ -78,7 +78,7 @@ function pluralFriends(n) {
 
 export function syncHallOfFameBadges(count) {
   const n = Math.max(0, Number(count || 0));
-  for (const id of ['hub-trophies-count', 'burger-trophies-count']) {
+  for (const id of ['hub-trophies-count', 'burger-trophies-count', 'mode-a-rb-chips']) {
     const node = document.getElementById(id);
     if (node) node.textContent = String(n);
   }
@@ -163,7 +163,10 @@ export async function mintRareMovieCard(tgUser = null, source = 'level3') {
       p_source: source,
     });
     if (!error && data?.ok) {
-      if (data.dropped) {
+      const totalCount = data.total_count != null ? Math.max(0, Number(data.total_count || 0)) : null;
+      if (totalCount != null) {
+        syncHallOfFameBadges(totalCount);
+      } else if (data.dropped) {
         const cur = Number(document.getElementById('hub-trophies-count')?.textContent || 0);
         syncHallOfFameBadges(cur + 1);
       }
@@ -172,6 +175,7 @@ export async function mintRareMovieCard(tgUser = null, source = 'level3') {
         dropped: Boolean(data.dropped),
         chancePct: Number(data.chance_pct || 0),
         reason: data.reason || 'ok',
+        totalCount,
         trophy: data.trophy || null,
       };
     }
@@ -343,7 +347,7 @@ export function renderHallOfFameModal(bodyEl, data, { onInviteFriend, onOpenChip
   const tabArt = el('button', 'hof-tab-btn', `🎬 Артефакты фильма (${unlockedArtCount}/${slots.length})`);
   tabArt.type = 'button';
   tabArt.id = 'btn-hof-tab-artifacts';
-  const tabFriends = el('button', 'hof-tab-btn', `👥 Друзья из ветки (${trophies.length})`);
+  const tabFriends = el('button', 'hof-tab-btn', `🪙 Фишки и друзья (${trophies.length})`);
   tabFriends.type = 'button';
   tabFriends.id = 'btn-hof-tab-friends';
   tabBar.appendChild(tabArt);
@@ -448,7 +452,7 @@ export function renderHallOfFameModal(bodyEl, data, { onInviteFriend, onOpenChip
   const gridTitle = el(
     'div',
     'hof-section-title',
-    trophies.length ? `ФИШКИ ДРУЗЕЙ ИЗ ВЕТКИ (${trophies.length})` : 'ФИШКИ ДРУЗЕЙ ИЗ ВЕТКИ'
+    trophies.length ? `КОЛЛЕКЦИЯ ФИШЕК И ДРУЗЕЙ (${trophies.length})` : 'КОЛЛЕКЦИЯ ФИШЕК И ДРУЗЕЙ'
   );
   paneFriends.appendChild(gridTitle);
 

@@ -618,6 +618,17 @@ export class WorkshopDuelController {
 
     const tgUser = this.getTgUser?.() || null;
     this.myUid = getViewerUid(tgUser);
+    if (!this.hofCache?.ok || (this.hofCache?.ownerUid && this.hofCache.ownerUid !== this.myUid)) {
+      this.loadTrophiesMod()
+        .then((m) => m.fetchHallOfFame(tgUser))
+        .then((hof) => {
+          if (hof?.ok && this.active) {
+            this.hofCache = hof;
+            this.syncEnergyUI();
+          }
+        })
+        .catch(() => {});
+    }
     this.myName = tgUser?.name || (isTestBogSessionActive() ? 'Тест-Бог' : 'Игрок');
     this.myAvatar = this.getPlayerAvatar?.() || tgUser?.photoUrl || getFallbackFighterAvatar(this.myUid);
     this.roomId = String(roomId || `d_${Math.random().toString(36).slice(2, 8)}`).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 28);
@@ -2037,7 +2048,10 @@ export class WorkshopDuelController {
       pHpFill.style.width = `${Math.min(100, Math.round((dl / hpDenom) * 100))}%`;
     }
     if (pChipsEl) {
-      pChipsEl.textContent = String(Math.max(0, Number(this.hofCache?.totalCount || 0), Number(profStats.chipsCount || 0), Number(this.sessionStats?.playerChips || 0)));
+      const displayChips = this.hofCache?.ok
+        ? Math.max(0, Number(this.hofCache.totalCount || 0))
+        : Math.max(0, Number(profStats.trophiesCount || profStats.chipsCount || 0), Number(this.sessionStats?.playerChips || 0));
+      pChipsEl.textContent = String(displayChips);
     }
     const totalPts = Math.max(0, Math.round(Number(profStats.premierePoints ?? this.sessionStats?.playerPoints ?? 0)));
     if (pPtsEl) pPtsEl.textContent = String(totalPts);
@@ -2701,7 +2715,7 @@ export class WorkshopDuelController {
         } else if (kind === 'chip') {
           this.sessionStats.playerChips += 1;
           this.onFlyRating?.({ type: 'chip', count: 3, label: '🪙 Новая фишка' });
-          this.onCollectChipFromBarrel?.({ barrelIndex: -1, loot: { kind: 'chip', value: 150, label: '🪙 Новая фишка' } });
+          await this.onCollectChipFromBarrel?.({ source: 'duel_trophy', barrelIndex: -1, loot: { kind: 'chip', value: 150, label: '🪙 Новая фишка' } });
           const bankRes = await claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: 150, solo: !isPvp1x1 }).catch(() => null);
           if (bankRes?.ok) this.onProfileSync?.({ premierePoints: bankRes.premierePoints });
         } else {
@@ -2846,7 +2860,7 @@ export class WorkshopDuelController {
           barrelIndex: myEntry.barrelIndex,
         });
         if (k === 'chip') {
-          this.onCollectChipFromBarrel?.({ barrelIndex: myEntry.barrelIndex, loot: myEntry.loot });
+          this.onCollectChipFromBarrel?.({ source: 'duel_barrel', barrelIndex: myEntry.barrelIndex, loot: myEntry.loot });
         }
         claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: val, solo: this.soloMode })
           .then((bankRes) => {
