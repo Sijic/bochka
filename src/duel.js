@@ -1621,7 +1621,12 @@ export class WorkshopDuelController {
         }
         openedIndices = [];
         this.batchResolved = false;
-        this.initBatchEnergy(Math.max(1, Number(this.tilRoundIdx || 1)));
+        const preserveEnergyMidRound = Boolean(isFreeRerack && this.getEnergyActiveContenders().length > 0);
+        if (preserveEnergyMidRound) {
+          this.onToast?.('🛢 Выкачены новые бочки — энергия ещё есть, бьём дальше!');
+        } else {
+          this.initBatchEnergy(Math.max(1, Number(this.tilRoundIdx || 1)));
+        }
       }
 
       const roundKey =
@@ -2145,10 +2150,8 @@ export class WorkshopDuelController {
       this.triggerDefeatFlow();
       return;
     }
-    const closedLeft = Math.max(0, (this.barrelCount || 6) - (this.openedIndices?.length || 0));
     const activeEnergyCount = this.getEnergyActiveContenders().length;
-    const minClosed = this.friendBarrelHunt || activeEnergyCount <= 1 ? 1 : 2;
-    const keepCurrentBatch = !this.batchResolved && activeEnergyCount > 0 && closedLeft >= minClosed;
+    const keepCurrentBatch = !this.batchResolved && activeEnergyCount > 0;
     if (!keepCurrentBatch) {
       this.initBatchEnergy(Math.max(1, Number(this.tilRoundIdx || 1) + 1));
       this.syncEnergyUI();
@@ -2920,13 +2923,11 @@ export class WorkshopDuelController {
     }
 
     const ticketEntry = entries.find((e) => e.loot.kind === 'ticket') || null;
-    const closedLeftNow = Math.max(0, (this.barrelCount || 10) - (this.openedIndices?.length || 0));
     const needTilNow = this.duelLives <= 0;
     const tilKnockedOut = Boolean(!this.friendBarrelHunt && this.tilLives <= 0 && !needTilNow);
     const activeEnergyUids = this.getEnergyActiveContenders();
     const anyEnergyLeft = activeEnergyUids.length > 0;
-    const minClosedContinue = this.friendBarrelHunt || activeEnergyUids.length <= 1 ? 1 : 2;
-    this.batchResolved = Boolean(ticketEntry || tilKnockedOut || !anyEnergyLeft || closedLeftNow < minClosedContinue);
+    this.batchResolved = Boolean(ticketEntry || tilKnockedOut || !anyEnergyLeft);
 
     const summaryLine = entries
       .map((e) => `${e.claim.uid === this.myUid ? 'ТЫ' : e.claim.name}: ${e.loot.label}`)
@@ -2945,7 +2946,7 @@ export class WorkshopDuelController {
       return;
     }
 
-    if (!ticketEntry && !tilKnockedOut && anyEnergyLeft && closedLeftNow >= minClosedContinue) {
+    if (!ticketEntry && !tilKnockedOut && anyEnergyLeft) {
       const pauseMs = anyScreamer ? LOOT_READ_SCREAMER_MS : LOOT_READ_PAUSE_MS;
       this.scheduleStepWhenUnblocked(() => {
         if (!this.active) return;
@@ -3238,9 +3239,9 @@ export class WorkshopDuelController {
       }
     } else if (this.getEnergyActiveContenders().length === 0) {
       Haptics.light();
-      if (titleEl) titleEl.textContent = '⚡ Энергия раунда исчерпана!';
+      if (titleEl) titleEl.textContent = '⚡ Энергия закончилась — раунд завершён!';
       if (subEl) {
-        subEl.textContent = `❤️ ${this.duelLives} · закрыто бочек: ${closedLeft}. В новом раунде энергия восстановится (и растёт с уровнем!).`;
+        subEl.textContent = `❤️ ${this.duelLives} · В новом раунде энергия восстановится полностью.`;
       }
     } else {
       Haptics.light();
@@ -3273,16 +3274,12 @@ export class WorkshopDuelController {
     const capHit = iFoundTicket && (detail.serverTicketRes?.reason === 'solo_cap_reached' || detail.serverTicketRes?.reason === 'friend_or_duel_required');
     if (rematchBtn) {
       const activeEn = this.getEnergyActiveContenders().length;
-      const minClosedBtn = activeEn <= 1 ? 1 : 2;
       if (needTilRefill) {
         rematchBtn.textContent = oceanAllowed ? '🌊 К Тилю (+6 ❤️)' : '🛢 Закатать друга (+6 ❤️)';
-      } else if (!this.batchResolved && activeEn > 0 && closedLeft >= minClosedBtn) {
+      } else if (!this.batchResolved && activeEn > 0) {
         rematchBtn.textContent = '🔨 Бить дальше';
       } else {
-        const nextB = [6, 8, 10, 12][Math.min(3, Math.max(0, Number(this.tilRoundIdx || 1)))];
-        rematchBtn.textContent = this.soloMode
-          ? `Дальше (${nextB} бочек)`
-          : `Реванш 1×1 (${nextB} бочек)`;
+        rematchBtn.textContent = this.soloMode ? '▶ Новый раунд' : '⚔️ Реванш 1×1';
       }
       rematchBtn.removeAttribute('hidden');
     }
