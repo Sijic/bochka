@@ -2214,6 +2214,96 @@ class WorkshopAudio {
     });
   }
 
+  playFalseStartBuzz() {
+    Haptics.error();
+    if (!this.ctx || !this.enabled || !this.master) return;
+    if (this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
+    const now = this.ctx.currentTime;
+    [0, 0.13].forEach((offset, idx) => {
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(idx === 0 ? 190 : 142, now + offset);
+      osc.frequency.exponentialRampToValueAtTime(92, now + offset + 0.11);
+      g.gain.setValueAtTime(0.32, now + offset);
+      g.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.12);
+      osc.connect(g).connect(this.master);
+      osc.start(now + offset);
+      osc.stop(now + offset + 0.13);
+    });
+  }
+
+  playBarrelPullScrape() {
+    Haptics.heavy();
+    if (!this.ctx || !this.enabled || !this.master) return;
+    if (this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const filt = this.ctx.createBiquadFilter();
+    const g = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(165, now);
+    osc.frequency.exponentialRampToValueAtTime(48, now + 0.95);
+    filt.type = 'bandpass';
+    filt.frequency.setValueAtTime(620, now);
+    filt.frequency.exponentialRampToValueAtTime(180, now + 0.95);
+    filt.Q.value = 3.5;
+    g.gain.setValueAtTime(0.38, now);
+    g.gain.exponentialRampToValueAtTime(0.01, now + 0.98);
+    osc.connect(filt).connect(g).connect(this.master);
+    osc.start(now);
+    osc.stop(now + 1.0);
+  }
+
+  playLidSlamShut() {
+    Haptics.heavy();
+    if (!this.ctx || !this.enabled || !this.master) return;
+    if (this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
+    const now = this.ctx.currentTime;
+    // Heavy sub thud
+    const sub = this.ctx.createOscillator();
+    const sg = this.ctx.createGain();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(118, now);
+    sub.frequency.exponentialRampToValueAtTime(32, now + 0.55);
+    sg.gain.setValueAtTime(0.62, now);
+    sg.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
+    sub.connect(sg).connect(this.master);
+    sub.start(now);
+    sub.stop(now + 0.68);
+    // Iron clang ring
+    [295, 442, 690].forEach((freq, i) => {
+      const m = this.ctx.createOscillator();
+      const mg = this.ctx.createGain();
+      m.type = i === 0 ? 'square' : 'triangle';
+      m.frequency.setValueAtTime(freq, now);
+      m.frequency.exponentialRampToValueAtTime(freq * 0.84, now + 0.45);
+      mg.gain.setValueAtTime(0.18 / (i + 1), now);
+      mg.gain.exponentialRampToValueAtTime(0.001, now + 0.52);
+      m.connect(mg).connect(this.master);
+      m.start(now);
+      m.stop(now + 0.55);
+    });
+  }
+
+  playRewardChime() {
+    Haptics.success();
+    if (!this.ctx || !this.enabled || !this.master) return;
+    if (this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
+    const now = this.ctx.currentTime;
+    [587.33, 783.99, 987.77, 1318.5].forEach((freq, i) => {
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + i * 0.055);
+      g.gain.setValueAtTime(0.24, now + i * 0.055);
+      g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.055 + 0.34);
+      osc.connect(g).connect(this.master);
+      osc.start(now + i * 0.055);
+      osc.stop(now + i * 0.055 + 0.36);
+    });
+  }
+
   // v8.0: микрофон в цеху полностью отключён (запрос ТОЛЬКО на кнопке записи крика в окне упаковки)
   async startMicBlowDetector() {
     return false;

@@ -809,10 +809,13 @@ export async function fetchPlayerProfile(tgUser = null) {
           duelsWon: Number(data.duels_won || 0),
           duelsPlayed: srvDuels,
           trailerRewarded: Boolean(data.trailer_rewarded),
+          trailerWatchedFull: Boolean(data.trailer_watched_full),
           kpClickRewarded: Boolean(data.kp_click_rewarded),
           dailySocialMask: String(data.daily_social_mask || ''),
           lives: Number(data.lives ?? 3),
           rawSharesToday: Number(data.daily_shares_count || 0),
+          dailySharePoints: Number(data.daily_share_points || 0),
+          avatarUrl: String(data.avatar_url || ''),
           easterEggClaimed: Boolean(data.easter_egg_claimed),
           easterEggBestTaps: Number(data.easter_egg_best_taps || 0),
           easterEggGiftWon: Boolean(data.easter_egg_gift_won),
@@ -1007,23 +1010,88 @@ export async function claimShareBonusLife(tgUser = null) {
       });
       if (!error && data) {
         return {
-          granted: data.ok ? 1 : 0,
+          ok: Boolean(data.ok),
+          granted: data.ok ? Number(data.lives_added ?? 2) : 0,
+          livesAdded: data.ok ? Number(data.lives_added ?? 2) : 0,
+          pointsAdded: data.ok ? Number(data.points_added ?? 0) : 0,
           lives: Number(data.lives || 0),
+          premierePoints: data.premiere_points != null ? Number(data.premiere_points) : null,
           rawSharesToday: Number(data.daily_shares_count || 0),
+          dailyLimit: Number(data.daily_shares_limit || 15),
+          dailySharePoints: Number(data.daily_share_points || 0),
+          dailySharePointsCap: Number(data.daily_share_points_cap || 750),
+          pointsCapped: Boolean(data.points_capped),
           capped: data.reason === 'daily_limit',
+          retryAfterSec: Number(data.retry_after_sec || 0),
+          reason: String(data.reason || ''),
         };
       }
     } catch { /* fallback below */ }
   }
 
   const prof = getLocalPreviewProfile();
-  if (prof.rawSharesToday >= 3 && !isTestBogActive()) {
-    return { granted: 0, lives: prof.lives, rawSharesToday: prof.rawSharesToday, capped: true };
+  const nowTs = Date.now();
+  const lastShareTs = Number(prof.lastShareAtMs || 0);
+  if (lastShareTs > 0 && nowTs - lastShareTs < 8000 && !isTestBogActive()) {
+    return {
+      ok: false,
+      granted: 0,
+      livesAdded: 0,
+      pointsAdded: 0,
+      lives: prof.lives,
+      premierePoints: prof.premierePoints || 0,
+      rawSharesToday: prof.rawSharesToday || 0,
+      dailyLimit: 15,
+      dailySharePoints: prof.dailySharePoints || 0,
+      dailySharePointsCap: 750,
+      pointsCapped: false,
+      capped: false,
+      retryAfterSec: Math.max(1, Math.ceil((8000 - (nowTs - lastShareTs)) / 1000)),
+      reason: 'share_cooldown',
+    };
   }
-  prof.rawSharesToday += 1;
-  prof.lives += 1;
+  if ((prof.rawSharesToday || 0) >= 15 && !isTestBogActive()) {
+    return {
+      ok: false,
+      granted: 0,
+      livesAdded: 0,
+      pointsAdded: 0,
+      lives: prof.lives,
+      premierePoints: prof.premierePoints || 0,
+      rawSharesToday: prof.rawSharesToday || 15,
+      dailyLimit: 15,
+      dailySharePoints: prof.dailySharePoints || 0,
+      dailySharePointsCap: 750,
+      pointsCapped: true,
+      capped: true,
+      retryAfterSec: 0,
+      reason: 'daily_limit',
+    };
+  }
+  const prevSharePts = Number(prof.dailySharePoints || 0);
+  const ptsAdd = Math.min(50, Math.max(0, 750 - prevSharePts));
+  prof.rawSharesToday = Number(prof.rawSharesToday || 0) + 1;
+  prof.lives = Number(prof.lives || 0) + 2;
+  prof.premierePoints = Number(prof.premierePoints || 0) + ptsAdd;
+  prof.dailySharePoints = prevSharePts + ptsAdd;
+  prof.lastShareAtMs = nowTs;
   saveLocalPreviewProfile(prof);
-  return { granted: 1, lives: prof.lives, rawSharesToday: prof.rawSharesToday, capped: false };
+  return {
+    ok: true,
+    granted: 2,
+    livesAdded: 2,
+    pointsAdded: ptsAdd,
+    lives: prof.lives,
+    premierePoints: prof.premierePoints,
+    rawSharesToday: prof.rawSharesToday,
+    dailyLimit: 15,
+    dailySharePoints: prof.dailySharePoints,
+    dailySharePointsCap: 750,
+    pointsCapped: ptsAdd === 0,
+    capped: false,
+    retryAfterSec: 0,
+    reason: '',
+  };
 }
 
 /**
@@ -2645,6 +2713,7 @@ export async function claimPersonalBarrelOpen(barrelId, viewerTgUser = null) {
       p_viewer_tg_id: viewerTgUser?.id ? String(viewerTgUser.id) : '',
       p_viewer_username: viewerTgUser?.username || '',
       p_viewer_name: viewerTgUser?.name || '',
+      p_viewer_avatar: viewerTgUser?.photoUrl || '',
     });
     if (!error && data?.ok) {
       return {
@@ -2654,6 +2723,10 @@ export async function claimPersonalBarrelOpen(barrelId, viewerTgUser = null) {
         locked: Boolean(data.locked),
         firstOpen: Boolean(data.first_open),
         senderRewarded: Boolean(data.sender_rewarded),
+        duplicateFriendBlocked: Boolean(data.duplicate_friend_blocked),
+        jackpotPoints: Number(data.jackpot_points || 0),
+        jackpotLives: Number(data.jackpot_lives || 0),
+        friendChipMinted: Boolean(data.friend_chip_minted),
         senderShardRes: data.sender_shard_res || null,
         inheritedSeedPrefix: data.inherited_seed_prefix || '',
         inheritedRootCode: data.inherited_root_code || '',
@@ -2690,6 +2763,8 @@ export async function awardTicketShardServer(tgUser = null, source = 'level') {
           fallbackPoints: Number(data.fallback_points || 0),
           premierePoints: data.premiere_points != null ? Number(data.premiere_points) : null,
           pendingTicketsCount: Number(data.pending_tickets_count || 0),
+          lives: data.lives != null ? Number(data.lives) : null,
+          trailerWatchedFull: Boolean(data.trailer_watched_full),
           dailyIssued: Number(data.daily_tickets_issued || 0),
           maxDaily: Number(data.max_daily_tickets || 6),
           ticketsWon: Number(data.tickets_won || 0),
@@ -2710,7 +2785,7 @@ export async function awardTicketShardServer(tgUser = null, source = 'level') {
   }
   const prof = getLocalPreviewProfile();
   const prev = Math.max(0, Math.min(3, Number(prof.ticketShards || 0)));
-  if (source === 'solo_til' && prev >= 2) {
+  if (['solo_til', 'trailer_full', 'til_trophy'].includes(source) && prev >= 2) {
     return {
       ok: true,
       source,
@@ -2721,6 +2796,8 @@ export async function awardTicketShardServer(tgUser = null, source = 'level') {
       duplicateBlocked: false,
       reason: 'solo_cap_reached',
       fallbackPoints: 500,
+      lives: source === 'trailer_full' ? Math.max(6, Number(prof.lives || 3)) : Number(prof.lives || 3),
+      trailerWatchedFull: source === 'trailer_full' || Boolean(prof.trailerWatchedFull),
       pendingTicketsCount: Number(prof.pendingTicketsCount || 0),
     };
   }

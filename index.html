@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0d0d'/%3E%3Crect x='8' y='4' width='16' height='24' rx='2' fill='none' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='11' x2='25' y2='11' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='21' x2='25' y2='21' stroke='%23eab308' stroke-width='2'/%3E%3C/svg%3E" />
   <title>БОЧКА — Заводской триллер | Вызволи друга за 3 удара ломом</title>
-  <meta name="bochka-build" content="v19.8.0-studio" />
+  <meta name="bochka-build" content="v20.0-studio" />
   <meta name="description" content="Четыре цеха завода, заваренные 200-литровые бочки и 30 секунд кислорода. Запиши фото и голос друга на дно бочки, проверь его слух и забери допуск на закрытую Премьеру 17 декабря." />
 
   <!-- Open Graph / Telegram / WhatsApp Link Preview -->
@@ -30,7 +30,7 @@
 
   <!-- Telegram Mini App SDK и VK VideoPlayer API (100% локально — работает в РФ/СНГ без внешних CDN!) -->
   <script defer src="./public/vendor/telegram-web-app.js?v=1900"></script>
-  <script defer src="./public/vendor/vk-videoplayer.js?v=1980"></script>
+  <script defer src="./public/vendor/vk-videoplayer.js?v=2000"></script>
 
   <!-- Industrial Typography (100% локально — без Google Fonts CDN) -->
   <link rel="stylesheet" href="./public/fonts/fonts.css?v=1900" />
@@ -45,11 +45,11 @@
   }
   </script>
 
-  <link rel="modulepreload" href="./src/main.js?v=1980" />
+  <link rel="modulepreload" href="./src/main.js?v=2000" />
   <link rel="modulepreload" href="./src/backend.js" />
   <link rel="modulepreload" href="./src/env.js" />
   <link rel="modulepreload" href="./vendor/three.module.min.js" />
-  <link rel="modulepreload" href="./src/scene.js?v=1980" />
+  <link rel="modulepreload" href="./src/scene.js?v=2000" />
   <link rel="modulepreload" href="./vendor/supabase.esm.js" />
 
   <style id="critical-gate-css">
@@ -62,8 +62,8 @@
     .gate-actions{display:flex;flex-direction:column;gap:8px;margin-top:8px}
     #screen-gate .btn-primary{width:100%;min-height:52px;padding:13px 16px;border:0;border-radius:8px;background:#eab308;color:#0d0d0d;font-weight:800;font-size:16px;cursor:pointer}
   </style>
-  <link rel="stylesheet" href="./src/styles.css?v=1980" media="print" onload="this.media='all'" />
-  <noscript><link rel="stylesheet" href="./src/styles.css?v=1980" /></noscript>
+  <link rel="stylesheet" href="./src/styles.css?v=2000" media="print" onload="this.media='all'" />
+  <noscript><link rel="stylesheet" href="./src/styles.css?v=2000" /></noscript>
 </head>
 <body data-ui-stage="1" data-blitz-unlocked="0">
   <!-- 3D Three.js Industrial Workshop Canvas -->
@@ -358,7 +358,22 @@
   <div class="modal-backdrop context-hint-backdrop" id="modal-context-hint" hidden>
     <div class="context-hint-card" role="dialog" aria-modal="true">
       <div class="context-hint-arrow" id="context-hint-arrow" hidden>▲</div>
+      <div class="context-hint-icon" id="context-hint-icon" hidden></div>
       <p class="context-hint-text" id="context-hint-text"></p>
+      <div class="context-hint-structured" id="context-hint-structured" hidden>
+        <div class="ch-row">
+          <span class="ch-k">ЧТО ЭТО</span>
+          <strong class="ch-v" id="context-hint-what"></strong>
+        </div>
+        <div class="ch-row">
+          <span class="ch-k">ЧТО ДАЁТ</span>
+          <span class="ch-v" id="context-hint-gives"></span>
+        </div>
+        <div class="ch-row">
+          <span class="ch-k">ГДЕ СМОТРЕТЬ</span>
+          <span class="ch-v" id="context-hint-where"></span>
+        </div>
+      </div>
       <button type="button" class="btn-primary btn-full context-hint-btn" id="btn-context-hint-ok">Понял</button>
     </div>
   </div>
@@ -607,7 +622,7 @@
   <section class="screen" id="screen-til-challenge" hidden>
     <div class="panel-sheet til-hero-sheet">
       <div class="til-hero-photo-wrap">
-        <img src="./public/sprites/til_avatar.webp?v=1980" alt="Тиль Швайгер" class="til-hero-photo" />
+        <img src="./public/sprites/til_avatar.webp?v=2000" alt="Тиль Швайгер" class="til-hero-photo" />
       </div>
       <p class="til-hero-copy" id="til-challenge-copy">
         Выиграй Тиля и найди пустую бочку, чтобы запаковать друга!
@@ -732,7 +747,7 @@
   <section class="screen" id="screen-sent" hidden>
     <div class="panel-sheet til-hero-sheet sent-sheet">
       <div class="til-hero-photo-wrap">
-        <img src="./public/sprites/til_avatar.webp?v=1980" alt="Тиль Швайгер" class="til-hero-photo" id="sent-play-til-ava" />
+        <img src="./public/sprites/til_avatar.webp?v=2000" alt="Тиль Швайгер" class="til-hero-photo" id="sent-play-til-ava" />
       </div>
       <p class="til-hero-copy" id="sent-text">
         Выиграй Тиля, чтобы получить билет в кино!
@@ -1010,6 +1025,10 @@
         <button type="button" class="icon-close" id="btn-close-trailer" hidden aria-label="Закрыть">✕</button>
       </div>
 
+      <p class="trailer-motivation-copy" id="trailer-motivation-copy">
+        Досмотри трейлер до конца — получи 1/4 билета в кино и полные жизни!
+      </p>
+
       <div class="video-aspect" id="trailer-video-wrap">
         <div id="yt-fallback-slot" class="yt-fallback-slot"></div>
       </div>
@@ -1018,6 +1037,10 @@
         <div class="trailer-progress-track" aria-label="Прогресс просмотра">
           <div class="trailer-progress-fill" id="trailer-progress-fill"></div>
         </div>
+      </div>
+
+      <div class="trailer-reward-flash" id="trailer-reward-flash" hidden>
+        🎟 +1/4 билета и полные ❤️ жизни получены!
       </div>
 
       <button type="button" class="btn-primary btn-full trailer-to-pack-btn" id="btn-trailer-to-pack" disabled>
@@ -1110,20 +1133,70 @@
   <div class="duel-overlay" id="duel-overlay" hidden>
     <!-- Круглые аватарки захвата над 3D-бочками (проекция координат Three.js) -->
     <div class="duel-barrel-badges" id="duel-barrel-badges" aria-hidden="true"></div>
+    <div class="duel-loot-popouts" id="duel-loot-popouts" aria-hidden="true"></div>
 
-    <!-- Мини-панель живого боя: Раунд + Билеты + Жизни + Таймер + Пропуск -->
-    <div class="duel-live-mini-bar" id="duel-live-mini-bar" hidden>
-      <span id="duel-live-mini-status">⚔️ Р1 · 6/6</span>
-      <span class="duel-timer-pill" id="duel-live-timer">7.5с</span>
-      <span class="duel-shards-pill" id="duel-shards-pill" title="Части билета (4/4)">🎟 <strong id="duel-shards-val">0/4</strong></span>
-      <span class="duel-lives-pill" id="duel-lives-pill" title="Жизни в бою">❤️ <strong id="duel-lives-val">6</strong></span>
-      <span class="duel-energy-pill" id="duel-energy-pill" title="Энергия">
-        <span>⚡ <strong id="duel-energy-val">100%</strong></span>
-        <span class="duel-energy-track"><span class="duel-energy-fill" id="duel-energy-fill" style="width:100%"></span></span>
-      </span>
-      <button type="button" class="btn-duel-skip-pill" id="btn-duel-skip-strike" hidden>⏭ ПРОПУСК</button>
-      <button type="button" class="icon-close" id="btn-duel-live-close" aria-label="Выйти из боя">✕</button>
+    <!-- Боевой HUD в стиле Mortal Kombat VS + Шкала до главного приза (5 000) -->
+    <div class="duel-live-mini-bar duel-vs-hud" id="duel-live-mini-bar" hidden>
+      <div class="duel-vs-row">
+        <div class="duel-vs-side is-player" id="duel-vs-player-wrap">
+          <img src="./public/sprites/fighter_1.webp?v=2000" alt="Игрок" class="duel-vs-ava" id="duel-vs-player-ava" />
+          <div class="duel-vs-bars">
+            <div class="duel-vs-hp-line" id="duel-lives-pill" title="Твои жизни в бою">
+              <span class="duel-vs-num">❤️ <strong id="duel-lives-val">6</strong></span>
+              <span class="duel-vs-track"><span class="duel-vs-hp-fill" id="duel-vs-player-hp-fill" style="width:100%"></span></span>
+            </div>
+            <div class="duel-vs-en-line duel-energy-pill" id="duel-energy-pill" title="Энергия">
+              <span class="duel-vs-num">⚡ <strong id="duel-energy-val">100%</strong></span>
+              <span class="duel-energy-track"><span class="duel-energy-fill" id="duel-energy-fill" style="width:100%"></span></span>
+            </div>
+            <div class="duel-vs-loot-row">
+              <span class="duel-shards-pill" id="duel-shards-pill" title="Части билета (4/4)">🎟 <strong id="duel-shards-val">0/4</strong></span>
+              <span class="duel-vs-chip-pill" id="duel-vs-player-chips" title="Фишки">💎 <strong id="duel-vs-player-chips-val">0</strong></span>
+              <span class="duel-vs-pts-pill" id="duel-vs-player-pts" title="Очки в бою">⭐ <strong id="duel-vs-player-pts-val">0</strong></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="duel-vs-center">
+          <span class="duel-vs-round" id="duel-live-mini-status">Р1</span>
+          <span class="duel-vs-mark">VS</span>
+          <span class="duel-timer-pill" id="duel-live-timer">7.5с</span>
+          <div class="duel-vs-ctrl-btns">
+            <button type="button" class="btn-duel-skip-pill" id="btn-duel-skip-strike" hidden>⏭</button>
+            <button type="button" class="icon-close duel-vs-close" id="btn-duel-live-close" aria-label="Выйти из боя">✕</button>
+          </div>
+        </div>
+
+        <div class="duel-vs-side is-opp" id="duel-vs-opp-wrap">
+          <span class="duel-til-rage-badge" id="duel-til-rage-badge" hidden>Тиль в ярости!</span>
+          <div class="duel-vs-bars">
+            <div class="duel-vs-hp-line is-opp" id="duel-vs-opp-hp-line" title="Жизни соперника">
+              <span class="duel-vs-track"><span class="duel-vs-hp-fill is-opp" id="duel-vs-opp-hp-fill" style="width:100%"></span></span>
+              <span class="duel-vs-num"><strong id="duel-vs-opp-lives-val">3</strong> ❤️</span>
+            </div>
+            <div class="duel-vs-en-line is-opp" title="Заряд удара соперника">
+              <span class="duel-energy-track is-opp"><span class="duel-energy-fill is-opp" id="duel-vs-opp-energy-fill" style="width:0%"></span></span>
+              <span class="duel-vs-num" id="duel-vs-opp-name">Тиль ⚡</span>
+            </div>
+            <div class="duel-vs-loot-row is-opp" id="duel-vs-opp-loot">
+              <span class="duel-vs-opp-pill">🎟 <strong id="duel-vs-opp-tickets-val">0</strong></span>
+              <span class="duel-vs-opp-pill">💎 <strong id="duel-vs-opp-chips-val">0</strong></span>
+              <span class="duel-vs-opp-pill">⭐ <strong id="duel-vs-opp-pts-val">0</strong></span>
+            </div>
+          </div>
+          <img src="./public/sprites/til_avatar.webp?v=2000" alt="Тиль" class="duel-vs-ava is-opp" id="duel-vs-opp-ava" />
+        </div>
+      </div>
+
+      <div class="duel-superprize-strip" id="duel-superprize-strip">
+        <span class="duel-superprize-label" id="duel-superprize-label">До суперприза: 0 / 5 000 очков</span>
+        <div class="duel-superprize-track">
+          <div class="duel-superprize-fill" id="duel-superprize-fill" style="width:0%"></div>
+        </div>
+      </div>
     </div>
+
+    <div class="duel-idle-hint" id="duel-idle-hint" hidden>Бей по бочке!</div>
 
     <div class="duel-top-panel" id="duel-top-panel">
       <div class="duel-top-head">
@@ -1161,7 +1234,7 @@
           Отправить ссылку другу
         </button>
         <button type="button" class="btn-secondary btn-full btn-duel-solo-til" id="btn-duel-play-solo">
-          <img src="./public/sprites/til_avatar.webp?v=1980" alt="Тиль Швайгер" class="duel-btn-til-ava" />
+          <img src="./public/sprites/til_avatar.webp?v=2000" alt="Тиль Швайгер" class="duel-btn-til-ava" />
           <span>Играть с Тилем</span>
         </button>
         <button type="button" class="btn-primary btn-full" id="btn-duel-start-go">
@@ -1451,9 +1524,57 @@
     </div>
   </div>
 
+  <!-- Экран победы над Тилем: Забери ОДИН трофей из 3 -->
+  <div class="modal-backdrop trophy-pick-backdrop" id="modal-til-trophy-pick" hidden>
+    <div class="modal-card trophy-pick-card" role="dialog" aria-modal="true" aria-labelledby="trophy-pick-title">
+      <h3 class="trophy-pick-title" id="trophy-pick-title">Ты обыграл Тиля! Забери у него ОДИН трофей:</h3>
+      <div class="trophy-pick-grid" id="trophy-pick-grid">
+        <button type="button" class="trophy-pick-item" id="btn-trophy-pick-ticket" data-trophy-kind="ticket">
+          <span class="tp-ico">🎟</span>
+          <strong class="tp-name">Часть билета</strong>
+          <span class="tp-desc">+1/4 к билету в кино</span>
+          <span class="tp-lock" id="trophy-ticket-lock-badge" hidden>🔒 Нужен друг или 1×1</span>
+        </button>
+        <button type="button" class="trophy-pick-item" id="btn-trophy-pick-chip" data-trophy-kind="chip">
+          <span class="tp-ico">💎</span>
+          <strong class="tp-name">Новая фишка</strong>
+          <span class="tp-desc">Редкая фишка в коллекцию</span>
+        </button>
+        <button type="button" class="trophy-pick-item" id="btn-trophy-pick-points" data-trophy-kind="points">
+          <span class="tp-ico">⭐</span>
+          <strong class="tp-name">+300 очков</strong>
+          <span class="tp-desc">К шкале главного приза</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Кинематографичный переход 0 жизней: затянуло в бочку -> крышка захлопнулась -> небо -->
+  <div class="barrel-trap-cinematic" id="barrel-trap-cinematic" hidden aria-hidden="true">
+    <div class="barrel-tunnel-fx"></div>
+    <div class="barrel-iron-lid"></div>
+    <div class="barrel-trap-caption" id="barrel-trap-caption">Ты в бочке...</div>
+    <div class="barrel-heaven-flash"></div>
+  </div>
+
+  <!-- Повторное поражение в бочке (когда море 1×/24ч уже использовано) -->
+  <div class="modal-backdrop" id="modal-barrel-trapped" hidden>
+    <div class="modal-card til-hero-sheet barrel-trapped-card" role="dialog" aria-modal="true">
+      <div class="til-hero-photo-wrap">
+        <img src="./public/sprites/horror_hero_captive.webp" alt="Заперт в бочке" class="til-hero-photo" />
+      </div>
+      <p class="til-hero-copy" id="barrel-trapped-copy">
+        Тебя закрыли в бочке — позови друга, чтобы он тебя вытащил (+6 жизней)
+      </p>
+      <button type="button" class="btn-primary btn-full til-hero-cta" id="btn-trapped-invite-friend">
+        Позвать друга (+6 ❤️)
+      </button>
+    </div>
+  </div>
+
   <!-- Toast уведомления -->
   <div class="toast" id="toast" hidden></div>
 
-  <script type="module" src="./src/main.js?v=1980"></script>
+  <script type="module" src="./src/main.js?v=2000"></script>
 </body>
 </html>

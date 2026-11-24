@@ -84,6 +84,8 @@ export class WorkshopScene {
     this.activeBarrelCount = 6;
     this.hoveredIndex = -1;
     this.telegraphIndex = -1;
+    this.idleHintPulse = false;
+    this.idleHintOpened = new Set();
     this.interactive = false;
     this.duelDirectClick = false;
     this._lastDirectStrikeAt = 0;
@@ -96,6 +98,7 @@ export class WorkshopScene {
     this.diveTargetIndex = -1;
     this.diveStartPos = new THREE.Vector3();
     this.diveStartLook = new THREE.Vector3();
+    this.pullIntoBarrel = 0;
 
     this.shakeIntensity = 0;
     this.hitstopTimer = 0;
@@ -222,6 +225,17 @@ export class WorkshopScene {
     }
   }
 
+  setIdleHintPulse(active, openedIndices = []) {
+    this.idleHintPulse = Boolean(active);
+    this.idleHintOpened = new Set(Array.isArray(openedIndices) ? openedIndices : []);
+  }
+
+  triggerBarrelPullFX() {
+    this.pullIntoBarrel = 1.0;
+    this.shakeIntensity = Math.max(this.shakeIntensity || 0, 0.45);
+    this.cameraRoll = (Math.random() > 0.5 ? 1 : -1) * 0.14;
+  }
+
   setGoldenMode(enabled) {
     this.goldenMode = Boolean(enabled);
     if (this.mainSpot) {
@@ -251,6 +265,8 @@ export class WorkshopScene {
     this.diveProgress = 0;
     this.diveTargetIndex = targetIndex;
     this.telegraphIndex = -1;
+    this.idleHintPulse = false;
+    this.pullIntoBarrel = 0;
     this.shakeIntensity = 0;
     this.screamerStrobe = 0;
     this.cameraRoll = 0;
@@ -2054,12 +2070,23 @@ export class WorkshopScene {
         this.shakeIntensity = Math.max(0, this.shakeIntensity - dt * 1.15);
       }
 
+      let pullDropY = 0;
+      let pullFwdZ = 0;
+      if (this.pullIntoBarrel > 0.001) {
+        const elapsedPull = 1 - this.pullIntoBarrel;
+        const easePull = elapsedPull * elapsedPull;
+        pullDropY = easePull * 1.45;
+        pullFwdZ = easePull * 2.55;
+        this.pullIntoBarrel = Math.max(0, this.pullIntoBarrel - dt * 0.92);
+      }
+
       this.camera.position.set(
         this.baseCamPos.x + this.swayCurrent.x + breathX + sx,
-        this.baseCamPos.y + this.swayCurrent.y + breathY + sy,
-        this.baseCamPos.z
+        this.baseCamPos.y + this.swayCurrent.y + breathY + sy - pullDropY,
+        this.baseCamPos.z - pullFwdZ
       );
       this.currentLookAt.copy(this.baseLookAt);
+      if (pullDropY > 0) this.currentLookAt.y -= pullDropY * 0.95;
       this.camera.lookAt(this.currentLookAt);
       if (Math.abs(this.cameraRoll) > 0.0005) {
         this.camera.rotation.z += this.cameraRoll;
@@ -2337,6 +2364,7 @@ export class WorkshopScene {
       }
 
       const isTelegraph = b.index === this.telegraphIndex && !b.struck;
+      const isIdleGlow = !isTelegraph && this.idleHintPulse && this.interactive && b.group.visible && !b.struck && !this.idleHintOpened.has(b.index);
       if (isTelegraph) {
         b.ringMesh.material.color.setHex(0xef4444);
         if (!b.lidFlying) b.lidRattle = Math.max(b.lidRattle || 0, 0.25);
@@ -2347,7 +2375,9 @@ export class WorkshopScene {
         ? 0.55 + Math.abs(Math.sin(elapsed * 11)) * 0.4
         : b.index === this.hoveredIndex && this.interactive
           ? 0.68
-          : 0.0;
+          : isIdleGlow
+            ? 0.28 + Math.abs(Math.sin(elapsed * 4.5)) * 0.42
+            : 0.0;
       b.ringMesh.material.opacity += (targetRingOp - b.ringMesh.material.opacity) * Math.min(1, dt * 10);
 
       if (b.lidFlying) {

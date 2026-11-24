@@ -108,6 +108,29 @@ function pickRandomHorrorPortrait() {
     HORROR_FALLBACK_PORTRAITS[0]
   );
 }
+const FIGHTER_AVATARS = [
+  './public/sprites/fighter_1.webp?v=2000',
+  './public/sprites/fighter_2.webp?v=2000',
+  './public/sprites/fighter_3.webp?v=2000',
+  './public/sprites/fighter_4.webp?v=2000',
+  './public/sprites/fighter_5.webp?v=2000',
+  './public/sprites/fighter_6.webp?v=2000',
+];
+function getPlayerAvatarUrl(tgUser = null) {
+  const tgPhoto = String(tgUser?.photoUrl || tgUser?.photo_url || state?.profile?.avatarUrl || '').trim();
+  if (tgPhoto && /^(https?:\/\/|\.\/public\/sprites\/fighter_)/i.test(tgPhoto)) {
+    return tgPhoto;
+  }
+  try {
+    const saved = String(localStorage.getItem('bochka_fighter_avatar_v20') || '').trim();
+    if (saved && FIGHTER_AVATARS.includes(saved)) return saved;
+    const picked = FIGHTER_AVATARS[Math.floor(Math.random() * FIGHTER_AVATARS.length)] || FIGHTER_AVATARS[0];
+    localStorage.setItem('bochka_fighter_avatar_v20', picked);
+    return picked;
+  } catch {
+    return FIGHTER_AVATARS[0];
+  }
+}
 const RANDOM_PACK_SCREAMERS = [
   'saw_scream',
   'lid_blast',
@@ -134,13 +157,23 @@ const KP_MIN_AWAY_SEC = 3.5;
 const TRAILER_INTRO_LOCK_SEC = 15.0;
 const TRAILER_UNLOCK_SEC = 15.0;
 const HINT_STORAGE_KEYS = {
-  airDepleted: 'bochka_hint_air_v198',
-  firstChip: 'bochka_hint_chip_v198',
-  firstPoints: 'bochka_hint_points_v198',
+  airDepleted: 'bochka_hint_air_v20',
+  firstTicket: 'bochka_hint_ticket_v20',
+  firstChip: 'bochka_hint_chip_v20',
+  firstPoints: 'bochka_hint_points_v20',
+  firstEnergy: 'bochka_hint_energy_v20',
+  firstLife: 'bochka_hint_life_v20',
 };
 
 function loadHintsShownState() {
-  const out = { airDepleted: false, firstChip: false, firstPoints: false };
+  const out = {
+    airDepleted: false,
+    firstTicket: false,
+    firstChip: false,
+    firstPoints: false,
+    firstEnergy: false,
+    firstLife: false,
+  };
   try {
     for (const [k, storageKey] of Object.entries(HINT_STORAGE_KEYS)) {
       out[k] = localStorage.getItem(storageKey) === '1';
@@ -298,12 +331,20 @@ const state = {
     introLocked: false,
     introWatchedSec: 0,
     maxTime: 0,
+    honestWatchedSec: 0,
+    prevVkTime: 0,
+    lastTickWallMs: 0,
+    trailerWatchedFull: false,
+    fullWatchRewarded: false,
+    fullWatchInFlight: false,
+    antiSeekRejectedCount: 0,
+    lastAntiSeekToastAt: 0,
     unlocked40: false,
     muted: false,
     vkReady: false,
     vkState: '',
     vkTime: 0,
-    vkDuration: 0,
+    vkDuration: 91.8,
     vkMuted: false,
     vkVolume: 1,
     vkAutoplaySoundBlocked: false,
@@ -388,7 +429,7 @@ async function ensureSceneReady() {
   if (sceneInitPromise) return sceneInitPromise;
   sceneInitPromise = (async () => {
     try {
-      const { WorkshopScene } = await import('./scene.js?v=1980');
+      const { WorkshopScene } = await import('./scene.js?v=2000');
       if (scene) return scene;
       const canvas = document.getElementById('workshop-canvas');
       scene = new WorkshopScene(canvas, {
@@ -424,13 +465,21 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=1980'));
+    const mod = duelModCache || (await import('./duel.js?v=2000'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
       scene,
       audio,
       getTgUser: () => state.tg?.user || null,
+      getPlayerAvatar: () => getPlayerAvatarUrl(state.tg?.user),
+      getProfileStats: () => ({
+        lives: Number(state.profile?.lives || 0),
+        premierePoints: Number(state.profile?.premierePoints || 0),
+        ticketShards: Number(state.profile?.ticketShards || 0),
+        friendsBrought: Number(state.profile?.friendsBrought || 0),
+        chipsCount: Number(state.profile?.chipsCount || 0),
+      }),
       getTicketShards: () => Number(state.profile?.ticketShards || 0),
       canUseOceanRefill: () => canClaimOceanRefillToday(),
       onOpenPackForLives: () => {
@@ -458,6 +507,7 @@ async function ensureDuelReady() {
       },
       onTriggerScreamerFx: (durMs, variant = null) => triggerMiniScreamer(variant, durMs),
       onCollectChipFromBarrel: () => {
+        state.profile.chipsCount = Number(state.profile?.chipsCount || 0) + 1;
         rollRareMovieCardLazy('duel_barrel')
           .then((res) => {
             if (res?.dropped && res?.trophy?.title) {
@@ -475,20 +525,22 @@ async function ensureDuelReady() {
         }
         updatePremiereBarsUI();
         refreshHudLevelLabel();
+        syncSuperPrizeRatingBarUI();
       },
       onToast: (msg) => showToast(msg),
       onOpenInviteShare: () => pushDuelToFriends(),
       onOpenGoldenFork: () => openGoldenTicketForkModal(),
       onExitToHub: () => showScreen('modeA'),
-      onDuelDefeatToTil: ({ roomId, solo } = {}) => {
-        state.oceanTapper.returnDuel = { roomId: roomId || '', solo: Boolean(solo) };
-        duelCtrl?.leaveRoom(false);
-        triggerOceanEasterEggScene();
+      onDefeatCinematic: ({ oceanAllowed, roomId, solo } = {}) => {
+        playBarrelDefeatCinematic({ oceanAllowed, roomId, solo });
       },
-      onFlyRating: ({ count = 3, label = '⭐ +БАЛЛЫ', barrelIndex = -1 } = {}) => {
+      onDuelDefeatToTil: ({ roomId, solo } = {}) => {
+        playBarrelDefeatCinematic({ oceanAllowed: canClaimOceanRefillToday(), roomId, solo });
+      },
+      onFlyRating: ({ type = 'rating', count = 3, label = '⭐ +БАЛЛЫ', barrelIndex = -1 } = {}) => {
         const pos = barrelIndex >= 0 ? scene?.projectBarrelScreenPos?.(barrelIndex, 1.05) : null;
         flyRewardToHud({
-          type: 'rating',
+          type,
           count,
           label,
           startX: pos?.visible ? pos.x : null,
@@ -496,10 +548,10 @@ async function ensureDuelReady() {
         });
         syncSuperPrizeRatingBarUI();
       },
-      onFlyLife: ({ count = 1, label = '+1 ❤️', barrelIndex = -1 } = {}) => {
+      onFlyLife: ({ type = 'lives', count = 1, label = '+1 ❤️', barrelIndex = -1 } = {}) => {
         const pos = barrelIndex >= 0 ? scene?.projectBarrelScreenPos?.(barrelIndex, 1.05) : null;
         flyRewardToHud({
-          type: 'lives',
+          type,
           count,
           label,
           startX: pos?.visible ? pos.x : null,
@@ -516,7 +568,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=1980'));
+  const mod = duelModCache || (await import('./duel.js?v=2000'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
@@ -524,7 +576,7 @@ async function createWatchChannelLazy(barrelId, opts) {
 let trophiesModCache = null;
 async function loadTrophiesMod() {
   if (!trophiesModCache) {
-    trophiesModCache = await import('./trophies.js?v=1940');
+    trophiesModCache = await import('./trophies.js?v=2000');
   }
   return trophiesModCache;
 }
@@ -1044,6 +1096,9 @@ function mergeFreshProfile(freshProfile, { preserveProgress = true } = {}) {
       ? Math.max(0, Math.min(3, Number(freshProfile.ticketShards)))
       : keptShards;
   merged.hasBroadcastBarrel = Boolean(freshProfile.hasBroadcastBarrel || prev.hasBroadcastBarrel);
+  merged.trailerWatchedFull = Boolean(freshProfile.trailerWatchedFull || prev.trailerWatchedFull);
+  merged.dailySharePoints = Math.max(0, Number(freshProfile.dailySharePoints ?? prev.dailySharePoints ?? 0));
+  merged.avatarUrl = freshProfile.avatarUrl || prev.avatarUrl || '';
   if (!merged.hasBroadcastBarrel && Number(merged.packedCount || 0) <= 0) {
     merged.seedFirstPackDone = false;
   }
@@ -1057,6 +1112,7 @@ function mergeFreshProfile(freshProfile, { preserveProgress = true } = {}) {
     merged.lives = capEarlyLivesIfNoRealFriends(merged.lives);
   }
   state.profile = merged;
+  duelCtrl?.syncFromProfile?.(state.profile);
   saveLocalV9Flags();
   syncTicketShardsUI();
 }
@@ -1267,7 +1323,7 @@ function capEarlyLivesIfNoRealFriends(desiredLives) {
   const realFriends = Math.max(0, Math.round(Number(state.profile?.friendsBrought || 0)));
   const clean = Math.max(0, Math.round(Number(desiredLives || 0)));
   // v11.0: Пока реальные друзья ещё не зашли по ссылке, максимум 3 ❤️ жизни (5 быть не может!)
-  return realFriends > 0 ? clean : Math.min(3, clean);
+  return clean;
 }
 
 function consumePendingCinemaTicketAndReward() {
@@ -1330,6 +1386,17 @@ function syncSuperPrizeRatingBarUI() {
     lbBrk.textContent = pct >= 100
       ? `🏆 ШКАЛА ЗАПОЛНЕНА! Ты в финале Супер-приза (👥 Друзей: ${friends} · ⭐ Баллов: ${pts})`
       : `👥 Друзья в игре: ${friends} (+20% каждый) · ⭐ Из бочек: ${pts} (добери 100% для Супер-приза!)`;
+  }
+
+  const spLabel = document.getElementById('duel-superprize-label');
+  const spFill = document.getElementById('duel-superprize-fill');
+  const SUPERPRIZE_TARGET = 5000;
+  const spPct = Math.min(100, Math.max(0, (pts / SUPERPRIZE_TARGET) * 100));
+  if (spLabel) {
+    spLabel.textContent = `До суперприза: ${pts.toLocaleString('ru-RU')} / 5 000 очков`;
+  }
+  if (spFill) {
+    spFill.style.width = `${spPct.toFixed(1)}%`;
   }
 }
 
@@ -1457,22 +1524,35 @@ function applyOwnNameBarrelBonus(barrelIndex) {
  * v11.0: Сочная анимация полёта наград (❤️ жизни, 🟨 удары, ⭐ рейтинг, 💨 O₂) из центра/бочки прямо в HUD со звуком «БАХ!»
  */
 function flyRewardToHud({ type = 'lives', count = 3, label = '+1 ❤️', startX = null, startY = null, onStepImpact = null } = {}) {
+  const duelBar = document.getElementById('duel-live-mini-bar');
+  const duelOpen = Boolean(duelBar && !duelBar.hidden);
+  const duelTargetMap = {
+    ticket: 'duel-shards-pill',
+    chip: 'duel-vs-player-chips',
+    points: 'duel-vs-player-pts',
+    rating: 'duel-vs-player-pts',
+    energy: 'duel-energy-pill',
+    lives: 'duel-lives-pill',
+  };
   const targetId =
     type === 'strikes'
       ? 'attempts-squares'
       : type === 'air'
         ? 'hud-air-val'
-        : type === 'rating'
+        : type === 'rating' || type === 'points'
           ? 'hud-pts-pill'
           : 'hud-lives-pill';
-  const duelTargetId = type === 'rating' ? 'duel-shards-pill' : type === 'lives' ? 'duel-lives-pill' : '';
+  const duelTargetId = duelTargetMap[type] || '';
   const fallbackId =
     type === 'lives'
       ? 'top-lives-pill'
-      : type === 'rating'
+      : type === 'rating' || type === 'points'
         ? 'top-rating-pill'
         : 'nav-leaderboard';
-  let targetEl = document.getElementById(targetId);
+  let targetEl = duelOpen && duelTargetId ? document.getElementById(duelTargetId) : null;
+  if (!targetEl || targetEl.getBoundingClientRect().width === 0) {
+    targetEl = document.getElementById(targetId);
+  }
   if ((!targetEl || targetEl.getBoundingClientRect().width === 0) && duelTargetId) {
     targetEl = document.getElementById(duelTargetId);
   }
@@ -2072,8 +2152,27 @@ async function bootstrap() {
         for (const k of Object.values(HINT_STORAGE_KEYS)) {
           try { localStorage.removeItem(k); } catch { /* ignore */ }
         }
-        state.hintsShown = { airDepleted: false, firstChip: false, firstPoints: false };
+        state.hintsShown = {
+          airDepleted: false,
+          firstTicket: false,
+          firstChip: false,
+          firstPoints: false,
+          firstEnergy: false,
+          firstLife: false,
+        };
       },
+      getPlayerAvatar: () => getPlayerAvatarUrl(state.tg?.user),
+      getTrailerDebug: () => ({
+        open: Boolean(state.trailer?.open),
+        honestWatchedSec: Number(state.trailer?.honestWatchedSec || 0),
+        prevVkTime: Number(state.trailer?.prevVkTime || 0),
+        vkDuration: Number(state.trailer?.vkDuration || 91.8),
+        trailerWatchedFull: Boolean(state.profile?.trailerWatchedFull || state.trailer?.fullWatchRewarded),
+        fullWatchRewarded: Boolean(state.trailer?.fullWatchRewarded),
+        antiSeekRejectedCount: Number(state.trailer?.antiSeekRejectedCount || 0),
+        unlocked: Boolean(state.trailer?.unlocked),
+      }),
+      simulateVkTimeUpdate: (sec, dur = 91.8) => handleVkTrailerTimeProgress(Number(sec || 0), Number(dur || 91.8), false),
     };
   }
 
@@ -2435,23 +2534,67 @@ function showLifeLostPill(durationMs = 1750) {
   }, durationMs);
 }
 
-function showContextHintModal({ kind, text, buttonText = 'Дальше', highlightAir = false, onClose = null } = {}) {
+function showContextHintModal({
+  kind,
+  icon = '',
+  text = '',
+  what = '',
+  gives = '',
+  where = '',
+  spotlightId = '',
+  buttonText = 'Понял',
+  highlightAir = false,
+  onClose = null,
+} = {}) {
   const modal = document.getElementById('modal-context-hint');
   const txtEl = document.getElementById('context-hint-text');
   const btnEl = document.getElementById('btn-context-hint-ok');
   const arrowEl = document.getElementById('context-hint-arrow');
+  const iconEl = document.getElementById('context-hint-icon');
+  const structEl = document.getElementById('context-hint-structured');
+  const whatEl = document.getElementById('context-hint-what');
+  const givesEl = document.getElementById('context-hint-gives');
+  const whereEl = document.getElementById('context-hint-where');
   const hudSlim = document.getElementById('hud-slim');
   if (!modal || !txtEl || !btnEl) {
     onClose?.();
     return;
   }
+  document.querySelectorAll('.is-hud-spotlight').forEach((n) => n.classList.remove('is-hud-spotlight'));
+
   state.contextHint = {
     open: true,
     kind: String(kind || ''),
     text: String(text || ''),
     onClose: typeof onClose === 'function' ? onClose : null,
   };
+
+  const hasStructured = Boolean(what || gives || where);
+  if (iconEl) {
+    if (icon) {
+      iconEl.textContent = icon;
+      iconEl.removeAttribute('hidden');
+    } else {
+      iconEl.textContent = '';
+      iconEl.setAttribute('hidden', '');
+    }
+  }
+  if (structEl && whatEl && givesEl && whereEl) {
+    if (hasStructured) {
+      whatEl.textContent = what;
+      givesEl.textContent = gives;
+      whereEl.textContent = where;
+      structEl.removeAttribute('hidden');
+    } else {
+      structEl.setAttribute('hidden', '');
+    }
+  }
   txtEl.textContent = state.contextHint.text;
+  if (hasStructured && !state.contextHint.text) {
+    txtEl.setAttribute('hidden', '');
+  } else {
+    txtEl.removeAttribute('hidden');
+  }
   btnEl.textContent = buttonText;
   if (arrowEl) {
     if (highlightAir) arrowEl.removeAttribute('hidden');
@@ -2459,6 +2602,10 @@ function showContextHintModal({ kind, text, buttonText = 'Дальше', highlig
   }
   hudSlim?.classList.toggle('is-hint-highlight', Boolean(highlightAir));
   document.body.classList.toggle('is-air-hint-active', Boolean(highlightAir));
+  document.body.classList.toggle('is-duel-spotlight-active', Boolean(spotlightId));
+  if (spotlightId) {
+    document.getElementById(spotlightId)?.classList.add('is-hud-spotlight');
+  }
   modal.dataset.hint = state.contextHint.kind || '';
   modal.removeAttribute('hidden');
   Haptics.light();
@@ -2475,7 +2622,10 @@ function dismissContextHintModal() {
   }
   state.contextHint = { open: false, kind: '', text: '', onClose: null };
   hudSlim?.classList.remove('is-hint-highlight');
-  document.body.classList.remove('is-air-hint-active');
+  document.body.classList.remove('is-air-hint-active', 'is-duel-spotlight-active');
+  document.querySelectorAll('.is-hud-spotlight').forEach((n) => n.classList.remove('is-hud-spotlight'));
+  document.getElementById('context-hint-icon')?.setAttribute('hidden', '');
+  document.getElementById('context-hint-structured')?.setAttribute('hidden', '');
   if (modal) delete modal.dataset.hint;
   document.getElementById('context-hint-arrow')?.setAttribute('hidden', '');
   modal?.setAttribute('hidden', '');
@@ -2483,27 +2633,70 @@ function dismissContextHintModal() {
   cb?.();
 }
 
+const DUEL_DISCOVERY_CARDS = {
+  ticket: {
+    stateKey: 'firstTicket',
+    icon: '🎟',
+    text: 'Первая часть билета в кино!',
+    what: 'Часть билета (1/4)',
+    gives: 'Собери 4/4 и забери настоящий билет в кинотеатр или подари другу',
+    where: 'Счётчик 🎟 в левом верхнем углу VS-панели',
+    spotlightId: 'duel-shards-pill',
+  },
+  chip: {
+    stateKey: 'firstChip',
+    icon: '💎',
+    text: 'Найдена коллекционная фишка цеха!',
+    what: 'Коллекционная фишка (💎)',
+    gives: 'Открывает Зал славы и дуэли 1×1 со ставкой на фишки',
+    where: 'Счётчик 💎 в VS-панели и разделе «Зал славы»',
+    spotlightId: 'duel-vs-player-chips',
+  },
+  points: {
+    stateKey: 'firstPoints',
+    icon: '⭐',
+    text: 'Первые очки к суперпризу!',
+    what: 'Очки суперприза (⭐)',
+    gives: 'Заполняют шкалу до 5 000 очков на закрытую премьеру 17 декабря',
+    where: 'Золотая полоса «До суперприза» прямо под VS-панелью',
+    spotlightId: 'duel-superprize-strip',
+  },
+  energy: {
+    stateKey: 'firstEnergy',
+    icon: '⚡',
+    text: 'Заряд энергии для ударов!',
+    what: 'Энергия удара (⚡)',
+    gives: 'Восстанавливает +50% заряда для серии быстрых ударов по бочкам',
+    where: 'Жёлтая полоса ⚡ под твоей шкалой жизней',
+    spotlightId: 'duel-energy-pill',
+  },
+  life: {
+    stateKey: 'firstLife',
+    icon: '❤️',
+    text: 'Дополнительная жизнь в бою!',
+    what: 'Запас жизни (❤️)',
+    gives: 'Спасает от скримеров (-2/-3 ❤️) и держит тебя в бою дольше',
+    where: 'Красная полоса ❤️ рядом с твоим аватаром',
+    spotlightId: 'duel-lives-pill',
+  },
+};
+
 function maybeShowDuelDiscoveryHint(kind) {
   if (state.contextHint?.open) return false;
-  if (kind === 'chip' && !state.hintsShown.firstChip) {
-    showContextHintModal({
-      kind: 'firstChip',
-      text: 'Ты нашел фишку! Собирай фишки для коллекции и призов.',
-      buttonText: 'Дальше',
-      highlightAir: false,
-    });
-    return true;
-  }
-  if (kind === 'points' && !state.hintsShown.firstPoints) {
-    showContextHintModal({
-      kind: 'firstPoints',
-      text: 'Собирай очки и получи суперприз!',
-      buttonText: 'Дальше',
-      highlightAir: false,
-    });
-    return true;
-  }
-  return false;
+  const spec = DUEL_DISCOVERY_CARDS[kind];
+  if (!spec || state.hintsShown?.[spec.stateKey]) return false;
+  showContextHintModal({
+    kind: spec.stateKey,
+    icon: spec.icon,
+    text: spec.text,
+    what: spec.what,
+    gives: spec.gives,
+    where: spec.where,
+    spotlightId: spec.spotlightId,
+    buttonText: 'Понял',
+    highlightAir: false,
+  });
+  return true;
 }
 
 const PAUSED_SCENE_SCREENS = new Set(['gate', 'tilChallenge', 'pack', 'sent', 'finale', 'pass', 'ocean']);
@@ -3235,7 +3428,10 @@ async function startViralFriendRound(pack) {
     pack?.isBroadcast || state.tg?.broadcastLinkType === 'pr' || state.tg?.broadcastLinkType === 'bl'
   );
   if (pack?.id && !isIncomingBroadcast) {
-    const lockRes = await claimPersonalBarrelOpen(pack.id, state.tg?.user).catch(() => null);
+    const viewerForPersonalOpen = state.tg?.user
+    ? { ...state.tg.user, photoUrl: state.tg.user.photoUrl || getPlayerAvatarUrl(state.tg.user) }
+    : { id: 'web_guest', name: 'Игрок', photoUrl: getPlayerAvatarUrl(null) };
+  const lockRes = await claimPersonalBarrelOpen(pack.id, viewerForPersonalOpen).catch(() => null);
     if (lockRes?.ok) {
       state.lastPersonalLockEvent = lockRes;
       if (lockRes.inheritedRootCode) {
@@ -3287,8 +3483,9 @@ async function startViralFriendRound(pack) {
   const voiceUrl = pack?.voiceUrl || '';
   await audio.setSenderVoiceUrl(voiceUrl);
 
-  // v8.0: Жёсткая защита от повторной отправки обычной бочки тому же другу (social_connections)
-  if (pack?.senderUid) {
+  // v8.0/v20.0: Жёсткая защита от повторной отправки обычной бочки тому же другу (social_connections)
+  // Не дёргаем повторно checkFriendDuplicateConnection, если этот визит уже обработан как brand-new через claimPersonalBarrelOpen
+  if (pack?.senderUid && state.lastPersonalLockEvent?.ok !== true) {
     checkFriendDuplicateConnection(pack.senderUid, state.tg?.user, { senderTgId: pack?.senderTgId || '' })
       .then((dup) => {
         if (dup?.duplicate) {
@@ -3899,6 +4096,107 @@ function checkSecret1997Combo(index, worldPoint, alreadyStruck) {
 
   state.easterCombo = { stage: 0, lastAt: 0, knocks: 0 };
   return false;
+}
+
+let defeatCinematicActive = false;
+
+/**
+ * Единая кинематографичная сцена поражения при 0 ❤️:
+ * скрежет + затягивание в бочку (900 мс) -> тяжёлая крышка + «Ты в бочке...» -> белая вспышка (2.5 с) -> Море или Попап друга.
+ */
+function playBarrelDefeatCinematic({ oceanAllowed = true, roomId = '', solo = true } = {}) {
+  if (defeatCinematicActive) return;
+  defeatCinematicActive = true;
+  if (oceanAllowed) {
+    state.oceanTapper.returnDuel = { roomId: roomId || '', solo: Boolean(solo) };
+  }
+  stopAirTimer();
+  scene?.setInteractive?.(false);
+  audio.stopMuffledVoiceLoop?.();
+  audio.playBarrelPullScrape?.();
+  scene?.triggerBarrelPullFX?.();
+  Haptics.heavy();
+
+  const overlay = document.getElementById('barrel-trap-cinematic');
+  const captionEl = document.getElementById('barrel-trap-caption');
+  if (captionEl) captionEl.textContent = 'Ты в бочке...';
+
+  if (overlay) {
+    overlay.classList.remove('is-lid-slammed', 'is-heaven-flash', 'is-pulling');
+    overlay.removeAttribute('hidden');
+    void overlay.offsetWidth;
+    overlay.classList.add('is-pulling');
+  }
+
+  window.setTimeout(() => {
+    audio.playLidSlamShut?.();
+    Haptics.error();
+    overlay?.classList.add('is-lid-slammed');
+  }, 900);
+
+  window.setTimeout(() => {
+    overlay?.classList.add('is-heaven-flash');
+  }, 1900);
+
+  window.setTimeout(() => {
+    overlay?.classList.remove('is-pulling', 'is-lid-slammed', 'is-heaven-flash');
+    overlay?.setAttribute('hidden', '');
+    defeatCinematicActive = false;
+    duelCtrl?.leaveRoom?.(false);
+    if (oceanAllowed) {
+      triggerOceanEasterEggScene();
+    } else {
+      const trappedModal = document.getElementById('modal-barrel-trapped');
+      trappedModal?.removeAttribute('hidden');
+    }
+  }, 2500);
+}
+
+/**
+ * Пункт 9: Массовая рассылка (8с антиспам, 15/день): +2 ❤️ каждый раз + +50 ⭐ (до 750 ⭐/день).
+ */
+async function applyShareBonusReward({ showFeedback = true } = {}) {
+  const bonus = await claimShareBonusLife(state.tg?.user).catch(() => null);
+  if (!bonus) return null;
+  if (typeof bonus.lives === 'number') {
+    state.profile.lives = Math.max(0, bonus.lives);
+  }
+  if (typeof bonus.premierePoints === 'number') {
+    state.profile.premierePoints = Math.max(0, bonus.premierePoints);
+  }
+  if (typeof bonus.rawSharesToday === 'number') {
+    state.profile.rawSharesToday = bonus.rawSharesToday;
+  }
+  if (typeof bonus.dailySharePoints === 'number') {
+    state.profile.dailySharePoints = bonus.dailySharePoints;
+  }
+  if (duelCtrl) {
+    duelCtrl.syncFromProfile?.(state.profile);
+  }
+  updatePremiereBarsUI();
+  syncSuperPrizeRatingBarUI();
+
+  if (showFeedback) {
+    if (bonus.granted) {
+      const lAdd = Number(bonus.livesAdded || 2);
+      const pAdd = Number(bonus.pointsAdded || 0);
+      if (pAdd > 0) {
+        showToast(`🛢 +${lAdd} ❤️ и +${pAdd} ⭐ за рассылку (${bonus.rawSharesToday || 1}/${bonus.dailyLimit || 15})!`);
+      } else if (bonus.pointsCapped) {
+        showToast(`❤️ +${lAdd} жизни за рассылку! Дневной лимит +750 ⭐ взят — за нового друга ещё +500 ⭐ и +6 ❤️.`);
+      } else {
+        showToast(`❤️ +${lAdd} жизни за рассылку (${bonus.rawSharesToday || 1}/${bonus.dailyLimit || 15})!`);
+      }
+      audio.playRewardChime?.();
+      Haptics.success();
+    } else if (bonus.reason === 'cooldown') {
+      const wait = Math.max(1, Number(bonus.retryAfterSec || 8));
+      showToast(`⏳ Подожди ${wait} сек перед следующей наградой за рассылку.`);
+    } else if (bonus.reason === 'daily_limit_reached') {
+      showToast(`🛡 Дневной лимит ${bonus.dailyLimit || 15} отправок исчерпан — зови нового друга открыть бочку (+500 ⭐ и +6 ❤️)!`);
+    }
+  }
+  return bonus;
 }
 
 async function triggerOceanEasterEggScene() {
@@ -6667,7 +6965,7 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
     const prevLives = Math.max(0, Number(state.profile.lives || 0));
     const nextLives = wasLifeRefill
       ? Math.max(6, prevLives + 6)
-      : capEarlyLivesIfNoRealFriends(Math.max(3, prevLives + 3));
+      : Math.max(3, prevLives);
     state.profile.lives = nextLives;
     if (wasLifeRefill) {
       duelCtrl?.refillFromTil?.();
@@ -6704,6 +7002,9 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
       startParam: prepShare?.startParam || `${linkType}_${created.id}`,
       prepareCalled: true,
     };
+    if (shareOutcome?.ok !== false) {
+      await applyShareBonusReward({ showFeedback: true }).catch(() => null);
+    }
     updatePremiereBarsUI();
     refreshHudLevelLabel();
 
@@ -6824,20 +7125,8 @@ async function grantShareLifeOnceForCurrentBarrel() {
   try { localStorage.setItem('bochka_photo_barrel_sent', '1'); } catch { /* ignore */ }
   revealStep4TrailerBonusBox(true);
   syncStep4QuestRowUI();
-
-  if (state.pack.shareLifeClaimedForUrl === state.pack.lastShareUrl) return;
   state.pack.shareLifeClaimedForUrl = state.pack.lastShareUrl;
-
-  const bonus = await claimShareBonusLife(state.tg?.user);
-  state.profile.lives = bonus.lives;
-  state.profile.rawSharesToday = bonus.rawSharesToday;
-  updatePremiereBarsUI();
-
-  if (bonus.granted > 0) {
-    showToast(t('shareLifeGrantedToast'));
-  } else if (bonus.capped) {
-    showToast(t('shareLifeCappedToast'));
-  }
+  await applyShareBonusReward({ showFeedback: true });
 }
 
 /* ============================================================================
@@ -7522,6 +7811,116 @@ function clearTrailerTimers() {
   }
 }
 
+async function grantTrailerFullWatchReward() {
+  if (state.trailer.fullWatchRewarded || state.trailer.fullWatchInFlight) return;
+  state.trailer.fullWatchInFlight = true;
+  try {
+    const res = await awardTicketShardServer(state.tg?.user, 'trailer_full').catch(() => null);
+    recordFunnelEvent('trailer_watched_full', state.tg?.user).catch(() => {});
+    state.trailer.fullWatchRewarded = true;
+    state.trailer.unlocked40 = true;
+    state.profile.trailerWatchedFull = true;
+
+    if (res?.ok) {
+      state.profile.lives = Math.max(6, Number(res.lives ?? state.profile?.lives ?? 6));
+      if (res.shards != null) {
+        state.profile.ticketShards = res.mergedTicket ? 0 : Math.max(0, Math.min(3, Number(res.shards)));
+      }
+      if (res.premierePoints != null) {
+        state.profile.premierePoints = Math.max(
+          Number(state.profile?.premierePoints || 0),
+          Number(res.premierePoints)
+        );
+      }
+    } else {
+      state.profile.lives = Math.max(6, Number(state.profile?.lives || 0));
+      const curSh = Number(state.profile?.ticketShards || 0);
+      if (curSh < 2) state.profile.ticketShards = curSh + 1;
+    }
+
+    duelCtrl?.syncFromProfile?.(state.profile);
+    saveLocalV9Flags();
+    syncTicketShardsUI({ pulse: true });
+    updatePremiereBarsUI();
+    syncSuperPrizeRatingBarUI();
+
+    const flash = document.getElementById('trailer-reward-flash');
+    if (flash) {
+      flash.textContent = res?.reason === 'solo_cap_reached'
+        ? '⭐ +500 очков (лимит соло 2/4) и полные ❤️ жизни получены!'
+        : '🎟 +1/4 билета и полные ❤️ жизни получены!';
+      flash.removeAttribute('hidden');
+    }
+    audio.playRewardChime?.();
+    Haptics.success();
+    syncTrailerIntroLockUI(Math.max(TRAILER_INTRO_LOCK_SEC, Number(state.trailer.honestWatchedSec || 0)));
+  } finally {
+    state.trailer.fullWatchInFlight = false;
+  }
+}
+
+function handleVkTrailerTimeProgress(curTime, vkDur = 91.8, isEnded = false) {
+  if (!state.trailer.modalOpen && !isEnded) return { accepted: false, reason: 'closed' };
+  const dur = Number(vkDur) > 10 ? Number(vkDur) : (Number(state.trailer.vkDuration) || 91.8);
+  state.trailer.vkDuration = dur;
+  const t = Math.max(0, Number(curTime) || 0);
+  state.trailer.vkTime = t;
+
+  const prev = Number(state.trailer.prevVkTime || 0);
+  const nowMs = performance.now();
+  const wallSec = state.trailer.lastTickWallMs ? Math.max(0.05, (nowMs - state.trailer.lastTickWallMs) / 1000) : 1.0;
+  state.trailer.lastTickWallMs = nowMs;
+  const delta = t - prev;
+
+  if (prev === 0 && Number(state.trailer.honestWatchedSec || 0) === 0 && t > 3.0) {
+    state.trailer.antiSeekRejectedCount = (state.trailer.antiSeekRejectedCount || 0) + 1;
+    state.trailer.prevVkTime = t;
+    return { accepted: false, reason: 'seek_jump', delta };
+  }
+  if (delta > 3.0) {
+    state.trailer.antiSeekRejectedCount = (state.trailer.antiSeekRejectedCount || 0) + 1;
+    state.trailer.prevVkTime = t;
+    if (Date.now() - (state.trailer.lastAntiSeekToastAt || 0) > 4000) {
+      state.trailer.lastAntiSeekToastAt = Date.now();
+      showToast('⏪ Перемотка не засчитывается — досмотри трейлер до конца!');
+    }
+    return { accepted: false, reason: 'seek_jump', delta };
+  }
+
+  if (delta > 0 && delta <= 3.0) {
+    const creditCap = Math.min(delta, wallSec + 1.5);
+    const buckets = state.trailer.watchedBuckets || (state.trailer.watchedBuckets = {});
+    const bIdx = Math.floor(t);
+    const already = Number(buckets[bIdx] || 0);
+    const addable = Math.max(0, Math.min(creditCap, Math.max(0, 1.05 - already)));
+    if (addable > 0) {
+      buckets[bIdx] = Math.min(1.05, already + addable);
+      state.trailer.honestWatchedSec = Math.min(dur, Number(state.trailer.honestWatchedSec || 0) + addable);
+    }
+    state.trailer.maxTime = Math.max(Number(state.trailer.maxTime || 0), state.trailer.honestWatchedSec);
+  }
+  state.trailer.prevVkTime = t;
+
+  const unlockThreshold = Math.max(82.6, Math.floor(dur * 0.90));
+  syncTrailerIntroLockUI(Math.max(Number(state.trailer.introWatchedSec || 0), state.trailer.honestWatchedSec));
+  updateTrailerProgressUI(state.trailer.honestWatchedSec, dur, unlockThreshold);
+
+  if (
+    !state.trailer.fullWatchRewarded &&
+    !state.trailer.fullWatchInFlight &&
+    (state.trailer.honestWatchedSec >= unlockThreshold ||
+      (isEnded && state.trailer.honestWatchedSec >= Math.max(80, Math.floor(dur * 0.87))))
+  ) {
+    grantTrailerFullWatchReward();
+  }
+  return {
+    accepted: true,
+    honestWatchedSec: state.trailer.honestWatchedSec,
+    unlockThreshold,
+    fullWatchRewarded: state.trailer.fullWatchRewarded,
+  };
+}
+
 function syncTrailerIntroLockUI(watchedSec = 0) {
   const sec = Math.max(0, Number(watchedSec || 0));
   state.trailer.introWatchedSec = Math.max(Number(state.trailer.introWatchedSec || 0), sec);
@@ -7530,6 +7929,7 @@ function syncTrailerIntroLockUI(watchedSec = 0) {
   }
   const locked = Boolean(state.trailer.introLocked);
   const rem = Math.max(0, Math.ceil(TRAILER_INTRO_LOCK_SEC - state.trailer.introWatchedSec));
+  const fullRewarded = Boolean(state.trailer.fullWatchRewarded);
 
   const modal = document.getElementById('modal-trailer');
   modal?.classList.toggle('is-intro-locked', locked);
@@ -7547,9 +7947,16 @@ function syncTrailerIntroLockUI(watchedSec = 0) {
   const toPackBtn = document.getElementById('btn-trailer-to-pack');
   if (toPackBtn) {
     toPackBtn.removeAttribute('hidden');
-    toPackBtn.disabled = locked;
-    toPackBtn.classList.toggle('is-ready', !locked);
-    toPackBtn.textContent = locked ? `Смотри трейлер... ${rem}` : 'Дальше';
+    toPackBtn.disabled = locked && !fullRewarded;
+    toPackBtn.classList.toggle('is-ready', !locked || fullRewarded);
+    toPackBtn.classList.toggle('is-full-reward', fullRewarded);
+    if (fullRewarded) {
+      toPackBtn.textContent = 'Забрать награду и играть!';
+    } else if (locked) {
+      toPackBtn.textContent = `Смотри трейлер... ${rem}`;
+    } else {
+      toPackBtn.textContent = 'Пропустить и идти дальше';
+    }
   }
 }
 
@@ -7678,27 +8085,16 @@ function mountVkTrailerPlayer() {
           if (stName) state.trailer.vkState = stName;
           syncPlayerAudioState(ev);
           const cur = Math.max(0, Number(ev?.time ?? player.getCurrentTime?.() ?? 0));
-          const dur = Number(state.trailer.vkDuration || 0);
-          state.trailer.vkTime = cur;
-          const honestCur = Math.min(cur, Number(state.trailer.wallClockSec || 0) + 1.2);
-          if (honestCur > state.trailer.maxTime) {
-            state.trailer.maxTime = honestCur;
-          }
-          const targetSec = getEffectiveTrailerUnlockSec();
-          syncTrailerIntroLockUI(state.trailer.maxTime);
-          updateTrailerProgressUI(cur, dur > 0 ? dur : 92, targetSec);
-          if (state.trailer.forRescue && state.trailer.maxTime >= targetSec && !state.trailer.unlocked40) {
-            unlockTrailerReward();
-          }
+          const dur = Number(state.trailer.vkDuration || 91.8);
+          handleVkTrailerTimeProgress(cur, dur, false);
         });
 
-        player.on('ended', () => {
+        player.on('ended', (ev) => {
           if (!state.trailer.modalOpen || state.vkPlayer !== player) return;
           state.trailer.vkState = 'ended';
-          syncTrailerIntroLockUI(TRAILER_INTRO_LOCK_SEC);
-          if (state.trailer.forRescue && !state.trailer.unlocked40) {
-            unlockTrailerReward();
-          }
+          const dur = Number(state.trailer.vkDuration || 91.8);
+          const cur = Math.max(dur, Number(ev?.time ?? state.trailer.vkTime ?? dur));
+          handleVkTrailerTimeProgress(cur, dur, true);
         });
       } catch { /* fallback wall-clock timer below guarantees unlock */ }
     };
@@ -7713,7 +8109,7 @@ function mountVkTrailerPlayer() {
   let visibleWallMs = 0;
   let lastTickAt = performance.now();
   syncTrailerIntroLockUI(0);
-  updateTrailerProgressUI(0, 92, TRAILER_UNLOCK_SEC);
+  updateTrailerProgressUI(0, 91.8, Math.floor(91.8 * 0.90));
   state.trailer.vkTimer = window.setInterval(() => {
     const now = performance.now();
     const dt = Math.min(500, Math.max(0, now - lastTickAt));
@@ -7722,12 +8118,16 @@ function mountVkTrailerPlayer() {
     visibleWallMs += dt;
     const wallSec = visibleWallMs / 1000;
     state.trailer.wallClockSec = wallSec;
-    state.trailer.maxTime = Math.max(Number(state.trailer.maxTime || 0), wallSec);
-    syncTrailerIntroLockUI(state.trailer.maxTime);
-    const targetSec = getEffectiveTrailerUnlockSec();
-    updateTrailerProgressUI(state.trailer.vkTime || wallSec, state.trailer.vkDuration || 92, targetSec);
-    if (state.trailer.forRescue && state.trailer.maxTime >= targetSec && !state.trailer.unlocked40) {
-      unlockTrailerReward();
+    syncTrailerIntroLockUI(Math.max(wallSec, Number(state.trailer.honestWatchedSec || 0)));
+
+    if (state.vkPlayer && state.trailer.vkReady && state.trailer.vkState === 'playing') {
+      try {
+        const vkCur = Number(state.vkPlayer.getCurrentTime?.() ?? -1);
+        const vkDur = Number(state.vkPlayer.getDuration?.() || state.trailer.vkDuration || 91.8);
+        if (Number.isFinite(vkCur) && vkCur >= 0) {
+          handleVkTrailerTimeProgress(vkCur, vkDur, false);
+        }
+      } catch { /* ignore */ }
     }
   }, 250);
 }
@@ -7948,7 +8348,9 @@ function initLiveFriendFeedbackMonitor() {
       const nextBrought = prof ? Number(prof.friendsBrought || 0) : baselineFriendsBrought;
       if (prof) {
         state.profile = { ...state.profile, ...prof };
+        duelCtrl?.syncFromProfile?.(state.profile);
         updatePremiereBarsUI();
+        syncSuperPrizeRatingBarUI();
         refreshQuestUI();
         if (state.activeScreen === 'pack') refreshPackFriendsStrip();
       }
@@ -7960,8 +8362,8 @@ function initLiveFriendFeedbackMonitor() {
         Haptics.success();
         showToast(
           newlyOpened.length > 0
-            ? `🔥 Кент «${friendLabel}» вскрыл твою бочку! +2500 ⭐ и +2 ❤️`
-            : '🔥 Твой друг зашёл в игру по бочке! +2500 ⭐ и +2 ❤️'
+            ? `🔥 Кент «${friendLabel}» вскрыл твою бочку! +500 ⭐ и +6 ❤️`
+            : '🔥 Твой друг зашёл в игру по бочке! +500 ⭐ и +6 ❤️'
         );
       }
     } finally {
@@ -8008,9 +8410,22 @@ function openTrailerModal({ forRescue = false, afterL1ToPack = false } = {}) {
   state.trailer.introLocked = Boolean(afterL1ToPack || forRescue);
   state.trailer.introWatchedSec = 0;
   state.trailer.maxTime = 0;
+  state.trailer.honestWatchedSec = 0;
+  state.trailer.prevVkTime = 0;
+  state.trailer.lastTickWallMs = 0;
+  state.trailer.watchedBuckets = {};
+  state.trailer.antiSeekRejectedCount = 0;
+  state.trailer.fullWatchInFlight = false;
+  state.trailer.fullWatchRewarded = Boolean(state.profile?.trailerWatchedFull);
   state.trailer.externalRescueDepartedAt = 0;
   recordFunnelEvent('trailer_open', state.tg?.user).catch(() => {});
 
+  const flashEl = document.getElementById('trailer-reward-flash');
+  if (flashEl) {
+    if (state.trailer.fullWatchRewarded) flashEl.removeAttribute('hidden');
+    else flashEl.setAttribute('hidden', '');
+  }
+  document.getElementById('btn-trailer-to-pack')?.classList.toggle('is-full-reward', Boolean(state.trailer.fullWatchRewarded));
   document.getElementById('btn-trailer-to-pack')?.removeAttribute('hidden');
   audio.stopListening();
   audio.stopMuffledVoiceLoop();
@@ -8101,9 +8516,10 @@ function closeTrailerModal({ goToPack = false, goToTilChallenge = false, force =
 
 function updateTrailerProgressUI(cur, dur, targetSec = null) {
   const fill = document.getElementById('trailer-progress-fill');
-  const lockSec = Math.max(1, Number(targetSec || TRAILER_INTRO_LOCK_SEC));
-  const watched = Math.max(Number(state.trailer.introWatchedSec || 0), Math.min(Number(cur || 0), lockSec));
-  const pct = Math.min(100, Math.max(0, (watched / lockSec) * 100));
+  const fullDur = Math.max(15, Number(dur || state.trailer.vkDuration || 91.8));
+  const target = Number(targetSec || Math.max(82.6, Math.floor(fullDur * 0.90)));
+  const watched = Math.max(Number(state.trailer.honestWatchedSec || 0), Number(cur || 0));
+  const pct = Math.min(100, Math.max(0, (watched / Math.max(1, target)) * 100));
   if (fill) fill.style.width = `${pct.toFixed(1)}%`;
 
   if (state.trailer.forRescue && !state.trailer.unlocked40) {
@@ -8368,6 +8784,7 @@ async function shareCurrentDuelRoom() {
       ? '⚔️ Нас уже двое за столом «БОЧКИ»! Залетай 3-м на счёт три — цех досыплет +450 ⭐ очков ТОП-20 и шанс билета!'
       : '⚔️ Залетай за стол «НА СЧЁТ ТРИ!» в цеху «БОЧКИ»! Хватаем живые бочки синхронно за билет в кино:';
 
+  let sharedOk = false;
   if (state.tg?.inTelegram) {
     const prep = await prepareNativeShareMessage({
       tgUser: state.tg?.user,
@@ -8382,15 +8799,25 @@ async function shareCurrentDuelRoom() {
       shareUrl: links.tgMiniAppUrl,
       shareText: text,
     });
-    return;
+    sharedOk = true;
+  } else {
+    const res = await shareNativeOrFallback({
+      title: 'БОЧКА — Стол «На счёт три!»',
+      text,
+      url: links.tgMiniAppUrl || links.webUrl,
+    });
+    if (res === 'aborted') return;
+    if (res === 'copied') {
+      showToast('🔗 Ссылка на стол дуэли скопирована — скинь другу в Telegram!');
+    }
+    sharedOk = true;
   }
-  const res = await shareNativeOrFallback({
-    title: 'БОЧКА — Стол «На счёт три!»',
-    text,
-    url: links.tgMiniAppUrl || links.webUrl,
-  });
-  if (res === 'copied') {
-    showToast('🔗 Ссылка на стол дуэли скопирована — скинь другу в Telegram!');
+
+  if (sharedOk) {
+    const shareReward = await applyShareBonusReward({ showFeedback: true }).catch(() => null);
+    if (shareReward?.ok) {
+      updatePremiereBarsUI();
+    }
   }
 }
 
@@ -9910,9 +10337,13 @@ function bindUIEvents() {
     closeTrailerModal();
   });
   document.getElementById('btn-trailer-to-pack')?.addEventListener('click', () => {
-    if (state.trailer.introLocked) return;
+    if (state.trailer.introLocked && !state.trailer.fullWatchRewarded) return;
     if (state.trailer.forRescue) {
-      claimTrailerFifthLife();
+      if (state.trailer.fullWatchRewarded) {
+        closeTrailerModal();
+      } else {
+        claimTrailerFifthLife();
+      }
       return;
     }
     if (state.trailer.afterL1ToPack) {
@@ -10012,6 +10443,12 @@ function bindUIEvents() {
     duelCtrl?.continueBatchOrRematch();
   });
   document.getElementById('btn-duel-invite-lives')?.addEventListener('click', () => {
+    state.pack.forLifeRefill = true;
+    duelCtrl?.leaveRoom(false);
+    showScreen('pack');
+  });
+  document.getElementById('btn-trapped-invite-friend')?.addEventListener('click', () => {
+    document.getElementById('modal-barrel-trapped')?.setAttribute('hidden', '');
     state.pack.forLifeRefill = true;
     duelCtrl?.leaveRoom(false);
     showScreen('pack');

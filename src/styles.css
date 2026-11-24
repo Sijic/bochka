@@ -9083,3 +9083,577 @@ body.is-air-hint-active #screen-workshop {
     gap: 10px !important;
   }
 }
+
+/* ===== v20.0-studio: MK VS HUD, Full Trailer Reward, Loot Popouts, Trophy Picker & Defeat Cinematic ===== */
+.trailer-motivation-copy {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(250, 204, 21, 0.12);
+  border: 1px solid rgba(250, 204, 21, 0.38);
+  color: #fef08a;
+  font-size: 13px;
+  line-height: 1.3;
+  font-weight: 700;
+  text-align: center;
+}
+
+.trailer-reward-flash {
+  margin-top: 8px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: rgba(21, 128, 61, 0.9);
+  border: 1.5px solid #4ade80;
+  color: #f0fdf4;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+  animation: rewardFlashPop 0.35s ease-out;
+}
+
+@keyframes rewardFlashPop {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+#btn-trailer-to-pack.is-full-reward:not(:disabled) {
+  background: linear-gradient(135deg, #22c55e 0%, #eab308 100%);
+  color: #052e16;
+  border-color: #86efac;
+  box-shadow: 0 0 26px rgba(74, 222, 128, 0.65);
+}
+
+/* Mortal Kombat VS Top Bar (#duel-live-mini-bar.duel-vs-hud) */
+.duel-live-mini-bar.duel-vs-hud {
+  position: fixed !important;
+  top: calc(6px + var(--safe-top, 0px)) !important;
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%) !important;
+  width: min(calc(100vw - 12px), 780px) !important;
+  max-width: min(calc(100vw - 12px), 780px) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 5px !important;
+  padding: 6px 8px !important;
+  border-radius: 14px !important;
+  background: linear-gradient(180deg, rgba(16, 19, 24, 0.94) 0%, rgba(10, 12, 16, 0.92) 100%) !important;
+  border: 1.5px solid rgba(250, 204, 21, 0.5) !important;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.68) !important;
+  white-space: normal !important;
+  z-index: 82 !important;
+}
+
+.duel-live-mini-bar.duel-vs-hud[hidden] {
+  display: none !important;
+}
+
+.duel-vs-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+
+.duel-vs-side {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  position: relative;
+}
+
+.duel-vs-side.is-opp {
+  justify-content: flex-end;
+}
+
+.duel-vs-ava {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 2px solid #facc15;
+  box-shadow: 0 0 10px rgba(250, 204, 21, 0.35);
+  background: #18181b;
+}
+
+.duel-vs-ava.is-opp {
+  border-color: #60a5fa;
+  box-shadow: 0 0 10px rgba(96, 165, 250, 0.35);
+}
+
+.duel-vs-side.is-til-accelerated .duel-vs-ava.is-opp {
+  border-color: #f97316;
+  box-shadow: 0 0 14px rgba(249, 115, 22, 0.75);
+}
+
+.duel-vs-side.is-til-rage .duel-vs-ava.is-opp {
+  border-color: #ef4444;
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.95);
+  animation: dangerPulse 0.48s infinite alternate;
+}
+
+.duel-til-rage-badge {
+  position: absolute;
+  top: -12px;
+  right: 0;
+  z-index: 5;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #dc2626;
+  border: 1px solid #fecaca;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  box-shadow: 0 2px 10px rgba(220, 38, 38, 0.85);
+}
+
+.duel-vs-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.duel-vs-hp-line,
+.duel-vs-en-line {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+.duel-vs-num {
+  font-size: 10px;
+  font-weight: 800;
+  color: #f8fafc;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.duel-vs-track,
+.duel-vs-hud .duel-energy-track {
+  flex: 1 1 auto;
+  width: auto !important;
+  height: 6px !important;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+
+.duel-vs-hp-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ef4444, #facc15);
+  transition: width 0.25s ease;
+}
+
+.duel-vs-hp-fill.is-opp {
+  background: linear-gradient(90deg, #3b82f6, #ef4444);
+  margin-left: auto;
+}
+
+.duel-vs-hud .duel-energy-fill {
+  background: linear-gradient(90deg, #22c55e, #a3e635);
+}
+
+.duel-vs-hud .duel-energy-fill.is-opp {
+  background: linear-gradient(90deg, #f97316, #ef4444);
+  margin-left: auto;
+}
+
+.duel-vs-loot-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.duel-vs-loot-row.is-opp {
+  justify-content: flex-end;
+}
+
+.duel-vs-hud .duel-shards-pill,
+.duel-vs-chip-pill,
+.duel-vs-pts-pill,
+.duel-vs-opp-pill {
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  white-space: nowrap;
+}
+
+.duel-vs-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 58px;
+}
+
+.duel-vs-round {
+  font-size: 10px;
+  font-weight: 900;
+  color: #facc15;
+  letter-spacing: 0.04em;
+}
+
+.duel-vs-mark {
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+  color: #f97316;
+  text-shadow: 0 0 10px rgba(249, 115, 22, 0.65);
+}
+
+.duel-vs-ctrl-btns {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.duel-vs-hud .duel-vs-close,
+.duel-vs-hud .btn-duel-skip-pill {
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  min-height: 22px !important;
+  padding: 0 !important;
+  font-size: 11px !important;
+  line-height: 1 !important;
+  border-radius: 6px !important;
+}
+
+.duel-superprize-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.duel-superprize-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #fde047;
+  white-space: nowrap;
+}
+
+.duel-superprize-track {
+  flex: 1 1 auto;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.duel-superprize-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #f59e0b 0%, #fde047 65%, #4ade80 100%);
+  transition: width 0.32s ease;
+}
+
+/* False start & Idle Strike Hint */
+.duel-countdown-banner.is-false-start strong {
+  color: #f87171 !important;
+  font-size: clamp(22px, 6vw, 34px) !important;
+  text-align: center;
+  line-height: 1.15 !important;
+  text-shadow: 0 4px 16px rgba(0, 0, 0, 0.95), 0 0 22px rgba(239, 68, 68, 0.85) !important;
+  animation: falseStartShake 0.28s ease-in-out;
+}
+
+@keyframes falseStartShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-8px); }
+  75% { transform: translateX(8px); }
+}
+
+.duel-idle-hint {
+  position: fixed;
+  left: 50%;
+  top: 40%;
+  transform: translate(-50%, -50%);
+  z-index: 78;
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: rgba(234, 179, 8, 0.95);
+  border: 2px solid #fef08a;
+  color: #111827;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.72), 0 0 24px rgba(250, 204, 21, 0.75);
+  pointer-events: none !important;
+  animation: idleHintBob 0.75s ease-in-out infinite alternate;
+}
+
+@keyframes idleHintBob {
+  from { transform: translate(-50%, -50%) scale(0.96); }
+  to { transform: translate(-50%, -56%) scale(1.06); }
+}
+
+/* Big Barrel Loot Popout */
+.duel-loot-popouts {
+  position: fixed;
+  inset: 0;
+  pointer-events: none !important;
+  z-index: 84;
+  overflow: hidden;
+}
+
+.barrel-loot-popout {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none !important;
+  animation: lootPopRise 1.15s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.barrel-loot-popout-ico {
+  font-size: 46px;
+  line-height: 1;
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.85));
+}
+
+.barrel-loot-popout-lbl {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.94);
+  border: 1.5px solid #facc15;
+  color: #fef08a;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+@keyframes lootPopRise {
+  0% { opacity: 0; transform: translate(-50%, -15%) scale(0.45); }
+  22% { opacity: 1; transform: translate(-50%, -65%) scale(1.16); }
+  72% { opacity: 1; transform: translate(-50%, -95%) scale(1.0); }
+  100% { opacity: 0; transform: translate(-50%, -125%) scale(0.88); }
+}
+
+/* Structured First-Discovery Pause Card + Spotlight */
+.context-hint-icon {
+  font-size: 42px;
+  line-height: 1;
+}
+
+.context-hint-structured {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  text-align: left;
+}
+
+.context-hint-structured .ch-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 9px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.context-hint-structured .ch-k {
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: #facc15;
+}
+
+.context-hint-structured .ch-v {
+  font-size: 13px;
+  line-height: 1.3;
+  color: #f8fafc;
+}
+
+body.is-duel-spotlight-active .duel-live-mini-bar.duel-vs-hud {
+  z-index: 9615 !important;
+}
+
+.is-hud-spotlight {
+  position: relative;
+  z-index: 9620 !important;
+  outline: 2.5px solid #facc15 !important;
+  box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.85), 0 0 20px rgba(250, 204, 21, 0.95) !important;
+  border-radius: 8px;
+  background: rgba(250, 204, 21, 0.22) !important;
+}
+
+/* Victory 1-of-3 Trophy Picker Modal */
+.trophy-pick-backdrop {
+  z-index: 9550 !important;
+}
+
+.trophy-pick-card {
+  width: min(calc(100vw - 24px), 560px) !important;
+  padding: 18px 14px !important;
+  border-radius: 20px;
+  text-align: center;
+}
+
+.trophy-pick-title {
+  margin: 0 0 12px;
+  font-size: 17px;
+  line-height: 1.25;
+  color: #fef08a;
+}
+
+.trophy-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.trophy-pick-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 8px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #1f2430 0%, #11151d 100%);
+  border: 1.5px solid rgba(250, 204, 21, 0.55);
+  color: #f8fafc;
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease;
+}
+
+.trophy-pick-item:hover {
+  transform: translateY(-2px);
+  border-color: #fde047;
+}
+
+.trophy-pick-item.is-locked {
+  border-color: rgba(248, 113, 113, 0.65);
+  background: linear-gradient(180deg, #271b20 0%, #161015 100%);
+}
+
+.trophy-pick-item .tp-ico { font-size: 32px; line-height: 1; }
+.trophy-pick-item .tp-name { font-size: 13px; font-weight: 900; color: #fef08a; }
+.trophy-pick-item .tp-desc { font-size: 11px; line-height: 1.25; color: #cbd5e1; }
+.trophy-pick-item .tp-lock {
+  margin-top: 2px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(185, 28, 28, 0.9);
+  color: #fef2f2;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+/* Defeat Barrel Trap Cinematic (2.5s) */
+.barrel-trap-cinematic:not([hidden]) {
+  position: fixed;
+  inset: 0;
+  z-index: 9700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #040507;
+  pointer-events: auto;
+  overflow: hidden;
+}
+
+.barrel-tunnel-fx {
+  position: absolute;
+  inset: -25%;
+  background: radial-gradient(circle at center, rgba(18, 22, 28, 0.25) 12%, #050608 58%, #000 100%);
+  border: 18px solid #1f242c;
+  border-radius: 50%;
+  animation: barrelTunnelPull 1.05s ease-in forwards;
+}
+
+.barrel-iron-lid {
+  position: absolute;
+  width: min(92vw, 520px);
+  height: min(92vw, 520px);
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 35%, #374151 0%, #111827 58%, #030712 100%);
+  border: 10px solid #4b5563;
+  box-shadow: inset 0 0 40px #000, 0 24px 60px #000;
+  opacity: 0;
+  animation: barrelLidSlam 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.95s forwards;
+}
+
+.barrel-trap-caption {
+  position: relative;
+  z-index: 3;
+  font-size: 24px;
+  font-weight: 900;
+  color: #f8fafc;
+  letter-spacing: 0.06em;
+  text-shadow: 0 2px 16px #000;
+  opacity: 0;
+  animation: barrelCaptionFade 1.05s ease 1.15s forwards;
+}
+
+.barrel-heaven-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: #f8fafc;
+  opacity: 0;
+  animation: barrelHeavenFlash 0.55s ease-in-out 2.05s forwards;
+}
+
+@keyframes barrelTunnelPull {
+  0% { transform: scale(2.4); opacity: 0.2; }
+  100% { transform: scale(0.75); opacity: 1; }
+}
+
+@keyframes barrelLidSlam {
+  0% { transform: translateY(-100vh) scale(1.25); opacity: 1; }
+  80% { transform: translateY(6px) scale(0.98); opacity: 1; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+@keyframes barrelCaptionFade {
+  0% { opacity: 0; transform: scale(0.92); }
+  25% { opacity: 1; transform: scale(1); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes barrelHeavenFlash {
+  0% { opacity: 0; }
+  65% { opacity: 0.96; }
+  100% { opacity: 1; }
+}
+
+@media (max-width: 480px) {
+  .duel-vs-ava { width: 32px; height: 32px; }
+  .duel-vs-center { min-width: 48px; }
+  .duel-vs-num { font-size: 9.5px; }
+  .trophy-pick-grid { grid-template-columns: 1fr; gap: 8px; }
+  .trophy-pick-item {
+    flex-direction: row;
+    justify-content: flex-start;
+    text-align: left;
+    padding: 10px 12px;
+    gap: 10px;
+  }
+  .trophy-pick-item .tp-ico { font-size: 26px; }
+}

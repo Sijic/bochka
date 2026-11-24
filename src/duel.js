@@ -13,15 +13,63 @@ const BARREL_BATCH_CODES = ['01', '19', '97', '12', '17', '26', '33', '48', '71'
 const MAX_DUEL_PLAYERS = 2; // v17.1: Строго 1 на 1 — за столом играют только двое друзей!
 const TIL_BOT_UID = 'bot_workshop_master';
 const TIL_BOT_NAME = 'Тиль Швайгер';
-const TIL_AVATAR_URL = './public/sprites/til_avatar.webp?v=1543';
-
-// v19.5: Спокойный читаемый ритм боёв с Тилем (6.5–7.5с между ходами, пауза перед ударом Тиля и показ лута)
-const SOLO_TIL_PACING = [
-  { claimSec: 7.5, tilTelegraphMs: 5300, tilTelegraphDurMs: 850 }, // Р1 (6 бочек)
-  { claimSec: 7.2, tilTelegraphMs: 5050, tilTelegraphDurMs: 850 }, // Р2 (8 бочек)
-  { claimSec: 6.8, tilTelegraphMs: 4700, tilTelegraphDurMs: 800 }, // Р3 (10 бочек)
-  { claimSec: 6.5, tilTelegraphMs: 4450, tilTelegraphDurMs: 750 }, // Р4+ (12 бочек)
+const TIL_AVATAR_URL = './public/sprites/til_avatar.webp?v=2000';
+const SUPERPRIZE_POINTS_TARGET = 5000;
+const FIGHTER_AVATARS = [
+  './public/sprites/fighter_1.webp?v=2000',
+  './public/sprites/fighter_2.webp?v=2000',
+  './public/sprites/fighter_3.webp?v=2000',
+  './public/sprites/fighter_4.webp?v=2000',
+  './public/sprites/fighter_5.webp?v=2000',
+  './public/sprites/fighter_6.webp?v=2000',
 ];
+
+function getFallbackFighterAvatar(seed = '') {
+  const s = String(seed || '0');
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  }
+  return FIGHTER_AVATARS[h % FIGHTER_AVATARS.length] || FIGHTER_AVATARS[0];
+}
+
+// Динамическая сложность Тиля от количества жизней игрока (1–6 обычный, 7–11 ускоренный, 12+ ярость -3 ❤️)
+function getTilDifficultyProfile(lives = 6, roundIdx = 0) {
+  const lv = Math.max(0, Number(lives || 0));
+  const r = Math.min(3, Math.max(0, Number(roundIdx || 0)));
+  if (lv >= 12) {
+    return {
+      tier: 'rage',
+      claimSec: [4.6, 4.4, 4.2, 4.0][r],
+      tilTelegraphMs: [2800, 2650, 2500, 2350][r],
+      tilTelegraphDurMs: [600, 580, 550, 520][r],
+      screamerDamage: 3,
+      extraScreamers: 2,
+      prizeSnipeChance: 0.85,
+    };
+  }
+  if (lv >= 7) {
+    return {
+      tier: 'accelerated',
+      claimSec: [5.8, 5.6, 5.4, 5.2][r],
+      tilTelegraphMs: [3800, 3650, 3450, 3300][r],
+      tilTelegraphDurMs: [720, 700, 680, 650][r],
+      screamerDamage: 2,
+      extraScreamers: 1,
+      prizeSnipeChance: 0.55,
+    };
+  }
+  return {
+    tier: 'normal',
+    claimSec: [7.5, 7.2, 6.8, 6.5][r],
+    tilTelegraphMs: [5300, 5050, 4700, 4450][r],
+    tilTelegraphDurMs: [850, 850, 800, 750][r],
+    screamerDamage: 2,
+    extraScreamers: 0,
+    prizeSnipeChance: 0.25,
+  };
+}
+
 const COUNTDOWN_STEP_MS = 850;
 const PLAYER_STRIKE_BEAT_MS = 520;
 const TIL_AFTER_PLAYER_TELEGRAPH_MS = 680;
@@ -30,6 +78,7 @@ const LOOT_READ_PAUSE_MS = 2600;
 const LOOT_READ_SCREAMER_MS = 2850;
 const RESULT_CARD_DELAY_MS = 2100;
 const INPUT_WATCHDOG_LOCK_MS = 2600;
+const IDLE_HINT_DELAY_MS = 2700;
 
 /**
  * Контроллер синхронного мультиплеера 1 на 1 (строго 2 друга) «НА СЧЁТ ТРИ!» (Supabase Realtime Presence + Broadcast)
@@ -37,15 +86,18 @@ const INPUT_WATCHDOG_LOCK_MS = 2600;
  * Все промежуточные клики и таймеры идут строго через WebSocket в оперативной памяти (0 записей в БД).
  */
 export class WorkshopDuelController {
-  constructor({ scene, audio, getTgUser, getTicketShards, onCollectChipFromBarrel, canUseOceanRefill, onOpenPackForLives, onFoundFriendBarrel, onContextDiscoveryHint, onLifeLostPill, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels, onOpenHallOfFame, loadDuelCandidates, onChallengeFriend, onOpenPackFriend, onRoomFull, onTriggerScreamerFx }) {
+  constructor({ scene, audio, getTgUser, getPlayerAvatar, getProfileStats, getTicketShards, onCollectChipFromBarrel, canUseOceanRefill, onOpenPackForLives, onFoundFriendBarrel, onContextDiscoveryHint, onLifeLostPill, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDefeatCinematic, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels, onOpenHallOfFame, loadDuelCandidates, onChallengeFriend, onOpenPackFriend, onRoomFull, onTriggerScreamerFx }) {
     this.scene = scene;
     this.audio = audio;
     this.getTgUser = getTgUser;
+    this.getPlayerAvatar = getPlayerAvatar || null;
+    this.getProfileStats = getProfileStats || null;
     this.onProfileSync = onProfileSync;
     this.onToast = onToast;
     this.onOpenInviteShare = onOpenInviteShare;
     this.onOpenGoldenFork = onOpenGoldenFork;
     this.onExitToHub = onExitToHub;
+    this.onDefeatCinematic = onDefeatCinematic || null;
     this.onDuelDefeatToTil = onDuelDefeatToTil;
     this.onFlyRating = onFlyRating;
     this.onFlyLife = onFlyLife;
@@ -76,11 +128,21 @@ export class WorkshopDuelController {
     this.hofCache = null;
     this._trophiesMod = null;
     this.energy = 100;
-    this.duelLives = 6; // v12.0: Минимум 6 жизней именно на Дуэль (Тиль всегда пополняет минимум до 6 ❤️!)
+    this.duelLives = 6;
+    this.tilMaxLives = 3;
+    this.tilLives = 3;
+    this.sessionStats = { playerChips: 0, playerPoints: 0, oppTickets: 0, oppChips: 0, oppPoints: 0 };
     this.duelRoundsWithoutTicket = 0;
     this.maxDuelRounds = 3;
     this.batchResolved = false; // true, когда кто-то выбил 🎟 Билет или бочки кончились
     this.skippedThisTurn = false;
+    this.falseStartCount = 0;
+    this._idleHintTimer = null;
+    this._idleHintVisible = false;
+    this._falseStartResetTimer = null;
+    this._countdownTimers = [];
+    this._trophyPickerOpen = false;
+    this._pendingTrophyFinish = false;
 
     this.active = false;
     this.roomId = '';
@@ -135,6 +197,9 @@ export class WorkshopDuelController {
   isExternalOverlayBlocking() {
     const blockingIds = [
       'modal-context-hint',
+      'modal-til-trophy-pick',
+      'barrel-trap-cinematic',
+      'modal-barrel-trapped',
       'screamer-overlay',
       'fx-scream',
       'fx-reveal',
@@ -256,9 +321,50 @@ export class WorkshopDuelController {
     }
   }
 
+  clearIdleHint() {
+    if (this._idleHintTimer) {
+      clearTimeout(this._idleHintTimer);
+      this._idleHintTimer = null;
+    }
+    this._idleHintVisible = false;
+    document.getElementById('duel-idle-hint')?.setAttribute('hidden', '');
+    this.scene?.setIdleHintPulse?.(false);
+  }
+
+  scheduleIdleHint() {
+    this.clearIdleHint();
+    if (!this.active || this.phase !== 'claim' || this.spectatorUids.includes(this.myUid)) return;
+    this._idleHintTimer = window.setTimeout(() => {
+      this._idleHintTimer = null;
+      if (!this.active || this.phase !== 'claim' || this._playerAnimating || this.skippedThisTurn) return;
+      const alreadyClaimed = Object.values(this.claims || {}).some((c) => c.uid === this.myUid);
+      if (alreadyClaimed) return;
+      if (this.isExternalOverlayBlocking()) {
+        this.scheduleIdleHint();
+        return;
+      }
+      this._idleHintVisible = true;
+      const hintEl = document.getElementById('duel-idle-hint');
+      if (hintEl) {
+        hintEl.textContent = 'Бей по бочке!';
+        hintEl.removeAttribute('hidden');
+      }
+      this.scene?.setIdleHintPulse?.(true, this.openedIndices);
+    }, IDLE_HINT_DELAY_MS);
+  }
+
   clearAllTimers() {
     this.timeouts.forEach((id) => clearTimeout(id));
     this.timeouts = [];
+    if (this._countdownTimers?.length) {
+      this._countdownTimers.forEach((id) => clearTimeout(id));
+      this._countdownTimers = [];
+    }
+    if (this._falseStartResetTimer) {
+      clearTimeout(this._falseStartResetTimer);
+      this._falseStartResetTimer = null;
+    }
+    this.clearIdleHint();
     this.clearTilTimers();
     if (this.roundWatchdogTimer) {
       clearTimeout(this.roundWatchdogTimer);
@@ -271,12 +377,23 @@ export class WorkshopDuelController {
   }
 
   getPacingDebug() {
+    const diff = getTilDifficultyProfile(this.duelLives, Math.max(0, Number(this.tilRoundIdx || 1) - 1));
     return {
       phase: this.phase,
       soloMode: this.soloMode,
       friendBarrelHunt: Boolean(this.friendBarrelHunt),
       tilRoundIdx: this.tilRoundIdx,
       barrelCount: this.barrelCount,
+      duelLives: this.duelLives,
+      tilLives: this.tilLives,
+      tilMaxLives: this.tilMaxLives,
+      difficultyTier: diff.tier,
+      screamerDamage: diff.screamerDamage,
+      turnClaimSec: diff.claimSec,
+      prizeSnipeChance: diff.prizeSnipeChance,
+      falseStartCount: this.falseStartCount,
+      idleHintVisible: Boolean(this._idleHintVisible),
+      trophyPickerOpen: Boolean(this._trophyPickerOpen),
       claimTimeLeft: this.claimTimeLeft,
       activeClaimElapsedMs: this._activeClaimElapsedMs,
       playerAnimating: this._playerAnimating,
@@ -287,7 +404,6 @@ export class WorkshopDuelController {
       interactive: Boolean(this.scene?.interactive),
       diving: Boolean(this.scene?.diving),
       overlayBlocking: this.isExternalOverlayBlocking(),
-      pacingTable: SOLO_TIL_PACING,
       timings: {
         countdownStepMs: COUNTDOWN_STEP_MS,
         playerStrikeBeatMs: PLAYER_STRIKE_BEAT_MS,
@@ -297,13 +413,14 @@ export class WorkshopDuelController {
         lootReadScreamerMs: LOOT_READ_SCREAMER_MS,
         resultCardDelayMs: RESULT_CARD_DELAY_MS,
         watchdogLockMs: INPUT_WATCHDOG_LOCK_MS,
+        idleHintDelayMs: IDLE_HINT_DELAY_MS,
       },
     };
   }
 
   async loadTrophiesMod() {
     if (!this._trophiesMod) {
-      this._trophiesMod = await import('./trophies.js?v=1910');
+      this._trophiesMod = await import('./trophies.js?v=2000');
     }
     return this._trophiesMod;
   }
@@ -477,7 +594,7 @@ export class WorkshopDuelController {
     const tgUser = this.getTgUser?.() || null;
     this.myUid = getViewerUid(tgUser);
     this.myName = tgUser?.name || (isTestBogSessionActive() ? 'Тест-Бог' : 'Игрок');
-    this.myAvatar = tgUser?.photoUrl || '';
+    this.myAvatar = this.getPlayerAvatar?.() || tgUser?.photoUrl || getFallbackFighterAvatar(this.myUid);
     this.roomId = String(roomId || `d_${Math.random().toString(36).slice(2, 8)}`).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 28);
     this.active = true;
     this.setPhase('lobby');
@@ -499,7 +616,14 @@ export class WorkshopDuelController {
     this.claims = {};
     this.spectatorUids = [];
     this.energy = 100;
-    this.duelLives = Math.max(6, Number(this.duelLives || 6));
+    const profStats = this.getProfileStats?.() || null;
+    const profLives = Number(profStats?.lives ?? 0);
+    this.duelLives = Math.max(6, Math.min(30, profLives > 0 ? Math.max(Number(this.duelLives || 6), profLives) : Number(this.duelLives || 6)));
+    const initDiff = getTilDifficultyProfile(this.duelLives, 0);
+    this.tilMaxLives = initDiff.tier === 'rage' ? 4 : 3;
+    this.tilLives = this.tilMaxLives;
+    this.sessionStats = { playerChips: 0, playerPoints: 0, oppTickets: 0, oppChips: 0, oppPoints: 0 };
+    this.falseStartCount = 0;
     this.batchResolved = false;
     this.skippedThisTurn = false;
     this.syncEnergyUI();
@@ -587,6 +711,8 @@ export class WorkshopDuelController {
     }
     this.active = false;
     this.friendBarrelHunt = false;
+    this._trophyPickerOpen = false;
+    this._pendingTrophyFinish = false;
     this.setPhase('idle');
     this._playerAnimating = false;
     this._roundStarting = false;
@@ -594,6 +720,7 @@ export class WorkshopDuelController {
     this.clearAllTimers();
     this.scene?.setDuelDirectClick?.(false);
     this.scene?.setBarrelTelegraph?.(-1, false);
+    this.scene?.setIdleHintPulse?.(false);
     if (this.rafId) {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
@@ -607,6 +734,12 @@ export class WorkshopDuelController {
       this.channel = null;
     }
     this.clearBarrelClaimBadges();
+    const popWrap = document.getElementById('duel-loot-popouts');
+    if (popWrap) popWrap.innerHTML = '';
+    document.getElementById('modal-til-trophy-pick')?.setAttribute('hidden', '');
+    document.getElementById('duel-countdown-banner')?.classList.remove('is-false-start');
+    document.getElementById('duel-vs-opp-wrap')?.classList.remove('is-til-rage');
+    document.getElementById('duel-til-rage-badge')?.setAttribute('hidden', '');
     const overlay = document.getElementById('duel-overlay');
     overlay?.setAttribute('hidden', '');
     overlay?.classList.remove('is-playing', 'is-finished');
@@ -889,22 +1022,22 @@ export class WorkshopDuelController {
         const card = document.createElement('div');
         if (p) {
           const isTil = Boolean(p.isTil || p.uid === TIL_BOT_UID);
-          const initials = (p.name || '?').trim().slice(0, 2).toUpperCase();
           card.className = `duel-slot-card is-filled${isTil ? ' is-til-player' : ''}`;
           const avaWrap = document.createElement('div');
           avaWrap.className = 'duel-slot-avatar';
-          if (p.avatar && /^(https?:\/\/|\.?\/|data:image\/)/i.test(String(p.avatar))) {
-            const img = document.createElement('img');
-            img.src = p.avatar;
-            img.alt = p.name || '';
-            img.className = 'duel-slot-avatar-img';
-            avaWrap.appendChild(img);
-          } else {
-            const sp = document.createElement('span');
-            sp.className = 'duel-slot-initials';
-            sp.textContent = initials;
-            avaWrap.appendChild(sp);
-          }
+          const resolvedAva = isTil
+            ? TIL_AVATAR_URL
+            : p.avatar && /^(https?:\/\/|\.?\/|data:image\/)/i.test(String(p.avatar))
+              ? p.avatar
+              : p.uid === this.myUid
+                ? (this.myAvatar || getFallbackFighterAvatar(p.uid))
+                : getFallbackFighterAvatar(p.uid || p.name);
+          const img = document.createElement('img');
+          img.src = resolvedAva;
+          img.alt = p.name || '';
+          img.className = 'duel-slot-avatar-img';
+          img.onerror = () => { img.src = isTil ? TIL_AVATAR_URL : FIGHTER_AVATARS[0]; };
+          avaWrap.appendChild(img);
           const meta = document.createElement('div');
           meta.className = 'duel-slot-meta';
           const st = document.createElement('strong');
@@ -1056,14 +1189,13 @@ export class WorkshopDuelController {
         const ava = document.createElement('div');
         ava.className = 'dfp-ava';
         const avaUrl = String(friend.avatar_url || '').trim();
-        if (avaUrl && /^(https?:\/\/|\.?\/|data:image\/)/i.test(avaUrl)) {
-          const img = document.createElement('img');
-          img.src = avaUrl;
-          img.alt = friend.name || 'Друг';
-          ava.appendChild(img);
-        } else {
-          ava.textContent = (friend.name || 'Д').trim().slice(0, 2).toUpperCase();
-        }
+        const img = document.createElement('img');
+        img.src = avaUrl && /^(https?:\/\/|\.?\/|data:image\/)/i.test(avaUrl)
+          ? avaUrl
+          : getFallbackFighterAvatar(friend.uid || friend.tg_id || friend.name);
+        img.alt = friend.name || 'Друг';
+        img.onerror = () => { img.src = FIGHTER_AVATARS[0]; };
+        ava.appendChild(img);
 
         const info = document.createElement('div');
         info.className = 'dfp-info';
@@ -1219,42 +1351,62 @@ export class WorkshopDuelController {
             barrelLoot[sIdx] = { kind: 'screamer', value: -2, label: 'Потерял жизнь' };
           }
         } else {
+          const diff = getTilDifficultyProfile(this.duelLives, Math.max(0, Number(this.tilRoundIdx || 1) - 1));
+          if (!isFreeRerack) {
+            this.tilMaxLives = diff.tier === 'rage' ? 4 : 3;
+            this.tilLives = this.tilMaxLives;
+          }
           batchHasTicket = (this.duelRoundsWithoutTicket || 0) >= 1 ? true : Math.random() < 0.65;
-          if (batchHasTicket && cursor < barrelCount) {
+
+          const baseScreamers = barrelCount <= 6 ? 1 : barrelCount <= 8 ? 2 : 3;
+          const totalScreamers = Math.min(Math.max(1, barrelCount - 2), baseScreamers + diff.extraScreamers);
+          const emptySlots = barrelCount <= 6 ? (diff.extraScreamers > 0 ? 0 : 1) : barrelCount <= 8 ? 1 : 2;
+          const reservedForTraps = totalScreamers + emptySlots;
+          const goodBudget = Math.max(2, barrelCount - reservedForTraps);
+
+          if (batchHasTicket && safeIndices.length < goodBudget && cursor < barrelCount) {
             const tIdx = indices[cursor++];
             barrelLoot[tIdx] = { kind: 'ticket', value: 1000, label: '🎟 Часть билета!' };
             safeIndices.push(tIdx);
           }
 
-          if (cursor < barrelCount) {
+          if (safeIndices.length < goodBudget && cursor < barrelCount) {
             const cIdx = indices[cursor++];
-            barrelLoot[cIdx] = { kind: 'chip', value: 150, label: 'Фишка' };
+            barrelLoot[cIdx] = { kind: 'chip', value: 150, label: '💎 Фишка!' };
             safeIndices.push(cIdx);
           }
 
-          if (cursor < barrelCount) {
+          if (safeIndices.length < goodBudget && cursor < barrelCount) {
+            const eEnergyIdx = indices[cursor++];
+            barrelLoot[eEnergyIdx] = { kind: 'energy', value: 50, label: '⚡ +50% энергии' };
+            safeIndices.push(eEnergyIdx);
+          }
+
+          if (safeIndices.length < goodBudget && cursor < barrelCount) {
             const lIdx = indices[cursor++];
-            barrelLoot[lIdx] = { kind: 'life', value: 1, label: '+1 жизнь' };
+            barrelLoot[lIdx] = { kind: 'life', value: 1, label: '❤️ +1 жизнь' };
             safeIndices.push(lIdx);
           }
 
-          const ptsSlots = barrelCount <= 6 ? (batchHasTicket ? 1 : 2) : barrelCount <= 8 ? 2 : 3;
-          for (let p = 0; p < ptsSlots && cursor < barrelCount; p++) {
+          while (safeIndices.length < goodBudget && cursor < barrelCount) {
             const pIdx = indices[cursor++];
-            const val = pointTiers[p % pointTiers.length];
-            barrelLoot[pIdx] = { kind: 'points', value: val, label: `+${val}` };
+            const val = pointTiers[(safeIndices.length) % pointTiers.length];
+            barrelLoot[pIdx] = { kind: 'points', value: val, label: `+${val} ⭐` };
             safeIndices.push(pIdx);
           }
 
-          const emptySlots = barrelCount <= 8 ? 1 : 2;
-          for (let e = 0; e < emptySlots && cursor < barrelCount; e++) {
+          for (let e = 0; e < emptySlots && cursor < barrelCount - totalScreamers; e++) {
             const eIdx = indices[cursor++];
             barrelLoot[eIdx] = { kind: 'empty', value: 0, label: 'Пусто' };
           }
 
           while (cursor < barrelCount) {
             const sIdx = indices[cursor++];
-            barrelLoot[sIdx] = { kind: 'screamer', value: -2, label: 'Потерял жизнь' };
+            barrelLoot[sIdx] = {
+              kind: 'screamer',
+              value: -diff.screamerDamage,
+              label: `-${diff.screamerDamage} ❤️`,
+            };
           }
         }
         openedIndices = [];
@@ -1388,23 +1540,39 @@ export class WorkshopDuelController {
         }
       }
     }
-    this.scene.setInteractive(false);
+    this.scene.setIdleHintPulse?.(false);
+    // Обратный отсчёт: 1 — 2 — 3! Бочки интерактивны для перехвата фальстарта!
+    this.startCountdownPhase();
+  }
 
-    const closedLeft = Math.max(0, this.barrelCount - this.openedIndices.length);
-
-    // Обратный отсчёт: 1 — 2 — 3!
+  startCountdownPhase() {
+    if (!this.active) return;
+    if (this._countdownTimers?.length) {
+      this._countdownTimers.forEach((id) => clearTimeout(id));
+      this._countdownTimers = [];
+    }
+    this.clearIdleHint();
     this.setPhase('countdown');
     this.renderLobbyUI();
+
+    const amISpectator = this.spectatorUids.includes(this.myUid);
+    if (this.scene) {
+      this.scene.diving = false;
+      this.scene.setDuelDirectClick?.(true);
+      this.scene.setInteractive(!amISpectator);
+    }
+
     const banner = document.getElementById('duel-countdown-banner');
     const bannerText = document.getElementById('duel-countdown-text');
     const bannerSub = document.getElementById('duel-countdown-sub');
+    banner?.classList.remove('is-false-start', 'is-go');
     if (bannerSub) bannerSub.setAttribute('hidden', '');
     banner?.removeAttribute('hidden');
 
-    const steps = ['1', '2', '3!'];
+    const steps = ['1', '2', 'БЕЙ!'];
     steps.forEach((word, i) => {
-      this.scheduleTimeout(() => {
-        if (!this.active) return;
+      const tid = window.setTimeout(() => {
+        if (!this.active || this.phase !== 'countdown') return;
         const isGo = i === 2;
         if (bannerText) bannerText.textContent = word;
         banner?.classList.toggle('is-go', isGo);
@@ -1412,20 +1580,70 @@ export class WorkshopDuelController {
         if (isGo) {
           Haptics.heavy();
           this.beginClaimWindow();
-          this.scheduleTimeout(() => {
+          const hideId = window.setTimeout(() => {
             if (this.active && this.phase === 'claim') {
               banner?.setAttribute('hidden', '');
             }
           }, 420);
+          this._countdownTimers.push(hideId);
         } else {
           Haptics.light();
         }
       }, i * COUNTDOWN_STEP_MS);
+      this._countdownTimers.push(tid);
     });
   }
 
+  handleFalseStart() {
+    if (!this.active || this.phase !== 'countdown') return false;
+    this.falseStartCount = (this.falseStartCount || 0) + 1;
+    if (this._countdownTimers?.length) {
+      this._countdownTimers.forEach((id) => clearTimeout(id));
+      this._countdownTimers = [];
+    }
+    if (this._falseStartResetTimer) {
+      clearTimeout(this._falseStartResetTimer);
+      this._falseStartResetTimer = null;
+    }
+    this._phaseEnteredAt = Date.now();
+    this.audio?.playFalseStartBuzz?.();
+    Haptics.error();
+    this.scene?.triggerScreamerShake?.(0.28);
+
+    const banner = document.getElementById('duel-countdown-banner');
+    const bannerText = document.getElementById('duel-countdown-text');
+    const bannerSub = document.getElementById('duel-countdown-sub');
+    banner?.removeAttribute('hidden');
+    banner?.classList.remove('is-go');
+    banner?.classList.add('is-false-start');
+    if (bannerText) bannerText.textContent = 'ФАЛЬСТАРТ!';
+    if (bannerSub) {
+      bannerSub.textContent = 'Жди команды БЕЙ!';
+      bannerSub.removeAttribute('hidden');
+    }
+
+    this._falseStartResetTimer = window.setTimeout(() => {
+      this._falseStartResetTimer = null;
+      if (!this.active || this.phase !== 'countdown') return;
+      this.startCountdownPhase();
+    }, 850);
+    return true;
+  }
+
+  syncFromProfile(profile = null) {
+    if (!profile || typeof profile !== 'object') return;
+    if (typeof profile.lives === 'number' && this.phase !== 'idle') {
+      const nextL = Math.max(0, Math.min(30, Math.round(Number(profile.lives))));
+      if (nextL > this.duelLives) {
+        this.duelLives = nextL;
+      }
+    }
+    this.syncEnergyUI();
+  }
+
   refillFromTil() {
-    this.duelLives = Math.max(6, Number(this.duelLives || 0));
+    const profLives = Number(this.getProfileStats?.()?.lives ?? 0);
+    this.duelLives = Math.max(6, Math.min(30, Math.max(Number(this.duelLives || 0), profLives, 6)));
     this.energy = 100;
     this.syncEnergyUI();
   }
@@ -1439,9 +1657,36 @@ export class WorkshopDuelController {
     const skipBtn = document.getElementById('btn-duel-skip-strike');
     const statusEl = document.getElementById('duel-live-mini-status');
     const timerEl = document.getElementById('duel-live-timer');
+
+    const pAvaEl = document.getElementById('duel-vs-player-ava');
+    const pHpFill = document.getElementById('duel-vs-player-hp-fill');
+    const pChipsEl = document.getElementById('duel-vs-player-chips-val');
+    const pPtsEl = document.getElementById('duel-vs-player-pts-val');
+    const oWrap = document.getElementById('duel-vs-opp-wrap');
+    const rageBadge = document.getElementById('duel-til-rage-badge');
+    const oHpFill = document.getElementById('duel-vs-opp-hp-fill');
+    const oLivesEl = document.getElementById('duel-vs-opp-lives-val');
+    const oEnergyFill = document.getElementById('duel-vs-opp-energy-fill');
+    const oNameEl = document.getElementById('duel-vs-opp-name');
+    const oAvaEl = document.getElementById('duel-vs-opp-ava');
+    const oTicketsEl = document.getElementById('duel-vs-opp-tickets-val');
+    const oChipsEl = document.getElementById('duel-vs-opp-chips-val');
+    const oPtsEl = document.getElementById('duel-vs-opp-pts-val');
+    const spLabelEl = document.getElementById('duel-superprize-label');
+    const spFillEl = document.getElementById('duel-superprize-fill');
+
     const pct = Math.max(0, Math.min(100, Math.round(Number(this.energy || 0))));
     const dl = Math.max(0, Math.round(Number(this.duelLives ?? 6)));
-    const shards = Math.max(0, Math.min(4, Math.round(Number(this.getTicketShards?.() ?? 0))));
+    const profStats = this.getProfileStats?.() || {};
+    const shards = Math.max(0, Math.min(4, Math.round(Number(this.getTicketShards?.() ?? profStats.ticketShards ?? 0))));
+    const roundDisplay = Math.max(1, Number(this.tilRoundIdx || 1));
+    const diff = getTilDifficultyProfile(dl, roundDisplay - 1);
+
+    if (pAvaEl) {
+      const targetSrc = this.myAvatar || getFallbackFighterAvatar(this.myUid);
+      if (pAvaEl.getAttribute('src') !== targetSrc) pAvaEl.src = targetSrc;
+      pAvaEl.onerror = () => { pAvaEl.src = FIGHTER_AVATARS[0]; };
+    }
     if (shardsEl) shardsEl.textContent = `${shards}/4`;
     if (valEl) valEl.textContent = `${pct}%`;
     if (fillEl) {
@@ -1450,16 +1695,56 @@ export class WorkshopDuelController {
     }
     if (livesEl) livesEl.textContent = String(dl);
     if (livesPill) livesPill.classList.toggle('is-low', dl <= 1);
+    if (pHpFill) {
+      const hpDenom = Math.max(6, dl > 12 ? 18 : dl > 6 ? 12 : 6);
+      pHpFill.style.width = `${Math.min(100, Math.round((dl / hpDenom) * 100))}%`;
+    }
+    if (pChipsEl) pChipsEl.textContent = String(Math.max(0, Number(profStats.chipsCount || this.sessionStats?.playerChips || 0)));
+    const totalPts = Math.max(0, Math.round(Number(profStats.premierePoints ?? this.sessionStats?.playerPoints ?? 0)));
+    if (pPtsEl) pPtsEl.textContent = String(totalPts);
+
+    const spPct = Math.min(100, Math.max(0, (totalPts / SUPERPRIZE_POINTS_TARGET) * 100));
+    if (spLabelEl) spLabelEl.textContent = `До суперприза: ${totalPts.toLocaleString('ru-RU')} / 5 000 очков`;
+    if (spFillEl) spFillEl.style.width = `${spPct.toFixed(1)}%`;
+
+    const opp = this.players.find((p) => p.uid !== this.myUid) || null;
+    const oppIsTil = !opp || Boolean(opp.isBot || opp.isTil || opp.uid === TIL_BOT_UID);
+    const tilHp = Math.max(0, Number(this.tilLives ?? 3));
+    const tilMax = Math.max(1, Number(this.tilMaxLives || 3));
+    if (oLivesEl) oLivesEl.textContent = String(tilHp);
+    if (oHpFill) oHpFill.style.width = `${Math.min(100, Math.round((tilHp / tilMax) * 100))}%`;
+    if (oNameEl) oNameEl.textContent = oppIsTil ? 'Тиль ⚡' : `${String(opp.name || 'Соперник').slice(0, 10)} ⚡`;
+    if (oAvaEl) {
+      const oSrc = oppIsTil ? TIL_AVATAR_URL : (opp?.avatar || getFallbackFighterAvatar(opp?.uid || opp?.name));
+      if (oAvaEl.getAttribute('src') !== oSrc) oAvaEl.src = oSrc;
+      oAvaEl.onerror = () => { oAvaEl.src = TIL_AVATAR_URL; };
+    }
+    if (oEnergyFill) {
+      const chargeDur = Math.max(800, diff.tilTelegraphMs + diff.tilTelegraphDurMs);
+      const oppPct = this._tilState === 'struck'
+        ? 100
+        : this.phase === 'claim'
+          ? Math.min(100, Math.round((Number(this._activeClaimElapsedMs || 0) / chargeDur) * 100))
+          : 0;
+      oEnergyFill.style.width = `${oppPct}%`;
+    }
+    if (oTicketsEl) oTicketsEl.textContent = String(this.sessionStats?.oppTickets || 0);
+    if (oChipsEl) oChipsEl.textContent = String(this.sessionStats?.oppChips || 0);
+    if (oPtsEl) oPtsEl.textContent = String(this.sessionStats?.oppPoints || 0);
+
+    const isRage = Boolean(this.soloMode && diff.tier === 'rage');
+    if (oWrap) oWrap.classList.toggle('is-til-rage', isRage);
+    if (rageBadge) {
+      if (isRage) rageBadge.removeAttribute('hidden');
+      else rageBadge.setAttribute('hidden', '');
+    }
+
     if (timerEl) {
       timerEl.textContent = `${Math.max(0, Number(this.claimTimeLeft || 0)).toFixed(1)}с`;
       timerEl.classList.toggle('is-telegraph', this._tilState === 'telegraph');
     }
-    const closedLeft = Math.max(0, (this.barrelCount || 6) - (this.openedIndices?.length || 0));
-    const roundDisplay = Math.max(1, Number(this.tilRoundIdx || 1));
     if (statusEl) {
-      statusEl.textContent = this.soloMode
-        ? `Р${roundDisplay} (ТИЛЬ) · ${closedLeft}/${this.barrelCount || 6}`
-        : `1×1 · ${closedLeft}/${this.barrelCount || 6}`;
+      statusEl.textContent = `Р${Math.min(4, roundDisplay)}`;
     }
     if (skipBtn) {
       const hasMyClaim = Object.values(this.claims || {}).some((c) => c.uid === this.myUid);
@@ -1478,22 +1763,26 @@ export class WorkshopDuelController {
     Haptics.light();
   }
 
+  triggerDefeatFlow() {
+    document.getElementById('duel-result-box')?.setAttribute('hidden', '');
+    const oceanAllowed = this.canUseOceanRefill ? Boolean(this.canUseOceanRefill()) : true;
+    if (this.onDefeatCinematic) {
+      this.onDefeatCinematic({ oceanAllowed, roomId: this.roomId, solo: this.soloMode });
+      return;
+    }
+    if (!oceanAllowed && this.onOpenPackForLives) {
+      this.onOpenPackForLives();
+      return;
+    }
+    if (this.onDuelDefeatToTil) {
+      this.onDuelDefeatToTil({ roomId: this.roomId, solo: this.soloMode });
+    }
+  }
+
   continueBatchOrRematch() {
     if (!this.active || this._roundStarting) return;
-    // Если кончились дуэльные жизни (СТРОГО 0 ❤️!) — на Небо к Тилю (1 раз/24ч -> 6 ❤️), иначе упаковка друга!
     if (this.duelLives <= 0) {
-      const oceanAllowed = this.canUseOceanRefill ? Boolean(this.canUseOceanRefill()) : true;
-      if (!oceanAllowed && this.onOpenPackForLives) {
-        document.getElementById('duel-result-box')?.setAttribute('hidden', '');
-        this.onToast?.('🛢 Море уже заряжало жизни сегодня (1 раз / 24 ч) — закатай нового друга за +6 ❤️!');
-        this.onOpenPackForLives();
-        return;
-      }
-      if (this.onDuelDefeatToTil) {
-        document.getElementById('duel-result-box')?.setAttribute('hidden', '');
-        this.onToast?.('🌊 Жизни на нуле (0 ❤️) — к Тилю на берег зарядить 6 ❤️ на дуэль!');
-        this.onDuelDefeatToTil({ roomId: this.roomId, solo: this.soloMode });
-      }
+      this.triggerDefeatFlow();
       return;
     }
     // Если жизни ещё есть (> 0 ❤️), а энергия на нуле — восстанавливаем энергию без ухода к Тилю!
@@ -1521,6 +1810,16 @@ export class WorkshopDuelController {
       if (isAllowed(b)) free.push(b);
     }
     if (!free.length) return -1;
+    if (forBot && this.soloMode && !this.friendBarrelHunt) {
+      const diff = getTilDifficultyProfile(this.duelLives, Math.max(0, Number(this.tilRoundIdx || 1) - 1));
+      const prizePool = free.filter((b) => {
+        const k = this.barrelLoot?.[b]?.kind;
+        return k === 'ticket' || k === 'chip' || k === 'points' || k === 'energy' || k === 'life';
+      });
+      if (prizePool.length > 0 && Math.random() < diff.prizeSnipeChance) {
+        return prizePool[Math.floor(Math.random() * prizePool.length)];
+      }
+    }
     return free[Math.floor(Math.random() * free.length)];
   }
 
@@ -1549,8 +1848,9 @@ export class WorkshopDuelController {
   beginClaimWindow() {
     this.setPhase('claim');
     const roundIdx = Math.max(0, Number(this.tilRoundIdx || 1) - 1);
+    const diff = getTilDifficultyProfile(this.duelLives, roundIdx);
     const pacing = this.soloMode
-      ? SOLO_TIL_PACING[Math.min(SOLO_TIL_PACING.length - 1, roundIdx)]
+      ? diff
       : { claimSec: 6.5, tilTelegraphMs: 4600, tilTelegraphDurMs: 750 };
     this.claimTimeLeft = pacing.claimSec;
     this._activeClaimElapsedMs = 0;
@@ -1561,6 +1861,7 @@ export class WorkshopDuelController {
     this.skippedThisTurn = false;
     const amISpectator = this.spectatorUids.includes(this.myUid);
     this.syncEnergyUI();
+    this.scheduleIdleHint();
 
     if (this.scene) {
       this.scene.diving = false;
@@ -1654,6 +1955,14 @@ export class WorkshopDuelController {
         timerEl.textContent = `${this.claimTimeLeft.toFixed(1)}с`;
         timerEl.classList.toggle('is-telegraph', this._tilState === 'telegraph');
       }
+      const oppBarEl = document.getElementById('duel-vs-opp-energy-fill');
+      if (oppBarEl) {
+        const chargeDur = Math.max(800, (pacing.tilTelegraphMs || 4000) + (pacing.tilTelegraphDurMs || 700));
+        const oppPct = this._tilState === 'struck'
+          ? 100
+          : Math.min(100, Math.round((this._activeClaimElapsedMs / chargeDur) * 100));
+        oppBarEl.style.width = `${oppPct}%`;
+      }
 
       const claimedCount = new Set(Object.values(this.claims).map((c) => c.uid)).size;
       const expectedClaimers = this.contenderUids.length - (this.skippedThisTurn ? 1 : 0);
@@ -1672,7 +1981,13 @@ export class WorkshopDuelController {
    */
   handleBarrelClick(barrelIndex, worldPoint) {
     if (!this.active) return false;
+    if (this.phase === 'countdown') {
+      if (this._playerAnimating || this.isExternalOverlayBlocking()) return true;
+      if (this.spectatorUids.includes(this.myUid) || this.openedIndices.includes(barrelIndex)) return true;
+      return this.handleFalseStart();
+    }
     if (this.phase !== 'claim' || this._playerAnimating) return true;
+    this.clearIdleHint();
     if (this.spectatorUids.includes(this.myUid)) {
       this.onToast?.('Ты в нокауте! Жми «⛓ Погреметь цепями» внизу экрана.');
       return true;
@@ -1873,9 +2188,131 @@ export class WorkshopDuelController {
       : { kind: 'empty', value: 0, label: 'Пусто' };
   }
 
+  spawnBarrelLootPopout(barrelIndex, loot, isMine = true) {
+    const host = document.getElementById('duel-loot-popouts');
+    if (!host || !this.scene || barrelIndex < 0) return;
+    const pos = this.scene.projectBarrelScreenPos?.(barrelIndex, 1.55);
+    if (!pos?.visible) return;
+    const kind = String(loot?.kind || 'empty');
+    const icoMap = {
+      ticket: '🎟',
+      chip: '💎',
+      points: '⭐',
+      energy: '⚡',
+      life: '❤️',
+      screamer: '💀',
+      empty: '💨',
+      friend_barrel: '🛢',
+    };
+    const pop = document.createElement('div');
+    pop.className = `barrel-loot-popout is-${kind}${isMine ? ' is-mine' : ' is-opp'}`;
+    pop.style.left = `${Math.max(64, Math.min(window.innerWidth - 64, pos.x))}px`;
+    pop.style.top = `${Math.max(104, Math.min(window.innerHeight - 90, pos.y))}px`;
+
+    const icoEl = document.createElement('span');
+    icoEl.className = 'blp-ico';
+    icoEl.textContent = icoMap[kind] || '🎁';
+    const lblEl = document.createElement('strong');
+    lblEl.className = 'blp-lbl';
+    lblEl.textContent = String(loot?.label || '');
+    pop.append(icoEl, lblEl);
+    host.appendChild(pop);
+
+    window.setTimeout(() => {
+      try { pop.remove(); } catch { /* ignore */ }
+    }, 1850);
+  }
+
+  openTilTrophyPicker({ onResolved } = {}) {
+    const modal = document.getElementById('modal-til-trophy-pick');
+    const ticketBtn = document.getElementById('btn-trophy-pick-ticket');
+    const chipBtn = document.getElementById('btn-trophy-pick-chip');
+    const ptsBtn = document.getElementById('btn-trophy-pick-points');
+    const lockBadge = document.getElementById('trophy-ticket-lock-badge');
+
+    if (!modal || !ticketBtn || !chipBtn || !ptsBtn) {
+      onResolved?.({ kind: 'points', pickedRes: null });
+      return;
+    }
+
+    const profStats = this.getProfileStats?.() || {};
+    const shards = Math.max(0, Math.round(Number(this.getTicketShards?.() ?? profStats.ticketShards ?? 0)));
+    const friends = Math.max(0, Math.round(Number(profStats.friendsBrought ?? 0)));
+    const ticketLocked = shards >= 2 && friends < 1;
+
+    ticketBtn.classList.toggle('is-locked', ticketLocked);
+    if (lockBadge) {
+      if (ticketLocked) lockBadge.removeAttribute('hidden');
+      else lockBadge.setAttribute('hidden', '');
+    }
+
+    ticketBtn.disabled = false;
+    chipBtn.disabled = false;
+    ptsBtn.disabled = false;
+    this._trophyPickerOpen = true;
+    modal.removeAttribute('hidden');
+    Haptics.success();
+
+    let settling = false;
+    const handlePick = async (kind) => {
+      if (settling) return;
+      if (kind === 'ticket' && ticketLocked) {
+        Haptics.error();
+        this.onToast?.('🔒 Уже 2/4! Позови друга или сыграй 1×1, чтобы забрать 3/4 и 4/4.');
+        return;
+      }
+      settling = true;
+      ticketBtn.disabled = true;
+      chipBtn.disabled = true;
+      ptsBtn.disabled = true;
+
+      let pickedRes = { kind };
+      try {
+        if (kind === 'ticket') {
+          const sRes = await awardTicketShardServer(this.getTgUser?.(), 'til_trophy').catch(() => null);
+          pickedRes.serverTicketRes = sRes;
+          pickedRes.serverTicketGranted = Boolean(sRes?.granted);
+          if (sRes?.ok) {
+            const patch = {
+              ticketShards: sRes.mergedTicket ? 0 : Math.max(0, Math.min(3, Number(sRes.shards || 0))),
+            };
+            if (sRes.premierePoints != null) patch.premierePoints = Number(sRes.premierePoints);
+            if (sRes.granted) patch.hasPendingTicket = true;
+            if (sRes.pendingTicketsCount != null) patch.pendingTicketsCount = Number(sRes.pendingTicketsCount);
+            this.onProfileSync?.(patch);
+          }
+          this.onFlyRating?.({ type: 'ticket', count: 3, label: '🎟 +1/4 билета' });
+        } else if (kind === 'chip') {
+          this.sessionStats.playerChips += 1;
+          this.onCollectChipFromBarrel?.({ barrelIndex: -1, loot: { kind: 'chip', value: 150, label: '💎 Новая фишка' } });
+          const bankRes = await claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: 150, solo: true }).catch(() => null);
+          if (bankRes?.ok) this.onProfileSync?.({ premierePoints: bankRes.premierePoints });
+          this.onFlyRating?.({ type: 'chip', count: 3, label: '💎 Новая фишка' });
+        } else {
+          this.sessionStats.playerPoints += 300;
+          const bankRes = await claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: 300, solo: true }).catch(() => null);
+          if (bankRes?.ok) this.onProfileSync?.({ premierePoints: bankRes.premierePoints });
+          this.onFlyRating?.({ type: 'points', count: 3, label: '+300 ⭐' });
+        }
+        this.audio?.playRewardChime?.();
+        Haptics.success();
+      } finally {
+        this._trophyPickerOpen = false;
+        modal.setAttribute('hidden', '');
+        this.syncEnergyUI();
+        onResolved?.(pickedRes);
+      }
+    };
+
+    ticketBtn.onclick = () => handlePick('ticket');
+    chipBtn.onclick = () => handlePick('chip');
+    ptsBtn.onclick = () => handlePick('points');
+  }
+
   async executeReveal(payload) {
     if (this.phase === 'reveal') return;
     this.setPhase('reveal');
+    this.clearIdleHint();
     this._playerAnimating = false;
     this._playerAnimatingSince = 0;
     this._tilState = 'idle';
@@ -1883,6 +2320,8 @@ export class WorkshopDuelController {
     this.scene?.setBarrelTelegraph?.(-1, false);
     this.scene.setInteractive(false);
     document.getElementById('duel-countdown-banner')?.setAttribute('hidden', '');
+    const popHost = document.getElementById('duel-loot-popouts');
+    if (popHost) popHost.innerHTML = '';
 
     this.claims = payload.claims || this.claims;
     this.safeIndices = payload.safeIndices || this.safeIndices;
@@ -1910,10 +2349,12 @@ export class WorkshopDuelController {
       if (loot.kind === 'screamer') anyScreamer = true;
       if (loot.value > 0) anyPoints = true;
       entries.push({ barrelIndex: bIdx, claim, loot });
+      this.spawnBarrelLootPopout(bIdx, loot, claim.uid === this.myUid);
     }
 
     const myEntry = entries.find((e) => e.claim.uid === this.myUid) || null;
     const oppEntry = entries.find((e) => e.claim.uid !== this.myUid) || null;
+    const diff = getTilDifficultyProfile(this.duelLives, Math.max(0, Number(this.tilRoundIdx || 1) - 1));
 
     if (anyScreamer) {
       const randScreamerIdx = Math.floor(Math.random() * 7);
@@ -1931,47 +2372,100 @@ export class WorkshopDuelController {
       this.audio.playLidBlowOff(Boolean(myEntry && myEntry.loot.value > 0));
     }
 
+    if (oppEntry?.loot) {
+      const ok = oppEntry.loot.kind;
+      if (ok === 'ticket') {
+        this.sessionStats.oppTickets += 1;
+      } else if (ok === 'chip') {
+        this.sessionStats.oppChips += 1;
+      } else if (ok === 'points') {
+        this.sessionStats.oppPoints += Math.max(0, Number(oppEntry.loot.value || 150));
+      } else if (ok === 'life') {
+        this.tilLives = Math.min(this.tilMaxLives + 2, Number(this.tilLives || 0) + 1);
+      } else if (ok === 'empty') {
+        this.tilLives = Math.max(0, Number(this.tilLives || 0) - 1);
+      } else if (ok === 'screamer') {
+        this.tilLives = Math.max(0, Number(this.tilLives || 0) - 2);
+      }
+    }
+
     let foundFriendBarrel = false;
+    this._lastScreamerDmg = diff.screamerDamage;
     if (myEntry) {
       const k = myEntry.loot.kind;
       if (k === 'friend_barrel') {
         foundFriendBarrel = true;
         Haptics.success();
         this.onFlyRating?.({
+          type: 'points',
           count: 2,
           label: myEntry.loot.label,
           barrelIndex: myEntry.barrelIndex,
         });
-      } else if (k === 'ticket' || k === 'points' || k === 'chip') {
+      } else if (k === 'ticket') {
         this.onFlyRating?.({
-          count: k === 'ticket' ? 3 : 2,
+          type: 'ticket',
+          count: 3,
+          label: '🎟 +1/4',
+          barrelIndex: myEntry.barrelIndex,
+        });
+        this.scheduleTimeout(() => {
+          if (this.active && this.phase === 'reveal') {
+            this.onContextDiscoveryHint?.('ticket');
+          }
+        }, 420);
+      } else if (k === 'points' || k === 'chip') {
+        const val = Number(myEntry.loot.value || 150);
+        if (k === 'chip') this.sessionStats.playerChips += 1;
+        else this.sessionStats.playerPoints += val;
+        this.onFlyRating?.({
+          type: k === 'chip' ? 'chip' : 'points',
+          count: 2,
           label: myEntry.loot.label,
           barrelIndex: myEntry.barrelIndex,
         });
         if (k === 'chip') {
           this.onCollectChipFromBarrel?.({ barrelIndex: myEntry.barrelIndex, loot: myEntry.loot });
         }
-        if (k === 'points' || k === 'chip') {
-          claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: myEntry.loot.value, solo: this.soloMode })
-            .then((bankRes) => {
-              if (bankRes?.ok) {
-                this.onProfileSync?.({ premierePoints: bankRes.premierePoints });
-              }
-            })
-            .catch(() => {});
-          this.scheduleTimeout(() => {
-            if (this.active && this.phase === 'reveal') {
-              this.onContextDiscoveryHint?.(k);
+        claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: val, solo: this.soloMode })
+          .then((bankRes) => {
+            if (bankRes?.ok) {
+              this.onProfileSync?.({ premierePoints: bankRes.premierePoints });
             }
-          }, 550);
-        }
+          })
+          .catch(() => {});
+        this.scheduleTimeout(() => {
+          if (this.active && this.phase === 'reveal') {
+            this.onContextDiscoveryHint?.(k);
+          }
+        }, 420);
+      } else if (k === 'energy') {
+        this.energy = Math.min(100, Math.max(0, Number(this.energy || 0) + 50));
+        this.audio?.playRewardChime?.();
+        this.onFlyRating?.({
+          type: 'energy',
+          count: 2,
+          label: '+50% ⚡',
+          barrelIndex: myEntry.barrelIndex,
+        });
+        this.scheduleTimeout(() => {
+          if (this.active && this.phase === 'reveal') {
+            this.onContextDiscoveryHint?.('energy');
+          }
+        }, 420);
       } else if (k === 'life') {
-        this.duelLives = Math.min(6, Math.max(1, Number(this.duelLives || 0) + 1));
-        this.onFlyLife?.({ count: 1, label: '+1 жизнь', barrelIndex: myEntry.barrelIndex });
+        this.duelLives = Math.min(30, Math.max(1, Number(this.duelLives || 0) + 1));
+        this.onProfileSync?.({ lives: this.duelLives });
+        this.onFlyLife?.({ type: 'lives', count: 1, label: '+1 ❤️', barrelIndex: myEntry.barrelIndex });
+        this.scheduleTimeout(() => {
+          if (this.active && this.phase === 'reveal') {
+            this.onContextDiscoveryHint?.('life');
+          }
+        }, 420);
       } else if (k === 'empty') {
         this.duelLives = Math.max(0, Number(this.duelLives || 0) - 1);
       } else if (k === 'screamer') {
-        this.duelLives = Math.max(0, Number(this.duelLives || 0) - 2);
+        this.duelLives = Math.max(0, Number(this.duelLives || 0) - diff.screamerDamage);
       }
     }
 
@@ -1996,15 +2490,29 @@ export class WorkshopDuelController {
     }
     const ticketEntry = entries.find((e) => e.loot.kind === 'ticket') || null;
     const closedLeftNow = Math.max(0, (this.barrelCount || 10) - (this.openedIndices?.length || 0));
-    const needTilNow = !ticketEntry && this.duelLives <= 0;
+    const needTilNow = this.duelLives <= 0;
+    const tilKnockedOut = Boolean(this.soloMode && !this.friendBarrelHunt && this.tilLives <= 0 && !needTilNow);
     const minClosedContinue = this.friendBarrelHunt ? 1 : 2;
-    this.batchResolved = Boolean(ticketEntry || closedLeftNow < minClosedContinue);
+    this.batchResolved = Boolean(ticketEntry || tilKnockedOut || closedLeftNow < minClosedContinue);
 
     const summaryLine = entries
       .map((e) => `${e.claim.uid === this.myUid ? 'ТЫ' : e.claim.name}: ${e.loot.label}`)
       .join(' · ');
 
-    if (!ticketEntry && !needTilNow && closedLeftNow >= minClosedContinue) {
+    if (needTilNow) {
+      this.scheduleStepWhenUnblocked(() => {
+        if (!this.active) return;
+        this.clearBarrelClaimBadges();
+        this.setPhase('finished');
+        this.spectatorUids = [];
+        document.getElementById('duel-countdown-banner')?.setAttribute('hidden', '');
+        document.getElementById('duel-spectator-bar')?.setAttribute('hidden', '');
+        this.triggerDefeatFlow();
+      }, anyScreamer ? 1500 : 1050, 120000);
+      return;
+    }
+
+    if (!ticketEntry && !tilKnockedOut && closedLeftNow >= minClosedContinue) {
       const pauseMs = anyScreamer ? LOOT_READ_SCREAMER_MS : LOOT_READ_PAUSE_MS;
       this.scheduleStepWhenUnblocked(() => {
         if (!this.active) return;
@@ -2013,6 +2521,39 @@ export class WorkshopDuelController {
           this.hostInitiateRound({ isFreeRerack: true });
         }
       }, pauseMs, 120000);
+      return;
+    }
+
+    const playerBeatTilSolo = Boolean(
+      this.soloMode &&
+      !this.friendBarrelHunt &&
+      (tilKnockedOut || (ticketEntry && ticketEntry.claim.uid === this.myUid))
+    );
+
+    if (playerBeatTilSolo) {
+      this.scheduleStepWhenUnblocked(() => {
+        if (!this.active) return;
+        this.clearBarrelClaimBadges();
+        document.getElementById('duel-countdown-banner')?.setAttribute('hidden', '');
+        document.getElementById('duel-spectator-bar')?.setAttribute('hidden', '');
+        this.openTilTrophyPicker({
+          onResolved: (picked) => {
+            if (!this.active) return;
+            this.setPhase('finished');
+            this.spectatorUids = [];
+            this.showRoundResultCard(ticketEntry?.claim || { uid: this.myUid, name: this.myName }, { potLives: 0 }, {
+              myEntry,
+              oppEntry,
+              summaryLine,
+              ticketFound: picked?.kind === 'ticket',
+              serverTicketGranted: Boolean(picked?.serverTicketGranted),
+              serverTicketRes: picked?.serverTicketRes || null,
+              tilTrophyPicked: picked?.kind || 'points',
+              tilDefeatedByPlayer: true,
+            });
+          },
+        });
+      }, RESULT_CARD_DELAY_MS, 120000);
       return;
     }
 
@@ -2078,8 +2619,11 @@ export class WorkshopDuelController {
     const myLoot = detail.myEntry?.loot || { kind: 'skip', value: 0, label: 'Пропустил' };
     const oppName = detail.oppEntry?.claim?.name || TIL_BOT_NAME;
     const oppLoot = detail.oppEntry?.loot || { kind: 'empty', value: 0, label: 'Пусто' };
-    const iFoundTicket = Boolean(ticketWinner && ticketWinner.uid === this.myUid);
-    const oppFoundTicket = Boolean(ticketWinner && ticketWinner.uid !== this.myUid);
+    const iFoundTicket = Boolean(
+      (ticketWinner && ticketWinner.uid === this.myUid) || detail.tilDefeatedByPlayer
+    );
+    const pickedTrophy = detail.tilTrophyPicked || '';
+    const oppFoundTicket = Boolean(ticketWinner && ticketWinner.uid !== this.myUid && !detail.tilDefeatedByPlayer);
     const closedLeft = Math.max(0, (this.barrelCount || 10) - (this.openedIndices?.length || 0));
 
     const serverTicketGranted = Boolean(detail.serverTicketGranted);
@@ -2102,9 +2646,9 @@ export class WorkshopDuelController {
         this.onProfileSync?.(immediatePatch);
       }
     }
-    // Начисляем +500 ⭐ очки в рейтинг за найденную 🎟 часть билета (баллы и фишки уже начислены при вскрытии в executeReveal)
-    const myPointsEarned = iFoundTicket ? 500 : 0;
-    if (myPointsEarned > 0 || iFoundTicket) {
+    // Начисляем +500 ⭐ в живой 1×1 дуэли (в соло с Тилем трофей уже начислен через Пикер 1 из 3)
+    const myPointsEarned = !detail.tilDefeatedByPlayer && iFoundTicket ? 500 : 0;
+    if (!detail.tilDefeatedByPlayer && (myPointsEarned > 0 || iFoundTicket)) {
       claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: myPointsEarned, solo: this.soloMode })
         .then((bankRes) => {
           if (bankRes?.ok) {
@@ -2139,7 +2683,27 @@ export class WorkshopDuelController {
     const needTilRefill = !iFoundTicket && this.duelLives <= 0;
     const oceanAllowed = needTilRefill ? (this.canUseOceanRefill ? Boolean(this.canUseOceanRefill()) : true) : false;
 
-    if (iFoundTicket) {
+    if (pickedTrophy) {
+      Haptics.success();
+      if (pickedTrophy === 'chip') {
+        if (titleEl) titleEl.textContent = '💎 Трофей Тиля: Новая фишка!';
+        if (subEl) subEl.textContent = 'Фишка добавлена в твою коллекцию (+150 ⭐).';
+      } else if (pickedTrophy === 'points') {
+        if (titleEl) titleEl.textContent = '⭐ Трофей Тиля: +300 очков!';
+        if (subEl) subEl.textContent = 'Твоя шкала до суперприза выросла.';
+      } else {
+        const sRes = detail.serverTicketRes || {};
+        if (serverTicketGranted) {
+          if (titleEl) titleEl.textContent = '🎟 Билет 4/4 собран!';
+          if (subEl) subEl.textContent = 'Подари бесплатный билет другу в Telegram!';
+          this.scheduleTimeout(() => this.onOpenGoldenFork?.(), 900);
+        } else {
+          const sh = Number(sRes.shards ?? (this.getTicketShards?.() || 1));
+          if (titleEl) titleEl.textContent = `🎟 Билет: ${sh}/4!`;
+          if (subEl) subEl.textContent = 'Трофей Тиля забран — двигайся к 4/4.';
+        }
+      }
+    } else if (iFoundTicket) {
       Haptics.success();
       const sRes = detail.serverTicketRes || {};
       if (serverTicketGranted) {
@@ -2209,21 +2773,22 @@ export class WorkshopDuelController {
             ? '💎 Найдена фишка!'
             : myLoot.kind === 'points'
               ? `⭐ +${myLoot.value || 150} очков`
-              : myLoot.kind === 'screamer'
-                ? '☠️ Потерял жизнь (-2 ❤️)'
-                : '💨 Пусто (-1 ❤️)';
+              : myLoot.kind === 'energy'
+                ? '⚡ +50% энергии!'
+                : myLoot.kind === 'screamer'
+                  ? `☠️ Потерял жизнь (-${this._lastScreamerDmg || 2} ❤️)`
+                  : '💨 Пусто (-1 ❤️)';
       if (titleEl) titleEl.textContent = statusVerb;
       if (subEl) {
         subEl.textContent = `❤️ ${this.duelLives} · осталось бочек: ${closedLeft}`;
       }
     }
 
-    if (needTilRefill && oceanAllowed && this.onDuelDefeatToTil) {
+    if (needTilRefill) {
       this.scheduleTimeout(() => {
         if (!this.active || this.phase !== 'finished') return;
-        box?.setAttribute('hidden', '');
-        this.onDuelDefeatToTil({ roomId: this.roomId, solo: this.soloMode });
-      }, 2400);
+        this.triggerDefeatFlow();
+      }, 1500);
     }
 
     const capHit = iFoundTicket && (detail.serverTicketRes?.reason === 'solo_cap_reached' || detail.serverTicketRes?.reason === 'friend_or_duel_required');
@@ -2288,29 +2853,7 @@ export class WorkshopDuelController {
   }
 
   showNoLivesPrompt() {
-    const oceanAllowed = this.canUseOceanRefill ? Boolean(this.canUseOceanRefill()) : true;
-    if (!oceanAllowed && this.onOpenPackForLives) {
-      this.onToast?.('🛢 Море уже заряжало жизни сегодня (1 раз / 24 ч) — закатай нового друга за +6 ❤️!');
-      this.onOpenPackForLives();
-      return;
-    }
-    if (this.onDuelDefeatToTil) {
-      this.onToast?.('⚡ Энергия на нуле — в подвал к Бочке Тиля на 12 сек!');
-      this.onDuelDefeatToTil({ roomId: this.roomId, solo: this.soloMode });
-      return;
-    }
-    const box = document.getElementById('duel-result-box');
-    const titleEl = document.getElementById('duel-result-title');
-    const subEl = document.getElementById('duel-result-sub');
-    const rematchBtn = document.getElementById('btn-duel-rematch');
-
-    box?.removeAttribute('hidden');
-    if (titleEl) titleEl.textContent = '❤️ НА СЧЕТУ 0 ЖИЗНЕЙ ДЛЯ СТАВКИ!';
-    if (subEl) {
-      subEl.textContent =
-        'Для входа в кон нужна 1 ❤️. Отправь бочку или ссылку на трейлер новому другу (+1 ❤️ сразу и +2 ❤️ за вход) и возвращайся за стол!';
-    }
-    rematchBtn?.setAttribute('hidden', '');
+    this.triggerDefeatFlow();
   }
 
   triggerSpectatorChainRattle() {
@@ -2344,10 +2887,12 @@ export class WorkshopDuelController {
       badge.className = `duel-barrel-badge ${stateCls}`;
       badge.dataset.barrelIndex = String(idx);
 
-      const initials = (claim.name || '?').trim().slice(0, 2).toUpperCase();
-      const ava = claim.avatar
-        ? `<img src="${escapeAttr(claim.avatar)}" alt="" />`
-        : `<span>${escapeHtml(initials)}</span>`;
+      const avaSrc = claim.uid === TIL_BOT_UID
+        ? TIL_AVATAR_URL
+        : claim.avatar && /^(https?:\/\/|\.?\/|data:image\/)/i.test(String(claim.avatar))
+          ? claim.avatar
+          : getFallbackFighterAvatar(claim.uid || claim.name);
+      const ava = `<img src="${escapeAttr(avaSrc)}" alt="" onerror="this.src='${FIGHTER_AVATARS[0]}'" />`;
       const lootTag = revealed ? `<b class="duel-badge-loot">${escapeHtml(loot.label)}</b>` : '';
       const shortName = claim.uid === this.myUid
         ? 'ТЫ'
