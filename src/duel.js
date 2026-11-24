@@ -119,6 +119,11 @@ export class WorkshopDuelController {
     this.duelCandidates = { sent: [], branch: [], loaded: false };
     this.pickerTab = 'sent'; // 'sent' | 'branch'
     this.challengedUids = new Set();
+    this.isWaitingInQueue = false;
+    this.waitingQueue = [];
+    this.queuePosition = 0;
+    this._myJoinedAt = Date.now();
+    this.lastPersonalChallengeStatus = '';
     this.soloMode = false;
     this.friendBarrelHunt = false;
     this.tilRoundIdx = 0;
@@ -631,6 +636,12 @@ export class WorkshopDuelController {
     this.falseStartCount = 0;
     this.batchResolved = false;
     this.skippedThisTurn = false;
+    this._myJoinedAt = Date.now();
+    this.isWaitingInQueue = false;
+    this.waitingQueue = [];
+    this.queuePosition = 0;
+    this.lastPersonalChallengeStatus = '';
+    document.getElementById('duel-waitlist-banner')?.setAttribute('hidden', '');
     this.syncEnergyUI();
 
     this.players = [
@@ -638,7 +649,7 @@ export class WorkshopDuelController {
         uid: this.myUid,
         name: this.myName,
         avatar: this.myAvatar,
-        joinedAt: Date.now(),
+        joinedAt: this._myJoinedAt,
         isBot: false,
       },
     ];
@@ -718,6 +729,11 @@ export class WorkshopDuelController {
     this.friendBarrelHunt = false;
     this._trophyPickerOpen = false;
     this._pendingTrophyFinish = false;
+    this.isWaitingInQueue = false;
+    this.waitingQueue = [];
+    this.queuePosition = 0;
+    this.lastPersonalChallengeStatus = '';
+    document.getElementById('duel-waitlist-banner')?.setAttribute('hidden', '');
     this.setPhase('idle');
     this._playerAnimating = false;
     this._roundStarting = false;
@@ -784,6 +800,87 @@ export class WorkshopDuelController {
     this.renderLobbyUI();
   }
 
+  applyPresenceList(list = []) {
+    if (!this.active || this.soloMode) return;
+    const dedup = new Map();
+    for (const p of list || []) {
+      if (!p?.uid) continue;
+      const prev = dedup.get(p.uid);
+      if (!prev || Number(p.joinedAt || 0) < Number(prev.joinedAt || 0)) {
+        dedup.set(p.uid, p);
+      }
+    }
+    const realSorted = Array.from(dedup.values()).sort(
+      (a, b) => (Number(a.joinedAt || 0) - Number(b.joinedAt || 0)) || String(a.uid).localeCompare(String(b.uid))
+    );
+    const activeReal = realSorted.slice(0, MAX_DUEL_PLAYERS);
+    const queueReal = realSorted.slice(MAX_DUEL_PLAYERS);
+    this.waitingQueue = queueReal;
+
+    const myQueueIdx = queueReal.findIndex((p) => p.uid === this.myUid);
+    if (myQueueIdx >= 0) {
+      const wasWaiting = this.isWaitingInQueue;
+      this.isWaitingInQueue = true;
+      this.queuePosition = myQueueIdx + 1;
+      this.players = activeReal;
+      if (!wasWaiting) {
+        this.clearAllTimers();
+        this._playerAnimating = false;
+        this.scene.setInteractive(false);
+        this.setPhase('lobby');
+        this.onToast?.(`⏳ За столом уже двое (1×1) — ты #${this.queuePosition} в очереди ожидания!`);
+      }
+      this.renderLobbyUI();
+      return;
+    }
+
+    if (this.isWaitingInQueue) {
+      this.isWaitingInQueue = false;
+      this.queuePosition = 0;
+      Haptics.success();
+      this.onToast?.('🔥 Твоя очередь! Ты зашёл за стол 1×1!');
+    }
+
+    const myLocal = this.players.find((p) => p.uid === this.myUid) || {
+      uid: this.myUid,
+      name: this.myName,
+      avatar: this.myAvatar,
+      joinedAt: this._myJoinedAt || Date.now(),
+      isBot: false,
+    };
+    const realWithSelf = activeReal.some((p) => p.uid === this.myUid)
+      ? activeReal
+      : [myLocal, ...activeReal].slice(0, MAX_DUEL_PLAYERS);
+    const bots = this.players.filter((p) => p.isBot);
+    const merged = [...realWithSelf, ...bots]
+      .sort((a, b) => (Number(a.joinedAt || 0) - Number(b.joinedAt || 0)) || String(a.uid).localeCompare(String(b.uid)))
+      .slice(0, MAX_DUEL_PLAYERS);
+
+    if (merged.length > 0) {
+      this.players = merged;
+      if (this.phase === 'lobby' || this.phase === 'finished') {
+        this.renderLobbyUI();
+      } else if (this.phase === 'countdown' || this.phase === 'claim') {
+        const presentUids = merged.map((p) => p.uid);
+        const presentContenders = this.contenderUids.filter((u) => presentUids.includes(u));
+        if (!this.soloMode && presentContenders.length < 2) {
+          this.clearAllTimers();
+          this._playerAnimating = false;
+          this.setPhase('lobby');
+          this.antePaidForRound = null;
+          this.scene.setInteractive(false);
+          this.onToast?.('⚠️ Соперник вышел из дуэли — возврат в лобби стола.');
+          this.renderLobbyUI();
+        } else if (this.isHost() && this.phase === 'claim' && !this._playerAnimating) {
+          const allPresentClaimed = presentContenders.every((u) => Object.values(this.claims).some((c) => c.uid === u));
+          if (allPresentClaimed) {
+            this.finalizeClaimsAndBroadcastReveal();
+          }
+        }
+      }
+    }
+  }
+
   connectRealtimeChannel() {
     const rt = getActiveRealtimeClient();
     if (!rt) return;
@@ -811,72 +908,16 @@ export class WorkshopDuelController {
           });
         }
       }
-      // v17.2: Строго 1 на 1 — максимум 2 игрока за столом! Если 2 друга уже сидят, 3-го сразу уводим на свежий стол, не ломая пару.
-      const realSorted = [...list].sort((a, b) => (a.joinedAt - b.joinedAt) || a.uid.localeCompare(b.uid));
-      const othersCount = realSorted.filter((p) => p.uid !== this.myUid).length;
-      const inTopTwo = realSorted.slice(0, MAX_DUEL_PLAYERS).some((p) => p.uid === this.myUid);
-      const roomIsFullForMe =
-        (othersCount >= MAX_DUEL_PLAYERS && !inTopTwo) ||
-        (realSorted.length > MAX_DUEL_PLAYERS && !inTopTwo);
-      if (roomIsFullForMe) {
-        if (this._bouncingRoomFull) return;
-        this._bouncingRoomFull = true;
-        try { ch.untrack(); } catch { /* ignore */ }
-        this.onToast?.('⚔️ За этим столом уже играют двое друзей (1 на 1)! Открываем твой новый стол…');
-        this.leaveRoom(false);
-        window.setTimeout(() => {
-          this.onRoomFull?.();
-        }, 60);
-        return;
-      }
-
-      const myLocal = this.players.find((p) => p.uid === this.myUid) || {
-        uid: this.myUid,
-        name: this.myName,
-        avatar: this.myAvatar,
-        joinedAt: Date.now(),
-        isBot: false,
-      };
-      const realWithSelf = realSorted.some((p) => p.uid === this.myUid)
-        ? realSorted
-        : [myLocal, ...realSorted];
-      const bots = this.players.filter((p) => p.isBot);
-      const merged = [...realWithSelf, ...bots]
-        .sort((a, b) => (a.joinedAt - b.joinedAt) || a.uid.localeCompare(b.uid))
-        .slice(0, MAX_DUEL_PLAYERS);
-
-      if (merged.length > 0) {
-        this.players = merged;
-        if (this.phase === 'lobby' || this.phase === 'finished') {
-          this.renderLobbyUI();
-        } else if (this.phase === 'countdown' || this.phase === 'claim') {
-          const presentUids = merged.map((p) => p.uid);
-          const presentContenders = this.contenderUids.filter((u) => presentUids.includes(u));
-          if (!this.soloMode && presentContenders.length < 2) {
-            this.clearAllTimers();
-            this._playerAnimating = false;
-            this.setPhase('lobby');
-            this.antePaidForRound = null;
-            this.scene.setInteractive(false);
-            this.onToast?.('⚠️ Соперник вышел из дуэли — возврат в лобби стола.');
-            this.renderLobbyUI();
-          } else if (this.isHost() && this.phase === 'claim' && !this._playerAnimating) {
-            const allPresentClaimed = presentContenders.every((u) => Object.values(this.claims).some((c) => c.uid === u));
-            if (allPresentClaimed) {
-              this.finalizeClaimsAndBroadcastReveal();
-            }
-          }
-        }
-      }
+      this.applyPresenceList(list);
     });
 
     ch.on('broadcast', { event: 'duel_start' }, ({ payload }) => {
-      if (!this.active || !payload) return;
+      if (!this.active || !payload || this.isWaitingInQueue) return;
       this.receiveRoundStart(payload);
     });
 
     ch.on('broadcast', { event: 'barrel_claim' }, ({ payload }) => {
-      if (!this.active || !payload) return;
+      if (!this.active || !payload || this.isWaitingInQueue) return;
       this.applyBarrelClaim(payload, false);
     });
 
@@ -887,7 +928,7 @@ export class WorkshopDuelController {
     });
 
     ch.on('broadcast', { event: 'duel_ante_failed' }, ({ payload }) => {
-      if (!this.active || !payload || payload.roundKey !== this.roundKey) return;
+      if (!this.active || !payload || this.isWaitingInQueue || payload.roundKey !== this.roundKey) return;
       if (this.duelMode === 'chips' && this.roundKey) {
         const rk = this.roundKey;
         const tg = this.getTgUser?.();
@@ -914,12 +955,12 @@ export class WorkshopDuelController {
     });
 
     ch.on('broadcast', { event: 'duel_reveal' }, ({ payload }) => {
-      if (!this.active || !payload) return;
+      if (!this.active || !payload || this.isWaitingInQueue) return;
       this.executeReveal(payload);
     });
 
     ch.on('broadcast', { event: 'chain_rattle' }, ({ payload }) => {
-      if (!this.active || !payload) return;
+      if (!this.active || !payload || this.isWaitingInQueue) return;
       const now = Date.now();
       if (now - this._lastRemoteRattleAt < 2500) return;
       this._lastRemoteRattleAt = now;
@@ -935,7 +976,7 @@ export class WorkshopDuelController {
           uid: this.myUid,
           name: this.myName,
           avatar: this.myAvatar,
-          joinedAt: this.players[0]?.joinedAt || Date.now(),
+          joinedAt: this._myJoinedAt || Date.now(),
         });
       }
     });
@@ -965,6 +1006,65 @@ export class WorkshopDuelController {
     return Boolean(this.getHasRealFriends?.() || count >= 1 || hasRealOpp || this.joinedViaDuelLink || Number(this.hofCache?.invitedFriends || 0) >= 1);
   }
 
+  renderWaitlistBanner() {
+    const banner = document.getElementById('duel-waitlist-banner');
+    if (!banner) return;
+    if (this.isWaitingInQueue) {
+      banner.className = 'duel-waitlist-banner';
+      const title = document.createElement('div');
+      title.className = 'duel-waitlist-title';
+      title.textContent = `⏳ Ты в очереди ожидания (место #${this.queuePosition})`;
+
+      const sub = document.createElement('div');
+      sub.className = 'duel-waitlist-sub';
+      const activeNames = this.players.map((p) => p.name || 'Игрок').join(' vs ');
+      sub.textContent = activeNames
+        ? `Сейчас за столом 1×1: ${activeNames}. Как только место освободится — ты зайдёшь автоматически.`
+        : 'Как только место освободится — ты зайдёшь автоматически.';
+
+      const children = [title, sub];
+      if (this.waitingQueue.length > 1) {
+        const qList = document.createElement('div');
+        qList.className = 'duel-waitlist-list';
+        qList.textContent = `В очереди (${this.waitingQueue.length}): ` + this.waitingQueue.map((q, idx) => `#${idx + 1} ${q.name || 'Игрок'}`).join(', ');
+        children.push(qList);
+      }
+
+      const actions = document.createElement('div');
+      actions.className = 'duel-waitlist-actions';
+      const newRoomBtn = document.createElement('button');
+      newRoomBtn.type = 'button';
+      newRoomBtn.id = 'btn-duel-waitlist-new-room';
+      newRoomBtn.className = 'btn-secondary btn-compact btn-full';
+      newRoomBtn.textContent = '⚔️ Открыть свой стол 1×1';
+      newRoomBtn.addEventListener('click', () => {
+        Haptics.light();
+        this.leaveRoom(false);
+        this.onRoomFull?.();
+      });
+      actions.appendChild(newRoomBtn);
+      children.push(actions);
+
+      banner.replaceChildren(...children);
+      banner.removeAttribute('hidden');
+      return;
+    }
+
+    if (this.waitingQueue.length > 0 && (this.phase === 'lobby' || this.phase === 'finished')) {
+      banner.className = 'duel-waitlist-banner is-host-notice';
+      const notice = document.createElement('div');
+      notice.className = 'duel-waitlist-sub';
+      const names = this.waitingQueue.map((q) => q.name || 'Игрок').join(', ');
+      notice.textContent = `⏳ В очереди ожидания за столом: ${this.waitingQueue.length} (${names}) — зайдёт следующим, как освободится место.`;
+      banner.replaceChildren(notice);
+      banner.removeAttribute('hidden');
+      return;
+    }
+
+    banner.replaceChildren();
+    banner.setAttribute('hidden', '');
+  }
+
   renderLobbyUI() {
     const slotsEl = document.getElementById('duel-slots-row');
     const potEl = document.getElementById('duel-pot-banner');
@@ -976,14 +1076,20 @@ export class WorkshopDuelController {
     const show1x1 = this.has1x1Access();
 
     if (roomTag) roomTag.textContent = `СТОЛ #${this.roomId.toUpperCase()}`;
-    if (headingEl) headingEl.textContent = show1x1 ? '⚔️ Дуэль 1×1' : '🥊 Бой с Тилем';
+    if (headingEl) {
+      headingEl.textContent = this.isWaitingInQueue
+        ? '⏳ Очередь на дуэль 1×1'
+        : show1x1
+          ? '⚔️ Дуэль 1×1'
+          : '🥊 Бой с Тилем';
+    }
     if (tabsEl) {
-      if (show1x1) tabsEl.removeAttribute('hidden');
+      if (show1x1 && !this.isWaitingInQueue) tabsEl.removeAttribute('hidden');
       else tabsEl.setAttribute('hidden', '');
     }
 
     const count = this.players.length;
-    const isChipsMode = show1x1 && this.duelMode === 'chips';
+    const isChipsMode = !this.isWaitingInQueue && show1x1 && this.duelMode === 'chips';
     const chipsUnlocked = Boolean(this.hofCache?.chipDuelUnlocked);
     this.updateModeTabsUI();
     if (potEl) {
@@ -997,8 +1103,8 @@ export class WorkshopDuelController {
       }
     }
 
-    const isPlaying = this.phase === 'countdown' || this.phase === 'claim' || this.phase === 'reveal';
-    const isFinished = this.phase === 'finished';
+    const isPlaying = !this.isWaitingInQueue && (this.phase === 'countdown' || this.phase === 'claim' || this.phase === 'reveal');
+    const isFinished = !this.isWaitingInQueue && this.phase === 'finished';
     const overlayEl = document.getElementById('duel-overlay');
     overlayEl?.classList.toggle('is-playing', isPlaying);
     overlayEl?.classList.toggle('is-finished', isFinished);
@@ -1024,10 +1130,19 @@ export class WorkshopDuelController {
     }
 
     const shareLinkBtn = document.getElementById('btn-duel-share-link');
-    if (invite3Btn) invite3Btn.setAttribute('hidden', '');
+    if (invite3Btn) {
+      if (!this.isWaitingInQueue && this.phase === 'lobby' && count < MAX_DUEL_PLAYERS) {
+        if (invite3Btn.dataset.pushCooldown !== '1') {
+          invite3Btn.textContent = '📣 Вызвать любого (пуш всем)';
+        }
+        invite3Btn.removeAttribute('hidden');
+      } else {
+        invite3Btn.setAttribute('hidden', '');
+      }
+    }
     if (shareLinkBtn) {
-      shareLinkBtn.textContent = 'Отправить ссылку другу';
-      if (count < MAX_DUEL_PLAYERS && (this.phase === 'lobby' || this.phase === 'finished')) {
+      shareLinkBtn.textContent = '👤 Вызвать друга';
+      if (!this.isWaitingInQueue && count < MAX_DUEL_PLAYERS && (this.phase === 'lobby' || this.phase === 'finished')) {
         shareLinkBtn.removeAttribute('hidden');
       } else {
         shareLinkBtn.setAttribute('hidden', '');
@@ -1088,16 +1203,17 @@ export class WorkshopDuelController {
       }
     }
 
+    this.renderWaitlistBanner();
     this.renderFriendPickerUI();
 
     const soloBtn = document.getElementById('btn-duel-play-solo');
     if (soloBtn) {
-      if (this.phase === 'lobby' && !isChipsMode && count < MAX_DUEL_PLAYERS) soloBtn.removeAttribute('hidden');
+      if (!this.isWaitingInQueue && this.phase === 'lobby' && !isChipsMode && count < MAX_DUEL_PLAYERS) soloBtn.removeAttribute('hidden');
       else soloBtn.setAttribute('hidden', '');
     }
 
     if (startBtn) {
-      if (!show1x1 || this.phase !== 'lobby' || (count < MAX_DUEL_PLAYERS && !isChipsMode)) {
+      if (this.isWaitingInQueue || !show1x1 || this.phase !== 'lobby' || (count < MAX_DUEL_PLAYERS && !isChipsMode)) {
         startBtn.setAttribute('hidden', '');
       } else {
         startBtn.removeAttribute('hidden');
@@ -1142,7 +1258,14 @@ export class WorkshopDuelController {
   renderFriendPickerUI() {
     const host = document.getElementById('duel-friend-picker');
     if (!host) return;
-    const showPicker = this.phase === 'lobby' && this.players.length < MAX_DUEL_PLAYERS && (this.has1x1Access() || isTestBogSessionActive());
+    const sentList = this.duelCandidates?.sent || [];
+    const branchList = this.duelCandidates?.branch || [];
+    const isLoaded = Boolean(this.duelCandidates?.loaded);
+    const showPicker =
+      !this.isWaitingInQueue &&
+      this.phase === 'lobby' &&
+      this.players.length < MAX_DUEL_PLAYERS &&
+      (this.has1x1Access() || isTestBogSessionActive() || sentList.length > 0 || branchList.length > 0);
     if (!showPicker) {
       host.setAttribute('hidden', '');
       return;
@@ -1150,9 +1273,15 @@ export class WorkshopDuelController {
     host.removeAttribute('hidden');
     host.textContent = '';
 
-    const sentList = this.duelCandidates?.sent || [];
-    const branchList = this.duelCandidates?.branch || [];
-    const isLoaded = Boolean(this.duelCandidates?.loaded);
+    const statusNote = document.createElement('div');
+    statusNote.id = 'dfp-status-note';
+    statusNote.className = 'dfp-status-note';
+    if (this.lastPersonalChallengeStatus) {
+      statusNote.textContent = this.lastPersonalChallengeStatus;
+    } else {
+      statusNote.setAttribute('hidden', '');
+    }
+    host.appendChild(statusNote);
 
     const tabs = document.createElement('div');
     tabs.className = 'dfp-tabs';
@@ -1197,7 +1326,7 @@ export class WorkshopDuelController {
       empty.className = 'dfp-empty-box';
       const txt = document.createElement('p');
       txt.className = 'dfp-empty';
-      txt.textContent = 'Пока нет друзей — отправь ссылку ниже';
+      txt.textContent = 'Пока нет друзей — нажми «👤 Вызвать друга» или «📣 Вызвать любого (пуш всем)»';
       empty.appendChild(txt);
       listEl.appendChild(empty);
     } else {
@@ -1236,21 +1365,36 @@ export class WorkshopDuelController {
         btn.type = 'button';
         btn.className = `dfp-btn${alreadySent ? ' is-sent' : ''}`;
         btn.disabled = alreadySent;
-        btn.textContent = alreadySent ? '✓ Позван' : 'Вызвать';
+        btn.textContent = alreadySent ? '✓ Пуш отправлен' : '📲 Вызвать лично';
         btn.addEventListener('click', async () => {
           Haptics.medium();
           this.challengedUids.add(key);
           btn.disabled = true;
           btn.classList.add('is-sent');
-          btn.textContent = 'Зовём…';
+          btn.textContent = 'Шлём пуш…';
           try {
-            await this.onChallengeFriend?.(friend, this.roomId);
-            btn.textContent = '✓ Позван';
+            const res = await this.onChallengeFriend?.(friend, this.roomId);
+            const msg = String(res?.message || '').trim();
+            if (msg) {
+              this.lastPersonalChallengeStatus = msg;
+              const noteEl = document.getElementById('dfp-status-note');
+              if (noteEl) {
+                noteEl.textContent = msg;
+                noteEl.removeAttribute('hidden');
+              }
+            }
+            btn.textContent = '✓ Пуш отправлен';
+            window.setTimeout(() => {
+              this.challengedUids.delete(key);
+              if (this.active && this.phase === 'lobby' && !this.isWaitingInQueue) {
+                this.renderFriendPickerUI();
+              }
+            }, 15000);
           } catch {
             this.challengedUids.delete(key);
             btn.disabled = false;
             btn.classList.remove('is-sent');
-            btn.textContent = 'Вызвать';
+            btn.textContent = '📲 Вызвать лично';
           }
         });
 
@@ -1263,7 +1407,7 @@ export class WorkshopDuelController {
   }
 
   async startSoloDuel({ huntFriendBarrel = undefined } = {}) {
-    if (!this.active || this._soloStarting || this.phase !== 'lobby') return;
+    if (!this.active || this._soloStarting || this.phase !== 'lobby' || this.isWaitingInQueue) return;
     this._soloStarting = true;
     const soloBtn = document.getElementById('btn-duel-play-solo');
     if (soloBtn) soloBtn.disabled = true;
@@ -1300,7 +1444,7 @@ export class WorkshopDuelController {
    * закрытые бочки, и только когда закрытых бочек остаётся меньше числа бьющихся игроков, выкатывается новая партия 10 бочек!
    */
   async hostInitiateRound({ isFreeRerack = false, suddenDeathContenders = null } = {}) {
-    if (this._roundStarting) return;
+    if (this._roundStarting || this.isWaitingInQueue) return;
     if (this.players.length < 2) {
       this.onToast?.('Позови хотя бы одного друга за стол (или добавь бота в Тест-Боге)!');
       return;
@@ -2052,6 +2196,7 @@ export class WorkshopDuelController {
    */
   handleBarrelClick(barrelIndex, worldPoint) {
     if (!this.active) return false;
+    if (this.isWaitingInQueue) return true;
     this.audio?.stopListening?.();
     if (this.phase === 'countdown') {
       if (this._playerAnimating || this.isExternalOverlayBlocking()) return true;

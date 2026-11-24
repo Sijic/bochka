@@ -806,7 +806,7 @@ Deno.serve(async (req: Request) => {
 
       const challenger = escapeHtml(body.challengerName || "Кент из Цеха");
       const roomId = String(body.roomId || "duel");
-      await tgApi("sendMessage", {
+      const sendRes = await tgApi("sendMessage", {
         chat_id: body.targetTgId,
         parse_mode: "HTML",
         text:
@@ -818,7 +818,12 @@ Deno.serve(async (req: Request) => {
           ],
         },
       });
-      return jsonResp({ ok: true });
+      return jsonResp({
+        ok: Boolean(sendRes?.ok),
+        delivered: Boolean(sendRes?.ok),
+        skipped: false,
+        tgError: sendRes?.description || "",
+      });
     }
 
     // v15.2: Массовый пуш от бота ВСЕМ друзьям, кто играл в «БОЧКУ», с прямым входом за стол дуэли
@@ -937,8 +942,8 @@ Deno.serve(async (req: Request) => {
             parse_mode: "HTML",
             text:
               `⚔️ <b>ВЫЗОВ В ДУЭЛЬ «НА СЧЁТ ТРИ!»</b>\n\n` +
-              `<b>${challenger}</b> уже ждёт за столом в цеху «БОЧКИ» (нужно ещё ${needCount})!\n` +
-              `Залетай прямо сейчас — хватаем живые бочки синхронно за бесплатный билет и очки ТОП-20 на Закрытый показ в Москве 17 декабря!`,
+              `<b>${challenger}</b> уже ждёт за столом в цеху «БОЧКИ»!\n` +
+              `Кто первый залетит — сразу в дуэль 1×1, остальные встают в очередь ожидания!`,
             reply_markup: {
               inline_keyboard: [
                 [{ text: "⚔️ ЗАЛЕТЕТЬ В ДУЭЛЬ", web_app: { url: duelWebUrl } }],

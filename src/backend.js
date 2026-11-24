@@ -1851,13 +1851,35 @@ export async function sendPostRescueReaction(pack, reactionType, viewerTgUser = 
 }
 
 export async function sendDuelChallengePush({ targetTgId, challengerName = '', roomId }) {
-  if (!targetTgId) return false;
-  return sendTelegramPing({
-    clientAction: 'duel_challenge',
-    targetTgId,
-    challengerName: challengerName || 'Друг из Цеха',
-    roomId,
-  });
+  if (isTestBogActive()) return { ok: true, delivered: true, skipped: false, reason: '' };
+  if (!targetTgId || !ENV.tgNotifyWebhook || !roomId) {
+    return { ok: false, delivered: false, skipped: true, reason: 'unavailable' };
+  }
+  const initData = typeof window !== 'undefined' ? String(window.Telegram?.WebApp?.initData || '') : '';
+  try {
+    const res = await fetch(ENV.tgNotifyWebhook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clientAction: 'duel_challenge',
+        targetTgId,
+        challengerName: challengerName || 'Друг из Цеха',
+        roomId,
+        initData,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    const skipped = Boolean(data?.skipped);
+    const delivered = Boolean(res.ok && data?.ok && !skipped && data?.delivered !== false);
+    return {
+      ok: Boolean(res.ok && data?.ok),
+      delivered,
+      skipped,
+      reason: String(data?.tgError || data?.error || ''),
+    };
+  } catch {
+    return { ok: false, delivered: false, skipped: false, reason: 'network_error' };
+  }
 }
 
 /**

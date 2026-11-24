@@ -9198,37 +9198,37 @@ async function openDuelTable(roomId = '', { autoAddTestBots = false, initialMode
 
 async function challengeSpecificFriend1v1(friend, roomId) {
   const cleanRoom = roomId || duelCtrl?.roomId || `d_${Math.random().toString(36).slice(2, 8)}`;
-  const targetTgId = String(friend?.tg_id || friend?.receiver_tg_id || friend?.friend_tg_id || '').trim();
+  const rawUid = String(friend?.uid || '').trim();
+  const targetTgId = String(
+    friend?.tg_id || friend?.receiver_tg_id || friend?.friend_tg_id || (rawUid.startsWith('tg_') ? rawUid.slice(3) : '')
+  ).trim();
   const friendName = String(friend?.name || friend?.receiver_name || 'Друг').trim();
   const challengerName = state.tg?.user?.name || 'Друг из Цеха';
-  const explainEl = document.getElementById('dfp-tab-explain');
 
-  if (targetTgId) {
-    const ok = await sendDuelChallengePush({
+  if (targetTgId && /^\d+$/.test(targetTgId)) {
+    const res = await sendDuelChallengePush({
       targetTgId,
       challengerName,
       roomId: cleanRoom,
-    }).catch(() => false);
-    if (ok) {
-      if (explainEl) explainEl.textContent = `✓ Вызов 1×1 отправлен ${friendName} в Telegram! Ждём за столом.`;
-      return true;
+    }).catch(() => ({ ok: false, delivered: false }));
+    if (res?.delivered) {
+      Haptics.success();
+      const msg = `📲 Личный пуш отправлен ${friendName} в Telegram! Ты остаёшься в игре — ждём за столом.`;
+      showToast(msg);
+      return { ok: true, delivered: true, message: msg };
     }
+    const msg = `ℹ️ ${friendName} ещё не запускал @bochka_film_bot — нажми «👤 Вызвать друга» ниже, чтобы скинуть ссылку.`;
+    showToast(msg);
+    return { ok: true, delivered: false, message: msg };
   }
 
-  const links = buildDuelShareLinks(cleanRoom);
-  const url = links.tgLink || links.webUrl;
-  const text = `⚔️ ${friendName}, погнали 1 на 1 в «БОЧКУ»! Только мы вдвоём — кто быстрее собьёт крышки бочек на счёт три!`;
-  if (state.tg?.inTelegram && links.tgLink) {
-    openTelegramShare(url, text);
-  } else {
-    openExternalLink(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`);
-  }
-  if (explainEl) explainEl.textContent = `🔗 Отправь личную ссылку 1×1 для ${friendName} и жми «СТАРТ»!`;
-  return true;
+  const msg = `ℹ️ У ${friendName} нет активного Telegram-бота — нажми «👤 Вызвать друга» ниже, чтобы скинуть ссылку.`;
+  showToast(msg);
+  return { ok: true, delivered: false, message: msg };
 }
 
 /**
- * v15.2+v19.0: Автоматический пуш через бота друзьям, кто играл в «БОЧКУ» (строго стол 1×1).
+ * v15.2+v19.0: Автоматический пуш через бота ВСЕМ друзьям/игрокам в «БОЧКУ» (1-й зашёл -> играет 1×1, остальные в ожидании).
  */
 async function pushDuelToFriends() {
   const roomId = duelCtrl?.roomId || `d_${Math.random().toString(36).slice(2, 8)}`;
@@ -9237,14 +9237,14 @@ async function pushDuelToFriends() {
   const btn = document.getElementById('btn-duel-invite-third');
 
   if (btn?.dataset?.pushCooldown === '1') {
-    showToast('⏳ Пуш уже отправлен друзьям — ждём их за столом!');
+    showToast('⏳ Пуш уже отправлен — кто первый зайдёт, с тем и дуэль 1×1!');
     return;
   }
 
   const prevLabel = btn?.textContent || '';
   if (btn) {
     btn.disabled = true;
-    btn.textContent = '📡 РАССЫЛАЕМ ПУШ ДРУЗЬЯМ В БОЧКЕ...';
+    btn.textContent = '📡 Отправляем пуш всем...';
   }
 
   let sentCount = 0;
@@ -9273,10 +9273,10 @@ async function pushDuelToFriends() {
       const uniqueTargets = new Set();
       for (const f of [...(gameFriends || []), ...(wsFriends || [])]) {
         const tid = String(f?.receiver_tg_id || f?.tg_id || f?.friend_tg_id || '').trim();
-        if (tid && tid !== myTgId) uniqueTargets.add(tid);
+        if (tid && /^\d+$/.test(tid) && tid !== myTgId) uniqueTargets.add(tid);
       }
       if (uniqueTargets.size > 0) {
-        await Promise.allSettled(
+        const results = await Promise.allSettled(
           Array.from(uniqueTargets).map((targetTgId) =>
             sendDuelChallengePush({
               targetTgId,
@@ -9285,7 +9285,7 @@ async function pushDuelToFriends() {
             })
           )
         );
-        sentCount = uniqueTargets.size;
+        sentCount = results.filter((r) => r.status === 'fulfilled' && r.value?.delivered).length;
         totalCandidates = uniqueTargets.size;
       }
     } catch { /* ignore */ }
@@ -9295,27 +9295,27 @@ async function pushDuelToFriends() {
 
   if (sentCount > 0) {
     Haptics.success();
-    showToast(`📣 Пуш-вызов отправлен ${sentCount} друзьям через @bochka_film_bot! Они зайдут прямо за твой стол!`);
+    showToast(`📣 Пуш отправлен ${sentCount} игрокам! Кто первый зайдёт — сразу в дуэль 1×1, остальные в ожидании.`);
     if (btn) {
       btn.dataset.pushCooldown = '1';
-      btn.textContent = `✅ ПУШ ОТПРАВЛЕН (${sentCount}) · ЖДЁМ ДРУЗЕЙ`;
+      btn.textContent = `✅ Пуш отправлен (${sentCount}) · Ждём`;
       window.setTimeout(() => {
         if (!btn) return;
         delete btn.dataset.pushCooldown;
-        btn.textContent = prevLabel || `📣 ПУШ ВСЕМ ДРУЗЬЯМ В БОЧКЕ (НУЖНО ЕЩЁ ${need})`;
+        btn.textContent = prevLabel || '📣 Вызвать любого (пуш всем)';
       }, 15000);
     }
     return;
   }
 
-  if (btn) btn.textContent = prevLabel || `📣 ПУШ ВСЕМ ДРУЗЬЯМ В БОЧКЕ (НУЖНО ЕЩЁ ${need})`;
+  if (btn) btn.textContent = prevLabel || '📣 Вызвать любого (пуш всем)';
 
   if (throttledCount > 0) {
-    showToast('⏳ Пуш этим друзьям уже ушёл минуту назад — ждём их за столом или нажми «Скинуть ссылку» ниже!');
+    showToast('⏳ Пуш уже разослан минуту назад — кто первый зайдёт, с тем и дуэль 1×1!');
     return;
   }
 
-  showToast('ℹ️ Пока никто из твоих друзей не запускал бота — нажми «🔗 Скинуть ссылку на стол» ниже!');
+  showToast('📡 Стол открыт для любого соперника! Кто первый зайдёт — сразу в дуэль 1×1, остальные в ожидании. Можно также нажать «👤 Вызвать друга».');
 }
 
 async function shareCurrentDuelRoom() {
