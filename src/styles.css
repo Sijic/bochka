@@ -9747,6 +9747,10 @@ body.is-duel-spotlight-active .duel-live-mini-bar.duel-vs-hud {
   box-shadow: 0 8px 32px rgba(250, 204, 21, 0.45), 0 0 0 2px rgba(250, 204, 21, 0.35);
 }
 
+body[data-screen="workshop"]:not(.is-duel-active) .toast:not([hidden]) {
+  top: calc(96px + var(--safe-top));
+}
+
 .hof-chip-item.is-friend-joined {
   border-color: rgba(250, 204, 21, 0.72);
   background: linear-gradient(180deg, rgba(250, 204, 21, 0.14), rgba(15, 23, 42, 0.85));
