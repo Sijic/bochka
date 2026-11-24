@@ -8258,7 +8258,7 @@ function mountVkTrailerPlayer() {
     const dt = Math.min(500, Math.max(0, now - lastTickAt));
     lastTickAt = now;
     if (!state.trailer.modalOpen || document.hidden) return;
-    visibleWallMs += dt * (state.trailer.vkReady ? 1 : 0.45);
+    visibleWallMs += dt * (state.trailer.vkReady ? 1 : 0.62);
     const wallSec = visibleWallMs / 1000;
     state.trailer.wallClockSec = wallSec;
     syncTrailerIntroLockUI(Math.max(wallSec, Number(state.trailer.honestWatchedSec || 0)));

@@ -2998,11 +2998,14 @@ export async function fetchTelegramUserAvatarFallback() {
   if (!endpoint || isTestBogActive()) return '';
   const initData = typeof window !== 'undefined' ? String(window.Telegram?.WebApp?.initData || '') : '';
   if (!initData) return '';
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timerId = controller ? setTimeout(() => controller.abort(), 2500) : null;
   try {
-    const resp = await resilientFetch(endpoint, {
+    const resp = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clientAction: 'get_tg_avatar', initData }),
+      signal: controller ? controller.signal : undefined,
     });
     if (!resp.ok) return '';
     const json = await resp.json().catch(() => null);
@@ -3010,6 +3013,9 @@ export async function fetchTelegramUserAvatarFallback() {
       return json.dataUrl;
     }
   } catch { /* fallback handled by caller */ }
+  finally {
+    if (timerId) clearTimeout(timerId);
+  }
   return '';
 }
 

@@ -1148,6 +1148,7 @@ export class WorkshopDuelController {
 
     const sentList = this.duelCandidates?.sent || [];
     const branchList = this.duelCandidates?.branch || [];
+    const isLoaded = Boolean(this.duelCandidates?.loaded);
 
     const tabs = document.createElement('div');
     tabs.className = 'dfp-tabs';
@@ -1157,7 +1158,7 @@ export class WorkshopDuelController {
     tabSent.type = 'button';
     tabSent.id = 'btn-dfp-tab-sent';
     tabSent.className = `dfp-tab${this.pickerTab === 'sent' ? ' is-active' : ''}`;
-    tabSent.textContent = `Мои друзья (${sentList.length})`;
+    tabSent.textContent = isLoaded ? `Мои друзья (${sentList.length})` : 'Мои друзья …';
     tabSent.addEventListener('click', () => {
       Haptics.light();
       this.pickerTab = 'sent';
@@ -1168,7 +1169,7 @@ export class WorkshopDuelController {
     tabBranch.type = 'button';
     tabBranch.id = 'btn-dfp-tab-branch';
     tabBranch.className = `dfp-tab${this.pickerTab === 'branch' ? ' is-active' : ''}`;
-    tabBranch.textContent = `Ветка (${branchList.length})`;
+    tabBranch.textContent = isLoaded ? `Ветка (${branchList.length})` : 'Ветка …';
     tabBranch.addEventListener('click', () => {
       Haptics.light();
       this.pickerTab = 'branch';
