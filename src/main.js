@@ -514,7 +514,7 @@ async function ensureDuelReady() {
         rollRareMovieCardLazy('duel_barrel')
           .then((res) => {
             if (res?.dropped && res?.trophy?.title) {
-              showToast(`💎 ФИШКА ИЗ БОЧКИ: «${res.trophy.title}» (+150 ⭐)!`);
+              showToast(`🪙 ФИШКА ИЗ БОЧКИ: «${res.trophy.title}» (+150 ⭐)!`);
             }
           })
           .catch(() => {});
@@ -2734,7 +2734,13 @@ function showContextHintModal({
 
   const hasStructured = Boolean(what || gives || where);
   if (iconEl) {
-    if (icon) {
+    if (String(kind || '') === 'chip') {
+      const chipIco = document.createElement('span');
+      chipIco.className = 'chip-token-ico is-lg';
+      chipIco.setAttribute('aria-hidden', 'true');
+      iconEl.replaceChildren(chipIco);
+      iconEl.removeAttribute('hidden');
+    } else if (icon) {
       iconEl.textContent = icon;
       iconEl.removeAttribute('hidden');
     } else {
@@ -2808,11 +2814,11 @@ const DUEL_DISCOVERY_CARDS = {
   },
   chip: {
     stateKey: 'firstChip',
-    icon: '💎',
+    icon: '🪙',
     text: 'Найдена коллекционная фишка цеха!',
-    what: 'Коллекционная фишка (💎)',
+    what: 'Коллекционная фишка (🪙)',
     gives: 'Открывает Зал славы и дуэли 1×1 со ставкой на фишки',
-    where: 'Счётчик 💎 в VS-панели и разделе «Зал славы»',
+    where: 'Счётчик фишек в VS-панели и разделе «Зал славы»',
     spotlightId: 'duel-vs-player-chips',
   },
   points: {

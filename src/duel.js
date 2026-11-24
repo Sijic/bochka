@@ -1390,7 +1390,7 @@ export class WorkshopDuelController {
 
           if (safeIndices.length < goodBudget && cursor < barrelCount) {
             const cIdx = indices[cursor++];
-            barrelLoot[cIdx] = { kind: 'chip', value: 150, label: '💎 Фишка!' };
+            barrelLoot[cIdx] = { kind: 'chip', value: 150, label: '🪙 Фишка!' };
             safeIndices.push(cIdx);
           }
 
@@ -1591,7 +1591,7 @@ export class WorkshopDuelController {
     if (bannerSub) bannerSub.setAttribute('hidden', '');
     banner?.removeAttribute('hidden');
 
-    const steps = ['1', '2', 'БЕЙ!'];
+    const steps = ['РАЗ...', 'ДВА...', 'ТРИ — БЕЙ!'];
     steps.forEach((word, i) => {
       const tid = window.setTimeout(() => {
         if (!this.active || this.phase !== 'countdown') return;
@@ -1640,7 +1640,7 @@ export class WorkshopDuelController {
     banner?.classList.add('is-false-start');
     if (bannerText) bannerText.textContent = 'ФАЛЬСТАРТ!';
     if (bannerSub) {
-      bannerSub.textContent = 'Жди команды БЕЙ!';
+      bannerSub.textContent = 'Жди команды «ТРИ — БЕЙ!»';
       bannerSub.removeAttribute('hidden');
     }
 
@@ -1648,7 +1648,7 @@ export class WorkshopDuelController {
       this._falseStartResetTimer = null;
       if (!this.active || this.phase !== 'countdown') return;
       this.startCountdownPhase();
-    }, 850);
+    }, 1050);
     return true;
   }
 
@@ -2224,7 +2224,7 @@ export class WorkshopDuelController {
     const kind = String(loot?.kind || 'empty');
     const icoMap = {
       ticket: '🎟',
-      chip: '💎',
+      chip: '🪙',
       points: '⭐',
       energy: '⚡',
       life: '❤️',
@@ -2239,7 +2239,14 @@ export class WorkshopDuelController {
 
     const icoEl = document.createElement('span');
     icoEl.className = 'blp-ico';
-    icoEl.textContent = icoMap[kind] || '🎁';
+    if (kind === 'chip') {
+      const chipToken = document.createElement('span');
+      chipToken.className = 'chip-token-ico is-xl';
+      chipToken.setAttribute('aria-hidden', 'true');
+      icoEl.replaceChildren(chipToken);
+    } else {
+      icoEl.textContent = icoMap[kind] || '🎁';
+    }
     const lblEl = document.createElement('strong');
     lblEl.className = 'blp-lbl';
     lblEl.textContent = String(loot?.label || '');
@@ -2323,8 +2330,8 @@ export class WorkshopDuelController {
           }
         } else if (kind === 'chip') {
           this.sessionStats.playerChips += 1;
-          this.onFlyRating?.({ type: 'chip', count: 3, label: '💎 Новая фишка' });
-          this.onCollectChipFromBarrel?.({ barrelIndex: -1, loot: { kind: 'chip', value: 150, label: '💎 Новая фишка' } });
+          this.onFlyRating?.({ type: 'chip', count: 3, label: '🪙 Новая фишка' });
+          this.onCollectChipFromBarrel?.({ barrelIndex: -1, loot: { kind: 'chip', value: 150, label: '🪙 Новая фишка' } });
           const bankRes = await claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: 150, solo: !isPvp1x1 }).catch(() => null);
           if (bankRes?.ok) this.onProfileSync?.({ premierePoints: bankRes.premierePoints });
         } else {
@@ -2761,7 +2768,7 @@ export class WorkshopDuelController {
       Haptics.success();
       const winPrefix = detail.pvp1x1WonByPlayer ? '🏆 Дуэль 1×1' : 'Трофей Тиля';
       if (pickedTrophy === 'chip') {
-        if (titleEl) titleEl.textContent = `💎 ${winPrefix}: Новая фишка!`;
+        if (titleEl) titleEl.textContent = `🪙 ${winPrefix}: Новая фишка!`;
         if (subEl) subEl.textContent = 'Фишка добавлена в твою коллекцию (+150 ⭐).';
       } else if (pickedTrophy === 'points') {
         if (titleEl) titleEl.textContent = `⭐ ${winPrefix}: +300 очков!`;
@@ -2845,7 +2852,7 @@ export class WorkshopDuelController {
         : myLoot.kind === 'life'
           ? '❤️ +1 жизнь!'
           : myLoot.kind === 'chip'
-            ? '💎 Найдена фишка!'
+            ? '🪙 Найдена фишка!'
             : myLoot.kind === 'points'
               ? `⭐ +${myLoot.value || 150} очков`
               : myLoot.kind === 'energy'
