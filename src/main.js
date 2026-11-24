@@ -2591,6 +2591,95 @@ function updateControlHintText() {
   }
 }
 
+let workshopIntroHintTimer = null;
+let workshopIntroFadeTimer = null;
+let workshopIntroPulseTimer = null;
+
+function clearWorkshopIntroPulse() {
+  if (workshopIntroPulseTimer) {
+    clearTimeout(workshopIntroPulseTimer);
+    workshopIntroPulseTimer = null;
+  }
+  document.querySelector('.hud-slim-o2')?.classList.remove('is-intro-pulse');
+  document.querySelector('.hud-slim-airbar')?.classList.remove('is-intro-pulse');
+}
+
+function hideWorkshopIntroHint(immediate = false) {
+  if (workshopIntroHintTimer) {
+    clearTimeout(workshopIntroHintTimer);
+    workshopIntroHintTimer = null;
+  }
+  if (workshopIntroFadeTimer) {
+    clearTimeout(workshopIntroFadeTimer);
+    workshopIntroFadeTimer = null;
+  }
+  clearWorkshopIntroPulse();
+  const el = document.getElementById('workshop-intro-hint');
+  if (!el) return;
+  if (immediate || el.hasAttribute('hidden')) {
+    el.classList.remove('is-fading');
+    el.setAttribute('hidden', '');
+    return;
+  }
+  el.classList.add('is-fading');
+  workshopIntroFadeTimer = window.setTimeout(() => {
+    workshopIntroFadeTimer = null;
+    el.classList.remove('is-fading');
+    el.setAttribute('hidden', '');
+  }, 360);
+}
+
+function showWorkshopIntroHint({ targetKind = 'human', durationMs = 4600 } = {}) {
+  if (duelCtrl?.isActive || state.watchingBarrelId) {
+    hideWorkshopIntroHint(true);
+    return;
+  }
+  const toastEl = document.getElementById('toast');
+  if (toastEl && !toastEl.hasAttribute('hidden')) {
+    hideWorkshopIntroHint(true);
+    return;
+  }
+  const el = document.getElementById('workshop-intro-hint');
+  const goalEl = document.getElementById('workshop-intro-goal');
+  const subEl = document.getElementById('workshop-intro-sub');
+  if (!el || !goalEl || !subEl) return;
+
+  if (workshopIntroHintTimer) {
+    clearTimeout(workshopIntroHintTimer);
+    workshopIntroHintTimer = null;
+  }
+  if (workshopIntroFadeTimer) {
+    clearTimeout(workshopIntroFadeTimer);
+    workshopIntroFadeTimer = null;
+  }
+  clearWorkshopIntroPulse();
+
+  if (targetKind === 'human') {
+    goalEl.textContent = 'Найди друга в бочке!';
+  } else if (targetKind === 'empty') {
+    goalEl.textContent = 'Найди пустую бочку!';
+  } else {
+    goalEl.textContent = 'Найди нужную бочку!';
+  }
+
+  const isTouch = Boolean(window.matchMedia?.('(pointer: coarse)')?.matches || window.innerWidth <= 768);
+  subEl.textContent = isTouch
+    ? 'Зажми палец на бочке — послушай и следи за воздухом O₂'
+    : 'Зажми или наведи на бочку — послушай и следи за воздухом O₂';
+
+  el.classList.remove('is-fading');
+  el.removeAttribute('hidden');
+
+  document.querySelector('.hud-slim-o2')?.classList.add('is-intro-pulse');
+  document.querySelector('.hud-slim-airbar')?.classList.add('is-intro-pulse');
+  workshopIntroPulseTimer = window.setTimeout(clearWorkshopIntroPulse, 3000);
+
+  workshopIntroHintTimer = window.setTimeout(() => {
+    workshopIntroHintTimer = null;
+    hideWorkshopIntroHint(false);
+  }, durationMs);
+}
+
 let lifeLostPillTimer = null;
 function showLifeLostPill(durationMs = 1750) {
   const pill = document.getElementById('life-lost-pill');
@@ -2634,6 +2723,7 @@ function showContextHintModal({
     return;
   }
   document.querySelectorAll('.is-hud-spotlight').forEach((n) => n.classList.remove('is-hud-spotlight'));
+  hideWorkshopIntroHint(true);
 
   state.contextHint = {
     open: true,
@@ -2793,6 +2883,9 @@ function showScreen(name) {
     });
   }
   document.body.setAttribute('data-screen', name);
+  if (name !== 'workshop') {
+    hideWorkshopIntroHint(true);
+  }
   if (name === 'ocean') {
     window.requestAnimationFrame(positionOceanToast);
   } else {
@@ -3893,6 +3986,7 @@ function launchWorkshopGameplay(golden = false) {
   audio.stopMicBlowDetector?.();
 
   showScreen('workshop');
+  showWorkshopIntroHint({ targetKind });
   startAirCountdownLoop();
 }
 
@@ -4791,6 +4885,9 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
   }
 
   const dwellMs = performance.now() - _hoverStartedAt;
+  if (!alreadyStruck && dwellMs >= 700) {
+    hideWorkshopIntroHint(false);
+  }
   const roundElapsedMs = performance.now() - Number(state.round.startedAtMs || 0);
   const allowReticleHint = Boolean(isSteamHazard || (dwellMs >= 2200 && roundElapsedMs >= 4000));
 
@@ -4933,6 +5030,7 @@ async function handleBarrelStrike(index, worldPoint, pointerMeta = null) {
 
   audio.stopListening();
   clearBarrelReticleHover();
+  hideWorkshopIntroHint(false);
 
   // Проверяем секретный код «19 -> 97 -> 3 быстрых удара»
   if (checkSecret1997Combo(index, worldPoint, barrelObj.struck)) {
@@ -10851,6 +10949,7 @@ function showToast(text, { className = '', durationMs = null } = {}) {
   el.classList.remove('is-special-knock');
   if (className) el.classList.add(className);
   el.removeAttribute('hidden');
+  hideWorkshopIntroHint(true);
   positionOceanToast();
   if (state.activeScreen === 'ocean') {
     window.requestAnimationFrame(positionOceanToast);
