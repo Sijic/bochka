@@ -9902,10 +9902,20 @@ body.is-duel-spotlight-active .duel-live-mini-bar.duel-vs-hud {
 }
 
 @media (max-width: 480px) {
-  .duel-vs-ava { width: 30px; height: 30px; }
+  .duel-live-mini-bar.duel-vs-hud { padding: 5px 6px !important; }
+  .duel-vs-row { gap: 4px; }
+  .duel-vs-side { gap: 4px; }
+  .duel-vs-ava { width: 28px; height: 28px; }
   .duel-vs-ava-menu-lbl { font-size: 7px; padding: 1px 3.5px; }
-  .duel-vs-center { min-width: 48px; }
+  .duel-vs-center { min-width: 42px; }
   .duel-vs-num { font-size: 9.5px; }
+  .duel-vs-loot-row { gap: 2px; }
+  .duel-vs-hud .duel-shards-pill,
+  .duel-vs-chip-pill,
+  .duel-vs-pts-pill,
+  .duel-vs-opp-pill { font-size: 8.5px; padding: 1px 2.5px; }
+  .duel-vs-hud .ticket-stub-mini.is-duel { width: 18px; height: 10px; padding: 1px 2px; gap: 1px; }
+  .duel-vs-hud .chip-token-ico { width: 10px; height: 10px; }
   .trophy-pick-grid { grid-template-columns: 1fr; gap: 8px; }
   .trophy-pick-item {
     flex-direction: row;
