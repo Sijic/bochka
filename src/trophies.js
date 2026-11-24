@@ -321,7 +321,7 @@ function showTrophyDetailOverlay(modalHost, trophy) {
   modalHost.appendChild(ov);
 }
 
-export function renderHallOfFameModal(bodyEl, data, { onInviteFriend, onOpenChipDuel, onPlayTil, initialTab = 'artifacts' } = {}) {
+export function renderHallOfFameModal(bodyEl, data, { onInviteFriend, onOpenChipDuel, onPlayTil, initialTab = 'auto' } = {}) {
   if (!bodyEl) return;
   bodyEl.textContent = '';
 
