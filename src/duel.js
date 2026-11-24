@@ -193,6 +193,9 @@ export class WorkshopDuelController {
   setPhase(nextPhase) {
     this.phase = nextPhase;
     this._phaseEnteredAt = Date.now();
+    if (nextPhase !== 'countdown' && nextPhase !== 'claim') {
+      this.audio?.stopListening?.();
+    }
   }
 
   isExternalOverlayBlocking() {
@@ -720,6 +723,7 @@ export class WorkshopDuelController {
     this._roundStarting = false;
     this.stopInputWatchdog();
     this.clearAllTimers();
+    this.audio?.stopListening?.();
     this.scene?.setDuelDirectClick?.(false);
     this.scene?.setBarrelTelegraph?.(-1, false);
     this.scene?.setIdleHintPulse?.(false);
@@ -1562,8 +1566,9 @@ export class WorkshopDuelController {
         }
       }
     }
+    this.audio?.setDuelBarrelLayout?.(this.scene.getBarrelWorldPositions(), this.barrelLoot);
     this.scene.setIdleHintPulse?.(false);
-    // Обратный отсчёт: 1 — 2 — 3! Бочки интерактивны для перехвата фальстарта!
+    // Обратный отсчёт: РАЗ — ДВА — ТРИ! Бочки интерактивны для прослушки и перехвата фальстарта!
     this.startCountdownPhase();
   }
 
@@ -1597,6 +1602,14 @@ export class WorkshopDuelController {
         if (!this.active || this.phase !== 'countdown') return;
         const isGo = i === 2;
         if (bannerText) bannerText.textContent = word;
+        if (bannerSub) {
+          if (isGo) {
+            bannerSub.setAttribute('hidden', '');
+          } else {
+            bannerSub.textContent = 'Зажми бочку — послушай, что внутри!';
+            bannerSub.removeAttribute('hidden');
+          }
+        }
         banner?.classList.toggle('is-go', isGo);
         this.audio.playCountdownBeat(isGo);
         if (isGo) {
@@ -2009,6 +2022,7 @@ export class WorkshopDuelController {
    */
   handleBarrelClick(barrelIndex, worldPoint) {
     if (!this.active) return false;
+    this.audio?.stopListening?.();
     if (this.phase === 'countdown') {
       if (this._playerAnimating || this.isExternalOverlayBlocking()) return true;
       if (this.spectatorUids.includes(this.myUid) || this.openedIndices.includes(barrelIndex)) return true;

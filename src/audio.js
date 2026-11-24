@@ -126,6 +126,7 @@ class WorkshopAudio {
     this.panners = [];
     this.targetIndex = 0;
     this.targetKind = 'human'; // 'human' | 'empty' | 'ticket'
+    this.duelLootMap = null;
     this.barrelDecoys = [];
     this.activeBarrel = -1;
     this.activeListenSource = null;
@@ -388,6 +389,7 @@ class WorkshopAudio {
     this.barrelPositions = positions.slice();
     this.targetIndex = targetIdx;
     this.targetKind = targetKind || 'human';
+    this.duelLootMap = null;
     // Перемешиваем 10 обманок для каждого нового раунда так, чтобы каждая бочка звучала по-своему
     const pool = DECOY_SOUND_KEYS.slice();
     for (let i = pool.length - 1; i > 0; i--) {
@@ -398,7 +400,31 @@ class WorkshopAudio {
     this._rebuildPanners();
   }
 
+  setDuelBarrelLayout(positions, barrelLoot = {}) {
+    this.barrelPositions = Array.isArray(positions) ? positions.slice() : [];
+    this.duelLootMap = barrelLoot && typeof barrelLoot === 'object' ? { ...barrelLoot } : {};
+    const entries = Object.entries(this.duelLootMap);
+    const ticketEntry = entries.find(([, l]) => l?.kind === 'ticket' || l?.kind === 'friend_barrel')
+      || entries.find(([, l]) => l?.kind === 'chip' || l?.kind === 'life');
+    this.targetIndex = ticketEntry ? Number(ticketEntry[0]) : -1;
+    this.targetKind = 'ticket';
+    this._rebuildPanners();
+  }
+
   getBarrelSoundKey(index) {
+    if (this.duelLootMap) {
+      const kind = String(this.duelLootMap[index]?.kind || 'empty');
+      if (kind === 'ticket') return 'target_ticket';
+      if (kind === 'friend_barrel') return 'target_human';
+      if (kind === 'chip' || kind === 'life') return 'patch_barrel_ring';
+      if (kind === 'energy') return 'patch_tesla_arc';
+      if (kind === 'points') return 'patch_metal_latch';
+      if (kind === 'screamer') {
+        const idxAbs = Math.abs(Math.round(Number(index) || 0));
+        return ['horror_barrel_scratch', 'horror_barrel_breath', 'horror_barrel_groan'][idxAbs % 3];
+      }
+      return 'target_empty';
+    }
     if (index === this.targetIndex) {
       if (this.targetKind === 'empty') return 'target_empty';
       if (this.targetKind === 'ticket') return 'target_ticket';
@@ -766,12 +792,17 @@ class WorkshopAudio {
     const playOnce = () => {
       if (this.activeBarrel !== index) return;
       listenCycle += 1;
-      const isTarget = index === this.targetIndex;
-      Haptics.barrelListenPulse(isTarget);
+      const duelLoot = this.duelLootMap ? String(this.duelLootMap[index]?.kind || 'empty') : '';
+      const isGood = this.duelLootMap
+        ? ['ticket', 'friend_barrel', 'chip', 'life'].includes(duelLoot)
+        : index === this.targetIndex;
+      const isTarget = this.duelLootMap ? isGood : index === this.targetIndex;
+      Haptics.barrelListenPulse(isGood);
       if (!this.ctx || !this.enabled) return;
       const dest = this.panners[index] || this.master;
       // v11.6 Прослушка: на целевой бочке с человеком (Ур. 1, Ур. 4, Ур. 5+) с 1-го прослушивания слышно глухое «я тут...»!
       const useMuffledVoiceClue =
+        !this.duelLootMap &&
         isTarget &&
         this.targetKind === 'human' &&
         !this.senderVoiceBuffer &&
@@ -779,7 +810,10 @@ class WorkshopAudio {
       const key = useMuffledVoiceClue
         ? (listenCycle % 4 === 0 ? 'target_muffled_2' : 'target_muffled_1')
         : this.getBarrelSoundKey(index);
-      const played = this._playInsideBarrelSample(key, dest, isTarget ? 1.15 : 0.94);
+      const gainVol = this.duelLootMap
+        ? (isGood ? 1.12 : (duelLoot === 'screamer' ? 1.05 : 0.88))
+        : (isTarget ? 1.15 : 0.94);
+      const played = this._playInsideBarrelSample(key, dest, gainVol);
       if (!played) {
         if (isTarget) this._triggerTargetCycle(index);
         else this._triggerEmptyCycle(index);

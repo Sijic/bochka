@@ -4848,7 +4848,57 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
   const reticle = document.getElementById('barrel-reticle');
   const retId = document.getElementById('reticle-id');
 
-  if (duelCtrl?.isActive || state.watchingBarrelId || !state.round.running || state.round.pausedForModal || index < 0) {
+  if (duelCtrl?.isActive) {
+    const canListen = !state.watchingBarrelId && (duelCtrl.phase === 'countdown' || duelCtrl.phase === 'claim');
+    if (!canListen || index < 0 || alreadyStruck) {
+      clearBarrelReticleHover();
+      audio.stopListening();
+      return;
+    }
+    if (index !== _hoverBarrelIdx) {
+      if (_hoverHintTimer) {
+        clearTimeout(_hoverHintTimer);
+        _hoverHintTimer = null;
+      }
+      _hoverBarrelIdx = index;
+      _hoverStartedAt = performance.now();
+      _hoverHintTimer = window.setTimeout(() => {
+        _hoverHintTimer = null;
+        if (_hoverBarrelIdx === index && duelCtrl?.isActive) {
+          handleBarrelHover(index, _hoverLastPos.sx, _hoverLastPos.sy, _hoverLastPos.alreadyStruck);
+        }
+      }, 880);
+    }
+    _hoverLastPos = { sx, sy, alreadyStruck: Boolean(alreadyStruck) };
+    audio.setListeningBarrel(index);
+    if (reticle && retId) {
+      const bCode = BARREL_BATCH_CODES[index] || `0${index + 1}`;
+      reticle.removeAttribute('hidden');
+      reticle.style.left = `${Math.max(78, Math.min(window.innerWidth - 78, sx))}px`;
+      reticle.style.top = `${Math.max(96, Math.min(window.innerHeight - 90, sy))}px`;
+      reticle.classList.remove('is-radar-human', 'is-radar-empty', 'is-radar-ticket', 'is-radar-trap');
+      reticle.classList.add('is-knocking');
+      const dwellMs = performance.now() - _hoverStartedAt;
+      if (!audio.enabled && dwellMs >= 850) {
+        const lKind = String(duelCtrl.barrelLoot?.[index]?.kind || 'empty');
+        if (['ticket', 'friend_barrel', 'chip', 'life', 'energy'].includes(lKind)) {
+          reticle.classList.add('is-radar-ticket');
+          retId.textContent = `ПРОСЛУШКА · №${bCode} // 🎟 ЖИВОЙ ЗВУК`;
+        } else if (lKind === 'screamer') {
+          reticle.classList.add('is-radar-trap');
+          retId.textContent = `ПРОСЛУШКА · №${bCode} // ⚠️ СКРЕЖЕТ`;
+        } else {
+          reticle.classList.add('is-radar-empty');
+          retId.textContent = `ПРОСЛУШКА · №${bCode} // 💨 ГЛУХОЕ ЭХО`;
+        }
+      } else {
+        retId.textContent = `ПРОСЛУШКА · №${bCode} // ${t('reticleListening')}`;
+      }
+    }
+    return;
+  }
+
+  if (state.watchingBarrelId || !state.round.running || state.round.pausedForModal || index < 0) {
     clearBarrelReticleHover();
     audio.stopListening();
     return;

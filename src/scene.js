@@ -1803,7 +1803,7 @@ export class WorkshopScene {
       if (this.pointerDownInfo) {
         const dx = e.clientX - this.pointerDownInfo.x;
         const dy = e.clientY - this.pointerDownInfo.y;
-        const dragTol = e.pointerType === 'mouse' ? 32 : 22;
+        const dragTol = e.pointerType === 'mouse' ? 32 : (this.duelDirectClick ? 28 : 22);
         if (Math.hypot(dx, dy) > dragTol) {
           this.pointerDownInfo.dragged = true;
         }
@@ -1831,20 +1831,9 @@ export class WorkshopScene {
         this._listenHoldTimer = null;
       }
 
-      // v19.5: В бою с Тилем / дуэли 1x1 клик срабатывает мгновенно на pointerdown (без удержания/порога pointerup)
-      if (this.duelDirectClick) {
-        this.pointerDownInfo = null;
-        if (hit) {
-          const nowMs = performance.now();
-          if (nowMs - (this._lastDirectStrikeAt || 0) > 140) {
-            this._lastDirectStrikeAt = nowMs;
-            this.onStrikeBarrel(hit.index, hit.point, { clientX: e.clientX, clientY: e.clientY });
-          }
-        }
-        return;
-      }
-
-      const holdMs = e.pointerType === 'touch' ? 190 : 360;
+      const holdMs = this.duelDirectClick
+        ? (e.pointerType === 'touch' ? 210 : 250)
+        : (e.pointerType === 'touch' ? 190 : 360);
       this.pointerDownInfo = {
         x: e.clientX,
         y: e.clientY,
@@ -1890,6 +1879,11 @@ export class WorkshopScene {
       }
 
       if (info.barrelIndex >= 0 && !info.dragged) {
+        if (this.duelDirectClick) {
+          const nowMs = performance.now();
+          if (nowMs - (this._lastDirectStrikeAt || 0) <= 110) return;
+          this._lastDirectStrikeAt = nowMs;
+        }
         this.onStrikeBarrel(info.barrelIndex, info.point, { clientX: info.x, clientY: info.y });
       }
     });

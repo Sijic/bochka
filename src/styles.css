@@ -584,7 +584,7 @@ body {
 /* Плавающий технический прицел прослушки */
 .barrel-reticle {
   position: fixed;
-  z-index: 15;
+  z-index: 82;
   transform: translate(-50%, -105%);
   pointer-events: none;
   display: inline-flex;
