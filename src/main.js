@@ -3690,10 +3690,6 @@ function configureBottomAttemptsMode(mode) {
 }
 
 function updatePremiereBarsUI() {
-  // v11.0 Железное правило: пока реальные друзья ещё не зашли по ссылке, жизней максимум 3 ❤️ (4 или 5 быть не может!)
-  if (Number(state.profile.friendsBrought || 0) <= 0 && Number(state.profile.lives || 0) > 3) {
-    state.profile.lives = 3;
-  }
   const scoreStr = Number(state.profile.premiereScore || 0).toFixed(1);
   const pct = Math.max(0, Math.min(100, Number(state.profile.premiereScore || 0)));
   const lives = Math.max(0, Number(state.profile.lives ?? 0));
@@ -6536,7 +6532,9 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
         if (res?.ok) {
           state.profile.currentLevel = Math.max(state.profile.currentLevel, res.currentLevel);
           state.profile.premierePoints = Math.max(state.profile.premierePoints, res.premierePoints);
-          if (typeof res.lives === 'number') state.profile.lives = capEarlyLivesIfNoRealFriends(res.lives);
+          if (typeof res.lives === 'number') {
+            state.profile.lives = Math.max(Number(state.profile.lives || 0), capEarlyLivesIfNoRealFriends(res.lives));
+          }
           updatePremiereBarsUI();
           refreshHudLevelLabel();
           // Уровень 3 (билет найден): перекрёстный пуш рефереру!
