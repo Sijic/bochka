@@ -1947,8 +1947,8 @@ function syncBurgerMenuLocks() {
   setLock(
     'btn-burger-pack-friend',
     !hasRescuedL1,
-    '🛢 ЗАКАТАТЬ И ПРИГЛАСИТЬ ДРУГА (+3 ❤️)',
-    '🔒 ЗАКАТАТЬ ДРУГА (ОТКРОЕТСЯ С УР. 2)'
+    '🛢 ЗАКАТАТЬ ДРУГА (+3 ❤️)',
+    '🔒 ЗАКАТАТЬ ДРУГА (С УР. 2)'
   );
   const sentLedger = readSentTicketsLedger().filter((x) => x.status === 'waiting_24h' || x.status === 'opened_unactivated');
   const ticketShards = Math.max(0, Math.min(3, Math.round(Number(state.profile?.ticketShards || 0))));
@@ -1956,15 +1956,15 @@ function syncBurgerMenuLocks() {
     'btn-burger-send-tickets',
     tickets <= 0 && sentLedger.length === 0,
     tickets > 0
-      ? `🎟 ПОДАРИТЬ БИЛЕТЫ ДРУЗЬЯМ (${tickets} · ${ticketShards}/4)`
-      : `🎟 СТАТУС ОТПРАВЛЕННЫХ БИЛЕТОВ (${sentLedger.length} · ${ticketShards}/4)`,
-    `🔒 ПОДАРИТЬ БИЛЕТ ДРУГУ (${tickets} · ${ticketShards}/4)`
+      ? `🎟 ПОДАРИТЬ БИЛЕТ (${tickets} · ${ticketShards}/4)`
+      : `🎟 БИЛЕТЫ (${sentLedger.length} · ${ticketShards}/4)`,
+    `🔒 ПОДАРИТЬ БИЛЕТ (${tickets} · ${ticketShards}/4)`
   );
   setLock(
     'btn-burger-leaderboard',
     packed <= 0 && lvl <= 1,
-    '🏆 РЕЙТИНГ НА ПРЕМЬЕРУ (⭐ + 🛢)',
-    '🔒 РЕЙТИНГ ПРЕМЬЕРЫ (ПОСЛЕ 1-Й БОЧКИ)'
+    '🏆 РЕЙТИНГ ТОП-20',
+    '🔒 РЕЙТИНГ (ПОСЛЕ 1-Й БОЧКИ)'
   );
   const testTicketBtn = document.getElementById('btn-burger-test-ticket');
   if (testTicketBtn) {
@@ -4694,7 +4694,14 @@ function resetOceanTapperUI() {
     subEl.textContent = '⚡ Бей быстрее! Остановишься — пульс мигом слетит в ноль! Вернёшься в игру только на 100%!';
   }
   if (giftBtn) giftBtn.setAttribute('hidden', '');
-  if (backBtn) backBtn.setAttribute('hidden', '');
+  if (backBtn) {
+    if (Number(state.profile?.lives || 0) > 0) {
+      backBtn.textContent = '← В ЦЕХ';
+      backBtn.removeAttribute('hidden');
+    } else {
+      backBtn.setAttribute('hidden', '');
+    }
+  }
   if (pill) {
     pill.setAttribute('hidden', '');
     pill.textContent = '';
@@ -10066,11 +10073,6 @@ function bindUIEvents() {
   };
   document.getElementById('btn-hud-sound')?.addEventListener('click', toggleWorkshopSound);
   document.getElementById('btn-sound-corner')?.addEventListener('click', toggleWorkshopSound);
-  document.getElementById('btn-burger-ocean')?.addEventListener('click', () => {
-    closeBurgerDrawer();
-    if (duelCtrl?.isActive) duelCtrl.leaveRoom(false);
-    triggerOceanEasterEggScene();
-  });
 
   document.querySelectorAll('[data-life-action]').forEach((btn) => {
     btn.addEventListener('click', () => handleLifeRecoveryAction(btn.getAttribute('data-life-action') || 'kp'));
@@ -10830,11 +10832,6 @@ function bindUIEvents() {
     }
     showToast('🙏 «Спасибо!» улетело другу — его шкала Супер-приза выросла на +25%!');
     Haptics.success();
-  });
-
-  document.getElementById('btn-burger-reset-test')?.addEventListener('click', () => {
-    closeBurgerDrawer();
-    window.location.href = `${window.location.pathname}?reset=1`;
   });
 
   document.getElementById('btn-burger-test-ticket')?.addEventListener('click', async () => {

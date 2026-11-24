@@ -10642,3 +10642,11 @@ body:not([data-screen="workshop"]) .workshop-intro-hint {
     gap: 3px;
   }
 }
+
+@media (max-width: 400px) {
+  .topbar-brand .brand-word { font-size: 10.5px !important; letter-spacing: 0.02em !important; }
+  .topbar-right { gap: 2px !important; }
+  .topbar-right .nav-link { padding: 3px 4px !important; font-size: 9.5px !important; gap: 2px !important; }
+  .top-shards-pill .ticket-stub-mini { width: 20px; height: 10px; padding: 1px 2px; gap: 1px; }
+  .sound-corner-btn { width: 28px !important; height: 28px !important; font-size: 13px !important; }
+}
