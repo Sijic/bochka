@@ -54,7 +54,7 @@ BEGIN
     );
   END IF;
 
-  v_next_lives := LEAST(30, GREATEST(0, COALESCE(v_lives, 0)) + 3);
+  v_next_lives := GREATEST(0, COALESCE(v_lives, 0)) + 3;
 
   UPDATE public.users
   SET
@@ -498,7 +498,7 @@ BEGIN
       friends_brought = COALESCE(friends_brought, 0) + 1,
       premiere_points = COALESCE(premiere_points, 0) + 500,
       premiere_score = LEAST(99.5, COALESCE(premiere_score, 0) + 20.0),
-      lives = LEAST(30, COALESCE(lives, 0) + 6),
+      lives = COALESCE(lives, 0) + 6,
       ui_stage = GREATEST(COALESCE(ui_stage, 1), 4),
       lives_updated_at = now(),
       updated_at = now()
