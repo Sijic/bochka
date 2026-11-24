@@ -832,40 +832,46 @@
         <button type="button" class="icon-close" id="btn-close-golden-fork" aria-label="Отложить">✕</button>
       </div>
 
-      <img src="./public/sprites/cinema_ticket_card.webp" class="cinema-ticket-visual" alt="Кинобилет на фильм БОЧКА — 17 декабря" loading="lazy" decoding="async" />
+      <div class="golden-fork-overview" id="golden-fork-overview">
+        <img src="./public/sprites/cinema_ticket_card.webp" class="cinema-ticket-visual" alt="Кинобилет на фильм БОЧКА — 17 декабря" loading="lazy" decoding="async" />
 
-      <h3 class="section-title rescue-title" id="golden-fork-title">
-        ВНУТРИ БИЛЕТ В КИНО ДЛЯ ТВОЕГО ДРУГА!
-      </h3>
-      <p class="modal-hint" id="golden-fork-desc">
-        Отправь этот билет другу в Telegram — он получит приглашение на «БОЧКУ» (17 декабря), а ты сразу получишь <strong>+3 ❤️ жизни</strong> и <strong>+500 ⭐</strong> на супер-приз!
-      </p>
+        <h3 class="section-title rescue-title" id="golden-fork-title">
+          ВНУТРИ БИЛЕТ В КИНО ДЛЯ ТВОЕГО ДРУГА!
+        </h3>
+        <p class="modal-hint" id="golden-fork-desc">
+          Отправь этот билет другу в Telegram — он получит приглашение на «БОЧКУ» (17 декабря), а ты сразу получишь <strong>+3 ❤️ жизни</strong> и <strong>+500 ⭐</strong> на супер-приз!
+        </p>
 
-      <div class="golden-fork-friends-section" id="golden-fork-friends-section">
-        <div class="mono-tag" style="margin-bottom:4px;">👥 ДРУЗЬЯ, КОТОРЫЕ УЖЕ ИГРАЮТ С ТОБОЙ (ПОЛУЧАТ В ИГРЕ + В ЧАТЕ TG):</div>
-        <div class="ticket-friends-list" id="golden-fork-friends-list"></div>
-      </div>
+        <div class="golden-fork-friends-section" id="golden-fork-friends-section">
+          <div class="mono-tag" style="margin-bottom:4px;">👥 ДРУЗЬЯ, КОТОРЫЕ УЖЕ ИГРАЮТ С ТОБОЙ (ПОЛУЧАТ В ИГРЕ + В ЧАТЕ TG):</div>
+          <div class="ticket-friends-list" id="golden-fork-friends-list"></div>
+        </div>
 
-      <div class="golden-fork-ledger-box" id="golden-fork-ledger-box" hidden></div>
+        <div class="golden-fork-ledger-box" id="golden-fork-ledger-box" hidden></div>
 
-      <p class="mono-tag" style="opacity:.78; font-size:10.5px; line-height:1.35; margin:4px 0 6px;">
-        ⏳ Правила билета: отправить можно 1 раз · если друг не зашёл за 24ч — билет вернётся тебе · за неделю до 17.12 напомним другу активировать (иначе можно вернуть) · за день (16.12) неактивированные билеты сгорают.
-      </p>
+        <p class="mono-tag" style="opacity:.78; font-size:10.5px; line-height:1.35; margin:4px 0 6px;">
+          ⏳ Правила билета: отправить можно 1 раз · если друг не зашёл за 24ч — билет вернётся тебе · за неделю до 17.12 напомним другу активировать (иначе можно вернуть) · за день (16.12) неактивированные билеты сгорают.
+        </p>
 
-      <div class="fork-choices-stack" id="fork-choices-stack">
-        <button type="button" class="btn-primary btn-full" id="btn-gift-ticket-toggle">
-          <span id="btn-gift-ticket-label">🚀 ОТПРАВИТЬ НОВОМУ ДРУГУ (ЕЩЁ НЕ ИГРАЛ → +25% К ШКАЛЕ!)</span>
-        </button>
+        <div class="fork-choices-stack" id="fork-choices-stack">
+          <button type="button" class="btn-primary btn-full" id="btn-gift-ticket-toggle">
+            <span id="btn-gift-ticket-label">🚀 ОТПРАВИТЬ НОВОМУ ДРУГУ (ЕЩЁ НЕ ИГРАЛ → +25% К ШКАЛЕ!)</span>
+          </button>
 
-        <button type="button" class="btn-secondary btn-full" id="btn-defer-ticket-pile">
-          <span>⏳ ПРИБЕРЕЧЬ БИЛЕТ — ИГРАТЬ ДАЛЬШЕ</span>
-        </button>
+          <button type="button" class="btn-secondary btn-full" id="btn-defer-ticket-pile">
+            <span>⏳ ПРИБЕРЕЧЬ БИЛЕТ — ИГРАТЬ ДАЛЬШЕ</span>
+          </button>
 
-        <button type="button" id="btn-burn-ticket-x2" hidden></button>
+          <button type="button" id="btn-burn-ticket-x2" hidden></button>
+        </div>
       </div>
 
       <!-- Форма оформления подарочной ссылки startapp=gift_<id> (Путь Б) -->
       <div class="gift-pass-form" id="gift-pass-form" hidden>
+        <div class="gift-form-step-bar">
+          <button type="button" class="btn-ghost btn-compact" id="btn-gift-form-back">← Назад</button>
+          <span class="mono-tag accent-tag">ОФОРМЛЕНИЕ БИЛЕТА ДРУГУ</span>
+        </div>
         <p class="gift-face-warn">
           🎟 Отправь новому другу именной билет на «БОЧКУ» (17 декабря) — получишь <strong>+3 ❤️</strong> и <strong>+500 ⭐ (+25% к шкале Супер-приза)</strong>!
         </p>

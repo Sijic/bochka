@@ -6827,6 +6827,18 @@ body.is-duel-active .topbar {
   padding: 14px !important;
 }
 
+#modal-golden-fork.is-gift-form-step .golden-fork-overview {
+  display: none !important;
+}
+
+.gift-form-step-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
 .duel-lives-pill {
   display: inline-flex;
   align-items: center;

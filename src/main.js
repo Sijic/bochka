@@ -6056,7 +6056,10 @@ function openGoldenTicketForkModal() {
   const nameIn = document.getElementById('input-gift-friend-name');
   if (nameIn) nameIn.value = '';
 
-  document.getElementById('modal-golden-fork')?.removeAttribute('hidden');
+  const forkModal = document.getElementById('modal-golden-fork');
+  forkModal?.classList.remove('is-gift-form-step');
+  forkModal?.removeAttribute('hidden');
+  if (forkModal) forkModal.scrollTop = 0;
   Haptics.heavy();
 }
 
@@ -10111,7 +10114,21 @@ function bindUIEvents() {
   document.getElementById('btn-reopen-golden-fork')?.addEventListener('click', () => openGoldenTicketForkModal());
   document.getElementById('btn-burn-ticket-x2')?.addEventListener('click', () => handleBurnTicketChoice());
   document.getElementById('btn-gift-ticket-toggle')?.addEventListener('click', () => {
-    document.getElementById('gift-pass-form')?.removeAttribute('hidden');
+    const modal = document.getElementById('modal-golden-fork');
+    const form = document.getElementById('gift-pass-form');
+    modal?.classList.add('is-gift-form-step');
+    form?.removeAttribute('hidden');
+    window.requestAnimationFrame(() => {
+      modal?.scrollTo?.({ top: 0, behavior: 'smooth' });
+      form?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    });
+    Haptics.light();
+  });
+  document.getElementById('btn-gift-form-back')?.addEventListener('click', () => {
+    const modal = document.getElementById('modal-golden-fork');
+    modal?.classList.remove('is-gift-form-step');
+    document.getElementById('gift-pass-form')?.setAttribute('hidden', '');
+    modal?.scrollTo?.({ top: 0, behavior: 'smooth' });
     Haptics.light();
   });
   document.getElementById('input-gift-friend-photo')?.addEventListener('change', async (e) => {
