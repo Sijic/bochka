@@ -660,7 +660,7 @@ export class WorkshopDuelController {
     this.playerMaxEnergy = { [this.myUid]: this.maxEnergy };
     this._energyFinisherNotified = '';
     const profLives = Number(profStats?.lives ?? 0);
-    this.duelLives = Math.max(6, Math.min(30, profLives > 0 ? Math.max(Number(this.duelLives || 6), profLives) : Number(this.duelLives || 6)));
+    this.duelLives = Math.max(3, Math.min(30, profLives > 0 ? profLives : 3));
     const initDiff = getTilDifficultyProfile(this.duelLives, 0);
     this.tilMaxLives = initDiff.tier === 'rage' ? 4 : 3;
     this.tilLives = this.tilMaxLives;
@@ -1542,17 +1542,17 @@ export class WorkshopDuelController {
             safeIndices.push(pIdx);
           }
           if (cursor < barrelCount) {
-            const lIdx = indices[cursor++];
-            barrelLoot[lIdx] = { kind: 'life', value: 1, label: '+1 жизнь' };
-            safeIndices.push(lIdx);
+            const eEnergyIdx = indices[cursor++];
+            barrelLoot[eEnergyIdx] = { kind: 'energy', value: ENERGY_BARREL_REFILL, label: '⚡ +2 удара (+50)' };
+            safeIndices.push(eEnergyIdx);
           }
           if (cursor < barrelCount) {
             const eIdx = indices[cursor++];
-            barrelLoot[eIdx] = { kind: 'empty', value: 0, label: 'Пусто' };
+            barrelLoot[eIdx] = { kind: 'empty', value: 0, label: '-1 ❤️ (Пусто)' };
           }
           while (cursor < barrelCount) {
             const sIdx = indices[cursor++];
-            barrelLoot[sIdx] = { kind: 'screamer', value: -2, label: 'Потерял жизнь' };
+            barrelLoot[sIdx] = { kind: 'screamer', value: -2, label: '-2 ❤️' };
           }
         } else {
           const diff = getTilDifficultyProfile(this.duelLives, Math.max(0, Number(this.tilRoundIdx || 1) - 1));
@@ -1562,9 +1562,9 @@ export class WorkshopDuelController {
           }
           batchHasTicket = (this.duelRoundsWithoutTicket || 0) >= 1 ? true : Math.random() < 0.65;
 
-          const baseScreamers = barrelCount <= 6 ? 1 : barrelCount <= 8 ? 2 : 3;
-          const totalScreamers = Math.min(Math.max(1, barrelCount - 2), baseScreamers + diff.extraScreamers);
-          const emptySlots = barrelCount <= 6 ? (diff.extraScreamers > 0 ? 0 : 1) : barrelCount <= 8 ? 1 : 2;
+          const baseScreamers = barrelCount <= 6 ? 2 : barrelCount <= 8 ? 3 : barrelCount <= 10 ? 4 : 5;
+          const totalScreamers = Math.min(Math.max(2, barrelCount - 2), baseScreamers + diff.extraScreamers);
+          const emptySlots = barrelCount <= 6 ? (diff.extraScreamers > 0 ? 0 : 1) : 1;
           const reservedForTraps = totalScreamers + emptySlots;
           const goodBudget = Math.max(2, barrelCount - reservedForTraps);
 
@@ -1574,25 +1574,24 @@ export class WorkshopDuelController {
             safeIndices.push(tIdx);
           }
 
+          const targetEnergy = barrelCount <= 6
+            ? (batchHasTicket ? (Math.random() < 0.5 ? 2 : 1) : 2)
+            : barrelCount <= 8
+              ? 2
+              : 3;
+          for (let en = 0; en < targetEnergy && safeIndices.length < goodBudget && cursor < barrelCount; en++) {
+            const eEnergyIdx = indices[cursor++];
+            barrelLoot[eEnergyIdx] = { kind: 'energy', value: ENERGY_BARREL_REFILL, label: '⚡ +2 удара (+50)' };
+            safeIndices.push(eEnergyIdx);
+          }
+
           if (safeIndices.length < goodBudget && cursor < barrelCount) {
             const cIdx = indices[cursor++];
             barrelLoot[cIdx] = { kind: 'chip', value: 150, label: '🪙 Фишка!' };
             safeIndices.push(cIdx);
           }
 
-          if (safeIndices.length < goodBudget && cursor < barrelCount) {
-            const eEnergyIdx = indices[cursor++];
-            barrelLoot[eEnergyIdx] = { kind: 'energy', value: ENERGY_BARREL_REFILL, label: '⚡ +2 удара (+50)' };
-            safeIndices.push(eEnergyIdx);
-          }
-
-          if (barrelCount >= 8 && safeIndices.length < goodBudget && cursor < barrelCount) {
-            const eEnergyIdx2 = indices[cursor++];
-            barrelLoot[eEnergyIdx2] = { kind: 'energy', value: ENERGY_BARREL_REFILL, label: '⚡ +2 удара (+50)' };
-            safeIndices.push(eEnergyIdx2);
-          }
-
-          if (safeIndices.length < goodBudget && cursor < barrelCount) {
+          if (this.duelLives <= 2 && Math.random() < 0.25 && safeIndices.length < goodBudget && cursor < barrelCount) {
             const lIdx = indices[cursor++];
             barrelLoot[lIdx] = { kind: 'life', value: 1, label: '❤️ +1 жизнь' };
             safeIndices.push(lIdx);
@@ -1607,7 +1606,7 @@ export class WorkshopDuelController {
 
           for (let e = 0; e < emptySlots && cursor < barrelCount - totalScreamers; e++) {
             const eIdx = indices[cursor++];
-            barrelLoot[eIdx] = { kind: 'empty', value: 0, label: 'Пусто' };
+            barrelLoot[eIdx] = { kind: 'empty', value: 0, label: '-1 ❤️ (Пусто)' };
           }
 
           while (cursor < barrelCount) {
@@ -1961,7 +1960,7 @@ export class WorkshopDuelController {
 
   refillFromTil() {
     const profLives = Number(this.getProfileStats?.()?.lives ?? 0);
-    this.duelLives = Math.max(6, Math.min(30, Math.max(Number(this.duelLives || 0), profLives, 6)));
+    this.duelLives = Math.max(3, Math.min(30, Math.max(Number(this.duelLives || 0), profLives, 3)));
     this.initBatchEnergy(Math.max(1, Number(this.tilRoundIdx || 1)));
     this.syncEnergyUI();
   }
