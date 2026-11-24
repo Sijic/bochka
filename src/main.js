@@ -4180,10 +4180,10 @@ async function applyShareBonusReward({ showFeedback = true } = {}) {
       }
       audio.playRewardChime?.();
       Haptics.success();
-    } else if (bonus.reason === 'cooldown') {
+    } else if (bonus.reason === 'share_cooldown' || bonus.reason === 'cooldown') {
       const wait = Math.max(1, Number(bonus.retryAfterSec || 8));
       showToast(`⏳ Подожди ${wait} сек перед следующей наградой за рассылку.`);
-    } else if (bonus.reason === 'daily_limit_reached') {
+    } else if (bonus.reason === 'daily_limit' || bonus.reason === 'daily_limit_reached' || bonus.capped) {
       showToast(`🛡 Дневной лимит ${bonus.dailyLimit || 15} отправок исчерпан — зови нового друга открыть бочку (+500 ⭐ и +6 ❤️)!`);
     }
   }
