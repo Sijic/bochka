@@ -15,6 +15,18 @@ const TIL_BOT_UID = 'bot_workshop_master';
 const TIL_BOT_NAME = 'Тиль Швайгер';
 const TIL_AVATAR_URL = './public/sprites/til_avatar.webp?v=2000';
 const SUPERPRIZE_POINTS_TARGET = 5000;
+const ENERGY_PER_STRIKE = 25;
+const ENERGY_BARREL_REFILL = 50;
+
+function getLevelEnergyCap(level = 1) {
+  const lvl = Math.max(1, Math.round(Number(level || 1)));
+  return 100 + Math.min(4, lvl - 1) * ENERGY_PER_STRIKE;
+}
+
+function getTilEnergyCap(roundIdx = 1) {
+  const r = Math.max(1, Math.round(Number(roundIdx || 1)));
+  return r <= 1 ? 75 : r === 2 ? 100 : 125;
+}
 const FIGHTER_AVATARS = [
   './public/sprites/fighter_1.webp?v=2000',
   './public/sprites/fighter_2.webp?v=2000',
@@ -133,7 +145,11 @@ export class WorkshopDuelController {
     this.opponentChips = {};
     this.hofCache = null;
     this._trophiesMod = null;
+    this.maxEnergy = 100;
     this.energy = 100;
+    this.playerEnergy = {};
+    this.playerMaxEnergy = {};
+    this._energyFinisherNotified = '';
     this.duelLives = 6;
     this.tilMaxLives = 3;
     this.tilLives = 3;
@@ -625,8 +641,13 @@ export class WorkshopDuelController {
     this.openedIndices = [];
     this.claims = {};
     this.spectatorUids = [];
-    this.energy = 100;
     const profStats = this.getProfileStats?.() || null;
+    const initLvl = Math.max(1, Number(profStats?.currentLevel || 1));
+    this.maxEnergy = getLevelEnergyCap(initLvl);
+    this.energy = this.maxEnergy;
+    this.playerEnergy = { [this.myUid]: this.maxEnergy };
+    this.playerMaxEnergy = { [this.myUid]: this.maxEnergy };
+    this._energyFinisherNotified = '';
     const profLives = Number(profStats?.lives ?? 0);
     this.duelLives = Math.max(6, Math.min(30, profLives > 0 ? Math.max(Number(this.duelLives || 6), profLives) : Number(this.duelLives || 6)));
     const initDiff = getTilDifficultyProfile(this.duelLives, 0);
@@ -650,6 +671,7 @@ export class WorkshopDuelController {
         name: this.myName,
         avatar: this.myAvatar,
         joinedAt: this._myJoinedAt,
+        level: initLvl,
         isBot: false,
       },
     ];
@@ -846,6 +868,7 @@ export class WorkshopDuelController {
       name: this.myName,
       avatar: this.myAvatar,
       joinedAt: this._myJoinedAt || Date.now(),
+      level: this.getMyEffectiveLevel(),
       isBot: false,
     };
     const realWithSelf = activeReal.some((p) => p.uid === this.myUid)
@@ -904,6 +927,7 @@ export class WorkshopDuelController {
             name: entries[0].name || 'Игрок',
             avatar: entries[0].avatar || '',
             joinedAt: Number(entries[0].joinedAt || Date.now()),
+            level: Math.max(1, Number(entries[0].level || 1)),
             isBot: false,
           });
         }
@@ -977,6 +1001,7 @@ export class WorkshopDuelController {
           name: this.myName,
           avatar: this.myAvatar,
           joinedAt: this._myJoinedAt || Date.now(),
+          level: Math.max(1, Number(this.getProfileStats?.()?.currentLevel || 1)),
         });
       }
     });
@@ -1464,7 +1489,9 @@ export class WorkshopDuelController {
         (i) => !prevOpened.includes(i)
       );
 
-      const minNeed = this.friendBarrelHunt ? 1 : contenders.length;
+      const minNeed = this.friendBarrelHunt || (isFreeRerack && this.getEnergyActiveContenders().length <= 1)
+        ? 1
+        : Math.max(2, isFreeRerack ? this.getEnergyActiveContenders().length : contenders.length);
       const needFreshRack = !isFreeRerack || closedRemaining.length < minNeed || !this.safeIndices.length;
 
       let safeIndices = this.safeIndices;
@@ -1544,8 +1571,14 @@ export class WorkshopDuelController {
 
           if (safeIndices.length < goodBudget && cursor < barrelCount) {
             const eEnergyIdx = indices[cursor++];
-            barrelLoot[eEnergyIdx] = { kind: 'energy', value: 50, label: '⚡ +50% энергии' };
+            barrelLoot[eEnergyIdx] = { kind: 'energy', value: ENERGY_BARREL_REFILL, label: '⚡ +2 удара (+50)' };
             safeIndices.push(eEnergyIdx);
+          }
+
+          if (barrelCount >= 8 && safeIndices.length < goodBudget && cursor < barrelCount) {
+            const eEnergyIdx2 = indices[cursor++];
+            barrelLoot[eEnergyIdx2] = { kind: 'energy', value: ENERGY_BARREL_REFILL, label: '⚡ +2 удара (+50)' };
+            safeIndices.push(eEnergyIdx2);
           }
 
           if (safeIndices.length < goodBudget && cursor < barrelCount) {
@@ -1577,6 +1610,7 @@ export class WorkshopDuelController {
         }
         openedIndices = [];
         this.batchResolved = false;
+        this.initBatchEnergy(Math.max(1, Number(this.tilRoundIdx || 1)));
       }
 
       const roundKey =
@@ -1598,6 +1632,8 @@ export class WorkshopDuelController {
         barrelLoot,
         batchHasTicket,
         openedIndices,
+        playerEnergy: { ...this.playerEnergy },
+        playerMaxEnergy: { ...this.playerMaxEnergy },
       };
 
       this.broadcast('duel_start', payload);
@@ -1642,6 +1678,14 @@ export class WorkshopDuelController {
     if (!payload.isFreeRerack && !this.soloMode) {
       this.tilMaxLives = 6;
       this.tilLives = 6;
+    }
+    if (payload.playerMaxEnergy && typeof payload.playerMaxEnergy === 'object') {
+      for (const [u, mx] of Object.entries(payload.playerMaxEnergy)) {
+        const val = payload.playerEnergy && payload.playerEnergy[u] != null ? Number(payload.playerEnergy[u]) : Number(mx);
+        this.setPlayerEnergy(u, val, Number(mx));
+      }
+    } else if (!payload.isFreeRerack) {
+      this.initBatchEnergy(Math.max(1, Number(this.tilRoundIdx || 1)));
     }
 
     document.getElementById('duel-result-box')?.setAttribute('hidden', '');
@@ -1823,10 +1867,86 @@ export class WorkshopDuelController {
     }
   }
 
+  getMyEffectiveLevel() {
+    const profLvl = Math.max(1, Number(this.getProfileStats?.()?.currentLevel || 1));
+    const roundLvl = Math.max(1, Number(this.tilRoundIdx || 1));
+    return Math.max(profLvl, roundLvl);
+  }
+
+  getPlayerMaxEnergy(uid = this.myUid) {
+    if (uid && Number(this.playerMaxEnergy?.[uid]) >= ENERGY_PER_STRIKE) {
+      return Number(this.playerMaxEnergy[uid]);
+    }
+    if (uid === TIL_BOT_UID) {
+      return getTilEnergyCap(Math.max(1, Number(this.tilRoundIdx || 1)));
+    }
+    if (!uid || uid === this.myUid) {
+      return getLevelEnergyCap(this.getMyEffectiveLevel());
+    }
+    const p = this.players?.find((x) => x.uid === uid);
+    return getLevelEnergyCap(Math.max(1, Number(p?.level || 1), Math.max(1, Number(this.tilRoundIdx || 1))));
+  }
+
+  getPlayerEnergy(uid = this.myUid) {
+    if (uid && this.playerEnergy && this.playerEnergy[uid] != null) {
+      return Math.max(0, Number(this.playerEnergy[uid]));
+    }
+    return this.getPlayerMaxEnergy(uid);
+  }
+
+  setPlayerEnergy(uid, val, maxVal = null) {
+    if (!uid) return;
+    if (!this.playerEnergy) this.playerEnergy = {};
+    if (!this.playerMaxEnergy) this.playerMaxEnergy = {};
+    const mx = Math.max(
+      ENERGY_PER_STRIKE,
+      Math.round(Number(maxVal ?? this.getPlayerMaxEnergy(uid)))
+    );
+    const next = Math.max(0, Math.min(mx, Math.round(Number(val ?? 0))));
+    this.playerMaxEnergy[uid] = mx;
+    this.playerEnergy[uid] = next;
+    if (uid === this.myUid) {
+      this.maxEnergy = mx;
+      this.energy = next;
+    }
+  }
+
+  initBatchEnergy(roundIdx = 1) {
+    const r = Math.max(1, Number(roundIdx || 1));
+    this.playerEnergy = {};
+    this.playerMaxEnergy = {};
+    this._energyFinisherNotified = '';
+    const list = Array.isArray(this.players) && this.players.length > 0
+      ? this.players
+      : [{ uid: this.myUid, level: this.getMyEffectiveLevel(), isBot: false }];
+    for (const p of list) {
+      if (!p?.uid) continue;
+      const cap = p.uid === TIL_BOT_UID
+        ? getTilEnergyCap(r)
+        : p.uid === this.myUid
+          ? getLevelEnergyCap(Math.max(this.getMyEffectiveLevel(), r))
+          : getLevelEnergyCap(Math.max(1, Number(p.level || 1), r));
+      this.setPlayerEnergy(p.uid, cap, cap);
+    }
+    if (this.playerEnergy[this.myUid] == null) {
+      const myCap = getLevelEnergyCap(Math.max(this.getMyEffectiveLevel(), r));
+      this.setPlayerEnergy(this.myUid, myCap, myCap);
+    }
+  }
+
+  getEnergyActiveContenders() {
+    const list = Array.isArray(this.contenderUids) && this.contenderUids.length > 0
+      ? this.contenderUids
+      : (this.players || []).map((p) => p.uid);
+    return list.filter(
+      (u) => !this.spectatorUids.includes(u) && this.getPlayerEnergy(u) >= ENERGY_PER_STRIKE
+    );
+  }
+
   refillFromTil() {
     const profLives = Number(this.getProfileStats?.()?.lives ?? 0);
     this.duelLives = Math.max(6, Math.min(30, Math.max(Number(this.duelLives || 0), profLives, 6)));
-    this.energy = 100;
+    this.initBatchEnergy(Math.max(1, Number(this.tilRoundIdx || 1)));
     this.syncEnergyUI();
   }
 
@@ -1882,7 +2002,11 @@ export class WorkshopDuelController {
     const spLabelEl = document.getElementById('duel-superprize-label');
     const spFillEl = document.getElementById('duel-superprize-fill');
 
-    const pct = Math.max(0, Math.min(100, Math.round(Number(this.energy || 0))));
+    const myMax = Math.max(ENERGY_PER_STRIKE, this.getPlayerMaxEnergy(this.myUid));
+    const myCur = this.getPlayerEnergy(this.myUid);
+    const myStrikes = Math.floor(myCur / ENERGY_PER_STRIKE);
+    const myMaxStrikes = Math.max(1, Math.round(myMax / ENERGY_PER_STRIKE));
+    const pct = Math.max(0, Math.min(100, Math.round((myCur / myMax) * 100)));
     const dl = Math.max(0, Math.round(Number(this.duelLives ?? 6)));
     const profStats = this.getProfileStats?.() || {};
     const shards = Math.max(0, Math.min(4, Math.round(Number(this.getTicketShards?.() ?? profStats.ticketShards ?? 0))));
@@ -1896,10 +2020,12 @@ export class WorkshopDuelController {
     }
     if (shardsEl) shardsEl.textContent = `${shards}/4`;
     this._syncTicketStubEl(document.getElementById('duel-ticket-stub'), shards);
-    if (valEl) valEl.textContent = `${pct}%`;
+    if (valEl) valEl.textContent = `${myStrikes}/${myMaxStrikes}`;
+    const enPill = document.getElementById('duel-energy-pill');
+    if (enPill) enPill.classList.toggle('is-depleted', myStrikes <= 0);
     if (fillEl) {
       fillEl.style.width = `${pct}%`;
-      fillEl.classList.toggle('is-low', pct <= 20);
+      fillEl.classList.toggle('is-low', myStrikes <= 1);
     }
     if (livesEl) livesEl.textContent = String(dl);
     if (livesPill) livesPill.classList.toggle('is-low', dl <= 1);
@@ -1919,11 +2045,17 @@ export class WorkshopDuelController {
 
     const opp = this.players.find((p) => p.uid !== this.myUid) || null;
     const oppIsTil = !opp || Boolean(opp.isBot || opp.isTil || opp.uid === TIL_BOT_UID);
+    const oppUid = opp?.uid || TIL_BOT_UID;
+    const oppMax = Math.max(ENERGY_PER_STRIKE, this.getPlayerMaxEnergy(oppUid));
+    const oppCur = this.getPlayerEnergy(oppUid);
+    const oppStrikes = Math.floor(oppCur / ENERGY_PER_STRIKE);
+    const oppMaxStrikes = Math.max(1, Math.round(oppMax / ENERGY_PER_STRIKE));
+    const oppPct = Math.max(0, Math.min(100, Math.round((oppCur / oppMax) * 100)));
     const tilHp = Math.max(0, Number(this.tilLives ?? (oppIsTil ? 3 : 6)));
     const tilMax = Math.max(1, Number(this.tilMaxLives || (oppIsTil ? 3 : 6)));
     if (oLivesEl) oLivesEl.textContent = String(tilHp);
     if (oHpFill) oHpFill.style.width = `${Math.min(100, Math.round((tilHp / tilMax) * 100))}%`;
-    if (oNameEl) oNameEl.textContent = oppIsTil ? 'Тиль ⚡' : `${String(opp.name || 'Соперник').slice(0, 10)} ⚡`;
+    if (oNameEl) oNameEl.textContent = oppIsTil ? `Тиль ⚡${oppStrikes}/${oppMaxStrikes}` : `${String(opp.name || 'Соперник').slice(0, 9)} ⚡${oppStrikes}/${oppMaxStrikes}`;
     if (oAvaEl) {
       const oFallback = oppIsTil ? TIL_AVATAR_URL : getFallbackFighterAvatar(opp?.uid || opp?.name || 'opp');
       const oSrc = oppIsTil ? TIL_AVATAR_URL : (opp?.avatar || oFallback);
@@ -1931,12 +2063,6 @@ export class WorkshopDuelController {
       oAvaEl.onerror = () => { oAvaEl.src = oFallback; };
     }
     if (oEnergyFill) {
-      const chargeDur = Math.max(800, diff.tilTelegraphMs + diff.tilTelegraphDurMs);
-      const oppPct = this._tilState === 'struck'
-        ? 100
-        : this.phase === 'claim'
-          ? Math.min(100, Math.round((Number(this._activeClaimElapsedMs || 0) / chargeDur) * 100))
-          : 0;
       oEnergyFill.style.width = `${oppPct}%`;
     }
     if (oTicketsEl) {
@@ -1963,7 +2089,7 @@ export class WorkshopDuelController {
     }
     if (skipBtn) {
       const hasMyClaim = Object.values(this.claims || {}).some((c) => c.uid === this.myUid);
-      const canSkip = this.phase === 'claim' && !this.skippedThisTurn && !hasMyClaim && !this.spectatorUids.includes(this.myUid);
+      const canSkip = this.phase === 'claim' && !this.skippedThisTurn && !hasMyClaim && myCur >= ENERGY_PER_STRIKE && !this.spectatorUids.includes(this.myUid);
       if (canSkip) skipBtn.removeAttribute('hidden');
       else skipBtn.setAttribute('hidden', '');
     }
@@ -2000,13 +2126,14 @@ export class WorkshopDuelController {
       this.triggerDefeatFlow();
       return;
     }
-    // Если жизни ещё есть (> 0 ❤️), а энергия на нуле — восстанавливаем энергию без ухода к Тилю!
-    if (this.energy <= 0) {
-      this.energy = 100;
+    const closedLeft = Math.max(0, (this.barrelCount || 6) - (this.openedIndices?.length || 0));
+    const activeEnergyCount = this.getEnergyActiveContenders().length;
+    const minClosed = this.friendBarrelHunt || activeEnergyCount <= 1 ? 1 : 2;
+    const keepCurrentBatch = !this.batchResolved && activeEnergyCount > 0 && closedLeft >= minClosed;
+    if (!keepCurrentBatch) {
+      this.initBatchEnergy(Math.max(1, Number(this.tilRoundIdx || 1) + 1));
       this.syncEnergyUI();
     }
-    const closedLeft = Math.max(0, (this.barrelCount || 6) - (this.openedIndices?.length || 0));
-    const keepCurrentBatch = !this.batchResolved && closedLeft >= (this.friendBarrelHunt ? 1 : 2);
     this.hostInitiateRound({ isFreeRerack: keepCurrentBatch });
   }
 
@@ -2040,10 +2167,13 @@ export class WorkshopDuelController {
 
   _executeTilBotStrike(bot, preferIdx = -1) {
     if (!this.active || this.phase !== 'claim') return false;
+    if (this.getPlayerEnergy(bot.uid) < ENERGY_PER_STRIKE) return false;
     const pick = this._pickFreeClosedBarrel(preferIdx, { forBot: true });
     this._tilTelegraphBarrel = -1;
     this.scene?.setBarrelTelegraph?.(-1, false);
     if (pick < 0) return false;
+    const nextBotEnergy = Math.max(0, this.getPlayerEnergy(bot.uid) - ENERGY_PER_STRIKE);
+    this.setPlayerEnergy(bot.uid, nextBotEnergy);
     this._tilState = 'struck';
     this.scene?.triggerStrikeFX?.(pick);
     this.audio?.playStrike?.(pick);
@@ -2053,10 +2183,13 @@ export class WorkshopDuelController {
         name: bot.name,
         avatar: bot.avatar,
         barrelIndex: pick,
+        energyAfter: nextBotEnergy,
+        maxEnergy: this.getPlayerMaxEnergy(bot.uid),
         ts: Date.now(),
       },
       false
     );
+    this.syncEnergyUI();
     return true;
   }
 
@@ -2064,8 +2197,15 @@ export class WorkshopDuelController {
     this.setPhase('claim');
     const roundIdx = Math.max(0, Number(this.tilRoundIdx || 1) - 1);
     const diff = getTilDifficultyProfile(this.duelLives, roundIdx);
+    const myHasEnergy = this.getPlayerEnergy(this.myUid) >= ENERGY_PER_STRIKE;
+    const oppUids = this.contenderUids.filter((u) => u !== this.myUid && !this.spectatorUids.includes(u));
+    const oppHasEnergy = oppUids.some((u) => this.getPlayerEnergy(u) >= ENERGY_PER_STRIKE);
+    const tilSoloFinisher = Boolean(this.soloMode && !myHasEnergy && oppHasEnergy);
+
     const pacing = this.soloMode
-      ? diff
+      ? (tilSoloFinisher
+          ? { ...diff, claimSec: 3.0, tilTelegraphMs: 550, tilTelegraphDurMs: 420 }
+          : diff)
       : { claimSec: 6.5, tilTelegraphMs: 4600, tilTelegraphDurMs: 750 };
     this.claimTimeLeft = pacing.claimSec;
     this._activeClaimElapsedMs = 0;
@@ -2075,6 +2215,18 @@ export class WorkshopDuelController {
     this._playerAnimatingSince = 0;
     this.skippedThisTurn = false;
     const amISpectator = this.spectatorUids.includes(this.myUid);
+
+    if (!amISpectator) {
+      if (!myHasEnergy && oppHasEnergy && this._energyFinisherNotified !== 'opp') {
+        this._energyFinisherNotified = 'opp';
+        this.onToast?.('⚡ Твоя энергия кончилась — соперник добивает оставшиеся бочки!');
+      } else if (myHasEnergy && !oppHasEnergy && oppUids.length > 0 && this._energyFinisherNotified !== 'me') {
+        this._energyFinisherNotified = 'me';
+        const myStrikes = Math.floor(this.energy / ENERGY_PER_STRIKE);
+        this.onToast?.(`🔥 У соперника кончилась энергия! Добивай оставшиеся бочки (${myStrikes} ⚡)!`);
+      }
+    }
+
     this.syncEnergyUI();
     this.scheduleIdleHint();
 
@@ -2108,7 +2260,7 @@ export class WorkshopDuelController {
     // Не-соло боты в песочнице /testbog/ (с паузой при анимации/модалках)
     if (!this.soloMode) {
       this.players
-        .filter((p) => p.isBot && this.contenderUids.includes(p.uid))
+        .filter((p) => p.isBot && this.contenderUids.includes(p.uid) && this.getPlayerEnergy(p.uid) >= ENERGY_PER_STRIKE)
         .forEach((bot, idx) => {
           const delay = 1400 + idx * 550 + Math.round(Math.random() * 650);
           this.scheduleStepWhenUnblocked(() => {
@@ -2144,7 +2296,7 @@ export class WorkshopDuelController {
 
       if (this.soloMode) {
         const tilBot = this.players.find((p) => p.isBot && this.contenderUids.includes(p.uid));
-        if (tilBot) {
+        if (tilBot && this.getPlayerEnergy(tilBot.uid) >= ENERGY_PER_STRIKE) {
           const tilAlreadyClaimed = Object.values(this.claims).some((c) => c.uid === tilBot.uid);
           if (!tilAlreadyClaimed) {
             if (this._tilState === 'idle' && this._activeClaimElapsedMs >= pacing.tilTelegraphMs) {
@@ -2170,17 +2322,23 @@ export class WorkshopDuelController {
         timerEl.textContent = `${this.claimTimeLeft.toFixed(1)}с`;
         timerEl.classList.toggle('is-telegraph', this._tilState === 'telegraph');
       }
-      const oppBarEl = document.getElementById('duel-vs-opp-energy-fill');
-      if (oppBarEl) {
-        const chargeDur = Math.max(800, (pacing.tilTelegraphMs || 4000) + (pacing.tilTelegraphDurMs || 700));
-        const oppPct = this._tilState === 'struck'
-          ? 100
-          : Math.min(100, Math.round((this._activeClaimElapsedMs / chargeDur) * 100));
-        oppBarEl.style.width = `${oppPct}%`;
+
+      const activeEnergyUids = this.getEnergyActiveContenders();
+      if (activeEnergyUids.length === 0) {
+        clearInterval(this.claimInterval);
+        this.claimInterval = null;
+        if (this.isHost()) {
+          this.finalizeClaimsAndBroadcastReveal();
+        }
+        return;
       }
 
-      const claimedCount = new Set(Object.values(this.claims).map((c) => c.uid)).size;
-      const expectedClaimers = this.contenderUids.length - (this.skippedThisTurn ? 1 : 0);
+      const claimedCount = new Set(
+        Object.values(this.claims)
+          .map((c) => c.uid)
+          .filter((u) => activeEnergyUids.includes(u))
+      ).size;
+      const expectedClaimers = activeEnergyUids.length - (this.skippedThisTurn && myHasEnergy ? 1 : 0);
       if (claimedCount >= Math.max(1, expectedClaimers) || this.claimTimeLeft <= 0) {
         clearInterval(this.claimInterval);
         this.claimInterval = null;
@@ -2233,14 +2391,14 @@ export class WorkshopDuelController {
       this.onToast?.('🌊 Жизни кончились (0 ❤️) — к Тилю за 6 ❤️ на дуэль!');
       return true;
     }
-    // Пока есть жизни (> 0 ❤️), энергия не выгоняет к Тилю — при 0% она просто перезаряжается на новый рывок!
-    if (this.energy < 25) {
-      this.energy = 100;
-      this.syncEnergyUI();
+    if (this.energy < ENERGY_PER_STRIKE) {
+      Haptics.error();
+      this.onToast?.('⚡ Твои удары кончились — соперник добивает бочки пока у него есть энергия!');
+      return true;
     }
 
-    // Каждый удар тратит 25% энергии (можно пропустить и сэкономить!)
-    this.energy = Math.max(0, this.energy - 25);
+    // Каждый удар тратит 1 деление энергии (25) — запас ударов растёт с уровнем!
+    this.setPlayerEnergy(this.myUid, this.energy - ENERGY_PER_STRIKE);
     this.syncEnergyUI();
 
     const claimPayload = {
@@ -2248,6 +2406,8 @@ export class WorkshopDuelController {
       name: this.myName,
       avatar: this.myAvatar,
       barrelIndex,
+      energyAfter: this.energy,
+      maxEnergy: this.maxEnergy,
       ts: Date.now(),
     };
 
@@ -2271,7 +2431,8 @@ export class WorkshopDuelController {
     if (this.soloMode) {
       const tilBot = this.players.find((p) => p.isBot && this.contenderUids.includes(p.uid));
       const tilAlreadyClaimed = tilBot && Object.values(this.claims).some((c) => c.uid === tilBot.uid);
-      if (tilBot && !tilAlreadyClaimed) {
+      const tilHasEnergy = Boolean(tilBot && this.getPlayerEnergy(tilBot.uid) >= ENERGY_PER_STRIKE);
+      if (tilBot && !tilAlreadyClaimed && tilHasEnergy) {
         const bannerText = document.getElementById('duel-countdown-text');
         const bannerSub = document.getElementById('duel-countdown-sub');
         this.clearTilTimers();
@@ -2346,16 +2507,21 @@ export class WorkshopDuelController {
     }
 
     this.claims[idx] = claim;
+    if (claim.uid && claim.energyAfter != null) {
+      this.setPlayerEnergy(claim.uid, Number(claim.energyAfter), claim.maxEnergy != null ? Number(claim.maxEnergy) : null);
+    }
     if (shouldBroadcast) {
       this.broadcast('barrel_claim', claim);
     }
     this.renderBarrelClaimBadges();
+    this.syncEnergyUI();
   }
 
   finalizeClaimsAndBroadcastReveal() {
     if (this.phase !== 'claim') return;
 
     for (const uid of this.contenderUids) {
+      if (this.getPlayerEnergy(uid) < ENERGY_PER_STRIKE) continue;
       if (uid === this.myUid) {
         const hasMyClaim = Object.values(this.claims).some((c) => c.uid === this.myUid);
         if (!hasMyClaim) {
@@ -2369,12 +2535,16 @@ export class WorkshopDuelController {
         for (let b = 0; b < this.barrelCount; b++) {
           if (isTilBot && this.friendBarrelHunt && this.barrelLoot?.[b]?.kind === 'friend_barrel') continue;
           if (!this.openedIndices.includes(b) && !this.claims[b]) {
+            const nextE = Math.max(0, this.getPlayerEnergy(uid) - ENERGY_PER_STRIKE);
+            this.setPlayerEnergy(uid, nextE);
             const p = this.players.find((x) => x.uid === uid);
             this.claims[b] = {
               uid,
               name: p?.name || 'Игрок',
               avatar: p?.avatar || '',
               barrelIndex: b,
+              energyAfter: nextE,
+              maxEnergy: this.getPlayerMaxEnergy(uid),
               ts: Date.now() + 999,
             };
             break;
@@ -2391,6 +2561,8 @@ export class WorkshopDuelController {
       batchHasTicket: this.batchHasTicket,
       openedIndices: this.openedIndices,
       contenderUids: this.contenderUids,
+      playerEnergy: { ...this.playerEnergy },
+      playerMaxEnergy: { ...this.playerMaxEnergy },
     };
 
     this.broadcast('duel_reveal', revealPayload);
@@ -2565,6 +2737,12 @@ export class WorkshopDuelController {
     if (Array.isArray(payload.openedIndices)) {
       this.openedIndices = [...payload.openedIndices];
     }
+    if (payload.playerMaxEnergy && typeof payload.playerMaxEnergy === 'object') {
+      for (const [u, mx] of Object.entries(payload.playerMaxEnergy)) {
+        const val = payload.playerEnergy && payload.playerEnergy[u] != null ? Number(payload.playerEnergy[u]) : null;
+        if (val != null) this.setPlayerEnergy(u, val, Number(mx));
+      }
+    }
 
     const entries = [];
     let anyScreamer = false;
@@ -2609,12 +2787,15 @@ export class WorkshopDuelController {
 
     if (oppEntry?.loot) {
       const ok = oppEntry.loot.kind;
+      const oppUid = oppEntry.claim?.uid || TIL_BOT_UID;
       if (ok === 'ticket') {
         this.sessionStats.oppTickets += 1;
       } else if (ok === 'chip') {
         this.sessionStats.oppChips += 1;
       } else if (ok === 'points') {
         this.sessionStats.oppPoints += Math.max(0, Number(oppEntry.loot.value || 150));
+      } else if (ok === 'energy') {
+        this.setPlayerEnergy(oppUid, this.getPlayerEnergy(oppUid) + ENERGY_BARREL_REFILL);
       } else if (ok === 'life') {
         this.tilLives = Math.min(this.tilMaxLives + 2, Number(this.tilLives || 0) + 1);
       } else if (ok === 'empty') {
@@ -2675,12 +2856,12 @@ export class WorkshopDuelController {
           }
         }, 420);
       } else if (k === 'energy') {
-        this.energy = Math.min(100, Math.max(0, Number(this.energy || 0) + 50));
+        this.setPlayerEnergy(this.myUid, this.getPlayerEnergy(this.myUid) + ENERGY_BARREL_REFILL);
         this.audio?.playRewardChime?.();
         this.onFlyRating?.({
           type: 'energy',
           count: 2,
-          label: '+50% ⚡',
+          label: '+2 удара ⚡',
           barrelIndex: myEntry.barrelIndex,
         });
         this.scheduleTimeout(() => {
@@ -2719,16 +2900,14 @@ export class WorkshopDuelController {
       return;
     }
 
-    if (this.duelLives > 0 && this.energy <= 0) {
-      this.energy = 100;
-      this.syncEnergyUI();
-    }
     const ticketEntry = entries.find((e) => e.loot.kind === 'ticket') || null;
     const closedLeftNow = Math.max(0, (this.barrelCount || 10) - (this.openedIndices?.length || 0));
     const needTilNow = this.duelLives <= 0;
     const tilKnockedOut = Boolean(!this.friendBarrelHunt && this.tilLives <= 0 && !needTilNow);
-    const minClosedContinue = this.friendBarrelHunt ? 1 : 2;
-    this.batchResolved = Boolean(ticketEntry || tilKnockedOut || closedLeftNow < minClosedContinue);
+    const activeEnergyUids = this.getEnergyActiveContenders();
+    const anyEnergyLeft = activeEnergyUids.length > 0;
+    const minClosedContinue = this.friendBarrelHunt || activeEnergyUids.length <= 1 ? 1 : 2;
+    this.batchResolved = Boolean(ticketEntry || tilKnockedOut || !anyEnergyLeft || closedLeftNow < minClosedContinue);
 
     const summaryLine = entries
       .map((e) => `${e.claim.uid === this.myUid ? 'ТЫ' : e.claim.name}: ${e.loot.label}`)
@@ -2747,7 +2926,7 @@ export class WorkshopDuelController {
       return;
     }
 
-    if (!ticketEntry && !tilKnockedOut && closedLeftNow >= minClosedContinue) {
+    if (!ticketEntry && !tilKnockedOut && anyEnergyLeft && closedLeftNow >= minClosedContinue) {
       const pauseMs = anyScreamer ? LOOT_READ_SCREAMER_MS : LOOT_READ_PAUSE_MS;
       this.scheduleStepWhenUnblocked(() => {
         if (!this.active) return;
@@ -3038,6 +3217,12 @@ export class WorkshopDuelController {
           subEl.textContent = 'Закатай друга в бочку и получи +6 ❤️.';
         }
       }
+    } else if (this.getEnergyActiveContenders().length === 0) {
+      Haptics.light();
+      if (titleEl) titleEl.textContent = '⚡ Энергия раунда исчерпана!';
+      if (subEl) {
+        subEl.textContent = `❤️ ${this.duelLives} · закрыто бочек: ${closedLeft}. В новом раунде энергия восстановится (и растёт с уровнем!).`;
+      }
     } else {
       Haptics.light();
       const statusVerb = mySkipped
@@ -3049,7 +3234,7 @@ export class WorkshopDuelController {
             : myLoot.kind === 'points'
               ? `⭐ +${myLoot.value || 150} очков`
               : myLoot.kind === 'energy'
-                ? '⚡ +50% энергии!'
+                ? '⚡ +2 удара (+50)!'
                 : myLoot.kind === 'screamer'
                   ? `☠️ Потерял жизнь (-${this._lastScreamerDmg || 2} ❤️)`
                   : '💨 Пусто (-1 ❤️)';
@@ -3068,9 +3253,11 @@ export class WorkshopDuelController {
 
     const capHit = iFoundTicket && (detail.serverTicketRes?.reason === 'solo_cap_reached' || detail.serverTicketRes?.reason === 'friend_or_duel_required');
     if (rematchBtn) {
+      const activeEn = this.getEnergyActiveContenders().length;
+      const minClosedBtn = activeEn <= 1 ? 1 : 2;
       if (needTilRefill) {
         rematchBtn.textContent = oceanAllowed ? '🌊 К Тилю (+6 ❤️)' : '🛢 Закатать друга (+6 ❤️)';
-      } else if (!this.batchResolved && closedLeft >= 2) {
+      } else if (!this.batchResolved && activeEn > 0 && closedLeft >= minClosedBtn) {
         rematchBtn.textContent = '🔨 Бить дальше';
       } else {
         const nextB = [6, 8, 10, 12][Math.min(3, Math.max(0, Number(this.tilRoundIdx || 1)))];

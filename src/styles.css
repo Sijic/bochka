@@ -6690,6 +6690,12 @@ body.is-duel-active .topbar {
 .duel-energy-fill.is-low {
   background: linear-gradient(90deg, #ef4444, #f97316);
 }
+.duel-energy-pill.is-depleted {
+  border-color: rgba(239, 68, 68, 0.85) !important;
+  background: rgba(127, 29, 29, 0.45) !important;
+  color: #fecaca !important;
+  animation: dangerPulse 0.8s ease-in-out infinite alternate;
+}
 .btn-duel-skip-pill {
   padding: 5px 10px;
   border-radius: 4px;
