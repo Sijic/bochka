@@ -626,6 +626,9 @@ async function collectBarrelTrophyLazy(barrelId) {
     if (res?.ok && res.collected && res.trophy) {
       const tag = res.trophy.rarity === 'blogger' ? '🌟 Блогерская фишка' : '🪙 Фото-фишка';
       showToast(`${tag} «${res.trophy.label}» добавлена в Зал славы!`);
+      if (!state.hintsShown?.firstChip && duelCtrl?.isActive) {
+        maybeShowDuelDiscoveryHint('chip');
+      }
     }
     return res;
   } catch {
@@ -2191,6 +2194,7 @@ async function bootstrap() {
         hasLocalVideoEl: Boolean(document.getElementById('trailer-video')),
       }),
       openDuel: (code, opts) => openDuelTable(code, opts || {}),
+      triggerFirstChipHint: () => maybeShowDuelDiscoveryHint('chip'),
       openHallOfFame: () => openHallOfFameModal(),
       collectBarrelTrophy: (bid) => collectBarrelTrophyLazy(bid),
       mintRareMovieCard: (src) => rollRareMovieCardLazy(src || 'level3'),
@@ -2734,14 +2738,15 @@ function showContextHintModal({
   };
 
   const hasStructured = Boolean(what || gives || where);
+  const normKind = String(kind || '');
   if (iconEl) {
-    if (String(kind || '') === 'chip') {
+    if (normKind === 'chip' || normKind === 'firstChip') {
       const chipIco = document.createElement('span');
       chipIco.className = 'chip-token-ico is-lg';
       chipIco.setAttribute('aria-hidden', 'true');
       iconEl.replaceChildren(chipIco);
       iconEl.removeAttribute('hidden');
-    } else if (String(kind || '') === 'ticket') {
+    } else if (normKind === 'ticket' || normKind === 'firstTicket') {
       const stub = document.createElement('span');
       stub.className = 'ticket-stub-mini is-lg';
       stub.setAttribute('aria-hidden', 'true');
@@ -2830,11 +2835,11 @@ const DUEL_DISCOVERY_CARDS = {
   chip: {
     stateKey: 'firstChip',
     icon: '🪙',
-    text: 'Найдена коллекционная фишка цеха!',
+    text: 'Первая фишка! Артефакты и дуэли — в меню (жми на свой аватар)',
     what: 'Коллекционная фишка (🪙)',
-    gives: 'Открывает Зал славы и дуэли 1×1 со ставкой на фишки',
-    where: 'Счётчик фишек в VS-панели и разделе «Зал славы»',
-    spotlightId: 'duel-vs-player-chips',
+    gives: 'Открывает Зал славы, артефакты и дуэли 1×1 со ставкой на фишки',
+    where: 'Жми на свой аватар с подписью «МЕНЮ» в левом верхнем углу',
+    spotlightId: 'btn-duel-vs-avatar-menu',
   },
   points: {
     stateKey: 'firstPoints',
@@ -2865,10 +2870,34 @@ const DUEL_DISCOVERY_CARDS = {
   },
 };
 
+function clearAvatarMenuHintPulse() {
+  if (state._avatarCueTimer) {
+    window.clearTimeout(state._avatarCueTimer);
+    state._avatarCueTimer = null;
+  }
+  document.getElementById('btn-duel-vs-avatar-menu')?.classList.remove('is-avatar-menu-pulse');
+  document.getElementById('duel-ava-menu-cue')?.setAttribute('hidden', '');
+}
+
+function triggerAvatarMenuHintPulse(durationMs = 6500) {
+  clearAvatarMenuHintPulse();
+  const btn = document.getElementById('btn-duel-vs-avatar-menu');
+  const cue = document.getElementById('duel-ava-menu-cue');
+  btn?.classList.add('is-avatar-menu-pulse');
+  cue?.removeAttribute('hidden');
+  state._avatarCueTimer = window.setTimeout(() => {
+    clearAvatarMenuHintPulse();
+  }, Math.max(1500, Number(durationMs || 6500)));
+}
+
 function maybeShowDuelDiscoveryHint(kind) {
   if (state.contextHint?.open) return false;
   const spec = DUEL_DISCOVERY_CARDS[kind];
   if (!spec || state.hintsShown?.[spec.stateKey]) return false;
+  const isChip = kind === 'chip';
+  if (isChip) {
+    document.getElementById('btn-duel-vs-avatar-menu')?.classList.add('is-avatar-menu-pulse');
+  }
   showContextHintModal({
     kind: spec.stateKey,
     icon: spec.icon,
@@ -2879,6 +2908,7 @@ function maybeShowDuelDiscoveryHint(kind) {
     spotlightId: spec.spotlightId,
     buttonText: 'Понял',
     highlightAir: false,
+    onClose: isChip ? () => triggerAvatarMenuHintPulse(6500) : null,
   });
   return true;
 }
@@ -3026,6 +3056,120 @@ function showScreen(name) {
  * v11.5: Меню-цех прямо на 2 или 3 настоящих стоящих 3D-бочках!
  * Только «ЗАКАТАТЬ ДРУГА», «ТРЕЙЛЕР ДРУГУ» (+1 ❤️ визуально) и (если есть билет) «ПОДАРИТЬ БИЛЕТ»!
  */
+const MODE_A_RANK_TIERS = [
+  { id: 'stalker', min: 0, label: '🛢 Сталкер', shortMin: '0', fullTitle: '🛢 СТАЛКЕР БОЧЕК' },
+  { id: 'listener', min: 700, label: '🔥 Слухач', shortMin: '700', fullTitle: '🔥 МАСТЕР СЛУХА' },
+  { id: 'master', min: 1500, label: '⚡ Гроза цеха', shortMin: '1.5k', fullTitle: '⚡ ГРОЗА ЦЕХА' },
+  { id: 'legend', min: 5000, label: '👑 Легенда', shortMin: '5k', fullTitle: '👑 ЛЕГЕНДА ЦЕХА №19' },
+];
+
+async function renderModeARankBoard() {
+  const rankTitleEl = document.getElementById('mode-a-rb-rank-title');
+  const posEl = document.getElementById('mode-a-rb-pos');
+  const ladderEl = document.getElementById('mode-a-rb-ladder');
+  const ptsEl = document.getElementById('mode-a-rb-pts');
+  const chipsEl = document.getElementById('mode-a-rb-chips');
+  const friendsEl = document.getElementById('mode-a-rb-friends');
+  const nextEl = document.getElementById('mode-a-rb-next');
+  const leadersEl = document.getElementById('mode-a-rb-leaders');
+
+  const rawPts = Math.max(0, Number(state.profile?.premierePoints || 0));
+  const friends = Math.max(0, Number(state.profile?.friendsBrought || 0));
+  const bonusPct = Math.min(5, friends) * 10;
+  const effPts = Math.round(rawPts * (1 + bonusPct / 100));
+  const chipsFallback = Math.max(
+    Number(state.profile?.trophiesCount || 0),
+    Number(document.getElementById('hub-trophies-count')?.textContent || 0)
+  );
+
+  let currentTierIdx = 0;
+  for (let i = 0; i < MODE_A_RANK_TIERS.length; i++) {
+    if (effPts >= MODE_A_RANK_TIERS[i].min) currentTierIdx = i;
+  }
+  const currentTier = MODE_A_RANK_TIERS[currentTierIdx];
+  const nextTier = MODE_A_RANK_TIERS[currentTierIdx + 1] || null;
+
+  if (rankTitleEl) rankTitleEl.textContent = currentTier.fullTitle;
+  if (ptsEl) ptsEl.textContent = bonusPct > 0 ? `${effPts} (+${bonusPct}%)` : String(effPts);
+  if (chipsEl) chipsEl.textContent = String(chipsFallback);
+  if (friendsEl) friendsEl.textContent = String(friends);
+  if (nextEl) {
+    nextEl.textContent = nextTier
+      ? `До «${nextTier.label}»: ${Math.max(0, nextTier.min - effPts)} ⭐`
+      : '🏆 Макс. ранг цеха!';
+  }
+
+  if (ladderEl) {
+    const stepNodes = MODE_A_RANK_TIERS.map((tier, idx) => {
+      const box = document.createElement('div');
+      box.className = `mode-a-rb-step${idx <= currentTierIdx ? ' is-reached' : ''}${idx === currentTierIdx ? ' is-current' : ''}`;
+      const strong = document.createElement('strong');
+      strong.textContent = tier.label;
+      const small = document.createElement('small');
+      small.textContent = `${tier.shortMin} ⭐`;
+      box.append(strong, small);
+      return box;
+    });
+    ladderEl.replaceChildren(...stepNodes);
+  }
+
+  if (leadersEl && !leadersEl.childElementCount) {
+    const empty = document.createElement('div');
+    empty.className = 'mode-a-rb-empty';
+    empty.textContent = 'Синхронизация лидеров цеха...';
+    leadersEl.replaceChildren(empty);
+  }
+
+  try {
+    const res = await fetchPremiereLeaderboard(state.tg?.user);
+    if (state.activeScreen !== 'modeA') return;
+    const myUid = getViewerUid(state.tg?.user);
+    const me = res?.me || {};
+    const liveEff = Number(me.effective_points ?? effPts);
+    const liveBonus = Number(me.friend_bonus_pct ?? bonusPct);
+    const liveFriends = Number(me.friends_brought ?? friends);
+    if (posEl) posEl.textContent = me.rank ? `Место: #${me.rank}` : 'Место: #—';
+    if (ptsEl) ptsEl.textContent = liveBonus > 0 ? `${liveEff} (+${liveBonus}%)` : String(liveEff);
+    if (friendsEl) friendsEl.textContent = String(liveFriends);
+
+    if (leadersEl) {
+      const top3 = (res?.leaders || []).slice(0, 3);
+      if (!top3.length) {
+        const empty = document.createElement('div');
+        empty.className = 'mode-a-rb-empty';
+        empty.textContent = 'Стань первым в рейтинге цеха!';
+        leadersEl.replaceChildren(empty);
+        return;
+      }
+      const chips = top3.map((row, idx) => {
+        const rank = Number(row.rank || idx + 1);
+        const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉';
+        const isMe = row.uid === myUid;
+        const rowBonus = Number(row.friend_bonus_pct ?? Math.min(5, Number(row.friends_brought || 0)) * 10);
+        const rowEff = Number(row.effective_points ?? Math.round(Number(row.premiere_points || 0) * (1 + rowBonus / 100)));
+        const chip = document.createElement('div');
+        chip.className = `mode-a-rb-leader-chip${isMe ? ' is-me' : ''}`;
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'mode-a-rb-leader-name';
+        nameSpan.textContent = `${medal} ${row.name || 'Узник'}${isMe ? ' (вы)' : ''}`;
+        const ptsSpan = document.createElement('span');
+        ptsSpan.className = 'mode-a-rb-leader-pts';
+        ptsSpan.textContent = `⭐ ${rowEff}`;
+        chip.append(nameSpan, ptsSpan);
+        return chip;
+      });
+      leadersEl.replaceChildren(...chips);
+    }
+  } catch {
+    if (leadersEl && !leadersEl.querySelector('.mode-a-rb-leader-chip')) {
+      const empty = document.createElement('div');
+      empty.className = 'mode-a-rb-empty';
+      empty.textContent = 'Стань первым в рейтинге цеха!';
+      leadersEl.replaceChildren(empty);
+    }
+  }
+}
+
 function leaveModeABarrelHub() {
   if (state.hubLabelRafId) {
     cancelAnimationFrame(state.hubLabelRafId);
@@ -3033,7 +3177,7 @@ function leaveModeABarrelHub() {
   }
   state.hubBarrelActions = null;
   const wrap = document.getElementById('mode-a-barrel-labels');
-  if (wrap) wrap.innerHTML = '';
+  if (wrap) wrap.replaceChildren();
 }
 
 function enterModeABarrelHub() {
@@ -3068,7 +3212,7 @@ function enterModeABarrelHub() {
 
   const wrap = document.getElementById('mode-a-barrel-labels');
   if (wrap) {
-    wrap.innerHTML = '';
+    wrap.replaceChildren();
     actions.forEach((act, idx) => {
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -3085,15 +3229,19 @@ function enterModeABarrelHub() {
     });
   }
 
+  renderModeARankBoard().catch(() => {});
+
   const updatePositions = () => {
     if (state.activeScreen !== 'modeA' || !state.hubBarrelActions) return;
+    const boardRect = document.getElementById('mode-a-rank-board')?.getBoundingClientRect?.();
+    const maxPillY = boardRect && boardRect.height > 0 ? Math.max(150, boardRect.top - 34) : window.innerHeight - 170;
     const nodes = document.querySelectorAll('#mode-a-barrel-labels .mode-barrel-pill');
     nodes.forEach((node) => {
       const idx = Number(node.dataset.hubIdx);
       const pos = scene?.projectBarrelScreenPos?.(idx, -0.08);
       if (pos?.visible) {
         node.style.left = `${Math.round(pos.x)}px`;
-        node.style.top = `${Math.min(window.innerHeight - 54, Math.round(pos.y + 18))}px`;
+        node.style.top = `${Math.min(maxPillY, Math.round(pos.y + 18))}px`;
         node.style.opacity = '1';
       } else {
         node.style.opacity = '0';
@@ -9903,6 +10051,7 @@ function bindUIEvents() {
   document.getElementById('btn-sound-corner')?.addEventListener('click', toggleWorkshopSound);
   document.getElementById('btn-burger-ocean')?.addEventListener('click', () => {
     closeBurgerDrawer();
+    if (duelCtrl?.isActive) duelCtrl.leaveRoom(false);
     triggerOceanEasterEggScene();
   });
 
@@ -10659,6 +10808,7 @@ function bindUIEvents() {
 
   document.getElementById('btn-burger-test-ticket')?.addEventListener('click', async () => {
     closeBurgerDrawer();
+    if (duelCtrl?.isActive) duelCtrl.leaveRoom(false);
     await audio.unlock(true).catch(() => {});
     state.profile.currentLevel = 3;
     state.profile.lives = Math.max(3, Number(state.profile.lives || 0));
@@ -10669,6 +10819,7 @@ function bindUIEvents() {
   // v10.0: В любой момент с кнопки меню можно закатать друга, разослать накопленные билеты или открыть рейтинг на Премьеру!
   document.getElementById('btn-burger-pack-friend')?.addEventListener('click', () => {
     closeBurgerDrawer();
+    if (duelCtrl?.isActive) duelCtrl.leaveRoom(false);
     stopAirTimer();
     state.round.running = false;
     state.pack.forLifeRefill = false;
@@ -10695,6 +10846,17 @@ function bindUIEvents() {
   document.getElementById('btn-hud-menu')?.addEventListener('click', () => {
     toggleBurgerDrawer();
     Haptics.light();
+  });
+
+  document.getElementById('btn-duel-vs-avatar-menu')?.addEventListener('click', () => {
+    clearAvatarMenuHintPulse();
+    toggleBurgerDrawer();
+    Haptics.light();
+  });
+
+  document.getElementById('btn-mode-a-open-leaderboard')?.addEventListener('click', () => {
+    Haptics.light();
+    openLeaderboardModal();
   });
 
   document.getElementById('btn-download-stories')?.addEventListener('click', () => handleDownloadStories());

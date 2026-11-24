@@ -3982,7 +3982,7 @@ body[data-ui-stage="2"] #screen-finale #btn-pack-revenge .btn-sub-line {
 .burger-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 68;
+  z-index: 105;
   background: rgba(4, 6, 10, 0.7);
   backdrop-filter: blur(4px);
 }
@@ -3991,7 +3991,7 @@ body[data-ui-stage="2"] #screen-finale #btn-pack-revenge .btn-sub-line {
   position: fixed;
   top: 10px;
   right: 10px;
-  z-index: 69;
+  z-index: 110;
   width: min(296px, calc(100vw - 20px));
   max-height: calc(100dvh - 20px);
   overflow-y: auto;
@@ -9884,7 +9884,8 @@ body.is-duel-spotlight-active .duel-live-mini-bar.duel-vs-hud {
 }
 
 @media (max-width: 480px) {
-  .duel-vs-ava { width: 32px; height: 32px; }
+  .duel-vs-ava { width: 30px; height: 30px; }
+  .duel-vs-ava-menu-lbl { font-size: 7px; padding: 1px 3.5px; }
   .duel-vs-center { min-width: 48px; }
   .duel-vs-num { font-size: 9.5px; }
   .trophy-pick-grid { grid-template-columns: 1fr; gap: 8px; }
@@ -9903,7 +9904,7 @@ body.is-duel-spotlight-active .duel-live-mini-bar.duel-vs-hud {
   position: fixed;
   top: calc(env(safe-area-inset-top, 0px) + 52px);
   right: 10px;
-  z-index: 620;
+  z-index: 75;
   pointer-events: auto;
   display: inline-flex;
   align-items: center;
@@ -10006,4 +10007,313 @@ body:not([data-screen="workshop"]) .workshop-intro-hint {
   background: linear-gradient(90deg, #eab308, #f59e0b);
   color: #111827;
   font-weight: 900;
+}
+
+/* Кликабельная аватарка-меню в MK VS HUD + анимация подсказки на первую фишку */
+.duel-vs-ava-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+  flex-shrink: 0;
+  position: relative;
+  line-height: 1;
+}
+
+.duel-vs-ava-btn:active .duel-vs-ava {
+  transform: scale(0.94);
+}
+
+.duel-vs-ava-menu-lbl {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  padding: 1.5px 4px;
+  border-radius: 4px;
+  background: rgba(250, 204, 21, 0.2);
+  border: 1px solid rgba(250, 204, 21, 0.72);
+  color: #fef08a;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.duel-vs-ava-btn.is-avatar-menu-pulse .duel-vs-ava {
+  animation: avatarMenuPulse 1.05s ease-in-out infinite;
+}
+
+.duel-vs-ava-btn.is-avatar-menu-pulse .duel-vs-ava-menu-lbl {
+  background: #facc15;
+  color: #111827;
+  border-color: #fef9c3;
+  box-shadow: 0 0 12px rgba(250, 204, 21, 0.85);
+}
+
+@keyframes avatarMenuPulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 10px rgba(250, 204, 21, 0.45);
+  }
+  50% {
+    transform: scale(1.09);
+    box-shadow: 0 0 0 5px rgba(250, 204, 21, 0.55), 0 0 18px rgba(250, 204, 21, 0.95);
+  }
+}
+
+.duel-ava-menu-cue {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 88;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: max-content;
+  max-width: min(74vw, 240px);
+  padding: 6px 9px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(133, 77, 14, 0.96), rgba(30, 20, 10, 0.96));
+  border: 1.5px solid #facc15;
+  color: #fef9c3;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1.25;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.72), 0 0 14px rgba(250, 204, 21, 0.4);
+  pointer-events: none;
+  animation: avatarCueBob 0.9s ease-in-out infinite alternate;
+}
+
+.duel-ava-menu-cue[hidden] {
+  display: none !important;
+}
+
+.duel-ava-cue-arrow {
+  color: #facc15;
+  font-size: 11px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+@keyframes avatarCueBob {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(4px); }
+}
+
+/* Табло рейтингов и рангов под бочками (#screen-mode-a) */
+.mode-a-rank-board {
+  position: fixed;
+  left: 50%;
+  bottom: calc(10px + var(--safe-bottom, env(safe-area-inset-bottom, 0px)));
+  transform: translateX(-50%);
+  width: min(94vw, 680px);
+  z-index: 33;
+  pointer-events: auto;
+  background: linear-gradient(180deg, rgba(14, 17, 22, 0.92), rgba(8, 10, 14, 0.95));
+  border: 1px solid rgba(250, 204, 21, 0.45);
+  border-radius: 12px;
+  padding: 8px 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.78);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mode-a-rb-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.mode-a-rb-me {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.mode-a-rb-rank-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(250, 204, 21, 0.16);
+  border: 1px solid rgba(250, 204, 21, 0.6);
+  color: #fef08a;
+  font-family: var(--font-display, Oswald, sans-serif);
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.mode-a-rb-pos {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #cbd5e1;
+  white-space: nowrap;
+}
+
+.mode-a-rb-all-btn {
+  padding: 3px 8px;
+  border-radius: 7px;
+  border: 1px solid rgba(250, 204, 21, 0.55);
+  background: rgba(250, 204, 21, 0.14);
+  color: #fde047;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.mode-a-rb-all-btn:hover {
+  background: rgba(250, 204, 21, 0.26);
+}
+
+.mode-a-rb-ladder {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.mode-a-rb-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 3px 4px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  color: #94a3b8;
+  font-size: 9.5px;
+  line-height: 1.15;
+  text-align: center;
+  overflow: hidden;
+}
+
+.mode-a-rb-step strong {
+  font-size: 9.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.mode-a-rb-step small {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  opacity: 0.8;
+}
+
+.mode-a-rb-step.is-reached {
+  border-color: rgba(250, 204, 21, 0.45);
+  background: rgba(250, 204, 21, 0.1);
+  color: #fde68a;
+}
+
+.mode-a-rb-step.is-current {
+  border-color: #facc15;
+  background: rgba(250, 204, 21, 0.24);
+  color: #fef9c3;
+  box-shadow: 0 0 10px rgba(250, 204, 21, 0.28);
+}
+
+.mode-a-rb-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  font-size: 11px;
+  color: #e2e8f0;
+  align-items: center;
+}
+
+.mode-a-rb-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.mode-a-rb-next {
+  margin-left: auto;
+  color: #fde047;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.mode-a-rb-leaders {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.mode-a-rb-leader-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+  font-size: 10px;
+  min-width: 0;
+}
+
+.mode-a-rb-leader-chip.is-me {
+  border-color: rgba(250, 204, 21, 0.72);
+  background: rgba(250, 204, 21, 0.14);
+  color: #fef08a;
+}
+
+.mode-a-rb-leader-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.mode-a-rb-leader-pts {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: #fde047;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.mode-a-rb-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  font-size: 10px;
+  color: #94a3b8;
+  padding: 2px 0;
+}
+
+@media (max-width: 480px) {
+  .mode-a-rank-board {
+    padding: 6px 8px;
+    gap: 4px;
+  }
+  .mode-a-rb-rank-pill { font-size: 10.5px; }
+  .mode-a-rb-pos, .mode-a-rb-all-btn { font-size: 9.5px; }
+  .mode-a-rb-stats { font-size: 10px; gap: 4px 8px; }
+  .mode-a-rb-next { font-size: 9.5px; }
+  .mode-a-rb-leader-chip { font-size: 9.5px; padding: 3px 5px; }
 }

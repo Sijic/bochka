@@ -267,6 +267,25 @@
     <!-- Проекции кликабельных табличек прямо под стоящими 3D-бочками -->
     <div class="mode-barrel-labels" id="mode-a-barrel-labels"></div>
 
+    <!-- Табло рейтингов и рангов под бочками -->
+    <div class="mode-a-rank-board" id="mode-a-rank-board" aria-label="Рейтинги и ранги">
+      <div class="mode-a-rb-head">
+        <div class="mode-a-rb-me">
+          <span class="mode-a-rb-rank-pill" id="mode-a-rb-rank-title">🛢 СТАЛКЕР БОЧЕК</span>
+          <span class="mode-a-rb-pos" id="mode-a-rb-pos">Место: #—</span>
+        </div>
+        <button type="button" class="mode-a-rb-all-btn" id="btn-mode-a-open-leaderboard">🏆 Рейтинг ↗</button>
+      </div>
+      <div class="mode-a-rb-ladder" id="mode-a-rb-ladder" aria-label="Шкала рангов"></div>
+      <div class="mode-a-rb-stats" id="mode-a-rb-stats">
+        <span class="mode-a-rb-stat">⭐ <strong id="mode-a-rb-pts">0</strong> / 5 000</span>
+        <span class="mode-a-rb-stat"><span class="chip-token-ico" aria-hidden="true"></span> <strong id="mode-a-rb-chips">0</strong></span>
+        <span class="mode-a-rb-stat">👥 <strong id="mode-a-rb-friends">0</strong></span>
+        <span class="mode-a-rb-next" id="mode-a-rb-next">До след. ранга: 700 ⭐</span>
+      </div>
+      <div class="mode-a-rb-leaders" id="mode-a-rb-leaders" aria-label="Лидеры цеха"></div>
+    </div>
+
     <!-- Скрытые совместимые якоря (Гонка за премьерой закрыта до 100% шкалы!) -->
     <button type="button" id="btn-go-pack" hidden></button>
     <button type="button" id="btn-mode-a-share-hub" hidden></button>
@@ -1151,7 +1170,14 @@
     <div class="duel-live-mini-bar duel-vs-hud" id="duel-live-mini-bar" hidden>
       <div class="duel-vs-row">
         <div class="duel-vs-side is-player" id="duel-vs-player-wrap">
-          <img src="./public/sprites/fighter_1.webp?v=2000" alt="Игрок" class="duel-vs-ava" id="duel-vs-player-ava" />
+          <button type="button" class="duel-vs-ava-btn" id="btn-duel-vs-avatar-menu" aria-label="Открыть меню цеха" title="Открыть меню: артефакты, дуэли, рейтинг">
+            <span class="duel-vs-ava-menu-lbl" aria-hidden="true">МЕНЮ</span>
+            <img src="./public/sprites/fighter_1.webp?v=2000" alt="Игрок" class="duel-vs-ava" id="duel-vs-player-ava" />
+          </button>
+          <div class="duel-ava-menu-cue" id="duel-ava-menu-cue" hidden aria-live="polite">
+            <span class="duel-ava-cue-arrow" aria-hidden="true">▲</span>
+            <span class="duel-ava-cue-text">Артефакты и дуэли в меню — жми на аватар!</span>
+          </div>
           <div class="duel-vs-bars">
             <div class="duel-vs-hp-line" id="duel-lives-pill" title="Твои жизни в бою">
               <span class="duel-vs-num">❤️ <strong id="duel-lives-val">6</strong></span>
