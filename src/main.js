@@ -7986,6 +7986,7 @@ function mountVkTrailerPlayer() {
   state.trailer.vkMuted = false;
   state.trailer.vkVolume = 1;
   state.trailer.vkAutoplaySoundBlocked = false;
+  state.trailer.userPaused = false;
   state.trailer.wallClockSec = 0;
 
   if (customBar) {
@@ -7993,6 +7994,9 @@ function mountVkTrailerPlayer() {
     customBar.querySelector('.trailer-progress-track')?.removeAttribute('hidden');
   }
   updateTrailerProgressUI(0, 92, TRAILER_UNLOCK_SEC);
+
+  let bindVkPlayer = null;
+  let sendInitHandshake = null;
 
   if (slot) {
     destroyVkTrailerPlayerAndIframe();
@@ -8009,10 +8013,10 @@ function mountVkTrailerPlayer() {
     ifr.setAttribute('playsinline', '');
 
     let wired = false;
-    ifr.onload = () => {
+    bindVkPlayer = () => {
       if (wired || !state.trailer.modalOpen || document.getElementById('vk-trailer-iframe') !== ifr) return;
-      wired = true;
       if (!window.VK?.VideoPlayer) return;
+      wired = true;
       try {
         const player = window.VK.VideoPlayer(ifr);
         state.vkPlayer = player;
@@ -8027,6 +8031,7 @@ function mountVkTrailerPlayer() {
         player.on('inited', (ev) => {
           if (!state.trailer.modalOpen || state.vkPlayer !== player) return;
           state.trailer.vkReady = true;
+          state.trailer.userPaused = false;
           state.trailer.vkState = String(ev?.state || player.getState?.() || 'unstarted');
           syncPlayerAudioState(ev);
           try {
@@ -8043,18 +8048,23 @@ function mountVkTrailerPlayer() {
         player.on('started', (ev) => {
           if (!state.trailer.modalOpen || state.vkPlayer !== player) return;
           state.trailer.vkReady = true;
+          state.trailer.userPaused = false;
           state.trailer.vkState = String(ev?.state || 'playing');
           syncPlayerAudioState(ev);
         });
 
         player.on('resumed', (ev) => {
           if (!state.trailer.modalOpen || state.vkPlayer !== player) return;
+          state.trailer.userPaused = false;
           state.trailer.vkState = String(ev?.state || 'playing');
           syncPlayerAudioState(ev);
         });
 
         player.on('paused', () => {
-          if (state.vkPlayer === player) state.trailer.vkState = 'paused';
+          if (state.vkPlayer === player) {
+            state.trailer.vkState = 'paused';
+            state.trailer.userPaused = true;
+          }
         });
 
         player.on('volumechange', (ev) => {
@@ -8092,7 +8102,20 @@ function mountVkTrailerPlayer() {
       } catch { /* fallback wall-clock timer below guarantees unlock */ }
     };
 
+    sendInitHandshake = () => {
+      if (!state.trailer.modalOpen || document.getElementById('vk-trailer-iframe') !== ifr) return;
+      try {
+        ifr.contentWindow?.postMessage({ method: 'init' }, '*');
+      } catch { /* ignore */ }
+    };
+
+    ifr.onload = () => {
+      bindVkPlayer?.();
+      sendInitHandshake?.();
+    };
+
     slot.appendChild(ifr);
+    bindVkPlayer();
   }
 
   if (state.trailer.vkTimer) {
@@ -8101,6 +8124,9 @@ function mountVkTrailerPlayer() {
   }
   let visibleWallMs = 0;
   let lastTickAt = performance.now();
+  let lastInitNudgeAt = lastTickAt;
+  let playRetries = 0;
+  let lastPlayRetryAt = 0;
   syncTrailerIntroLockUI(0);
   updateTrailerProgressUI(0, 91.8, Math.floor(91.8 * 0.90));
   state.trailer.vkTimer = window.setInterval(() => {
@@ -8108,10 +8134,37 @@ function mountVkTrailerPlayer() {
     const dt = Math.min(500, Math.max(0, now - lastTickAt));
     lastTickAt = now;
     if (!state.trailer.modalOpen || document.hidden) return;
-    visibleWallMs += dt;
+    visibleWallMs += dt * (state.trailer.vkReady ? 1 : 0.45);
     const wallSec = visibleWallMs / 1000;
     state.trailer.wallClockSec = wallSec;
     syncTrailerIntroLockUI(Math.max(wallSec, Number(state.trailer.honestWatchedSec || 0)));
+
+    if (!state.trailer.vkReady && wallSec < 28 && (now - lastInitNudgeAt) >= 1000) {
+      lastInitNudgeAt = now;
+      bindVkPlayer?.();
+      sendInitHandshake?.();
+    }
+
+    if (
+      state.vkPlayer &&
+      state.trailer.vkReady &&
+      state.trailer.vkState === 'unstarted' &&
+      !state.trailer.userPaused &&
+      playRetries < 3 &&
+      (now - lastPlayRetryAt) >= 1000
+    ) {
+      playRetries += 1;
+      lastPlayRetryAt = now;
+      try {
+        if (!state.trailer.muted) {
+          state.vkPlayer.unmute?.();
+          state.vkPlayer.setVolume?.(1);
+        } else {
+          state.vkPlayer.mute?.();
+        }
+        state.vkPlayer.play?.();
+      } catch { /* ignore */ }
+    }
 
     if (state.vkPlayer && state.trailer.vkReady && state.trailer.vkState === 'playing') {
       try {
