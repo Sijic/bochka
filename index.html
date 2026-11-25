@@ -277,6 +277,7 @@
           <strong id="mode-a-rb-tickets">0 · 0/4</strong>
         </span>
         <span class="mode-a-rb-stat">👥 <strong id="mode-a-rb-friends">0</strong></span>
+        <span class="mode-a-rb-stat" id="mode-a-rb-golden-wrap" hidden>✨ <strong id="mode-a-rb-golden">0/12</strong></span>
         <span class="mode-a-rb-next" id="mode-a-rb-next">До след. ранга: 700 ⭐</span>
       </div>
       <div class="mode-a-rb-leaders" id="mode-a-rb-leaders" aria-label="Лидеры цеха"></div>
@@ -1608,6 +1609,28 @@
     <div class="barrel-trap-caption" id="barrel-trap-caption"></div>
   </div>
 
+  <!-- Порог 5 000 ⭐: открытие Лиги Суперприза (12 уровней × 3 000 ⭐ и 12 частей Золотого билета) -->
+  <div class="modal-backdrop" id="modal-superprize-unlock" hidden>
+    <div class="modal-card til-hero-sheet superprize-unlock-card" role="dialog" aria-modal="true" aria-labelledby="superprize-unlock-title">
+      <div class="superprize-unlock-badge">🏆 ЛИГА СУПЕРПРИЗА ОТКРЫТА</div>
+      <h3 class="superprize-unlock-title" id="superprize-unlock-title">Ты прошёл отбор 5 000 ⭐!</h3>
+      <div class="superprize-unlock-rank-pill" id="superprize-unlock-rank">Твоё место в рейтинге: #— · Рейтинг: ⭐ 0</div>
+      <p class="til-hero-copy superprize-unlock-copy" id="superprize-unlock-copy">
+        Теперь ты играешь на Суперприз! Впереди 12 уровней по 3 000 ⭐: на каждом уровне в бочках спрятана
+        1 твоя личная часть Золотого билета (1/12 … 12/12 — Тиль её не заберёт!), а рядом лежат простые билеты и фишки.
+        В рейтинге учитываются очки, уровень, фишки, золотые части, рефералы, дуэли и победы!
+      </p>
+      <div class="superprize-unlock-actions">
+        <button type="button" class="btn-primary btn-full til-hero-cta" id="btn-superprize-unlock-play">
+          ⚔️ Искать Золотой билет!
+        </button>
+        <button type="button" class="btn-secondary btn-full" id="btn-superprize-unlock-leaders">
+          🏆 Мой рейтинг и факторы
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Повторное поражение в бочке (когда море 1×/24ч уже использовано) -->
   <div class="modal-backdrop" id="modal-barrel-trapped" hidden>
     <div class="modal-card til-hero-sheet barrel-trapped-card" role="dialog" aria-modal="true">
@@ -1615,10 +1638,10 @@
         <img src="./public/sprites/horror_hero_captive.webp" alt="Заперт в бочке" class="til-hero-photo" />
       </div>
       <p class="til-hero-copy" id="barrel-trapped-copy">
-        Тебя закрыли в бочке — позови друга, чтобы он тебя вытащил (+6 жизней)
+        Тебя закрыли в бочке (0 ❤️) — закатай друга в бочку, чтобы он тебя вытащил (+6 жизней и +500 ⭐, а каждая рассылка даёт +2 ❤️)!
       </p>
       <button type="button" class="btn-primary btn-full til-hero-cta" id="btn-trapped-invite-friend">
-        Позвать друга (+6 ❤️)
+        🛢 Закатать друга в бочку (+2…+6 ❤️)
       </button>
     </div>
   </div>

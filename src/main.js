@@ -91,6 +91,8 @@ import {
   uploadPairTicketReceipt,
   fetchTelegramUserAvatarFallback,
   claimSpecialKnockBonus,
+  computeSuperprizeProgress,
+  claimGoldenTicketShard,
 } from './backend.js';
 import { HorrorScreamerPlayer, preloadScreamerFrames } from './screamer-fx.js';
 
@@ -249,6 +251,11 @@ const state = {
     friendsBrought: 0,
     duelsPlayed: 0,
     duelsWon: 0,
+    trophiesCount: 0,
+    chipsCount: 0,
+    goldenTicketShards: 0,
+    goldenLevelsClaimed: [],
+    superprizeUnlockedAt: null,
     uiStage: 1,
     temuSurgeClaimed: false,
     hasSocialConnection: false,
@@ -485,9 +492,33 @@ async function ensureDuelReady() {
         chipsCount: Number(state.profile?.chipsCount || 0),
         trophiesCount: Number(state.profile?.trophiesCount ?? state.profile?.chipsCount ?? 0),
         currentLevel: Math.max(1, Number(state.profile?.currentLevel || 1)),
+        duelsPlayed: Number(state.profile?.duelsPlayed || 0),
+        duelsWon: Number(state.profile?.duelsWon || 0),
+        goldenTicketShards: Number(state.profile?.goldenTicketShards || 0),
+        goldenLevelsClaimed: Array.isArray(state.profile?.goldenLevelsClaimed) ? state.profile.goldenLevelsClaimed : [],
       }),
       getTicketShards: () => Number(state.profile?.ticketShards || 0),
       canUseOceanRefill: () => canClaimOceanRefillToday(),
+      onCollectGoldenShard: async (superLevel = 1) => {
+        const res = await claimGoldenTicketShard(state.tg?.user, superLevel).catch(() => null);
+        if (res?.ok) {
+          state.profile.goldenTicketShards = Number(res.goldenTicketShards ?? state.profile.goldenTicketShards ?? 0);
+          state.profile.goldenLevelsClaimed = Array.isArray(res.goldenLevelsClaimed)
+            ? res.goldenLevelsClaimed
+            : state.profile.goldenLevelsClaimed;
+          state.profile.currentLevel = Math.max(Number(state.profile.currentLevel || 1), Number(superLevel || 1) + 1);
+          Haptics.success();
+          showToast(
+            res.completedGoldenTicket
+              ? '🏆 ВСЕ 12/12 ЧАСТЕЙ ЗОЛОТОГО БИЛЕТА СОБРАНЫ! Ты в главном розыгрыше Суперприза!'
+              : `✨ Найдена твоя часть Золотого билета (${state.profile.goldenTicketShards}/12)!`
+          );
+          syncSuperPrizeRatingBarUI();
+          duelCtrl?.syncEnergyUI?.();
+          if (state.activeScreen === 'modeA') renderModeARankBoard();
+        }
+        return res;
+      },
       onOpenPackForLives: () => {
         state.pack.forLifeRefill = true;
         duelCtrl?.leaveRoom(false);
@@ -1432,41 +1463,110 @@ function computeSuperPrizeRatingPct(profile = state.profile) {
   return Math.min(100, soloPct + pendingSendPct + friendsPct);
 }
 
+const SUPERPRIZE_UNLOCK_KEY_PREFIX = 'bochka_superprize_unlock_seen_v1:';
+const SUPERPRIZE_LEVEL_KEY_PREFIX = 'bochka_superprize_level_v1:';
+
+async function openSuperprizeUnlockModal() {
+  const modal = document.getElementById('modal-superprize-unlock');
+  const rankEl = document.getElementById('superprize-unlock-rank');
+  if (!modal) return;
+  const sp = computeSuperprizeProgress(
+    state.profile?.premierePoints,
+    state.profile?.goldenLevelsClaimed,
+    state.profile?.goldenTicketShards
+  );
+  if (rankEl) {
+    rankEl.textContent = `Уровень ${sp.displayLevel} · Золотой билет: ${sp.goldenCount}/12 · Считаем твоё место...`;
+  }
+  modal.removeAttribute('hidden');
+  try {
+    const lb = await fetchPremiereLeaderboard(state.tg?.user);
+    const me = lb?.me || {};
+    const rankStr = me.rank ? `#${me.rank}` : '#—';
+    const score = Number(me.rating_score ?? me.effective_points ?? state.profile?.premierePoints ?? 0);
+    if (rankEl) {
+      rankEl.textContent = `Твоё место в рейтинге: ${rankStr} · Рейтинг: ⭐ ${score.toLocaleString('ru-RU')} · Ур. ${sp.displayLevel}`;
+    }
+  } catch { /* keep initial text */ }
+}
+
+function checkSuperprizeTransitions({ allowModal = true } = {}) {
+  const sp = computeSuperprizeProgress(
+    state.profile?.premierePoints,
+    state.profile?.goldenLevelsClaimed,
+    state.profile?.goldenTicketShards
+  );
+  if (!sp.unlocked) return;
+  const uid = getViewerUid(state.tg?.user) || 'anon';
+  try {
+    const unlockKey = `${SUPERPRIZE_UNLOCK_KEY_PREFIX}${uid}`;
+    const lvlKey = `${SUPERPRIZE_LEVEL_KEY_PREFIX}${uid}`;
+    const prevSeenLvl = Number(localStorage.getItem(lvlKey) || 0);
+    if (!localStorage.getItem(unlockKey)) {
+      if (allowModal && state.entered && state.activeScreen !== 'gate') {
+        localStorage.setItem(unlockKey, '1');
+        localStorage.setItem(lvlKey, String(sp.displayLevel));
+        openSuperprizeUnlockModal().catch(() => {});
+        return;
+      }
+    } else if (sp.displayLevel > Math.max(2, prevSeenLvl)) {
+      localStorage.setItem(lvlKey, String(sp.displayLevel));
+      showToast(
+        `🏆 Уровень ${sp.displayLevel} (${sp.barMax.toLocaleString('ru-RU')} ⭐)! В бочках спрятана твоя новая часть Золотого билета (${sp.superLevel}/12)!`
+      );
+    } else if (!prevSeenLvl) {
+      localStorage.setItem(lvlKey, String(sp.displayLevel));
+    }
+  } catch { /* ignore storage errors */ }
+}
+
 function syncSuperPrizeRatingBarUI() {
   const pct = computeSuperPrizeRatingPct(state.profile);
   const friends = Math.max(0, Math.round(Number(state.profile?.friendsBrought || 0)));
   const pts = Math.max(0, Math.round(Number(state.profile?.premierePoints || 0)));
+  const chips = Math.max(0, Math.round(Number(state.profile?.trophiesCount ?? state.profile?.chipsCount ?? 0)));
+  const duelsPlayed = Math.max(0, Math.round(Number(state.profile?.duelsPlayed || 0)));
+  const duelsWon = Math.max(0, Math.round(Number(state.profile?.duelsWon || 0)));
+  const sp = computeSuperprizeProgress(
+    pts,
+    state.profile?.goldenLevelsClaimed,
+    state.profile?.goldenTicketShards
+  );
+
   const hudPct = document.getElementById('hud-rating-pct');
   const hudFill = document.getElementById('hud-rating-fill');
-  if (hudPct) hudPct.textContent = `${pct}%`;
-  if (hudFill) hudFill.style.width = `${pct}%`;
+  if (hudPct) hudPct.textContent = sp.unlocked ? `Ур.${sp.displayLevel}` : `${pct}%`;
+  if (hudFill) hudFill.style.width = `${sp.unlocked ? sp.pct.toFixed(1) : pct}%`;
 
   const topPct = document.getElementById('top-rating-pct');
   const topFill = document.getElementById('top-rating-fill');
-  if (topPct) topPct.textContent = `${pct}%`;
-  if (topFill) topFill.style.width = `${pct}%`;
+  if (topPct) topPct.textContent = sp.unlocked ? `Ур.${sp.displayLevel}` : `${pct}%`;
+  if (topFill) topFill.style.width = `${sp.unlocked ? sp.pct.toFixed(1) : pct}%`;
 
   const lbPct = document.getElementById('leader-rating-pct');
   const lbFill = document.getElementById('leader-rating-fill');
   const lbBrk = document.getElementById('leader-rating-breakdown');
-  if (lbPct) lbPct.textContent = pct >= 100 ? '100% 🏆' : `${pct}%`;
-  if (lbFill) lbFill.style.width = `${pct}%`;
+  if (lbPct) lbPct.textContent = sp.unlocked ? `Ур.${sp.displayLevel} ✨${sp.goldenCount}/12` : `${pct}%`;
+  if (lbFill) lbFill.style.width = `${sp.unlocked ? sp.pct.toFixed(1) : pct}%`;
   if (lbBrk) {
-    lbBrk.textContent = pct >= 100
-      ? `🏆 ШКАЛА ЗАПОЛНЕНА! Ты в финале Супер-приза (👥 Друзей: ${friends} · ⭐ Баллов: ${pts})`
-      : `👥 Друзья в игре: ${friends} (+20% каждый) · ⭐ Из бочек: ${pts} (добери 100% для Супер-приза!)`;
+    lbBrk.textContent = sp.unlocked
+      ? `🏆 Лига Суперприза (Ур.${sp.displayLevel} · ${sp.barCur.toLocaleString('ru-RU')}/3 000 ⭐ · ✨ Золотой ${sp.goldenCount}/12) · 👥 Друзей: ${friends} · 🪙 Фишек: ${chips} · ⚔️ Дуэлей: ${duelsPlayed} (${duelsWon} поб.)`
+      : `👥 Друзья: ${friends} · 🪙 Фишки: ${chips} · ⚔️ Дуэли: ${duelsPlayed} · ⭐ Очки: ${pts} (после 5 000 ⭐ — 12 уровней Золотого билета!)`;
   }
 
+  const spStrip = document.getElementById('duel-superprize-strip');
   const spLabel = document.getElementById('duel-superprize-label');
   const spFill = document.getElementById('duel-superprize-fill');
-  const SUPERPRIZE_TARGET = 5000;
-  const spPct = Math.min(100, Math.max(0, (pts / SUPERPRIZE_TARGET) * 100));
+  if (spStrip) spStrip.classList.toggle('is-superprize', sp.unlocked);
   if (spLabel) {
-    spLabel.textContent = `До суперприза: ${pts.toLocaleString('ru-RU')} / 5 000 очков`;
+    spLabel.textContent = sp.unlocked
+      ? `🏆 Ур. ${sp.displayLevel} · ${sp.barCur.toLocaleString('ru-RU')} / 3 000 ⭐ · ✨ Золотой ${sp.goldenCount}/12`
+      : `До суперприза: ${pts.toLocaleString('ru-RU')} / 5 000 очков`;
   }
   if (spFill) {
-    spFill.style.width = `${spPct.toFixed(1)}%`;
+    spFill.style.width = `${sp.pct.toFixed(1)}%`;
   }
+  checkSuperprizeTransitions({ allowModal: true });
 }
 
 /**
@@ -2244,6 +2344,8 @@ async function bootstrap() {
         hasLocalVideoEl: Boolean(document.getElementById('trailer-video')),
       }),
       openDuel: (code, opts) => openDuelTable(code, opts || {}),
+      openSuperprizeUnlockModal: () => openSuperprizeUnlockModal(),
+      computeSuperprizeProgress: (pts, claimed, count) => computeSuperprizeProgress(pts, claimed, count),
       triggerFirstChipHint: () => maybeShowDuelDiscoveryHint('chip'),
       openHallOfFame: () => openHallOfFameModal(),
       collectBarrelTrophy: (bid) => collectBarrelTrophyLazy(bid),
@@ -3134,6 +3236,11 @@ async function renderModeARankBoard() {
     Number(state.profile?.trophiesCount || 0),
     Number(document.getElementById('hub-trophies-count')?.textContent || 0)
   );
+  const sp = computeSuperprizeProgress(
+    rawPts,
+    state.profile?.goldenLevelsClaimed,
+    state.profile?.goldenTicketShards
+  );
 
   let currentTierIdx = 0;
   for (let i = 0; i < MODE_A_RANK_TIERS.length; i++) {
@@ -3142,15 +3249,21 @@ async function renderModeARankBoard() {
   const currentTier = MODE_A_RANK_TIERS[currentTierIdx];
   const nextTier = MODE_A_RANK_TIERS[currentTierIdx + 1] || null;
 
-  if (rankTitleEl) rankTitleEl.textContent = currentTier.fullTitle;
-  if (ptsEl) ptsEl.textContent = bonusPct > 0 ? `${effPts} (+${bonusPct}%)` : String(effPts);
+  if (rankTitleEl) rankTitleEl.textContent = sp.unlocked ? `🏆 ЛИГА УР.${sp.displayLevel}` : currentTier.fullTitle;
+  if (ptsEl) ptsEl.textContent = sp.unlocked ? `${sp.barCur.toLocaleString('ru-RU')} / 3 000` : (bonusPct > 0 ? `${effPts} (+${bonusPct}%)` : String(effPts));
   if (chipsEl) chipsEl.textContent = String(chipsFallback);
   if (friendsEl) friendsEl.textContent = String(friends);
+  const goldenWrapEl = document.getElementById('mode-a-rb-golden-wrap');
+  const goldenValEl = document.getElementById('mode-a-rb-golden');
+  if (goldenWrapEl) goldenWrapEl.hidden = !sp.unlocked;
+  if (goldenValEl) goldenValEl.textContent = `${sp.goldenCount}/12`;
   syncTicketShardsUI();
   if (nextEl) {
-    nextEl.textContent = nextTier
-      ? `До «${nextTier.label}»: ${Math.max(0, nextTier.min - effPts)} ⭐`
-      : '🏆 Макс. ранг цеха!';
+    nextEl.textContent = sp.unlocked
+      ? `Золотой билет: ${sp.goldenCount}/12 · Ур.${sp.displayLevel} (${sp.barCur}/3 000 ⭐)`
+      : nextTier
+        ? `До «${nextTier.label}»: ${Math.max(0, nextTier.min - effPts)} ⭐`
+        : '🏆 Макс. ранг цеха!';
   }
 
   if (ladderEl) {
@@ -3183,8 +3296,13 @@ async function renderModeARankBoard() {
     const liveBonus = Number(me.friend_bonus_pct ?? bonusPct);
     const liveFriends = Number(me.friends_brought ?? friends);
     if (posEl) posEl.textContent = me.rank ? `Место: #${me.rank}` : 'Место: #—';
-    if (ptsEl) ptsEl.textContent = liveBonus > 0 ? `${liveEff} (+${liveBonus}%)` : String(liveEff);
+    if (ptsEl) {
+      ptsEl.textContent = sp.unlocked
+        ? `${sp.barCur.toLocaleString('ru-RU')} / 3 000 ⭐ (Рейтинг ${liveEff.toLocaleString('ru-RU')})`
+        : (liveBonus > 0 ? `${liveEff} (+${liveBonus}%)` : String(liveEff));
+    }
     if (friendsEl) friendsEl.textContent = String(liveFriends);
+    if (me.chips_count != null && chipsEl) chipsEl.textContent = String(Number(me.chips_count || 0));
 
     if (leadersEl) {
       const top3 = (res?.leaders || []).slice(0, 3);
@@ -9623,7 +9741,12 @@ async function openLeaderboardModal() {
     state.round.pausedForModal = true;
   }
   modal?.removeAttribute('hidden');
-  if (listEl) listEl.innerHTML = '<div class="mono-tag">Синхронизация ТОП-10 с сервером...</div>';
+  if (listEl) {
+    const syncTag = document.createElement('div');
+    syncTag.className = 'mono-tag';
+    syncTag.textContent = 'Синхронизация ТОП-10 с сервером...';
+    listEl.replaceChildren(syncTag);
+  }
 
   renderRetentionAndTransparencyPanels();
 
@@ -9633,51 +9756,69 @@ async function openLeaderboardModal() {
   const myPts = Number(me.premiere_points ?? state.profile.premierePoints ?? 0);
   const myFriends = Number(me.friends_brought ?? state.profile.friendsBrought ?? 0);
   const myBonusPct = Number(me.friend_bonus_pct ?? Math.min(5, myFriends) * 10);
-  const myEffective = Number(me.effective_points ?? Math.round(myPts * (1 + myBonusPct / 100)));
+  const myEffective = Number(me.rating_score ?? me.effective_points ?? Math.round(myPts * (1 + myBonusPct / 100)));
+  const myChips = Number(me.chips_count ?? state.profile.trophiesCount ?? 0);
+  const myDuelsPlayed = Number(me.duels_played ?? state.profile.duelsPlayed ?? 0);
+  const myDuelsWon = Number(me.duels_won ?? state.profile.duelsWon ?? 0);
+  const myGolden = Number(me.golden_ticket_shards ?? state.profile.goldenTicketShards ?? 0);
+  const sp = computeSuperprizeProgress(myPts, state.profile.goldenLevelsClaimed, myGolden);
 
   if (rankEl) rankEl.textContent = me.rank ? `#${me.rank}` : '#—';
-  if (ptsEl) ptsEl.textContent = myBonusPct > 0 ? `⭐ ${myEffective} (+${myBonusPct}%)` : `⭐ ${myEffective}`;
+  if (ptsEl) ptsEl.textContent = myBonusPct > 0 ? `⭐ ${myEffective.toLocaleString('ru-RU')} (+${myBonusPct}%)` : `⭐ ${myEffective.toLocaleString('ru-RU')}`;
   if (gapEl) {
-    const tierHint = myFriends === 0
-      ? ' · 🤝 Приведи 1-го друга → сразу +150 ⭐ и +10% (2+ друзей → финал ТОП-10)'
-      : myFriends === 1
-        ? ' · ✓ Ступень 1 (+150 ⭐ и +10% активны) · Ещё 1 друг открывает финал ТОП-10!'
-        : myBonusPct < 50
-          ? ` · ✓ Допуск в финал ТОП-10 открыт (+${myBonusPct}%, макс +50%)`
-          : ' · ✓ Допуск в финал ТОП-10 открыт (макс. +50%)';
+    const factorsHint = ` · Ур.${sp.displayLevel} · 🪙 ${myChips} · 👥 ${myFriends} · ⚔️ ${myDuelsWon}/${myDuelsPlayed} · ✨ Золотой ${myGolden}/12`;
     gapEl.textContent = me.in_top10
-      ? `🔥 ТЫ В ЗОНЕ ПРИГЛАШЕНИЯ НА ЗАКРЫТУЮ ПРЕМЬЕРУ (ТОП-10)!${tierHint}`
-      : `До входа в ТОП-10: +${Math.max(10, Number(me.points_to_top10 || 150))} ⭐${tierHint}`;
+      ? `🔥 ТЫ В ЗОНЕ ПРИГЛАШЕНИЯ В ТОП-10!${factorsHint}`
+      : `До ТОП-10: +${Math.max(10, Number(me.points_to_top10 || 150))} ⭐${factorsHint}`;
   }
 
   if (!listEl) return;
   const topRows = (res.leaders || []).slice(0, 12);
   if (!topRows.length) {
-    listEl.innerHTML = '<div class="mono-tag">Ты можешь стать первым лидером ТОП-10 прямо сейчас!</div>';
+    const emptyTag = document.createElement('div');
+    emptyTag.className = 'mono-tag';
+    emptyTag.textContent = 'Ты можешь стать первым лидером ТОП-10 прямо сейчас!';
+    listEl.replaceChildren(emptyTag);
     return;
   }
 
-  listEl.innerHTML = topRows
-    .map((row, idx) => {
-      const rank = Number(row.rank || idx + 1);
-      const isMe = row.uid === myUid;
-      const cls = `leader-row ${rank <= 3 ? 'is-top3' : ''} ${isMe ? 'is-me' : ''}`.trim();
-      const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
-      const rowBonusPct = Number(row.friend_bonus_pct ?? Math.min(5, Number(row.friends_brought || 0)) * 10);
-      const rowEffPts = Number(row.effective_points ?? Math.round(Number(row.premiere_points || 0) * (1 + rowBonusPct / 100)));
-      const subMeta = `Ур.${row.current_level || 1} · Друзей: ${row.friends_brought || 0} (+${rowBonusPct}%) · Побед: ${row.duels_won || 0}`;
-      return `
-        <div class="${cls}">
-          <span class="leader-rank">${medal}</span>
-          <div class="leader-name-col">
-            <strong>${escapeHtmlSafe(row.name || 'Узник цеха')}${isMe ? ' (ВЫ)' : ''}</strong>
-            <small>${escapeHtmlSafe(subMeta)}</small>
-          </div>
-          <span class="leader-pts">⭐ ${rowEffPts}</span>
-        </div>
-      `;
-    })
-    .join('');
+  const rowNodes = topRows.map((row, idx) => {
+    const rank = Number(row.rank || idx + 1);
+    const isMe = row.uid === myUid;
+    const rowDiv = document.createElement('div');
+    rowDiv.className = `leader-row ${rank <= 3 ? 'is-top3' : ''} ${isMe ? 'is-me' : ''}`.trim();
+
+    const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
+    const rankSpan = document.createElement('span');
+    rankSpan.className = 'leader-rank';
+    rankSpan.textContent = medal;
+
+    const nameCol = document.createElement('div');
+    nameCol.className = 'leader-name-col';
+    const strongEl = document.createElement('strong');
+    strongEl.textContent = `${row.name || 'Узник цеха'}${isMe ? ' (ВЫ)' : ''}`;
+
+    const rowBonusPct = Number(row.friend_bonus_pct ?? Math.min(5, Number(row.friends_brought || 0)) * 10);
+    const rowEffPts = Number(row.rating_score ?? row.effective_points ?? Math.round(Number(row.premiere_points || 0) * (1 + rowBonusPct / 100)));
+    const rowLvl = Number(row.effective_level ?? row.current_level ?? 1);
+    const rowChips = Number(row.chips_count ?? 0);
+    const rowFriends = Number(row.friends_brought ?? 0);
+    const rowPlayed = Number(row.duels_played ?? 0);
+    const rowWon = Number(row.duels_won ?? 0);
+    const rowGolden = Number(row.golden_ticket_shards ?? 0);
+
+    const smallEl = document.createElement('small');
+    smallEl.textContent = `Ур.${rowLvl} · 🪙 ${rowChips} · 👥 ${rowFriends} (+${rowBonusPct}%) · ⚔️ ${rowWon}/${rowPlayed} · ✨ ${rowGolden}/12`;
+    nameCol.append(strongEl, smallEl);
+
+    const ptsSpan = document.createElement('span');
+    ptsSpan.className = 'leader-pts';
+    ptsSpan.textContent = `⭐ ${rowEffPts.toLocaleString('ru-RU')}`;
+
+    rowDiv.append(rankSpan, nameCol, ptsSpan);
+    return rowDiv;
+  });
+  listEl.replaceChildren(...rowNodes);
 }
 
 function getDailyMiniEventSpec() {
@@ -11091,6 +11232,13 @@ function bindUIEvents() {
     state.pack.forLifeRefill = true;
     duelCtrl?.leaveRoom(false);
     showScreen('pack');
+  });
+  document.getElementById('btn-superprize-unlock-play')?.addEventListener('click', () => {
+    document.getElementById('modal-superprize-unlock')?.setAttribute('hidden', '');
+  });
+  document.getElementById('btn-superprize-unlock-leaders')?.addEventListener('click', () => {
+    document.getElementById('modal-superprize-unlock')?.setAttribute('hidden', '');
+    openLeaderboardModal();
   });
 
   // Модалка перехвата повторной ссылки (ШАГ 8.1)

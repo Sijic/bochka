@@ -7,6 +7,9 @@ import {
   settleDuelRound,
   claimDuelPremiereBankReward,
   awardTicketShardServer,
+  computeSuperprizeProgress,
+  syncDuelLivesLoss,
+  recordDuelRoundResult,
 } from './backend.js';
 
 const BARREL_BATCH_CODES = ['01', '19', '97', '12', '17', '26', '33', '48', '71', '84', '92', '99'];
@@ -45,40 +48,42 @@ function getFallbackFighterAvatar(seed = '') {
   return FIGHTER_AVATARS[h % FIGHTER_AVATARS.length] || FIGHTER_AVATARS[0];
 }
 
-// Динамическая сложность Тиля от количества жизней игрока (1–6 обычный, 7–11 ускоренный, 12+ ярость -3 ❤️)
-function getTilDifficultyProfile(lives = 6, roundIdx = 0) {
+// Динамическая сложность Тиля от количества жизней игрока (и усиление в Лиге Суперприза 5 000+ ⭐)
+function getTilDifficultyProfile(lives = 6, roundIdx = 0, { inSuperprize = false } = {}) {
   const lv = Math.max(0, Number(lives || 0));
   const r = Math.min(3, Math.max(0, Number(roundIdx || 0)));
-  if (lv >= 12) {
+  const rageThreshold = inSuperprize ? 10 : 12;
+  const accelThreshold = inSuperprize ? 6 : 7;
+  if (lv >= rageThreshold) {
     return {
       tier: 'rage',
-      claimSec: [4.6, 4.4, 4.2, 4.0][r],
-      tilTelegraphMs: [2800, 2650, 2500, 2350][r],
+      claimSec: inSuperprize ? [4.1, 3.9, 3.7, 3.5][r] : [4.6, 4.4, 4.2, 4.0][r],
+      tilTelegraphMs: inSuperprize ? [2450, 2300, 2150, 2000][r] : [2800, 2650, 2500, 2350][r],
       tilTelegraphDurMs: [600, 580, 550, 520][r],
       screamerDamage: 3,
       extraScreamers: 2,
       prizeSnipeChance: 0.85,
     };
   }
-  if (lv >= 7) {
+  if (lv >= accelThreshold) {
     return {
       tier: 'accelerated',
-      claimSec: [5.8, 5.6, 5.4, 5.2][r],
-      tilTelegraphMs: [3800, 3650, 3450, 3300][r],
+      claimSec: inSuperprize ? [5.2, 5.0, 4.8, 4.6][r] : [5.8, 5.6, 5.4, 5.2][r],
+      tilTelegraphMs: inSuperprize ? [3300, 3150, 3000, 2850][r] : [3800, 3650, 3450, 3300][r],
       tilTelegraphDurMs: [720, 700, 680, 650][r],
       screamerDamage: 2,
       extraScreamers: 1,
-      prizeSnipeChance: 0.55,
+      prizeSnipeChance: inSuperprize ? 0.65 : 0.55,
     };
   }
   return {
     tier: 'normal',
-    claimSec: [7.5, 7.2, 6.8, 6.5][r],
-    tilTelegraphMs: [5300, 5050, 4700, 4450][r],
+    claimSec: inSuperprize ? [6.4, 6.1, 5.8, 5.5][r] : [7.5, 7.2, 6.8, 6.5][r],
+    tilTelegraphMs: inSuperprize ? [4300, 4050, 3850, 3650][r] : [5300, 5050, 4700, 4450][r],
     tilTelegraphDurMs: [850, 850, 800, 750][r],
     screamerDamage: 2,
-    extraScreamers: 0,
-    prizeSnipeChance: 0.25,
+    extraScreamers: inSuperprize ? 1 : 0,
+    prizeSnipeChance: inSuperprize ? 0.42 : 0.25,
   };
 }
 
@@ -98,7 +103,7 @@ const IDLE_HINT_DELAY_MS = 2700;
  * Все промежуточные клики и таймеры идут строго через WebSocket в оперативной памяти (0 записей в БД).
  */
 export class WorkshopDuelController {
-  constructor({ scene, audio, getTgUser, getPlayerAvatar, getHasRealFriends, getProfileStats, getTicketShards, onCollectChipFromBarrel, onUnlockFilmArtifact, canUseOceanRefill, onOpenPackForLives, onFoundFriendBarrel, onContextDiscoveryHint, onLifeLostPill, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDefeatCinematic, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels, onOpenHallOfFame, loadDuelCandidates, onChallengeFriend, onOpenPackFriend, onRoomFull, onTriggerScreamerFx }) {
+  constructor({ scene, audio, getTgUser, getPlayerAvatar, getHasRealFriends, getProfileStats, getTicketShards, onCollectChipFromBarrel, onCollectGoldenShard, onUnlockFilmArtifact, canUseOceanRefill, onOpenPackForLives, onFoundFriendBarrel, onContextDiscoveryHint, onLifeLostPill, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDefeatCinematic, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels, onOpenHallOfFame, loadDuelCandidates, onChallengeFriend, onOpenPackFriend, onRoomFull, onTriggerScreamerFx }) {
     this.scene = scene;
     this.audio = audio;
     this.getTgUser = getTgUser;
@@ -129,6 +134,9 @@ export class WorkshopDuelController {
     this.onRoomFull = onRoomFull || null;
     this.onTriggerScreamerFx = onTriggerScreamerFx || null;
     this.onUnlockFilmArtifact = onUnlockFilmArtifact || null;
+    this.onCollectGoldenShard = onCollectGoldenShard || null;
+    this._racksWithoutGolden = 0;
+    this._roundResultRecorded = false;
     this.duelCandidates = { sent: [], branch: [], loaded: false };
     this.pickerTab = 'sent'; // 'sent' | 'branch'
     this.challengedUids = new Set();
@@ -229,6 +237,7 @@ export class WorkshopDuelController {
     const blockingIds = [
       'modal-context-hint',
       'modal-til-trophy-pick',
+      'modal-superprize-unlock',
       'barrel-trap-cinematic',
       'modal-barrel-trapped',
       'screamer-overlay',
@@ -665,10 +674,18 @@ export class WorkshopDuelController {
     this.playerEnergy = { [this.myUid]: this.maxEnergy };
     this.playerMaxEnergy = { [this.myUid]: this.maxEnergy };
     this._energyFinisherNotified = '';
-    const profLives = Number(profStats?.lives ?? 0);
-    this.duelLives = Math.max(3, Math.min(30, profLives > 0 ? profLives : 3));
+    const profLives = profStats?.lives != null ? Number(profStats.lives) : 3;
+    const enforceZeroLives = profLives <= 0 && !this.friendBarrelHunt && (
+      Number(profStats?.duelsPlayed || 0) > 0 || Number(profStats?.premierePoints || 0) >= 5000
+    );
+    this.duelLives = enforceZeroLives ? 0 : Math.max(3, Math.min(30, profLives > 0 ? profLives : 3));
     this.playerMaxDuelLives = Math.max(3, this.duelLives);
-    const initDiff = getTilDifficultyProfile(this.duelLives, 0);
+    const initSp = computeSuperprizeProgress(
+      profStats?.premierePoints,
+      profStats?.goldenLevelsClaimed,
+      profStats?.goldenTicketShards
+    );
+    const initDiff = getTilDifficultyProfile(this.duelLives, 0, { inSuperprize: initSp.unlocked });
     this.tilMaxLives = initDiff.tier === 'rage' ? 4 : 3;
     this.tilLives = this.tilMaxLives;
     this._prevPlayerHp = this.duelLives;
@@ -1455,6 +1472,10 @@ export class WorkshopDuelController {
 
   async startSoloDuel({ huntFriendBarrel = undefined } = {}) {
     if (!this.active || this._soloStarting || this.phase !== 'lobby' || this.isWaitingInQueue) return;
+    if (this.duelLives <= 0 && !huntFriendBarrel && !this.friendBarrelHunt) {
+      this.triggerDefeatFlow();
+      return;
+    }
     this._soloStarting = true;
     const soloBtn = document.getElementById('btn-duel-play-solo');
     if (soloBtn) soloBtn.disabled = true;
@@ -1492,9 +1513,16 @@ export class WorkshopDuelController {
    */
   async hostInitiateRound({ isFreeRerack = false, suddenDeathContenders = null } = {}) {
     if (this._roundStarting || this.isWaitingInQueue) return;
+    if (this.duelLives <= 0 && !this.friendBarrelHunt) {
+      this.triggerDefeatFlow();
+      return;
+    }
     if (this.players.length < 2) {
       this.onToast?.('Позови хотя бы одного друга за стол (или добавь бота в Тест-Боге)!');
       return;
+    }
+    if (!isFreeRerack) {
+      this._roundResultRecorded = false;
     }
     this._roundStarting = true;
     this._roundStartingSince = Date.now();
@@ -1566,18 +1594,45 @@ export class WorkshopDuelController {
             barrelLoot[sIdx] = { kind: 'screamer', value: -2, label: '-2 ❤️' };
           }
         } else {
-          const diff = getTilDifficultyProfile(this.duelLives, Math.max(0, Number(this.tilRoundIdx || 1) - 1));
+          const profStats = this.getProfileStats?.() || {};
+          const sp = computeSuperprizeProgress(
+            profStats.premierePoints,
+            profStats.goldenLevelsClaimed,
+            profStats.goldenTicketShards
+          );
+          const diff = getTilDifficultyProfile(this.duelLives, Math.max(0, Number(this.tilRoundIdx || 1) - 1), {
+            inSuperprize: sp.unlocked,
+          });
           if (!isFreeRerack) {
             this.tilMaxLives = this.soloMode ? (diff.tier === 'rage' ? 4 : 3) : 6;
             this.tilLives = this.tilMaxLives;
           }
           batchHasTicket = (this.duelRoundsWithoutTicket || 0) >= 1 ? true : Math.random() < 0.65;
+          const claimedGoldenSet = new Set(sp.claimedLevels || []);
+          const needsGoldenShard = Boolean(
+            sp.unlocked && sp.superLevel >= 1 && sp.superLevel <= 12 && !claimedGoldenSet.has(sp.superLevel)
+          );
+          const spawnGoldenShard = needsGoldenShard && ((this._racksWithoutGolden || 0) >= 2 || Math.random() < 0.45);
+          if (needsGoldenShard) {
+            this._racksWithoutGolden = spawnGoldenShard ? 0 : (this._racksWithoutGolden || 0) + 1;
+          }
 
           const baseScreamers = barrelCount <= 6 ? 2 : barrelCount <= 8 ? 3 : barrelCount <= 10 ? 4 : 5;
-          const totalScreamers = Math.min(Math.max(2, barrelCount - 2), baseScreamers + diff.extraScreamers);
+          const totalScreamers = Math.min(Math.max(2, barrelCount - (spawnGoldenShard ? 3 : 2)), baseScreamers + diff.extraScreamers);
           const emptySlots = barrelCount <= 6 ? (diff.extraScreamers > 0 ? 0 : 1) : 1;
           const reservedForTraps = totalScreamers + emptySlots;
-          const goodBudget = Math.max(2, barrelCount - reservedForTraps);
+          const goodBudget = Math.max(spawnGoldenShard ? 3 : 2, barrelCount - reservedForTraps);
+
+          if (spawnGoldenShard && safeIndices.length < goodBudget && cursor < barrelCount) {
+            const gIdx = indices[cursor++];
+            barrelLoot[gIdx] = {
+              kind: 'golden_shard',
+              value: 400,
+              goldenLevel: sp.superLevel,
+              label: `✨ Золотой ${sp.superLevel}/12!`,
+            };
+            safeIndices.push(gIdx);
+          }
 
           if (batchHasTicket && safeIndices.length < goodBudget && cursor < barrelCount) {
             const tIdx = indices[cursor++];
@@ -1602,7 +1657,8 @@ export class WorkshopDuelController {
             safeIndices.push(cIdx);
           }
 
-          if (this.duelLives <= 2 && Math.random() < 0.25 && safeIndices.length < goodBudget && cursor < barrelCount) {
+          const lifeChance = sp.unlocked ? 0.12 : 0.25;
+          if (this.duelLives <= 2 && Math.random() < lifeChance && safeIndices.length < goodBudget && cursor < barrelCount) {
             const lIdx = indices[cursor++];
             barrelLoot[lIdx] = { kind: 'life', value: 1, label: '❤️ +1 жизнь' };
             safeIndices.push(lIdx);
@@ -2047,7 +2103,12 @@ export class WorkshopDuelController {
     const wholeTickets = Math.max(0, Math.round(Number(profStats.pendingTicketsCount || 0)));
     const shards = Math.max(0, Math.min(4, Math.round(Number(this.getTicketShards?.() ?? profStats.ticketShards ?? 0))));
     const roundDisplay = Math.max(1, Number(this.tilRoundIdx || 1));
-    const diff = getTilDifficultyProfile(dl, roundDisplay - 1);
+    const sp = computeSuperprizeProgress(
+      profStats.premierePoints ?? this.sessionStats?.playerPoints ?? 0,
+      profStats.goldenLevelsClaimed,
+      profStats.goldenTicketShards
+    );
+    const diff = getTilDifficultyProfile(dl, roundDisplay - 1, { inSuperprize: sp.unlocked });
 
     if (pAvaEl) {
       const targetSrc = this.myAvatar || getFallbackFighterAvatar(this.myUid);
@@ -2087,9 +2148,14 @@ export class WorkshopDuelController {
     const totalPts = Math.max(0, Math.round(Number(profStats.premierePoints ?? this.sessionStats?.playerPoints ?? 0)));
     if (pPtsEl) pPtsEl.textContent = String(totalPts);
 
-    const spPct = Math.min(100, Math.max(0, (totalPts / SUPERPRIZE_POINTS_TARGET) * 100));
-    if (spLabelEl) spLabelEl.textContent = `До суперприза: ${totalPts.toLocaleString('ru-RU')} / 5 000 очков`;
-    if (spFillEl) spFillEl.style.width = `${spPct.toFixed(1)}%`;
+    const spStripEl = document.getElementById('duel-superprize-strip');
+    if (spStripEl) spStripEl.classList.toggle('is-superprize', sp.unlocked);
+    if (spLabelEl) {
+      spLabelEl.textContent = sp.unlocked
+        ? `🏆 Ур. ${sp.displayLevel} · ${sp.barCur.toLocaleString('ru-RU')} / 3 000 ⭐ · ✨ Золотой ${sp.goldenCount}/12`
+        : `До суперприза: ${totalPts.toLocaleString('ru-RU')} / 5 000 очков`;
+    }
+    if (spFillEl) spFillEl.style.width = `${sp.pct.toFixed(1)}%`;
 
     const opp = this.players.find((p) => p.uid !== this.myUid) || null;
     const oppIsTil = !opp || Boolean(opp.isBot || opp.isTil || opp.uid === TIL_BOT_UID);
@@ -2238,6 +2304,7 @@ export class WorkshopDuelController {
     const isAllowed = (b) => {
       if (b < 0 || b >= this.barrelCount) return false;
       if (this.openedIndices.includes(b) || this.claims[b]) return false;
+      if (forBot && this.barrelLoot?.[b]?.kind === 'golden_shard') return false;
       if (forBot && this.friendBarrelHunt && this.barrelLoot?.[b]?.kind === 'friend_barrel') return false;
       return true;
     };
@@ -2250,7 +2317,15 @@ export class WorkshopDuelController {
     }
     if (!free.length) return -1;
     if (forBot && this.soloMode && !this.friendBarrelHunt) {
-      const diff = getTilDifficultyProfile(this.duelLives, Math.max(0, Number(this.tilRoundIdx || 1) - 1));
+      const profStats = this.getProfileStats?.() || {};
+      const sp = computeSuperprizeProgress(
+        profStats.premierePoints,
+        profStats.goldenLevelsClaimed,
+        profStats.goldenTicketShards
+      );
+      const diff = getTilDifficultyProfile(this.duelLives, Math.max(0, Number(this.tilRoundIdx || 1) - 1), {
+        inSuperprize: sp.unlocked,
+      });
       const prizePool = free.filter((b) => {
         const k = this.barrelLoot?.[b]?.kind;
         return k === 'ticket' || k === 'chip' || k === 'points' || k === 'energy' || k === 'life';
@@ -2794,12 +2869,12 @@ export class WorkshopDuelController {
           this.sessionStats.playerChips += 1;
           this.onFlyRating?.({ type: 'chip', count: 3, label: '🪙 Новая фишка' });
           await this.onCollectChipFromBarrel?.({ source: 'duel_trophy', barrelIndex: -1, loot: { kind: 'chip', value: 150, label: '🪙 Новая фишка' } });
-          const bankRes = await claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: 150, solo: !isPvp1x1 }).catch(() => null);
+          const bankRes = await claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: 150, solo: !isPvp1x1, countWin: false }).catch(() => null);
           if (bankRes?.ok) this.onProfileSync?.({ premierePoints: bankRes.premierePoints });
         } else {
           this.sessionStats.playerPoints += 300;
           this.onFlyRating?.({ type: 'points', count: 3, label: '+300 ⭐' });
-          const bankRes = await claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: 300, solo: !isPvp1x1 }).catch(() => null);
+          const bankRes = await claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: 300, solo: !isPvp1x1, countWin: false }).catch(() => null);
           if (bankRes?.ok) this.onProfileSync?.({ premierePoints: bankRes.premierePoints });
         }
       } finally {
@@ -2811,6 +2886,18 @@ export class WorkshopDuelController {
     ticketBtn.onclick = () => handlePick('ticket');
     chipBtn.onclick = () => handlePick('chip');
     ptsBtn.onclick = () => handlePick('points');
+  }
+
+  _recordRoundOutcomeOnce(didWin = false) {
+    if (this._roundResultRecorded || this.friendBarrelHunt) return;
+    this._roundResultRecorded = true;
+    recordDuelRoundResult(this.getTgUser?.(), Boolean(didWin))
+      .then((r) => {
+        if (r?.ok) {
+          this.onProfileSync?.({ duelsPlayed: r.duelsPlayed, duelsWon: r.duelsWon });
+        }
+      })
+      .catch(() => {});
   }
 
   async executeReveal(payload) {
@@ -2864,7 +2951,15 @@ export class WorkshopDuelController {
 
     const myEntry = entries.find((e) => e.claim.uid === this.myUid) || null;
     const oppEntry = entries.find((e) => e.claim.uid !== this.myUid) || null;
-    const diff = getTilDifficultyProfile(this.duelLives, Math.max(0, Number(this.tilRoundIdx || 1) - 1));
+    const profStatsReveal = this.getProfileStats?.() || {};
+    const spReveal = computeSuperprizeProgress(
+      profStatsReveal.premierePoints,
+      profStatsReveal.goldenLevelsClaimed,
+      profStatsReveal.goldenTicketShards
+    );
+    const diff = getTilDifficultyProfile(this.duelLives, Math.max(0, Number(this.tilRoundIdx || 1) - 1), {
+      inSuperprize: spReveal.unlocked,
+    });
 
     const myScreamerDmg = myEntry?.loot?.kind === 'screamer'
       ? Math.max(1, Math.abs(Number(myEntry.loot.value || diff.screamerDamage || 2)))
@@ -2931,6 +3026,26 @@ export class WorkshopDuelController {
             this.onContextDiscoveryHint?.('ticket');
           }
         }, 420);
+      } else if (k === 'golden_shard') {
+        const gLevel = Math.max(1, Math.min(12, Number(myEntry.loot.goldenLevel || 1)));
+        const ptsBonus = Number(myEntry.loot.value || 400);
+        this.sessionStats.playerPoints += ptsBonus;
+        this.audio?.playRewardChime?.();
+        Haptics.success();
+        this.onFlyRating?.({
+          type: 'ticket',
+          count: 4,
+          label: `✨ ЗОЛОТОЙ ${gLevel}/12`,
+          barrelIndex: myEntry.barrelIndex,
+        });
+        this.onCollectGoldenShard?.(gLevel, myEntry.barrelIndex);
+        claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: ptsBonus, solo: this.soloMode, countWin: false })
+          .then((bankRes) => {
+            if (bankRes?.ok) {
+              this.onProfileSync?.({ premierePoints: bankRes.premierePoints });
+            }
+          })
+          .catch(() => {});
       } else if (k === 'points' || k === 'chip') {
         const val = Number(myEntry.loot.value || 150);
         if (k === 'chip') this.sessionStats.playerChips += 1;
@@ -2944,7 +3059,7 @@ export class WorkshopDuelController {
         if (k === 'chip') {
           this.onCollectChipFromBarrel?.({ source: 'duel_barrel', barrelIndex: myEntry.barrelIndex, loot: myEntry.loot });
         }
-        claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: val, solo: this.soloMode })
+        claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: val, solo: this.soloMode, countWin: false })
           .then((bankRes) => {
             if (bankRes?.ok) {
               this.onProfileSync?.({ premierePoints: bankRes.premierePoints });
@@ -2982,11 +3097,13 @@ export class WorkshopDuelController {
       } else if (k === 'empty') {
         this.duelLives = Math.max(0, Number(this.duelLives || 0) - 1);
         this.onProfileSync?.({ lives: this.duelLives });
+        syncDuelLivesLoss(this.getTgUser?.(), this.duelLives).catch(() => {});
       } else if (k === 'screamer') {
         const dmg = myScreamerDmg || diff.screamerDamage;
         this._lastScreamerDmg = dmg;
         this.duelLives = Math.max(0, Number(this.duelLives || 0) - dmg);
         this.onProfileSync?.({ lives: this.duelLives });
+        syncDuelLivesLoss(this.getTgUser?.(), this.duelLives).catch(() => {});
       }
     }
 
@@ -3027,6 +3144,7 @@ export class WorkshopDuelController {
       .join(' · ');
 
     if (needTilNow) {
+      this._recordRoundOutcomeOnce(false);
       this.scheduleStepWhenUnblocked(() => {
         if (!this.active) return;
         this.clearBarrelClaimBadges();
@@ -3058,6 +3176,7 @@ export class WorkshopDuelController {
     );
 
     if (playerBeatTilSolo) {
+      this._recordRoundOutcomeOnce(true);
       this.onUnlockFilmArtifact?.();
       this.scheduleStepWhenUnblocked(() => {
         if (!this.active) return;
@@ -3109,6 +3228,7 @@ export class WorkshopDuelController {
     );
 
     if (playerWonLive1x1) {
+      this._recordRoundOutcomeOnce(true);
       this.onUnlockFilmArtifact?.();
       const oppPlayer = this.players.find((p) => p.uid !== this.myUid) || null;
       const oppLabel = oppEntry?.claim?.name || oppPlayer?.name || 'друга';
@@ -3156,6 +3276,7 @@ export class WorkshopDuelController {
       }));
     }
 
+    this._recordRoundOutcomeOnce(Boolean(ticketEntry && ticketEntry.claim.uid === this.myUid));
     this.scheduleStepWhenUnblocked(() => {
       if (!this.active) return;
       this.setPhase('finished');
@@ -3217,7 +3338,7 @@ export class WorkshopDuelController {
     // Начисляем +500 ⭐ в живой 1×1 дуэли (в соло с Тилем трофей уже начислен через Пикер 1 из 3)
     const myPointsEarned = !detail.tilDefeatedByPlayer && iFoundTicket ? 500 : 0;
     if (!detail.tilDefeatedByPlayer && (myPointsEarned > 0 || iFoundTicket)) {
-      claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: myPointsEarned, solo: this.soloMode })
+      claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: myPointsEarned, solo: this.soloMode, countWin: false })
         .then((bankRes) => {
           if (bankRes?.ok) {
             const patch = {
@@ -3456,7 +3577,8 @@ export class WorkshopDuelController {
       const loot = this.getLootForBarrel(idx);
       const isGood = loot.value > 0;
       const isTrap = loot.kind === 'screamer';
-      const stateCls = revealed ? (isGood ? 'is-safe' : isTrap ? 'is-dead' : 'is-empty') : 'is-locked';
+      const isGolden = loot.kind === 'golden_shard';
+      const stateCls = revealed ? (isGolden ? 'is-safe is-golden' : isGood ? 'is-safe' : isTrap ? 'is-dead' : 'is-empty') : 'is-locked';
       badge.className = `duel-barrel-badge ${stateCls}`;
       badge.dataset.barrelIndex = String(idx);
 

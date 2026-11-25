@@ -657,6 +657,10 @@ function getLocalPreviewProfile() {
     ticketsGifted: 0,
     duelsWon: 0,
     duelsPlayed: 0,
+    trophiesCount: 0,
+    goldenTicketShards: 0,
+    goldenLevelsClaimed: [],
+    superprizeUnlockedAt: null,
     trailerRewarded: false,
     kpClickRewarded: false,
     dailySocialMask: '',
@@ -812,6 +816,19 @@ export async function fetchPlayerProfile(tgUser = null) {
           ticketsGifted: Number(data.tickets_gifted || 0),
           duelsWon: Number(data.duels_won || 0),
           duelsPlayed: srvDuels,
+          trophiesCount: Math.max(
+            Number(data.trophies_count || 0),
+            isFreshServer ? 0 : Number(localBefore?.trophiesCount || 0)
+          ),
+          chipsCount: Math.max(
+            Number(data.trophies_count || 0),
+            isFreshServer ? 0 : Number(localBefore?.chipsCount || localBefore?.trophiesCount || 0)
+          ),
+          goldenTicketShards: Math.max(0, Math.min(12, Number(data.golden_ticket_shards || 0))),
+          goldenLevelsClaimed: Array.isArray(data.golden_levels_claimed)
+            ? data.golden_levels_claimed.map(Number).filter((n) => n >= 1 && n <= 12)
+            : [],
+          superprizeUnlockedAt: data.superprize_unlocked_at || null,
           trailerRewarded: Boolean(data.trailer_rewarded),
           trailerWatchedFull: Boolean(data.trailer_watched_full),
           kpClickRewarded: Boolean(data.kp_click_rewarded),
@@ -2285,16 +2302,45 @@ export async function fetchPremiereLeaderboard(tgUser = null) {
     current_level: prof.currentLevel || 1,
     friends_brought: prof.friendsBrought || 0,
     tickets_gifted: prof.ticketsGifted || 0,
+    duels_played: prof.duelsPlayed || 0,
     duels_won: prof.duelsWon || 0,
+    chips_count: prof.trophiesCount || prof.chipsCount || 0,
+    golden_ticket_shards: prof.goldenTicketShards || 0,
   });
-  mockLeaders.forEach((r) => {
-    const friends = Number(r.friends_brought || 0);
+  const computeComposite = (r) => {
+    const pts = Math.max(0, Number(r.premiere_points || 0));
+    const friends = Math.max(0, Number(r.friends_brought || 0));
     const bonusPct = Math.min(5, friends) * 10;
     const tier1Pts = friends >= 1 ? 150 : 0;
-    r.friend_bonus_pct = bonusPct;
+    const spLevel = pts >= 5000 ? Math.min(12, Math.floor((pts - 5000) / 3000) + 1) : 0;
+    const effLevel = Math.max(Number(r.current_level || 1), spLevel > 0 ? 1 + spLevel : 1);
+    const chips = Math.max(0, Number(r.chips_count || 0));
+    const golden = Math.min(12, Math.max(0, Number(r.golden_ticket_shards || 0)));
+    const duelsPlayed = Math.max(0, Number(r.duels_played || 0));
+    const duelsWon = Math.max(0, Number(r.duels_won || 0));
+    const score = tier1Pts
+      + Math.round(pts * (1 + bonusPct / 100))
+      + effLevel * 250
+      + chips * 200
+      + golden * 500
+      + friends * 600
+      + duelsPlayed * 100
+      + duelsWon * 200;
+    return { bonusPct, spLevel, effLevel, chips, golden, duelsPlayed, duelsWon, score };
+  };
+  mockLeaders.forEach((r) => {
+    const friends = Number(r.friends_brought || 0);
+    const c = computeComposite(r);
+    r.friend_bonus_pct = c.bonusPct;
     r.referral_tier = friends >= 2 ? 2 : friends === 1 ? 1 : 0;
     r.qualified_top10 = friends >= 2 && Number(r.premiere_points || 0) > 0;
-    r.effective_points = tier1Pts + Math.round(Number(r.premiere_points || 0) * (1 + bonusPct / 100));
+    r.effective_points = c.score;
+    r.rating_score = c.score;
+    r.effective_level = c.effLevel;
+    r.superprize_level = c.spLevel;
+    r.chips_count = c.chips;
+    r.golden_ticket_shards = c.golden;
+    r.duels_played = c.duelsPlayed;
   });
   mockLeaders.sort((a, b) => (Number(b.qualified_top10) - Number(a.qualified_top10)) || (b.effective_points - a.effective_points));
   mockLeaders.forEach((r, idx) => { r.rank = idx + 1; });
@@ -2313,11 +2359,17 @@ export async function fetchPremiereLeaderboard(tgUser = null) {
       in_top10: (meEntry?.rank || 11) <= 10 && Boolean(meEntry?.qualified_top10),
       premiere_points: myPts,
       effective_points: meEntry?.effective_points || myPts,
+      rating_score: meEntry?.rating_score || meEntry?.effective_points || myPts,
       friend_bonus_pct: meEntry?.friend_bonus_pct || 0,
       premiere_score: prof.premiereScore || 0,
-      current_level: prof.currentLevel || 1,
+      current_level: meEntry?.effective_level || prof.currentLevel || 1,
+      effective_level: meEntry?.effective_level || prof.currentLevel || 1,
+      superprize_level: meEntry?.superprize_level || 0,
+      chips_count: meEntry?.chips_count || 0,
+      golden_ticket_shards: meEntry?.golden_ticket_shards || 0,
       friends_brought: prof.friendsBrought || 0,
       tickets_gifted: prof.ticketsGifted || 0,
+      duels_played: meEntry?.duels_played || prof.duelsPlayed || 0,
       duels_won: prof.duelsWon || 0,
       points_to_top10: Math.max(0, tenth - (meEntry?.effective_points || myPts) + ((meEntry?.rank || 11) > 10 ? 10 : 0)),
     },
@@ -2603,12 +2655,64 @@ export async function sendLevel1FriendReply({ pack, replyType, viewerTgUser }) {
   });
 }
 
-export async function claimDuelPremiereBankReward(tgUser = null, { pointsBonus = 450, solo = false } = {}) {
+export const SUPERPRIZE_ENTRY_POINTS = 5000;
+export const SUPERPRIZE_LEVEL_STEP = 3000;
+export const SUPERPRIZE_MAX_LEVELS = 12;
+
+export function computeSuperprizeProgress(points = 0, goldenLevelsClaimed = [], goldenTicketShards = 0) {
+  const pts = Math.max(0, Math.round(Number(points || 0)));
+  const claimedSet = new Set(
+    (Array.isArray(goldenLevelsClaimed) ? goldenLevelsClaimed : [])
+      .map(Number)
+      .filter((n) => Number.isFinite(n) && n >= 1 && n <= SUPERPRIZE_MAX_LEVELS)
+  );
+  const goldenCount = Math.min(
+    SUPERPRIZE_MAX_LEVELS,
+    Math.max(claimedSet.size, Math.round(Number(goldenTicketShards || 0)))
+  );
+  if (pts < SUPERPRIZE_ENTRY_POINTS) {
+    return {
+      unlocked: false,
+      premierePoints: pts,
+      displayLevel: 1,
+      superLevel: 0,
+      barCur: pts,
+      barMax: SUPERPRIZE_ENTRY_POINTS,
+      pct: Math.min(100, Math.max(0, (pts / SUPERPRIZE_ENTRY_POINTS) * 100)),
+      goldenCount,
+      claimedLevels: Array.from(claimedSet).sort((a, b) => a - b),
+      completedAll: goldenCount >= SUPERPRIZE_MAX_LEVELS,
+    };
+  }
+  const offset = pts - SUPERPRIZE_ENTRY_POINTS;
+  const rawCycle = Math.floor(offset / SUPERPRIZE_LEVEL_STEP);
+  const superLevel = Math.min(SUPERPRIZE_MAX_LEVELS, rawCycle + 1);
+  const displayLevel = superLevel + 1;
+  const barCur = rawCycle >= SUPERPRIZE_MAX_LEVELS ? SUPERPRIZE_LEVEL_STEP : (offset % SUPERPRIZE_LEVEL_STEP);
+  const pct = Math.min(100, Math.max(0, (barCur / SUPERPRIZE_LEVEL_STEP) * 100));
+  return {
+    unlocked: true,
+    premierePoints: pts,
+    displayLevel,
+    superLevel,
+    barCur,
+    barMax: SUPERPRIZE_LEVEL_STEP,
+    pct,
+    goldenCount,
+    claimedLevels: Array.from(claimedSet).sort((a, b) => a - b),
+    completedAll: goldenCount >= SUPERPRIZE_MAX_LEVELS,
+  };
+}
+
+export async function claimDuelPremiereBankReward(tgUser = null, { pointsBonus = 450, solo = false, countWin = false } = {}) {
   const uid = getViewerUid(tgUser);
   const db = getCloudDb();
   const prof = getLocalPreviewProfile();
   prof.premierePoints = Math.max(0, Number(prof.premierePoints || 0) + Number(pointsBonus || 450));
-  prof.duelsWon = Number(prof.duelsWon || 0) + 1;
+  if (countWin) {
+    prof.duelsPlayed = Number(prof.duelsPlayed || 0) + 1;
+    prof.duelsWon = Number(prof.duelsWon || 0) + 1;
+  }
 
   if (db) {
     try {
@@ -2616,15 +2720,19 @@ export async function claimDuelPremiereBankReward(tgUser = null, { pointsBonus =
         p_uid: uid,
         p_points_bonus: Math.max(0, Math.round(pointsBonus || 450)),
         p_solo: Boolean(solo),
+        p_count_win: Boolean(countWin),
       });
       if (!error && data?.ok) {
         prof.premierePoints = Number(data.premiere_points ?? prof.premierePoints);
         prof.lives = Number(data.lives ?? prof.lives);
         prof.duelsWon = Number(data.duels_won ?? prof.duelsWon);
+        prof.duelsPlayed = Number(data.duels_played ?? prof.duelsPlayed);
+        prof.currentLevel = Math.max(Number(prof.currentLevel || 1), Number(data.current_level || 1));
         saveLocalPreviewProfile(prof);
         return {
           ok: true,
           premierePoints: prof.premierePoints,
+          currentLevel: prof.currentLevel,
           lives: prof.lives,
           ticketDropped: Boolean(data.ticket_dropped),
         };
@@ -2633,6 +2741,106 @@ export async function claimDuelPremiereBankReward(tgUser = null, { pointsBonus =
   }
   saveLocalPreviewProfile(prof);
   return { ok: true, premierePoints: prof.premierePoints, lives: prof.lives, ticketDropped: false };
+}
+
+export async function claimGoldenTicketShard(tgUser = null, superLevel = 1) {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  const lvl = Math.max(1, Math.min(SUPERPRIZE_MAX_LEVELS, Math.round(Number(superLevel || 1))));
+  const prof = getLocalPreviewProfile();
+  const prevClaimed = Array.isArray(prof.goldenLevelsClaimed) ? prof.goldenLevelsClaimed.map(Number) : [];
+
+  if (db) {
+    try {
+      const { data, error } = await db.rpc('claim_golden_ticket_shard_rpc', {
+        p_uid: uid,
+        p_super_level: lvl,
+      });
+      if (!error && data?.ok) {
+        const nextClaimed = Array.isArray(data.golden_levels_claimed)
+          ? data.golden_levels_claimed.map(Number)
+          : Array.from(new Set([...prevClaimed, lvl]));
+        prof.goldenLevelsClaimed = nextClaimed;
+        prof.goldenTicketShards = Math.min(12, Math.max(0, Number(data.golden_ticket_shards ?? nextClaimed.length)));
+        prof.currentLevel = Math.max(Number(prof.currentLevel || 1), lvl + 1);
+        saveLocalPreviewProfile(prof);
+        return {
+          ok: true,
+          granted: Boolean(data.granted),
+          alreadyClaimed: Boolean(data.already_claimed),
+          level: lvl,
+          goldenTicketShards: prof.goldenTicketShards,
+          goldenLevelsClaimed: prof.goldenLevelsClaimed,
+          completedGoldenTicket: Boolean(data.completed_golden_ticket),
+        };
+      }
+      if (!error && data && data.ok === false) {
+        return { ok: false, reason: data.reason || 'locked', level: lvl };
+      }
+    } catch { /* fallback below */ }
+  }
+
+  const already = prevClaimed.includes(lvl);
+  const nextClaimed = already ? prevClaimed : [...prevClaimed, lvl].sort((a, b) => a - b);
+  prof.goldenLevelsClaimed = nextClaimed;
+  prof.goldenTicketShards = Math.min(12, nextClaimed.length);
+  saveLocalPreviewProfile(prof);
+  return {
+    ok: true,
+    granted: !already,
+    alreadyClaimed: already,
+    level: lvl,
+    goldenTicketShards: prof.goldenTicketShards,
+    goldenLevelsClaimed: nextClaimed,
+    completedGoldenTicket: prof.goldenTicketShards >= 12,
+  };
+}
+
+export async function syncDuelLivesLoss(tgUser = null, lives = 0) {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  const target = Math.max(0, Math.min(30, Math.round(Number(lives || 0))));
+  const prof = getLocalPreviewProfile();
+  prof.lives = Math.min(Math.max(0, Number(prof.lives ?? 3)), target);
+  saveLocalPreviewProfile(prof);
+  if (db) {
+    try {
+      const { data, error } = await db.rpc('sync_duel_lives_rpc', {
+        p_uid: uid,
+        p_lives: target,
+      });
+      if (!error && data?.ok) {
+        prof.lives = Number(data.lives ?? prof.lives);
+        saveLocalPreviewProfile(prof);
+        return { ok: true, lives: prof.lives };
+      }
+    } catch { /* ignore */ }
+  }
+  return { ok: true, lives: prof.lives };
+}
+
+export async function recordDuelRoundResult(tgUser = null, won = false) {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  const prof = getLocalPreviewProfile();
+  prof.duelsPlayed = Math.max(0, Number(prof.duelsPlayed || 0)) + 1;
+  if (won) prof.duelsWon = Math.max(0, Number(prof.duelsWon || 0)) + 1;
+  saveLocalPreviewProfile(prof);
+  if (db) {
+    try {
+      const { data, error } = await db.rpc('record_duel_round_rpc', {
+        p_uid: uid,
+        p_won: Boolean(won),
+      });
+      if (!error && data?.ok) {
+        prof.duelsPlayed = Number(data.duels_played ?? prof.duelsPlayed);
+        prof.duelsWon = Number(data.duels_won ?? prof.duelsWon);
+        saveLocalPreviewProfile(prof);
+        return { ok: true, duelsPlayed: prof.duelsPlayed, duelsWon: prof.duelsWon };
+      }
+    } catch { /* ignore */ }
+  }
+  return { ok: true, duelsPlayed: prof.duelsPlayed, duelsWon: prof.duelsWon };
 }
 
 /**
