@@ -65,8 +65,8 @@
     #screen-gate .btn-primary{width:100%;min-height:48px;padding:12px 16px;border:0;border-radius:8px;background:#eab308;color:#0d0d0d;font-weight:800;font-size:15px;cursor:pointer}
     #screen-gate .btn-gate-mute{width:100%;min-height:44px;padding:10px 14px;border:1px solid rgba(148,163,184,.42);border-radius:8px;background:rgba(30,41,59,.72);color:#e2e8f0;font-weight:700;font-size:13.5px;cursor:pointer}
   </style>
-  <link rel="stylesheet" href="./src/styles.css?v=2070" media="print" onload="this.media='all'" />
-  <noscript><link rel="stylesheet" href="./src/styles.css?v=2070" /></noscript>
+  <link rel="stylesheet" href="./src/styles.css?v=2080" media="print" onload="this.media='all'" />
+  <noscript><link rel="stylesheet" href="./src/styles.css?v=2080" /></noscript>
 </head>
 <body data-ui-stage="1" data-blitz-unlocked="0">
   <!-- 3D Three.js Industrial Workshop Canvas -->
@@ -693,10 +693,10 @@
         🎁 1-й друг или дуэль 1×1: редкая кино-фишка + доступ к 3/4–4/4 билета + буст ×2 очков на 15 мин
       </p>
       <div class="pack-template-switch" id="pack-template-switch" role="group" aria-label="Повод для отправки 1-на-1">
-        <button type="button" class="pack-template-btn is-active" id="btn-tpl-gift" data-share-template="gift_barrel">🎁 Подарочная бочка</button>
-        <button type="button" class="pack-template-btn" id="btn-tpl-record" data-share-template="record_challenge">⏱ Вызов с рекордом</button>
+        <button type="button" class="pack-template-btn is-active" id="btn-tpl-record" data-share-template="record_challenge">⏱ Вызов с рекордом</button>
+        <button type="button" class="pack-template-btn" id="btn-tpl-gift" data-share-template="gift_barrel">🎁 Подарочная бочка</button>
       </div>
-      <div class="pack-template-preview" id="pack-template-preview">«Дарю тебе часть билета в кино в нашем городе — успей забрать из бочки.»</div>
+      <div class="pack-template-preview" id="pack-template-preview">«Я выбрался из бочки за 12 сек — побьешь мой рекорд, заберешь фишку»</div>
       <input type="file" id="input-photo-file" accept="image/*" hidden />
       <div class="pack-uploaded-confirm" id="pack-uploaded-confirm" hidden>
         <img id="pack-uploaded-thumb" alt="Фото друга" class="pack-uploaded-thumb" loading="lazy" decoding="async" />
@@ -705,6 +705,7 @@
         <button type="button" class="btn-primary btn-full pack-quick-1tap-btn pack-quick-lazy-btn" id="btn-pack-quick-1tap">
           <span id="btn-pack-quick-1tap-text">⚡ Отправить другу в 1 клик (1-на-1)</span>
         </button>
+        <p class="pack-dm-tip" id="pack-dm-tip">💡 Лучше отправить 1 другу в личку — открывают в разы чаще, чем в общих чатах</p>
         <button type="button" class="btn-primary btn-full" id="btn-pack-send-uploaded" hidden>
           Отправить вызов другу
         </button>
@@ -816,15 +817,15 @@
       <div class="seed-sent-meta" id="sent-seed-meta" hidden></div>
       <div class="branch-battle-pill" id="sent-branch-battle-pill" hidden></div>
       <div class="push-optin-card" id="sent-push-optin-card">
-        <p class="push-optin-copy">🔔 Без рекламы — напишу только когда друг откроет бочку, закроет тебя в ответ или тебя обгонят в ТОП-20</p>
+        <p class="push-optin-copy">🔔 Включи уведомления о ходах друзей и забери <strong>+1 ❤️ и +150 ⭐</strong>. Никакой рекламы — только когда друг вскроет твою бочку или вызовет в дуэль</p>
         <div class="push-optin-actions">
-          <button type="button" class="btn-secondary btn-compact btn-full" id="btn-enable-tg-push">🔔 Включить нужные пуши</button>
+          <button type="button" class="btn-secondary btn-compact btn-full" id="btn-enable-tg-push">🔔 Включить уведомления (+1 ❤️ и +150 ⭐)</button>
           <button type="button" class="btn-ghost btn-compact" id="btn-decline-tg-push">Не сейчас</button>
         </div>
       </div>
       <div class="push-optin-card homescreen-fallback-card" id="sent-homescreen-fallback-card" hidden>
-        <p class="push-optin-copy">📱 Без пушей проще вернуться в 1 касание — добавь ярлык «БОЧКИ» на экран телефона</p>
-        <button type="button" class="btn-secondary btn-compact btn-full" id="btn-add-homescreen">📲 Добавить ярлык на главный экран</button>
+        <p class="push-optin-copy">📱 Без пушей проще вернуться в 1 касание — добавь ярлык «БОЧКИ» на экран телефона и забери <strong>+100 ⭐</strong></p>
+        <button type="button" class="btn-secondary btn-compact btn-full" id="btn-add-homescreen">📲 Добавить ярлык на экран (+100 ⭐)</button>
       </div>
       <button type="button" class="btn-secondary btn-full" id="btn-sent-copy-link" hidden>
         📋 Скопировать общую ссылку
@@ -1108,7 +1109,7 @@
       </div>
 
       <p class="trailer-motivation-copy" id="trailer-motivation-copy">
-        Смотри 30 сек — получи Этап 1 из 4 до билета в кино в твоём городе и полные ❤️ жизни! Досмотри до 90% — получи ×2 очков ⭐
+        30с — Этап 1/4 + 250 ⭐ + 6 ❤️ · 60с — +100 ⭐ и подсказка секретного стука · 90% — ещё +250 ⭐ (×2)!
       </p>
 
       <div class="video-aspect" id="trailer-video-wrap">

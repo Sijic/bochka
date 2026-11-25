@@ -629,6 +629,23 @@ export async function sendCinemaInviteReply(pack, viewerTgUser = null) {
   });
 }
 
+async function sendTelegramActionJson(payload) {
+  if (isTestBogActive()) return { ok: true, local: true };
+  if (!ENV.tgNotifyWebhook) return { ok: false };
+  const initData = typeof window !== 'undefined' ? String(window.Telegram?.WebApp?.initData || '') : '';
+  try {
+    const res = await fetch(ENV.tgNotifyWebhook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...payload, initData }),
+    });
+    const data = await res.json().catch(() => null);
+    return { ok: res.ok && Boolean(data?.ok ?? true), status: res.status, data };
+  } catch {
+    return { ok: false };
+  }
+}
+
 async function sendTelegramPing(payload) {
   if (isTestBogActive()) return true;
   if (!ENV.tgNotifyWebhook) return false;
@@ -871,6 +888,9 @@ export async function fetchPlayerProfile(tgUser = null) {
           pointsBoostX2Until: data.points_boost_x2_until || null,
           firstSocialExclusiveClaimed: Boolean(data.first_social_exclusive_claimed),
           homescreenShortcutAdded: Boolean(data.homescreen_shortcut_added),
+          pushOptinBonusClaimed: Boolean(data.push_optin_bonus_claimed),
+          homescreenBonusClaimed: Boolean(data.homescreen_bonus_claimed),
+          trailer60sRewarded: Boolean(data.trailer_60s_rewarded),
           repeatLinkEntered: isFreshServer ? false : Boolean(localBefore?.repeatLinkEntered),
           uiStage: isFreshServer ? Math.min(2, Math.max(1, Number(data.ui_stage || 1))) : Number(data.ui_stage || 1),
           _isFreshServer: isFreshServer,
@@ -2641,12 +2661,19 @@ export async function syncTelegramWriteAccess(tgUser = null, allowed = false) {
   const prof = getLocalPreviewProfile();
   prof.tgWriteAccess = Boolean(allowed);
   saveLocalPreviewProfile(prof);
-  if (isTestBogActive()) return true;
-  if (!tgUser?.id && typeof window !== 'undefined' && !window.Telegram?.WebApp?.initData) return false;
-  return sendTelegramPing({
+  if (isTestBogActive()) return { ok: true, allowed: Boolean(allowed), bonus: null };
+  if (!tgUser?.id && typeof window !== 'undefined' && !window.Telegram?.WebApp?.initData) {
+    return { ok: false, allowed: Boolean(allowed), bonus: null };
+  }
+  const resp = await sendTelegramActionJson({
     clientAction: 'record_write_access',
     allowed: Boolean(allowed),
   });
+  return {
+    ok: Boolean(resp?.ok),
+    allowed: Boolean(allowed),
+    bonus: resp?.data?.bonus || null,
+  };
 }
 
 export async function sendLevel1FriendReply({ pack, replyType, viewerTgUser }) {
@@ -3018,7 +3045,7 @@ export async function prepareNativeShareMessage({
   senderName = '',
   phrase = '',
   shareUrl = '',
-  shareTemplate = 'gift_barrel',
+  shareTemplate = 'record_challenge',
   bestSec = 12,
 } = {}) {
   if (isTestBogActive() || !ENV.tgNotifyWebhook || !barrelId) {
@@ -3380,18 +3407,72 @@ export async function fetchBranchBattleStats(branchPrefix = '') {
   return { ok: false, myBranch: null, topBranches: [] };
 }
 
+export async function claimTrailer60sCheckpointServer(tgUser = null, watchedSec = 60) {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  if (db && !isTestBogActive()) {
+    try {
+      const { data, error } = await db.rpc('claim_trailer_60s_checkpoint_rpc', {
+        p_uid: uid,
+        p_watched_sec: Math.round(Number(watchedSec || 0)),
+      });
+      if (!error && data?.ok) {
+        return {
+          ok: true,
+          granted: Boolean(data.granted),
+          duplicateBlocked: Boolean(data.duplicate_blocked),
+          reason: data.reason || '',
+          bonusPoints: Number(data.bonus_points || 0),
+          premierePoints: data.premiere_points != null ? Number(data.premiere_points) : null,
+          hint: data.hint || '',
+        };
+      }
+      return { ok: false, granted: false, reason: data?.reason || error?.message || 'rpc_error' };
+    } catch (err) {
+      return { ok: false, granted: false, reason: err?.message || 'network_error' };
+    }
+  }
+  const prof = getLocalPreviewProfile();
+  if (prof.trailer60sRewarded) {
+    return { ok: true, granted: false, duplicateBlocked: true, reason: 'already_claimed_60s', premierePoints: prof.premierePoints };
+  }
+  prof.trailer60sRewarded = true;
+  prof.premierePoints = Number(prof.premierePoints || 0) + 100;
+  saveLocalPreviewProfile(prof);
+  return {
+    ok: true,
+    granted: true,
+    bonusPoints: 100,
+    premierePoints: prof.premierePoints,
+    hint: 'Секретный стук: у моря 3-пауза-2, в цеху 19-97 (+3 ❤️)',
+  };
+}
+
 export async function recordHomescreenShortcut(tgUser = null) {
   const uid = getViewerUid(tgUser);
   const db = getCloudDb();
   const prof = getLocalPreviewProfile();
   prof.homescreenShortcutAdded = true;
+  if (!prof.homescreenBonusClaimed && !prof.tgWriteAccess) {
+    prof.homescreenBonusClaimed = true;
+    prof.premierePoints = Number(prof.premierePoints || 0) + 100;
+  }
   saveLocalPreviewProfile(prof);
-  if (!db || isTestBogActive()) return { ok: true, local: true };
+  if (!db || isTestBogActive()) {
+    return { ok: true, local: true, granted: true, pointsAdded: 100, premierePoints: prof.premierePoints };
+  }
   try {
     const { data, error } = await db.rpc('record_homescreen_shortcut_rpc', { p_uid: uid });
-    return { ok: !error && Boolean(data?.ok) };
+    return {
+      ok: !error && Boolean(data?.ok),
+      granted: Boolean(data?.granted),
+      duplicateBlocked: Boolean(data?.duplicate_blocked),
+      pointsAdded: Number(data?.points_added || 0),
+      premierePoints: data?.premiere_points != null ? Number(data.premiere_points) : null,
+      reason: data?.reason || '',
+    };
   } catch {
-    return { ok: false };
+    return { ok: false, granted: false };
   }
 }
 

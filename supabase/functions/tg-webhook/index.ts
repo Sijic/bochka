@@ -642,7 +642,7 @@ Deno.serve(async (req: Request) => {
         return jsonResp({ ok: false, fallback: true, reason: "missing_params", shareUrl: targetMiniAppUrl, startParam });
       }
 
-      const shareTemplate = String(body.shareTemplate || "gift_barrel").toLowerCase();
+      const shareTemplate = String(body.shareTemplate || "record_challenge").toLowerCase();
       const bestSec = Math.max(3, Math.min(30, Math.round(Number(body.bestSec || 12))));
       const isPersonalPack = linkType === "pack";
       const isRecordTpl = isPersonalPack && shareTemplate === "record_challenge";
@@ -809,7 +809,14 @@ Deno.serve(async (req: Request) => {
           { onConflict: "uid" }
         );
       }
-      return jsonResp({ ok: true, uid: callerUid, tgWriteAccess: allowed, allowed });
+      let bonus: unknown = null;
+      if (allowed) {
+        try {
+          const { data: bonusData } = await adminDb.rpc("claim_push_optin_bonus_rpc", { p_uid: callerUid });
+          bonus = bonusData || null;
+        } catch { /* ignore */ }
+      }
+      return jsonResp({ ok: true, uid: callerUid, tgWriteAccess: allowed, allowed, bonus });
     }
 
     if (action === "get_tg_avatar") {

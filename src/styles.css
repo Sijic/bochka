@@ -11232,6 +11232,15 @@ body:not([data-screen="workshop"]) .workshop-intro-hint {
   text-align: center;
 }
 
+.pack-dm-tip {
+  margin: 2px 0 4px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: #fde68a;
+  text-align: center;
+  opacity: 0.92;
+}
+
 .push-optin-actions {
   display: flex;
   flex-direction: column;
