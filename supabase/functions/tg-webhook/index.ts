@@ -642,32 +642,36 @@ Deno.serve(async (req: Request) => {
         return jsonResp({ ok: false, fallback: true, reason: "missing_params", shareUrl: targetMiniAppUrl, startParam });
       }
 
-      const shareTemplate = String(body.shareTemplate || "record_challenge").toLowerCase();
-      const bestSec = Math.max(3, Math.min(30, Math.round(Number(body.bestSec || 12))));
+      const shareTemplate = String(body.shareTemplate || "thriller_challenge").toLowerCase();
+      const rawSec = Number(body.bestSec || 0);
+      const hasBestSec = Number.isFinite(rawSec) && rawSec >= 3 && rawSec <= 30;
+      const bestSec = hasBestSec ? Math.round(rawSec) : 0;
       const isPersonalPack = linkType === "pack";
-      const isRecordTpl = isPersonalPack && shareTemplate === "record_challenge";
+      const isFriendTicketTpl = isPersonalPack && (shareTemplate === "friend_ticket" || shareTemplate === "gift_barrel");
 
       const cardTitle =
         linkType === "duel"
           ? "⚔️ Вызов 1×1 в «БОЧКЕ» — кто быстрее!"
           : linkType === "bl" || linkType === "pr"
-            ? "🛢 Вытащи меня из бочки — и забери 2 билета в кино в своём городе!"
-            : isRecordTpl
-              ? `⏱ Я выбрался из бочки за ${bestSec} сек — побьёшь?`
-              : "🎁 Дарю тебе часть билета в кино в нашем городе";
+            ? "🛢 30 секунд в стальной бочке Тиля Швайгера (работает без звука)"
+            : isFriendTicketTpl
+              ? "🎟 Лишняя часть билета на триллер «БОЧКА» внутри бочки"
+              : hasBestSec
+                ? `🛢 Выбрался из стальной бочки за ${bestSec} сек — побьёшь?`
+                : "🛢 Закрыл тебя в стальной бочке Тиля Швайгера (30 сек)";
       const cardText =
         linkType === "duel"
           ? `⚔️ <b>${senderName}</b> зовёт тебя 1×1 в 3D-цех «БОЧКА»!\n\n` +
             `Работает со звуком и в тишине. Вскрой бочку быстрее — забери 2 билета в кино в ТВОЁМ городе (по всей России) или премьеру в Москве!${phrase ? `\n\n💬 «${phrase}»` : ""}`
           : linkType === "bl" || linkType === "pr"
-            ? `🛢 <b>${senderName}</b> закрыл бочку в 3D-цеху триллера «БОЧКА»!\n\n` +
-              `30 секунд воздуха, 3 удара — работает со звуком и в тишине (вибро/радар). Открой бочку за шаг к 2 билетам в кино в ТВОЁМ городе (по всей России)!${phrase ? `\n\n💬 «${phrase}»` : ""}`
-            : isRecordTpl
-              ? `⏱ <b>${senderName}:</b> Я выбрался из бочки за <b>${bestSec} сек</b> — побьёшь мой рекорд, заберёшь фишку!\n\n` +
-                `Работает со звуком и в полной тишине (30 сек, 3 удара).`
-              : `🎁 <b>${senderName}:</b> Дарю тебе часть билета в кино в нашем городе — успей забрать из бочки!\n\n` +
-                `У тебя 30 секунд (работает со звуком и без звука).`;
-      const btnText = linkType === "duel" ? "⚔️ ПРИНЯТЬ ВЫЗОВ" : isRecordTpl ? "⏱ ПОБИТЬ РЕКОРД" : "🎁 ЗАБРАТЬ ИЗ БОЧКИ";
+            ? `🛢 <b>${senderName}</b> открыл вызов по триллеру «БОЧКА» с Тилем Швайгером!\n\n` +
+              `30 секунд воздуха, 3 удара — работает даже в метро без звука по вибро-радару. Финальный трофей — билеты в кино в ТВОЁМ городе (по всей России).${phrase ? `\n\n💬 «${phrase}»` : ""}`
+            : isFriendTicketTpl
+              ? `🎟 <b>${senderName}:</b> Слушай, у меня в игре по триллеру «БОЧКА» осталась лишняя часть билета в кино — спрятал её в бочке, попробуй вытащить за 30 секунд.`
+              : hasBestSec
+                ? `🛢 <b>${senderName}:</b> Выбрался из стальной бочки Тиля Швайгера за <b>${bestSec} сек</b> (работает даже без звука по радару). Попробуешь быстрее?`
+                : `🛢 <b>${senderName}:</b> Закрыл тебя в стальной бочке из триллера с Тилем Швайгером. 30 секунд воздуха, работает даже без звука — проверишь, успеешь выбраться?`;
+      const btnText = linkType === "duel" ? "⚔️ ПРИНЯТЬ ВЫЗОВ" : isFriendTicketTpl ? "🎟 ОТКРЫТЬ БОЧКУ" : "🛢 ВЫБРАТЬСЯ ЗА 30 СЕК";
 
       const preparedRes = await tgApi("savePreparedInlineMessage", {
         user_id: tgUserId,

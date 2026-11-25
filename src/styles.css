@@ -11296,4 +11296,91 @@ body:not([data-screen="workshop"]) .workshop-intro-hint {
   display: none !important;
 }
 
+/* v20.10: Подсказка шаблонов, карточка Эстафеты +1 новый друг и тихая плашка ярлыка в лобби */
+.pack-template-hint {
+  margin: -2px 0 6px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: rgba(203, 213, 225, 0.85);
+  text-align: center;
+}
+
+.sent-relay-card {
+  width: 100%;
+  margin: 4px 0 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.16), rgba(234, 179, 8, 0.14));
+  border: 1px solid rgba(251, 146, 60, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: center;
+}
+.sent-relay-card[hidden] {
+  display: none !important;
+}
+.sent-relay-copy {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #fef3c7;
+}
+.sent-relay-btn {
+  border-color: rgba(250, 204, 21, 0.65) !important;
+  color: #fef08a !important;
+}
+
+.lobby-homescreen-pill {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--safe-bottom, 0px) + 10px);
+  transform: translateX(-50%);
+  z-index: 45;
+  width: min(calc(100vw - 24px), 420px);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px 7px 11px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.94);
+  border: 1px solid rgba(250, 204, 21, 0.45);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.48);
+  backdrop-filter: blur(8px);
+}
+.lobby-homescreen-pill[hidden] {
+  display: none !important;
+}
+.lobby-hs-action {
+  appearance: none;
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  padding: 2px 0;
+  color: #fef08a;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+}
+.lobby-hs-close {
+  appearance: none;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(30, 41, 59, 0.85);
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+
 

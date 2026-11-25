@@ -237,6 +237,7 @@ export class WorkshopDuelController {
     if (nextPhase !== 'countdown' && nextPhase !== 'claim') {
       this.audio?.stopListening?.();
     }
+    try { this.opts?.onPhaseChange?.(nextPhase); } catch {}
   }
 
   isExternalOverlayBlocking() {

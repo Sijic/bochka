@@ -114,21 +114,21 @@
     "semantic_hash": ""
   },
   "src/backend.js": {
-    "mtime": 1795604022.1577654,
-    "seen": 1795605884.5095928,
-    "ast_hash": "d7a799a73325d28b94ac78a61b1307fa",
+    "mtime": 1795639022.634031,
+    "seen": 1795642430.4265444,
+    "ast_hash": "193894cbf4517fe948cef962c63d7b85",
     "semantic_hash": ""
   },
   "src/dict.json": {
-    "mtime": 1795603968.6613512,
-    "seen": 1795605884.5095928,
-    "ast_hash": "fe972ac8e14f40c9f47c6db1ed4ce968",
+    "mtime": 1795634556.1422083,
+    "seen": 1795637691.2176647,
+    "ast_hash": "36099e19b2673062442db67402f1b957",
     "semantic_hash": ""
   },
   "src/duel.js": {
-    "mtime": 1795604035.215406,
-    "seen": 1795605884.5095928,
-    "ast_hash": "9c33e76d68adff69fab08f932d2ae749",
+    "mtime": 1795618130.4950557,
+    "seen": 1795626684.895528,
+    "ast_hash": "40cd86c177b32cd93872175143a882e7",
     "semantic_hash": ""
   },
   "src/env.js": {
@@ -150,9 +150,9 @@
     "semantic_hash": ""
   },
   "src/main.js": {
-    "mtime": 1795604039.3725488,
-    "seen": 1795605884.5105922,
-    "ast_hash": "90664c21926357a9073e09c47f93b336",
+    "mtime": 1795639215.2054193,
+    "seen": 1795642430.4275439,
+    "ast_hash": "18a0982aa670017b38e6aec515ea0203",
     "semantic_hash": ""
   },
   "src/scene.js": {
@@ -162,9 +162,9 @@
     "semantic_hash": ""
   },
   "src/telegram.js": {
-    "mtime": 1795569466.9768784,
-    "seen": 1795570011.0300715,
-    "ast_hash": "824394ea92ee55551e753ee8f037a018",
+    "mtime": 1795617932.4174469,
+    "seen": 1795626684.8965278,
+    "ast_hash": "8a4d20c22883be8bb8aa634925396cb4",
     "semantic_hash": ""
   },
   "src/testbog-gate.js": {
@@ -192,9 +192,9 @@
     "semantic_hash": ""
   },
   "supabase/functions/tg-webhook/index.ts": {
-    "mtime": 1795604112.5441432,
-    "seen": 1795605884.5125942,
-    "ast_hash": "9da945044a1607dfd2a7bbc03099b510",
+    "mtime": 1795639029.5274444,
+    "seen": 1795642430.4285436,
+    "ast_hash": "9649ea999a73b484eaca6cf256d9008b",
     "semantic_hash": ""
   },
   "tapper.js": {
@@ -288,9 +288,9 @@
     "semantic_hash": ""
   },
   "index.html": {
-    "mtime": 1795615069.176139,
-    "seen": 1795615563.0338614,
-    "ast_hash": "dca67e25e4bea9a0c2e2442e918c06f0",
+    "mtime": 1795639117.209721,
+    "seen": 1795642430.4315448,
+    "ast_hash": "521a958d9929a1062164d1a12aa5e571",
     "semantic_hash": ""
   },
   "testbog/index.html": {

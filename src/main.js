@@ -102,6 +102,7 @@ import {
   sendRevengeClosedPush,
   claimTrailer60sCheckpointServer,
   claimPingPongRevengeBonusServer,
+  claimPingPongRelayBonusServer,
 } from './backend.js';
 import { HorrorScreamerPlayer, preloadScreamerFrames } from './screamer-fx.js';
 
@@ -278,7 +279,11 @@ const state = {
     pointsBoostX2Until: null,
     firstSocialExclusiveClaimed: false,
     homescreenShortcutAdded: false,
-    bestEscapeSec: 12,
+    homescreenBonusClaimed: false,
+    pushDeclined: false,
+    homescreenPillDismissed: false,
+    relayBonusClaimed: false,
+    bestEscapeSec: null,
     trafficSource: '',
     seedPrefix: '',
   },
@@ -415,7 +420,7 @@ const state = {
     lastShareUrl: '',
     lastWebUrl: '',
     shareLifeClaimedForUrl: '',
-    shareTemplate: 'gift_barrel',
+    shareTemplate: 'thriller_challenge',
     customEdited: false,
     userUploadedPhoto: false,
     sealing: false,
@@ -497,12 +502,13 @@ async function ensureDuelReady() {
       screamersPreloaded = true;
       window.setTimeout(() => preloadScreamerFrames(SCREAMER_META), 200);
     }
-    const mod = duelModCache || (await import('./duel.js?v=2070'));
+    const mod = duelModCache || (await import('./duel.js?v=2010'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
       scene,
       audio,
+      onPhaseChange: () => syncLobbyHomescreenPillUI(),
       getTgUser: () => state.tg?.user || null,
       getTgWriteAccess: () => Boolean(state.profile?.tgWriteAccess),
       onRequestWriteAccess: () => requestAndSyncWriteAccess({ force: false }),
@@ -977,28 +983,38 @@ async function refreshBranchBattleUI() {
   return data;
 }
 
-function buildPersonalShareCopy(template = 'gift_barrel', bestSec = null) {
-  const sec = Math.max(3, Math.min(30, Math.round(Number(bestSec ?? state.profile?.bestEscapeSec ?? 12))));
-  if (template === 'record_challenge') {
+function buildPersonalShareCopy(template = 'thriller_challenge', bestSec = null) {
+  const rawBest = bestSec ?? state.profile?.bestEscapeSec ?? null;
+  const numBest = Number(rawBest);
+  const hasRealBest = rawBest != null && Number.isFinite(numBest) && numBest > 0;
+  const sec = hasRealBest ? Math.max(3, Math.min(30, Math.round(numBest))) : null;
+  if (template === 'friend_ticket' || template === 'gift_barrel') {
     return {
-      template: 'record_challenge',
+      template: 'friend_ticket',
       bestSec: sec,
-      phrase: `Выбрался из бочки за ${sec} сек — попробуешь пройти быстрее?`,
-      shareText: `⏱ Выбрался из бочки за ${sec} сек — попробуешь побить мой результат? (работает и без звука):`,
+      phrase:
+        'Слушай, у меня в игре по триллеру «БОЧКА» осталась лишняя часть билета в кино — спрятал её в бочке, попробуй вытащить за 30 секунд',
+      shareText:
+        '🎟 Слушай, у меня в игре по триллеру «БОЧКА» осталась лишняя часть билета в кино — спрятал её в бочке, попробуй вытащить за 30 секунд:',
     };
   }
+  const phrase = hasRealBest
+    ? `Выбрался из стальной бочки Тиля Швайгера за ${sec} сек (работает даже без звука по радару). Попробуешь быстрее?`
+    : 'Закрыл тебя в стальной бочке из триллера с Тилем Швайгером. 30 секунд воздуха, работает даже без звука — проверишь, успеешь выбраться?';
   return {
-    template: 'gift_barrel',
+    template: 'thriller_challenge',
     bestSec: sec,
-    phrase: 'Дарю тебе часть билета в кино в нашем городе — успей забрать из бочки!',
-    shareText: '🎁 Дарю тебе часть билета в кино в нашем городе — успей забрать из бочки! (30 сек, работает и без звука):',
+    phrase,
+    shareText: `🛢 ${phrase}`,
   };
 }
 
 function updatePackTemplatePreview() {
-  const tpl = state.pack.shareTemplate || 'gift_barrel';
-  document.getElementById('btn-tpl-gift')?.classList.toggle('is-active', tpl === 'gift_barrel');
-  document.getElementById('btn-tpl-record')?.classList.toggle('is-active', tpl === 'record_challenge');
+  const rawTpl = state.pack.shareTemplate || 'thriller_challenge';
+  const tpl = rawTpl === 'gift_barrel' ? 'friend_ticket' : rawTpl === 'record_challenge' ? 'thriller_challenge' : rawTpl;
+  state.pack.shareTemplate = tpl;
+  document.getElementById('btn-tpl-thriller')?.classList.toggle('is-active', tpl === 'thriller_challenge');
+  document.getElementById('btn-tpl-friend-ticket')?.classList.toggle('is-active', tpl === 'friend_ticket');
   const prevEl = document.getElementById('pack-template-preview');
   if (prevEl) {
     const copy = buildPersonalShareCopy(tpl, state.profile?.bestEscapeSec);
@@ -1082,6 +1098,13 @@ function loadLocalV9Flags() {
       state.profile.ticketShards = Math.max(0, Math.min(3, Math.round(Number(raw.ticketShards || 0))));
       state.profile.friendsShardAwardedCount = Math.max(0, Math.round(Number(raw.friendsShardAwardedCount || 0)));
       state.profile.lastOceanRefillAt = Math.max(0, Number(raw.lastOceanRefillAt || 0));
+      state.profile.pushDeclined = Boolean(raw.pushDeclined);
+      state.profile.homescreenPillDismissed = Boolean(raw.homescreenPillDismissed);
+      state.profile.homescreenShortcutAdded = Boolean(state.profile.homescreenShortcutAdded || raw.homescreenShortcutAdded);
+      state.profile.homescreenBonusClaimed = Boolean(state.profile.homescreenBonusClaimed || raw.homescreenBonusClaimed);
+      if (raw.bestEscapeSec != null && Number(raw.bestEscapeSec) > 0) {
+        state.profile.bestEscapeSec = Math.max(3, Math.min(30, Math.round(Number(raw.bestEscapeSec))));
+      }
       const cnt = Math.max(0, Math.round(Number(raw.pendingTicketsCount || 0)));
       const exp = Number(raw.ticketsExpireAt || 0);
       if (cnt > 0 && exp > Date.now()) {
@@ -1108,9 +1131,30 @@ function saveLocalV9Flags() {
         lastOceanRefillAt: Math.max(0, Number(state.profile.lastOceanRefillAt || 0)),
         pendingTicketsCount: Math.max(0, Math.round(Number(state.profile.pendingTicketsCount || 0))),
         ticketsExpireAt: Number(state.profile.ticketsExpireAt || 0),
+        pushDeclined: Boolean(state.profile.pushDeclined),
+        homescreenPillDismissed: Boolean(state.profile.homescreenPillDismissed),
+        homescreenShortcutAdded: Boolean(state.profile.homescreenShortcutAdded),
+        homescreenBonusClaimed: Boolean(state.profile.homescreenBonusClaimed),
+        bestEscapeSec: state.profile.bestEscapeSec != null ? Number(state.profile.bestEscapeSec) : null,
       })
     );
   } catch { /* ignore */ }
+}
+
+function syncLobbyHomescreenPillUI(screenName = state.activeScreen) {
+  const pill = document.getElementById('lobby-homescreen-pill');
+  if (!pill) return;
+  const duelIsLobby =
+    screenName === 'duel' && (!duelCtrl?.isActive || duelCtrl?.phase === 'lobby' || duelCtrl?.phase === 'finished');
+  const inLobby = screenName === 'modeA' || duelIsLobby;
+  const shouldShow =
+    Boolean(inLobby) &&
+    Boolean(state.profile?.pushDeclined) &&
+    !Boolean(state.profile?.tgWriteAccess) &&
+    !Boolean(state.profile?.homescreenShortcutAdded) &&
+    !Boolean(state.profile?.homescreenPillDismissed);
+  if (shouldShow) pill.removeAttribute('hidden');
+  else pill.setAttribute('hidden', '');
 }
 
 function syncTicketShardsUI({ pulse = false, showFullFlash = false, justEarned = 0 } = {}) {
@@ -2568,6 +2612,13 @@ async function bootstrap() {
         text: String(state.contextHint?.text || ''),
         shown: { ...state.hintsShown },
       }),
+      getShareTemplateState: () => ({
+        shareTemplate: state.pack.shareTemplate,
+        bestEscapeSec: state.profile?.bestEscapeSec ?? null,
+        preview: buildPersonalShareCopy(state.pack.shareTemplate, state.profile?.bestEscapeSec),
+      }),
+      syncLobbyHomescreenPillUI: (s) => syncLobbyHomescreenPillUI(s),
+      claimPingPongRelayBonus: (opts) => claimPingPongRelayBonusServer(state.tg?.user, opts || {}),
       resetHints: () => {
         for (const k of Object.values(HINT_STORAGE_KEYS)) {
           try { localStorage.removeItem(k); } catch { /* ignore */ }
@@ -3390,6 +3441,7 @@ function showScreen(name) {
   if (name === 'pack') {
     refreshPackFriendsStrip();
   }
+  syncLobbyHomescreenPillUI(name);
 
   if (name !== 'pass' && state.passClockTimer) {
     clearInterval(state.passClockTimer);
@@ -3729,7 +3781,16 @@ function requestAndSyncWriteAccess({ force = false } = {}) {
     .then(async (res) => {
       if (res && !res.skipped && !res.unsupported) {
         const allowed = Boolean(res.allowed);
-        if (state.profile) state.profile.tgWriteAccess = allowed;
+        if (state.profile) {
+          state.profile.tgWriteAccess = allowed;
+          if (allowed) {
+            state.profile.pushDeclined = false;
+          } else {
+            state.profile.pushDeclined = true;
+          }
+          saveLocalV9Flags();
+          syncLobbyHomescreenPillUI();
+        }
         const syncRes = await syncTelegramWriteAccess(state.tg?.user, allowed).catch(() => null);
         if (allowed && syncRes?.bonus?.granted) {
           applyWriteAccessBonusToProfile(syncRes.bonus);
@@ -7496,6 +7557,7 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
   if (survived && !isRecoveryShift) {
     const prevBest = Number(state.profile?.bestEscapeSec || 30);
     state.profile.bestEscapeSec = Math.max(3, Math.min(prevBest, elapsedRoundSec));
+    saveLocalV9Flags();
     const mult = getActivePointsMultiplier();
     const ptsDelta = (v8PointsTable[completedLvl] || 300) * mult;
     const nextLvl = Math.max(Number(state.profile.currentLevel || 1), completedLvl + 1);
@@ -7590,7 +7652,7 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
           if (state.profile.lives >= 2) {
             showToast('❤️ Потолок отработки 2/2 ❤️ достигнут! Иди к Тилю или позови друга за +6 ❤️!');
           } else {
-            showToast(`🔨 +1 ❤️ (без очков, смена ${recRes.dailyRecoveryShifts}/${recRes.maxDailyShifts || 2}). Следующая смена через 15 мин!`);
+            showToast(`🔨 +1 ❤️ (без очков, смена ${recRes.dailyRecoveryShifts}/${recRes.maxDailyShifts || 2}). Следующая смена через 5 мин!`);
           }
         } else if (recRes?.reason === 'daily_recovery_limit') {
           showToast('🔒 Лимит отработки (2 смены/день) исчерпан — позови друга (+6 ❤️ и ×2 очки)!');
@@ -7600,8 +7662,8 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
           syncWorkshopRecoveryBarUI();
           showToast(`❤️ Потолок отработки (${state.profile.lives}/2 ❤️) — возвращайся к Тилю или позови друга (+6 ❤️)!`);
         } else if (recRes?.reason === 'recovery_cooldown') {
-          const minsLeft = Math.max(1, Math.ceil((recRes.retryAfterSec || 900) / 60));
-          showToast(`⏳ Пауза между сменами 15 мин (осталось ~${minsLeft} мин) — позови друга (+6 ❤️) или иди к Тилю!`);
+          const minsLeft = Math.max(1, Math.ceil((recRes.retryAfterSec || 300) / 60));
+          showToast(`⏳ Пауза между сменами 5 мин (осталось ~${minsLeft} мин) — позови друга (+6 ❤️) или иди к Тилю!`);
         }
       } else {
         showToast('💨 Пусто! Попробуй ещё раз выбить +1 ❤️ в цеху или закатай друга (+2…+6 ❤️).');
@@ -7921,7 +7983,12 @@ async function handleQuick1TapPrankClick({ isPingPongRevenge = false, replyToPac
   }
 }
 
-async function handleSealBarrelClick({ forceAutoAvatar = false, isPingPongRevenge = false, replyToPack = null } = {}) {
+async function handleSealBarrelClick({
+  forceAutoAvatar = false,
+  isPingPongRevenge = false,
+  replyToPack = null,
+  isRelayNewFriend = false,
+} = {}) {
   if (state.pack.sealing) return;
   state.pack.sealing = true;
 
@@ -7943,16 +8010,23 @@ async function handleSealBarrelClick({ forceAutoAvatar = false, isPingPongReveng
 
   try {
     const teamRole = getTeamSeedRole();
-    const isBroadcastPack = !isPingPongRevenge && (teamRole === 'prod' || teamRole === 'blog');
+    const isPersonalMode = Boolean(isPingPongRevenge) || Boolean(isRelayNewFriend);
+    const isBroadcastPack = !isPersonalMode && (teamRole === 'prod' || teamRole === 'blog');
     const useAutoAvatar = !isBroadcastPack && (Boolean(forceAutoAvatar) || !state.pack.userUploadedPhoto);
 
     if (!useAutoAvatar && !state.pack.processed) {
       await rebuildPackPortraitPreview();
     }
-    const shareTpl = isPingPongRevenge ? 'record_challenge' : (state.pack.shareTemplate || 'gift_barrel');
-    const tplCopy = buildPersonalShareCopy(shareTpl, state.round?.lastElapsedSec || state.profile?.bestEscapeSec);
+    const shareTpl = (isPingPongRevenge || isRelayNewFriend)
+      ? 'thriller_challenge'
+      : (state.pack.shareTemplate || 'thriller_challenge');
+    const escapeTimeArg =
+      Number(state.round?.lastElapsedSec || 0) > 0
+        ? state.round.lastElapsedSec
+        : (state.profile?.bestEscapeSec ?? null);
+    const tplCopy = buildPersonalShareCopy(shareTpl, escapeTimeArg);
     const phrase = isPingPongRevenge
-      ? `Выбрался за ${tplCopy.bestSec} сек и закрыл тебя в ответ — попробуешь побить время?`
+      ? `Выбрался из стальной бочки за ${tplCopy.bestSec || 12} сек и закрыл тебя в ответ — попробуешь быстрее?`
       : tplCopy.phrase;
     const randomSound = pickRandomPackScreamer();
     const broadcastPrefix = isBroadcastPack ? buildBroadcastPrefix(teamRole, state.tg?.user) : '';
@@ -8006,7 +8080,7 @@ async function handleSealBarrelClick({ forceAutoAvatar = false, isPingPongReveng
       teamRole === 'blog' && isBroadcastPack
         ? '🛢 Открыл бочку к выходу триллера «БОЧКА»! Попробуй найти меня за 3 удара и забери 2 билета в кино в своём городе (работает без звука):'
         : isBroadcastPack
-          ? '🎁 Дарю шанс забрать 2 билета в кино на «БОЧКУ» в твоём городе — найди живую бочку за 30 сек:'
+          ? '🛢 Закрой живую бочку к триллеру «БОЧКА» (0.58 МБ, работает в метро без звука по вибро-радару) — финальный приз 2 билета в кино в твоём городе:'
           : tplCopy.shareText;
     const linkType = isBroadcastPack ? (teamRole === 'blog' ? 'bl' : 'pr') : 'pack';
     const prepShare = await prepareNativeShareMessage({
@@ -8111,6 +8185,7 @@ async function handleSealBarrelClick({ forceAutoAvatar = false, isPingPongReveng
       wasBroadcastPack: isBroadcastPack,
       broadcastRole: teamRole,
       isPingPongRevenge,
+      isRelayNewFriend,
       revengeTargetName: replyToPack?.senderName || '',
       revengeBonus: revengeBonusRes,
       prevRatingPct,
@@ -8132,6 +8207,7 @@ function showSentScreen({
   wasBroadcastPack = false,
   broadcastRole = '',
   isPingPongRevenge = false,
+  isRelayNewFriend = false,
   revengeTargetName = '',
   revengeBonus = null,
 } = {}) {
@@ -8171,20 +8247,37 @@ function showSentScreen({
         : 'Общая ссылка готова! Дальше играй с Тилем.';
     }
     if (btnTxt) btnTxt.textContent = isBlog ? 'Играть' : 'Поиграть в цех';
+  } else if (isRelayNewFriend) {
+    if (txt) txt.textContent = '🚀 Эстафетная бочка улетела новому другу! Как только он откроет её — сразу упадут +300 ⭐ и откроется 3/4 билета.';
+    if (btnTxt) btnTxt.textContent = 'Играть (×2 очки)';
   } else if (isPingPongRevenge) {
     const revBonusTxt = revengeBonus?.granted ? ' (+1 ❤️ и +200 ⭐ уже начислены!)' : '';
     if (txt) txt.textContent = `🔥 Ответная бочка улетела ${revengeTargetName || 'другу'}!${revBonusTxt} Активен буст ×2 очков на 15 мин.`;
     if (btnTxt) btnTxt.textContent = 'Играть (×2 очки)';
   } else {
-    if (txt) txt.textContent = '🎁 Подарочная бочка отправлена! За 1-го друга открыты редкая фишка, 3/4–4/4 билета и ×2 очки на 15 мин!';
+    if (txt) txt.textContent = '🔥 Вызов в стальную бочку отправлен! За 1-го друга открыты редкая фишка, 3/4–4/4 билета и ×2 очки на 15 мин!';
     if (btnTxt) btnTxt.textContent = 'Играть';
   }
   refreshBranchBattleUI().catch(() => {});
+  const relayCard = document.getElementById('sent-relay-card');
+  const relayCopy = document.getElementById('sent-relay-copy');
+  const targetLabel = String(revengeTargetName || state.incomingPack?.senderName || '').trim() || 'друга';
+  const safeTargetLabel = targetLabel.replace(/[<>&"]/g, '');
+  if (relayCard) {
+    if (isPingPongRevenge && !isRelayNewFriend && !wasBroadcastPack && !state.profile?.relayBonusClaimed) {
+      if (relayCopy) {
+        relayCopy.innerHTML = `🔥 Ответка улетела! Закрой ещё 1 нового друга (не <strong>${safeTargetLabel}</strong>) — получишь <strong>+300 ⭐</strong> и откроешь <strong>3/4 билета</strong>.`;
+      }
+      relayCard.removeAttribute('hidden');
+    } else {
+      relayCard.setAttribute('hidden', '');
+    }
+  }
   const pushCard = document.getElementById('sent-push-optin-card');
   const pushCopy = document.getElementById('sent-push-optin-copy');
-  const targetLabel = String(revengeTargetName || state.incomingPack?.senderName || '').trim() || 'друг';
   if (pushCopy) {
-    pushCopy.innerHTML = `🔔 Узнай в ту же секунду, когда <strong>${targetLabel.replace(/[<>&"]/g, '')}</strong> откроет твою бочку или отомстит! За включение сразу <strong>+1 ❤️ и +150 ⭐</strong> (без рекламы).`;
+    const labelForPush = String(revengeTargetName || state.incomingPack?.senderName || '').trim() || 'друг';
+    pushCopy.innerHTML = `🔔 Узнай в ту же секунду, когда <strong>${labelForPush.replace(/[<>&"]/g, '')}</strong> откроет твою бочку или отомстит! За включение сразу <strong>+1 ❤️ и +150 ⭐</strong> (без рекламы).`;
   }
   if (state.profile?.tgWriteAccess || wasBroadcastPack) {
     pushCard?.setAttribute('hidden', '');
@@ -8194,7 +8287,7 @@ function showSentScreen({
       if (res?.allowed) {
         pushCard?.setAttribute('hidden', '');
       } else if (res && !res.skipped && !res.unsupported && res.allowed === false) {
-        // v20.9: Не раздражаем отказавшегося всплывающим попапом ярлыка
+        // v20.10: Не показываем попап; ставим pushDeclined для тихой плашки в лобби
         pushCard?.setAttribute('hidden', '');
       }
     }).catch(() => {});
@@ -10897,6 +10990,11 @@ function bindUIEvents() {
     const res = await requestAndSyncWriteAccess({ force: true });
     if (res?.allowed) {
       document.getElementById('sent-push-optin-card')?.setAttribute('hidden', '');
+      if (state.profile) {
+        state.profile.pushDeclined = false;
+        saveLocalV9Flags();
+      }
+      syncLobbyHomescreenPillUI();
       const gotBonus = Boolean(res?.bonus?.granted);
       showToast(
         gotBonus
@@ -10905,13 +11003,33 @@ function bindUIEvents() {
       );
     } else {
       document.getElementById('sent-push-optin-card')?.setAttribute('hidden', '');
-      showToast('Хорошо, без уведомлений! Ярлык (+100 ⭐) всегда доступен в меню.');
+      if (state.profile) {
+        state.profile.pushDeclined = true;
+        saveLocalV9Flags();
+      }
+      syncLobbyHomescreenPillUI();
+      showToast('Хорошо, без уведомлений! Тихий ярлык (+100 ⭐) появится внизу лобби и в меню.');
     }
   });
   document.getElementById('btn-decline-tg-push')?.addEventListener('click', () => {
     document.getElementById('sent-push-optin-card')?.setAttribute('hidden', '');
+    if (state.profile) {
+      state.profile.pushDeclined = true;
+      saveLocalV9Flags();
+    }
+    syncLobbyHomescreenPillUI();
   });
-  document.getElementById('btn-add-homescreen')?.addEventListener('click', async () => {
+  document.getElementById('btn-sent-relay-new-friend')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-sent-relay-new-friend');
+    if (btn) btn.disabled = true;
+    try {
+      state.pack.shareTemplate = 'thriller_challenge';
+      await handleSealBarrelClick({ forceAutoAvatar: true, isPingPongRevenge: false, isRelayNewFriend: true });
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  });
+  async function handleAddHomescreenShortcutClick() {
     closeBurgerDrawer();
     const res = promptAddToHomeScreenSafe();
     const hsRes = await recordHomescreenShortcut(state.tg?.user).catch(() => null);
@@ -10924,21 +11042,31 @@ function bindUIEvents() {
         } else {
           state.profile.premierePoints = Number(state.profile.premierePoints || 0) + Number(hsRes.pointsAdded || 100);
         }
-        saveLocalV9Flags();
-        updatePremiereBarsUI();
-        syncSuperPrizeRatingBarUI();
       }
+      saveLocalV9Flags();
+      updatePremiereBarsUI();
+      syncSuperPrizeRatingBarUI();
     }
+    syncLobbyHomescreenPillUI();
     const ptsMsg = hsRes?.granted ? ' Зачислено +100 ⭐!' : '';
     showToast(
       res.mode === 'tg_native'
         ? `📲 Ярлык «БОЧКИ» добавлен на экран телефона!${ptsMsg}`
-        : `📲 Сохрани страницу bochka.quest на главный экран («На экран «Домой»» в меню).${ptsMsg}`
+        : `📲 Сохрани игру bochka.quest на главный экран («На экран «Домой»» в меню).${ptsMsg}`
     );
+  }
+  document.getElementById('btn-add-homescreen')?.addEventListener('click', handleAddHomescreenShortcutClick);
+  document.getElementById('btn-lobby-add-homescreen')?.addEventListener('click', handleAddHomescreenShortcutClick);
+  document.getElementById('btn-lobby-hs-dismiss')?.addEventListener('click', () => {
+    if (state.profile) {
+      state.profile.homescreenPillDismissed = true;
+      saveLocalV9Flags();
+    }
+    syncLobbyHomescreenPillUI();
   });
   document.querySelectorAll('[data-share-template]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      state.pack.shareTemplate = btn.getAttribute('data-share-template') || 'gift_barrel';
+      state.pack.shareTemplate = btn.getAttribute('data-share-template') || 'thriller_challenge';
       updatePackTemplatePreview();
     });
   });

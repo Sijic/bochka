@@ -3506,6 +3506,38 @@ export async function claimPingPongRevengeBonusServer(tgUser = null, { originalB
   };
 }
 
+export async function claimPingPongRelayBonusServer(
+  tgUser = null,
+  { relayBarrelId = '', recipientUid = '' } = {}
+) {
+  const senderUid = getViewerUid(tgUser);
+  const barrelId = String(relayBarrelId || '').trim();
+  const recUid = String(recipientUid || '').trim();
+  const db = getCloudDb();
+  if (db && !isTestBogActive() && senderUid && recUid) {
+    try {
+      const { data, error } = await db.rpc('claim_ping_pong_relay_bonus_rpc', {
+        p_sender_uid: senderUid,
+        p_relay_barrel_id: barrelId,
+        p_recipient_uid: recUid,
+      });
+      if (!error && data) {
+        return {
+          ok: Boolean(data.ok),
+          granted: Boolean(data.granted),
+          duplicateBlocked: Boolean(data.duplicate_blocked),
+          reason: data.reason || '',
+          pointsAdded: Number(data.points_added || 0),
+          premierePoints: data.premiere_points != null ? Number(data.premiere_points) : null,
+          ticketShards: data.ticket_shards != null ? Number(data.ticket_shards) : null,
+          unlocked34: Boolean(data.unlocked_34),
+        };
+      }
+    } catch { /* fallback below */ }
+  }
+  return { ok: false, granted: false, reason: 'relay_rpc_unavailable' };
+}
+
 export async function recordHomescreenShortcut(tgUser = null) {
   const uid = getViewerUid(tgUser);
   const db = getCloudDb();
