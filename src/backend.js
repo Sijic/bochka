@@ -865,8 +865,12 @@ export async function fetchPlayerProfile(tgUser = null) {
           isSeedAdmin: Boolean(data.is_seed_admin),
           isBloggerSeed: Boolean(data.is_blogger_seed),
           seedPrefix: String(data.seed_prefix || ''),
+          trafficSource: String(data.traffic_source || ''),
           hasBroadcastBarrel: Boolean(data.has_broadcast_barrel),
           tgWriteAccess: Boolean(data.tg_write_access),
+          pointsBoostX2Until: data.points_boost_x2_until || null,
+          firstSocialExclusiveClaimed: Boolean(data.first_social_exclusive_claimed),
+          homescreenShortcutAdded: Boolean(data.homescreen_shortcut_added),
           repeatLinkEntered: isFreshServer ? false : Boolean(localBefore?.repeatLinkEntered),
           uiStage: isFreshServer ? Math.min(2, Math.max(1, Number(data.ui_stage || 1))) : Number(data.ui_stage || 1),
           _isFreshServer: isFreshServer,
@@ -3014,6 +3018,8 @@ export async function prepareNativeShareMessage({
   senderName = '',
   phrase = '',
   shareUrl = '',
+  shareTemplate = 'gift_barrel',
+  bestSec = 12,
 } = {}) {
   if (isTestBogActive() || !ENV.tgNotifyWebhook || !barrelId) {
     return { ok: false, fallback: true, preparedMessageId: '', shareUrl };
@@ -3043,6 +3049,8 @@ export async function prepareNativeShareMessage({
         senderName: senderName || tgUser?.name || '',
         phrase,
         shareUrl,
+        shareTemplate,
+        bestSec,
         initData,
       }),
     });
@@ -3321,4 +3329,88 @@ function safeWriteJson(k, obj) {
   try {
     getActiveStorage().setItem(resolveKey(k), JSON.stringify(obj));
   } catch { /* ignore */ }
+}
+
+export async function claimFirstSocialExclusive(tgUser = null, trigger = 'friend_or_duel') {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  const prof = getLocalPreviewProfile();
+  if (db && !isTestBogActive()) {
+    try {
+      const { data, error } = await db.rpc('claim_first_social_exclusive_rpc', {
+        p_uid: uid,
+        p_trigger: trigger,
+      });
+      if (!error && data?.ok) {
+        if (data.points_boost_x2_until) prof.pointsBoostX2Until = data.points_boost_x2_until;
+        if (data.granted || data.already_claimed) prof.firstSocialExclusiveClaimed = true;
+        if (data.premiere_points != null) prof.premierePoints = Math.max(Number(prof.premierePoints || 0), Number(data.premiere_points));
+        saveLocalPreviewProfile(prof);
+        return {
+          ok: true,
+          granted: Boolean(data.granted),
+          alreadyClaimed: Boolean(data.already_claimed),
+          rareChipUnlocked: Boolean(data.rare_chip_unlocked),
+          shards34Unlocked: Boolean(data.shards_34_unlocked),
+          pointsBoostX2Until: data.points_boost_x2_until || prof.pointsBoostX2Until || null,
+          premierePoints: Number(data.premiere_points ?? prof.premierePoints ?? 0),
+          reason: data.reason || '',
+        };
+      }
+    } catch { /* fallback */ }
+  }
+  return { ok: false, granted: false, reason: 'offline' };
+}
+
+export async function fetchBranchBattleStats(branchPrefix = '') {
+  const db = getCloudDb();
+  if (!db || isTestBogActive()) return { ok: false, myBranch: null, topBranches: [] };
+  try {
+    const { data, error } = await db.rpc('get_branch_battle_stats_rpc', {
+      p_branch_prefix: branchPrefix ? String(branchPrefix).trim().toLowerCase() : null,
+    });
+    if (!error && data?.ok) {
+      return {
+        ok: true,
+        myBranch: data.my_branch || null,
+        topBranches: Array.isArray(data.top_branches) ? data.top_branches : [],
+      };
+    }
+  } catch { /* ignore */ }
+  return { ok: false, myBranch: null, topBranches: [] };
+}
+
+export async function recordHomescreenShortcut(tgUser = null) {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  const prof = getLocalPreviewProfile();
+  prof.homescreenShortcutAdded = true;
+  saveLocalPreviewProfile(prof);
+  if (!db || isTestBogActive()) return { ok: true, local: true };
+  try {
+    const { data, error } = await db.rpc('record_homescreen_shortcut_rpc', { p_uid: uid });
+    return { ok: !error && Boolean(data?.ok) };
+  } catch {
+    return { ok: false };
+  }
+}
+
+export async function sendRevengeClosedPush({ targetTgId = '', revengeName = '', revengeBarrelId = '' } = {}) {
+  if (!targetTgId) return false;
+  return sendTelegramPing({
+    clientAction: 'barrel_revenge_closed',
+    targetTgId: String(targetTgId),
+    revengeName: String(revengeName || 'Твой друг').slice(0, 48),
+    revengeBarrelId: String(revengeBarrelId || ''),
+  });
+}
+
+export async function sendDuelChipStolenPush({ targetTgId = '', stealerName = '', roomId = 'duel' } = {}) {
+  if (!targetTgId) return false;
+  return sendTelegramPing({
+    clientAction: 'duel_chip_stolen',
+    targetTgId: String(targetTgId),
+    stealerName: String(stealerName || 'Соперник').slice(0, 48),
+    roomId: String(roomId || 'duel'),
+  });
 }

@@ -558,6 +558,45 @@ Deno.serve(async (req: Request) => {
         return jsonResp({ ok: true, kind, eventType, result: res });
       }
 
+      if (kind === "barrel_revenge_closed") {
+        const revName = escapeHtml(String(body.revengeName || "Друг"));
+        const revBid = String(body.revengeBarrelId || "revenge").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32) || "revenge";
+        const res = await sendTgPushSafe({
+          chatId: targetTgId,
+          uid: targetUid,
+          isServicePush: false,
+          eventName: "barrel_revenge_closed",
+          dryRun,
+          simulate403,
+          text:
+            `🔥 <b>${revName} выбрался из твоей бочки и закрыл тебя в ответ!</b>\n` +
+            `У тебя 30 секунд на реванш — вскрой его бочку и забери ×2 очки!`,
+          replyMarkup: {
+            inline_keyboard: [[{ text: "🔥 ВЫБРАТЬСЯ И ОТОМСТИТЬ", web_app: { url: `${PUBLIC_WEB_URL}/?b=pack_${encodeURIComponent(revBid)}` } }]],
+          },
+        });
+        return jsonResp({ ok: true, kind, result: res });
+      }
+
+      if (kind === "duel_chip_stolen") {
+        const stealer = escapeHtml(String(body.stealerName || "Соперник"));
+        const res = await sendTgPushSafe({
+          chatId: targetTgId,
+          uid: targetUid,
+          isServicePush: false,
+          eventName: "duel_chip_stolen",
+          dryRun,
+          simulate403,
+          text:
+            `🪙 <b>${stealer} перехватил твою кино-фишку в дуэли 1×1!</b>\n` +
+            `Зайди за стол и верни фишку в реванше!`,
+          replyMarkup: {
+            inline_keyboard: [[{ text: "⚔️ ВЕРНУТЬ ФИШКУ", web_app: { url: `${PUBLIC_WEB_URL}/?duel=${encodeURIComponent(roomId)}` } }]],
+          },
+        });
+        return jsonResp({ ok: true, kind, result: res });
+      }
+
       return jsonResp({ ok: false, error: "unknown_test_push_kind" }, 400);
     }
 
@@ -603,28 +642,38 @@ Deno.serve(async (req: Request) => {
         return jsonResp({ ok: false, fallback: true, reason: "missing_params", shareUrl: targetMiniAppUrl, startParam });
       }
 
+      const shareTemplate = String(body.shareTemplate || "gift_barrel").toLowerCase();
+      const bestSec = Math.max(3, Math.min(30, Math.round(Number(body.bestSec || 12))));
+      const isPersonalPack = linkType === "pack";
+      const isRecordTpl = isPersonalPack && shareTemplate === "record_challenge";
+
       const cardTitle =
         linkType === "duel"
-          ? "⚔️ Я закрыл тебя в бочке — попробуй выбраться быстрее меня!"
-          : linkType === "bl"
-            ? "🛢 Вытащи меня из бочки — и забери билет в кино в своём городе!"
-            : "🛢 Я закрыл тебя в бочке — попробуй выбраться быстрее меня!";
+          ? "⚔️ Вызов 1×1 в «БОЧКЕ» — кто быстрее!"
+          : linkType === "bl" || linkType === "pr"
+            ? "🛢 Вытащи меня из бочки — и забери 2 билета в кино в своём городе!"
+            : isRecordTpl
+              ? `⏱ Я выбрался из бочки за ${bestSec} сек — побьёшь?`
+              : "🎁 Дарю тебе часть билета в кино в нашем городе";
       const cardText =
         linkType === "duel"
-          ? `⚔️ <b>${senderName}</b> зовёт тебя за стол «НА СЧЁТ ТРИ!» в 3D-цеху «БОЧКА»!\n\n` +
-            `Работает со звуком и в полной тишине. Вскрой живую бочку быстрее меня — забери 2 билета в кино в ТВОЁМ городе (РФ и СНГ) или премьеру в Москве!${phrase ? `\n\n💬 «${phrase}»` : ""}`
-          : linkType === "bl"
+          ? `⚔️ <b>${senderName}</b> зовёт тебя 1×1 в 3D-цех «БОЧКА»!\n\n` +
+            `Работает со звуком и в тишине. Вскрой бочку быстрее — забери 2 билета в кино в ТВОЁМ городе (РФ и СНГ) или премьеру в Москве!${phrase ? `\n\n💬 «${phrase}»` : ""}`
+          : linkType === "bl" || linkType === "pr"
             ? `🛢 <b>${senderName}</b> закрыл бочку в 3D-цеху триллера «БОЧКА»!\n\n` +
               `30 секунд воздуха, 3 удара — работает со звуком и в тишине (вибро/радар). Открой бочку за шаг к 2 билетам в кино в ТВОЁМ городе (РФ и СНГ)!${phrase ? `\n\n💬 «${phrase}»` : ""}`
-            : `🛢 <b>${senderName}:</b> Я закрыл тебя в бочке — попробуй выбраться быстрее меня!\n\n` +
-              `У тебя 30 секунд и 3 удара (со звуком или по тихому радару). Вскрой бочку — соберёшь часть билета в кино в ТВОЁМ городе (РФ и СНГ)!${phrase ? `\n\n💬 «${phrase}»` : ""}`;
-      const btnText = linkType === "duel" ? "⚔️ ПРИНЯТЬ ВЫЗОВ" : "🛢 ПОПРОБОВАТЬ ВЫБРАТЬСЯ";
+            : isRecordTpl
+              ? `⏱ <b>${senderName}:</b> Я выбрался из бочки за <b>${bestSec} сек</b> — побьёшь мой рекорд, заберёшь фишку!\n\n` +
+                `Работает со звуком и в полной тишине (30 сек, 3 удара).`
+              : `🎁 <b>${senderName}:</b> Дарю тебе часть билета в кино в нашем городе — успей забрать из бочки!\n\n` +
+                `У тебя 30 секунд (работает со звуком и без звука).`;
+      const btnText = linkType === "duel" ? "⚔️ ПРИНЯТЬ ВЫЗОВ" : isRecordTpl ? "⏱ ПОБИТЬ РЕКОРД" : "🎁 ЗАБРАТЬ ИЗ БОЧКИ";
 
       const preparedRes = await tgApi("savePreparedInlineMessage", {
         user_id: tgUserId,
         allow_user_chats: true,
-        allow_group_chats: true,
-        allow_channel_chats: true,
+        allow_group_chats: !isPersonalPack,
+        allow_channel_chats: !isPersonalPack,
         result: {
           type: "article",
           id: `bochka_${startParam}_${Date.now()}`,
@@ -1019,6 +1068,71 @@ Deno.serve(async (req: Request) => {
         reason: pushRes?.reason || "",
         tgError: pushRes?.error || "",
       });
+    }
+
+    // v20.7: Ответная месть друга — пинг-понг пуш
+    if (action === "barrel_revenge_closed" && (body.targetTgId || body.senderTgId)) {
+      const targetId = String(body.targetTgId || body.senderTgId || "").trim();
+      const revName = escapeHtml(String(body.revengeName || body.openerName || "Твой друг").slice(0, 48));
+      const revBarrel = String(body.revengeBarrelId || body.barrelId || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32);
+      const targetUrl = revBarrel ? `${PUBLIC_WEB_URL}/?b=pack_${encodeURIComponent(revBarrel)}` : `${PUBLIC_WEB_URL}/`;
+      const pushRes = await sendTgPushSafe({
+        chatId: targetId,
+        isServicePush: false,
+        eventName: "barrel_revenge_closed",
+        dryRun: Boolean(body.dryRun),
+        simulate403: Boolean(body.simulate403),
+        text:
+          `🔥 <b>Друг (${revName}) выбрался и закрыл тебя в ответ!</b>\n` +
+          `У тебя 30 секунд на реванш — вскрой его бочку и забери ×2 очки!`,
+        replyMarkup: {
+          inline_keyboard: [[{ text: "🔥 ВЫБРАТЬСЯ И ОТОМСТИТЬ", web_app: { url: targetUrl } }]],
+        },
+      });
+      return jsonResp({ ok: true, action: "barrel_revenge_closed", ...pushRes });
+    }
+
+    // v20.7: Перехват кино-фишки в дуэли 1x1
+    if (action === "duel_chip_stolen" && body.targetTgId) {
+      const targetId = String(body.targetTgId || "").trim();
+      const stealer = escapeHtml(String(body.stealerName || "Соперник").slice(0, 48));
+      const duelRoomId = String(body.roomId || "duel").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32) || "duel";
+      const pushRes = await sendTgPushSafe({
+        chatId: targetId,
+        isServicePush: false,
+        eventName: "duel_chip_stolen",
+        dryRun: Boolean(body.dryRun),
+        simulate403: Boolean(body.simulate403),
+        text:
+          `🪙 <b>${stealer} перехватил твою кино-фишку в дуэли 1×1!</b>\n` +
+          `Зайди за стол и верни фишку в реванше!`,
+        replyMarkup: {
+          inline_keyboard: [[{ text: "⚔️ ВЕРНУТЬ ФИШКУ", web_app: { url: `${PUBLIC_WEB_URL}/?duel=${encodeURIComponent(duelRoomId)}` } }]],
+        },
+      });
+      return jsonResp({ ok: true, action: "duel_chip_stolen", ...pushRes });
+    }
+
+    // v20.7: Обгон в ТОП-20 (строго <= 1 сервисный пуш в 24 часа)
+    if (action === "rank_top20_overtaken" && (body.targetTgId || verifiedCallerTgId)) {
+      const targetId = String(body.targetTgId || verifiedCallerTgId || "").trim();
+      const overtaker = escapeHtml(String(body.overtakerName || "Игрок из цеха").slice(0, 48));
+      const newRank = Math.max(2, Math.min(999, Math.round(Number(body.newRank || 11))));
+      const pushRes = await sendTgPushSafe({
+        chatId: targetId,
+        uid: `tg_${targetId}`,
+        isServicePush: true,
+        eventName: "rank_top20_overtaken",
+        dryRun: Boolean(body.dryRun),
+        simulate403: Boolean(body.simulate403),
+        text:
+          `⚡ <b>${overtaker} обогнал тебя в ТОП-20 (ты на #${newRank})!</b>\n` +
+          `До фиксации 10 декабря остаётся немного — вернись за 2 билетами в кино в ТВОЁМ городе.`,
+        replyMarkup: {
+          inline_keyboard: [[{ text: "🏆 ОТКРЫТЬ РЕЙТИНГ И ОТЫГРАТЬ", web_app: { url: `${PUBLIC_WEB_URL}/` } }]],
+        },
+      });
+      return jsonResp({ ok: true, action: "rank_top20_overtaken", ...pushRes });
     }
 
     // v20.6: Сервисный возвратный пуш (строго <= 1 раза в 24 часа через check_and_mark_service_push_rpc)

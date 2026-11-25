@@ -786,6 +786,19 @@ export async function copyToClipboard(str) {
   }
 }
 
+export function promptAddToHomeScreenSafe() {
+  const tg = getWebApp();
+  if (tg && isTelegramMiniApp() && typeof tg.addToHomeScreen === 'function') {
+    try {
+      tg.addToHomeScreen();
+      return { ok: true, mode: 'tg_native' };
+    } catch {
+      /* fallback below */
+    }
+  }
+  return { ok: true, mode: 'browser_fallback' };
+}
+
 export function openExternalLink(url) {
   const tg = getWebApp();
   if (tg && isTelegramMiniApp() && typeof tg.openLink === 'function') {

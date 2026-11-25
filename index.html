@@ -65,8 +65,8 @@
     #screen-gate .btn-primary{width:100%;min-height:48px;padding:12px 16px;border:0;border-radius:8px;background:#eab308;color:#0d0d0d;font-weight:800;font-size:15px;cursor:pointer}
     #screen-gate .btn-gate-mute{width:100%;min-height:44px;padding:10px 14px;border:1px solid rgba(148,163,184,.42);border-radius:8px;background:rgba(30,41,59,.72);color:#e2e8f0;font-weight:700;font-size:13.5px;cursor:pointer}
   </style>
-  <link rel="stylesheet" href="./src/styles.css?v=2061" media="print" onload="this.media='all'" />
-  <noscript><link rel="stylesheet" href="./src/styles.css?v=2061" /></noscript>
+  <link rel="stylesheet" href="./src/styles.css?v=2070" media="print" onload="this.media='all'" />
+  <noscript><link rel="stylesheet" href="./src/styles.css?v=2070" /></noscript>
 </head>
 <body data-ui-stage="1" data-blitz-unlocked="0">
   <!-- 3D Three.js Industrial Workshop Canvas -->
@@ -181,6 +181,8 @@
       <div class="gate-prize-pill" id="gate-prize-pill">
         🎟 Главный приз: 2 билета в кино в ТВОЁМ городе (РФ и СНГ) или закрытая премьера в Москве · 17.12
       </div>
+
+      <div class="branch-battle-pill" id="gate-branch-battle-pill" hidden></div>
 
       <div class="gate-v16-friend-callout" id="gate-friend-callout" hidden>
         <strong id="gate-friend-title">🔥 Я закрыл тебя в бочке!</strong>
@@ -328,6 +330,7 @@
           <span class="hud-rating-track"><span class="hud-rating-fill" id="hud-rating-fill" style="width:0%"></span></span>
           <span class="sr-only" id="hud-pts-val">0</span>
         </span>
+        <span class="hud-x2-boost-pill" id="hud-x2-boost-pill" hidden title="Буст ×2 очков на 15 минут за 1-го друга или дуэль 1×1">⚡ ×2 <strong id="hud-x2-timer">15:00</strong></span>
         <div class="premiere-lives-big" id="hud-premiere-lives-big" hidden>
           <span>❤️ ×</span><strong id="hud-lives-big-num">3</strong>
         </div>
@@ -685,17 +688,22 @@
        ==================================================================== -->
   <section class="screen" id="screen-pack" hidden>
     <div class="panel-sheet pack-clean">
-      <h2 class="section-title pack-clean-title" id="pack-screen-title">Брось вызов другу в бочке</h2>
+      <h2 class="section-title pack-clean-title" id="pack-screen-title">Отправь бочку лично другу</h2>
       <p class="pack-duel-subline" id="pack-duel-subline">
-        ⚔️ Откроет дуэль 1×1 с другом, его именную фишку в Зал Славы (+500 ⭐ и +6 ❤️)
+        🎁 1-й друг или дуэль 1×1: редкая кино-фишка + доступ к 3/4–4/4 билета + буст ×2 очков на 15 мин
       </p>
+      <div class="pack-template-switch" id="pack-template-switch" role="group" aria-label="Повод для отправки 1-на-1">
+        <button type="button" class="pack-template-btn is-active" id="btn-tpl-gift" data-share-template="gift_barrel">🎁 Подарочная бочка</button>
+        <button type="button" class="pack-template-btn" id="btn-tpl-record" data-share-template="record_challenge">⏱ Вызов с рекордом</button>
+      </div>
+      <div class="pack-template-preview" id="pack-template-preview">«Дарю тебе часть билета в кино в нашем городе — успей забрать из бочки.»</div>
       <input type="file" id="input-photo-file" accept="image/*" hidden />
       <div class="pack-uploaded-confirm" id="pack-uploaded-confirm" hidden>
         <img id="pack-uploaded-thumb" alt="Фото друга" class="pack-uploaded-thumb" loading="lazy" decoding="async" />
       </div>
       <div class="pack-two-actions">
         <button type="button" class="btn-primary btn-full pack-quick-1tap-btn pack-quick-lazy-btn" id="btn-pack-quick-1tap">
-          <span id="btn-pack-quick-1tap-text">⚡ Запаковать за 1 клик (без камеры и микрофона)</span>
+          <span id="btn-pack-quick-1tap-text">⚡ Отправить другу в 1 клик (1-на-1)</span>
         </button>
         <button type="button" class="btn-primary btn-full" id="btn-pack-send-uploaded" hidden>
           Отправить вызов другу
@@ -704,7 +712,7 @@
           📷 Опционально: добавить фото друга
         </label>
         <button type="button" class="btn-ghost btn-full btn-compact pack-recovery-btn" id="btn-pack-recovery-shift" hidden>
-          🔨 Не отправлять — отработать +1 ❤️ в цеху (без Тиля)
+          🔨 Отработать +1 ❤️ без Тиля (без редких фишек и 3/4–4/4 билета)
         </button>
       </div>
     </div>
@@ -806,9 +814,17 @@
         Выиграй Тиля, чтобы получить билет в кино!
       </p>
       <div class="seed-sent-meta" id="sent-seed-meta" hidden></div>
+      <div class="branch-battle-pill" id="sent-branch-battle-pill" hidden></div>
       <div class="push-optin-card" id="sent-push-optin-card">
-        <p class="push-optin-copy">🔔 Включи уведомления бота, чтобы узнать, когда друг откроет твою бочку или вызовет в дуэль 1×1</p>
-        <button type="button" class="btn-secondary btn-compact btn-full" id="btn-enable-tg-push">🔔 Включить уведомления бота</button>
+        <p class="push-optin-copy">🔔 Без рекламы — напишу только когда друг откроет бочку, закроет тебя в ответ или тебя обгонят в ТОП-20</p>
+        <div class="push-optin-actions">
+          <button type="button" class="btn-secondary btn-compact btn-full" id="btn-enable-tg-push">🔔 Включить нужные пуши</button>
+          <button type="button" class="btn-ghost btn-compact" id="btn-decline-tg-push">Не сейчас</button>
+        </div>
+      </div>
+      <div class="push-optin-card homescreen-fallback-card" id="sent-homescreen-fallback-card" hidden>
+        <p class="push-optin-copy">📱 Без пушей проще вернуться в 1 касание — добавь ярлык «БОЧКИ» на экран телефона</p>
+        <button type="button" class="btn-secondary btn-compact btn-full" id="btn-add-homescreen">📲 Добавить ярлык на главный экран</button>
       </div>
       <button type="button" class="btn-secondary btn-full" id="btn-sent-copy-link" hidden>
         📋 Скопировать общую ссылку
@@ -1425,6 +1441,7 @@
 
         <div class="leader-factor-grid" id="leader-factor-grid" aria-label="Факторы рейтинга"></div>
         <div class="leader-me-gap-pill" id="leader-me-gap">До ТОП-10: расчёт...</div>
+        <div class="branch-battle-pill" id="lb-branch-battle-pill" hidden></div>
         <small class="leader-rating-breakdown" id="leader-rating-breakdown">👥 Друзья: 0 · Фишки: 0 · ⚔️ Дуэли: 0 · ⭐ Очки: 0</small>
       </div>
 

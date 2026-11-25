@@ -10,6 +10,7 @@ import {
   computeSuperprizeProgress,
   syncDuelLivesLoss,
   recordDuelRoundResult,
+  sendDuelChipStolenPush,
 } from './backend.js';
 
 const BARREL_BATCH_CODES = ['01', '19', '97', '12', '17', '26', '33', '48', '71', '84', '92', '99'];
@@ -103,7 +104,7 @@ const IDLE_HINT_DELAY_MS = 2700;
  * Все промежуточные клики и таймеры идут строго через WebSocket в оперативной памяти (0 записей в БД).
  */
 export class WorkshopDuelController {
-  constructor({ scene, audio, getTgUser, getTgWriteAccess, onRequestWriteAccess, getPlayerAvatar, getHasRealFriends, getProfileStats, getTicketShards, onCollectChipFromBarrel, onCollectGoldenShard, onUnlockFilmArtifact, canUseOceanRefill, onOpenPackForLives, onFoundFriendBarrel, onContextDiscoveryHint, onLifeLostPill, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDefeatCinematic, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels, onOpenHallOfFame, loadDuelCandidates, onChallengeFriend, onOpenPackFriend, onRoomFull, onTriggerScreamerFx }) {
+  constructor({ scene, audio, getTgUser, getTgWriteAccess, onRequestWriteAccess, getPlayerAvatar, getHasRealFriends, getProfileStats, getTicketShards, onCollectChipFromBarrel, onCollectGoldenShard, onUnlockFilmArtifact, canUseOceanRefill, onOpenPackForLives, onFoundFriendBarrel, onContextDiscoveryHint, onLifeLostPill, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDefeatCinematic, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels, onOpenHallOfFame, loadDuelCandidates, onChallengeFriend, onOpenPackFriend, onRoomFull, onTriggerScreamerFx, onFirstPvpDuelComplete }) {
     this.scene = scene;
     this.audio = audio;
     this.getTgUser = getTgUser;
@@ -138,6 +139,8 @@ export class WorkshopDuelController {
     this.onTriggerScreamerFx = onTriggerScreamerFx || null;
     this.onUnlockFilmArtifact = onUnlockFilmArtifact || null;
     this.onCollectGoldenShard = onCollectGoldenShard || null;
+    this.onFirstPvpDuelComplete = onFirstPvpDuelComplete || null;
+    this._pvpExclusiveTriggered = false;
     this._racksWithoutGolden = 0;
     this._roundResultRecorded = false;
     this.duelCandidates = { sent: [], branch: [], loaded: false };
@@ -966,6 +969,7 @@ export class WorkshopDuelController {
         if (Array.isArray(entries) && entries[0]) {
           list.push({
             uid: entries[0].uid || key,
+            tgId: entries[0].tgId || '',
             name: entries[0].name || 'Игрок',
             avatar: entries[0].avatar || '',
             joinedAt: Number(entries[0].joinedAt || Date.now()),
@@ -1040,6 +1044,7 @@ export class WorkshopDuelController {
       if (status === 'SUBSCRIBED' && this.active) {
         await ch.track({
           uid: this.myUid,
+          tgId: this.getTgUser?.()?.id ? String(this.getTgUser().id) : '',
           name: this.myName,
           avatar: this.myAvatar,
           joinedAt: this._myJoinedAt || Date.now(),
@@ -3530,9 +3535,26 @@ export class WorkshopDuelController {
       this.onRequestWriteAccess?.();
     }
 
+    const captured = Array.isArray(settleRes?.transferredTrophies) ? settleRes.transferredTrophies : [];
+    const oppPlayerObj = this.players.find((p) => p.uid !== this.myUid && !p.isBot) || null;
+    if (!this.soloMode && oppPlayerObj && !this._pvpExclusiveTriggered) {
+      this._pvpExclusiveTriggered = true;
+      this.onFirstPvpDuelComplete?.({
+        oppUid: oppPlayerObj.uid,
+        oppTgId: oppPlayerObj.tgId || '',
+        capturedCount: captured.length,
+      });
+    }
+    if (!this.soloMode && iFoundTicket && (captured.length > 0 || detail.tilTrophyPicked === 'chip') && oppPlayerObj?.tgId) {
+      sendDuelChipStolenPush({
+        targetTgId: oppPlayerObj.tgId,
+        stealerName: this.myName,
+        roomId: this.roomId,
+      }).catch(() => {});
+    }
+
     const resTrophyEl = document.getElementById('duel-result-trophy');
     if (resTrophyEl) {
-      const captured = Array.isArray(settleRes?.transferredTrophies) ? settleRes.transferredTrophies : [];
       if (captured.length > 0 && iFoundTicket) {
         if (titleEl) titleEl.textContent = '🏆 ПОБЕДА В ДУЭЛИ НА ФИШКИ!';
         this.loadTrophiesMod()

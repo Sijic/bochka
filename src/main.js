@@ -16,6 +16,7 @@ import {
   shareNativeOrFallback,
   copyToClipboard,
   openExternalLink,
+  promptAddToHomeScreenSafe,
   Haptics,
 } from './telegram.js';
 import { audio } from './audio.js';
@@ -95,6 +96,10 @@ import {
   computeSuperprizeProgress,
   claimGoldenTicketShard,
   claimWorkshopRecoveryLife,
+  claimFirstSocialExclusive,
+  fetchBranchBattleStats,
+  recordHomescreenShortcut,
+  sendRevengeClosedPush,
 } from './backend.js';
 import { HorrorScreamerPlayer, preloadScreamerFrames } from './screamer-fx.js';
 
@@ -267,6 +272,12 @@ const state = {
     mustSendFriendPack: false,
     pendingTicketsCount: 0,
     ticketsExpireAt: 0,
+    pointsBoostX2Until: null,
+    firstSocialExclusiveClaimed: false,
+    homescreenShortcutAdded: false,
+    bestEscapeSec: 12,
+    trafficSource: '',
+    seedPrefix: '',
   },
 
   blitzCooldownUntil: 0,
@@ -399,6 +410,7 @@ const state = {
     lastShareUrl: '',
     lastWebUrl: '',
     shareLifeClaimedForUrl: '',
+    shareTemplate: 'gift_barrel',
     customEdited: false,
     userUploadedPhoto: false,
     sealing: false,
@@ -480,7 +492,7 @@ async function ensureDuelReady() {
       screamersPreloaded = true;
       window.setTimeout(() => preloadScreamerFrames(SCREAMER_META), 200);
     }
-    const mod = duelModCache || (await import('./duel.js?v=2060'));
+    const mod = duelModCache || (await import('./duel.js?v=2070'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -552,6 +564,9 @@ async function ensureDuelReady() {
         openDuelTable('').catch(() => {});
       },
       onTriggerScreamerFx: (durMs, variant = null, dmg = 1) => triggerMiniScreamer(variant, durMs, dmg),
+      onFirstPvpDuelComplete: () => {
+        applyFirstSocialExclusive('first_duel_1x1').catch(() => {});
+      },
       onUnlockFilmArtifact: () => {
         return loadTrophiesMod()
           .then((mod) => {
@@ -823,15 +838,16 @@ function refreshInitialSeedGateUI() {
   const teaser = document.getElementById('gate-teaser');
   const enterSoundSpan = document.querySelector('#btn-enter-sound span');
   const role = getTeamSeedRole();
+  refreshBranchBattleUI().catch(() => {});
   if (role === 'prod' && !state.incomingParam) {
     const pref = buildBroadcastPrefix('prod', state.tg?.user);
     if (banner) {
-      banner.textContent = `🎬 КОМАНДА ПРОДЮСЕРОВ (${pref}) — Запакуй СЕБЯ в бочку 1 раз и получи ОДНУ общую ссылку для всех друзей и чатов! Каждому пришедшему бот сам выдаст номер 1..∞. Розыгрыши на команду не действуют.`;
+      banner.textContent = `🎬 КОМАНДА ПРОДЮСЕРОВ (${pref}) — Запакуй СЕБЯ в бочку 1 раз и получи ОДНУ общую ссылку для знакомых и подписчиков! Розыгрыши на команду не действуют.`;
       banner.removeAttribute('hidden');
     }
     if (teaser) {
       teaser.textContent =
-        'Шаг 1: запакуй себя (фото + скример/голос) → получишь одну общую ссылку pr_... для всех друзей. Шаг 2: можно сразу играть!';
+        'Шаг 1: запакуй себя (фото + скример/голос) → получишь одну общую ссылку pr_... для своего круга. Шаг 2: можно сразу играть!';
     }
     if (enterSoundSpan) {
       enterSoundSpan.textContent = '🎬 ЗАПАКОВАТЬ СЕБЯ И ПОЛУЧИТЬ ССЫЛКУ';
@@ -852,6 +868,137 @@ function refreshInitialSeedGateUI() {
     return;
   }
   banner?.setAttribute('hidden', '');
+}
+
+let _x2BoostTimerId = null;
+function getActivePointsMultiplier() {
+  const raw = state.profile?.pointsBoostX2Until;
+  if (!raw) return 1;
+  const ts = typeof raw === 'number' ? raw : Date.parse(String(raw));
+  return Number.isFinite(ts) && ts > Date.now() ? 2 : 1;
+}
+
+function syncX2BoostHudUI() {
+  const pill = document.getElementById('hud-x2-boost-pill');
+  const timerEl = document.getElementById('hud-x2-timer');
+  if (!pill) return;
+  const raw = state.profile?.pointsBoostX2Until;
+  const ts = raw ? (typeof raw === 'number' ? raw : Date.parse(String(raw))) : 0;
+  const remSec = ts > Date.now() ? Math.max(0, Math.ceil((ts - Date.now()) / 1000)) : 0;
+  if (remSec <= 0) {
+    pill.setAttribute('hidden', '');
+    if (_x2BoostTimerId) {
+      clearInterval(_x2BoostTimerId);
+      _x2BoostTimerId = null;
+    }
+    return;
+  }
+  const mm = String(Math.floor(remSec / 60)).padStart(2, '0');
+  const ss = String(remSec % 60).padStart(2, '0');
+  if (timerEl) timerEl.textContent = `${mm}:${ss}`;
+  pill.removeAttribute('hidden');
+  if (!_x2BoostTimerId) {
+    _x2BoostTimerId = window.setInterval(syncX2BoostHudUI, 1000);
+  }
+}
+
+async function applyFirstSocialExclusive(trigger = 'friend_or_duel') {
+  if (!state.profile) return null;
+  if (state.profile.firstSocialExclusiveClaimed && getActivePointsMultiplier() === 2) {
+    syncX2BoostHudUI();
+    return null;
+  }
+  const res = await claimFirstSocialExclusive(state.tg?.user, trigger).catch(() => null);
+  if (res?.ok && (res.granted || res.alreadyClaimed)) {
+    state.profile.firstSocialExclusiveClaimed = true;
+    state.profile.hasSocialConnection = true;
+    if (res.pointsBoostX2Until) {
+      state.profile.pointsBoostX2Until = res.pointsBoostX2Until;
+    }
+    if (res.premierePoints != null) {
+      state.profile.premierePoints = Math.max(Number(state.profile.premierePoints || 0), Number(res.premierePoints));
+    }
+    syncX2BoostHudUI();
+    updatePremiereBarsUI();
+    syncSuperPrizeRatingBarUI();
+    if (res.granted) {
+      rollRareMovieCardLazy('first_social_v207').catch(() => {});
+      showToast('🎁 1-й друг / дуэль 1×1: редкая фишка + 3/4–4/4 билета + буст ×2 очков на 15 минут!', { durationMs: 4800 });
+    }
+  }
+  return res;
+}
+
+function getActiveBranchPrefix() {
+  const sp = String(state.profile?.seedPrefix || '').trim().toLowerCase();
+  if (/^(pr|bl)_/.test(sp)) return sp;
+  const ts = String(state.profile?.trafficSource || state.tg?.trafficSource || '').trim().toLowerCase();
+  if (/^(pr|bl)_/.test(ts)) return ts;
+  const lastBroadcast = String(state.pack?.lastBroadcastPrefix || '').trim().toLowerCase();
+  if (/^(pr|bl)_/.test(lastBroadcast)) return lastBroadcast;
+  const role = getTeamSeedRole();
+  if (role === 'prod' || role === 'blog') {
+    return buildBroadcastPrefix(role, state.tg?.user).toLowerCase();
+  }
+  return '';
+}
+
+async function refreshBranchBattleUI() {
+  const pref = getActiveBranchPrefix();
+  const data = await fetchBranchBattleStats(pref).catch(() => null);
+  const myBr = data?.myBranch || null;
+  const top1 = Array.isArray(data?.topBranches) && data.topBranches.length ? data.topBranches[0] : null;
+  let text = '';
+  if (myBr) {
+    const icon = myBr.role === 'blog' ? '🔥' : '🎬';
+    text = `${icon} Битва веток · Команда ${myBr.prefix}: ${myBr.members_count} чел. · ${Number(myBr.total_points || 0).toLocaleString('ru-RU')} ⭐ (#${myBr.rank} в рейтинге)`;
+  } else if (pref) {
+    const icon = pref.startsWith('bl_') ? '🔥' : '🎬';
+    text = `${icon} Битва веток · Ветка ${pref}: стань первым и веди знакомых в кино!`;
+  } else if (top1) {
+    const icon = top1.role === 'blog' ? '🔥' : '🎬';
+    text = `${icon} Битва веток: лидирует ${top1.prefix} (${top1.members_count} чел.)`;
+  }
+  for (const elId of ['gate-branch-battle-pill', 'sent-branch-battle-pill', 'lb-branch-battle-pill']) {
+    const el = document.getElementById(elId);
+    if (!el) continue;
+    if (text && (pref || elId === 'lb-branch-battle-pill')) {
+      el.textContent = text;
+      el.removeAttribute('hidden');
+    } else {
+      el.setAttribute('hidden', '');
+    }
+  }
+  return data;
+}
+
+function buildPersonalShareCopy(template = 'gift_barrel', bestSec = null) {
+  const sec = Math.max(3, Math.min(30, Math.round(Number(bestSec ?? state.profile?.bestEscapeSec ?? 12))));
+  if (template === 'record_challenge') {
+    return {
+      template: 'record_challenge',
+      bestSec: sec,
+      phrase: `Я выбрался из бочки за ${sec} сек — побьешь мой рекорд, заберешь фишку`,
+      shareText: `⏱ Я выбрался из бочки за ${sec} сек — побьешь мой рекорд, заберешь фишку! (работает со звуком и в тишине):`,
+    };
+  }
+  return {
+    template: 'gift_barrel',
+    bestSec: sec,
+    phrase: 'Дарю тебе часть билета в кино в нашем городе — успей забрать из бочки',
+    shareText: '🎁 Дарю тебе часть билета в кино в нашем городе — успей забрать из бочки (30 сек, работает и без звука):',
+  };
+}
+
+function updatePackTemplatePreview() {
+  const tpl = state.pack.shareTemplate || 'gift_barrel';
+  document.getElementById('btn-tpl-gift')?.classList.toggle('is-active', tpl === 'gift_barrel');
+  document.getElementById('btn-tpl-record')?.classList.toggle('is-active', tpl === 'record_challenge');
+  const prevEl = document.getElementById('pack-template-preview');
+  if (prevEl) {
+    const copy = buildPersonalShareCopy(tpl, state.profile?.bestEscapeSec);
+    prevEl.textContent = `«${copy.phrase}»`;
+  }
 }
 
 function applySeedPackModeUI(active) {
@@ -2486,12 +2633,20 @@ async function bootstrap() {
     loadBarrelPack(state.incomingParam).then((pack) => {
       state.incomingPack = pack;
       if (!state.entered && pack?.senderName && getTeamSeedRole() !== 'prod') {
-        if (calloutTitle) calloutTitle.textContent = `🔥 ${pack.senderName} заварил тебя в бочке!`;
-        if (calloutSub) calloutSub.textContent = 'У тебя 30 сек и 3 удара ломом — прислушайся, откуда идёт стук!';
-        calloutEl?.removeAttribute('hidden');
-        if (enterLabel && !getTeamSeedRole()) {
-          enterLabel.textContent = '🎧 НАЙТИ СЕБЯ В БОЧКЕ СО ЗВУКОМ';
+        if (!pack.isBroadcast) {
+          if (calloutTitle) calloutTitle.textContent = `🛢 Тебя закрыл ${pack.senderName}!`;
+          if (calloutSub) calloutSub.textContent = 'Выберись за 30 сек и закрой его в ответ (со звуком или в тишине).';
+          if (enterLabel && !getTeamSeedRole()) {
+            enterLabel.textContent = '▶ Выбраться и закрыть в ответ';
+          }
+        } else {
+          if (calloutTitle) calloutTitle.textContent = `🔥 ${pack.senderName} оставил тебе бочку!`;
+          if (calloutSub) calloutSub.textContent = 'Выберись за 30 сек и забери шанс на 2 билета в кино в ТВОЁМ городе.';
+          if (enterLabel && !getTeamSeedRole()) {
+            enterLabel.textContent = '🎧 Найти бочку со звуком';
+          }
         }
+        calloutEl?.removeAttribute('hidden');
       }
     });
   }
@@ -2553,6 +2708,8 @@ async function bootstrap() {
     applyProgressiveDisclosureUI();
   }
   updatePremiereBarsUI();
+  syncX2BoostHudUI();
+  refreshBranchBattleUI().catch(() => {});
   await refreshQuestUI();
   initLiveFriendFeedbackMonitor();
 
@@ -2567,12 +2724,10 @@ async function bootstrap() {
   if (state.incomingPassId) {
     await openIncomingPassScreen(state.incomingPassId);
   } else if (state.tg?.teamSeedRole === 'prod') {
-    // v15.3 + v15.4.1: Продюсер зашёл по ссылке team_prod — сразу открываем упаковку и запрашиваем разрешение на пуши от бота!
     state.entered = true;
     applySeedPackModeUI(true);
     showScreen('pack');
-    requestAndSyncWriteAccess();
-    showToast('🎬 Запакуй СЕБЯ в бочку 1 раз — получишь ОДНУ общую ссылку для всех друзей и чатов!');
+    showToast('🎬 Запакуй СЕБЯ в бочку 1 раз — получишь ОДНУ общую ссылку для своих знакомых и подписчиков!');
   }
 
   // Если активирована сессия «ТЕСТ-БОГА» (/testbog/) — лениво монтируем плавающий пульт песочницы (0 запросов в БД)
@@ -3181,7 +3336,8 @@ function showScreen(name) {
     const quickBtn = document.getElementById('btn-pack-quick-1tap');
     const quickTxt = document.getElementById('btn-pack-quick-1tap-text');
     if (quickBtn) quickBtn.disabled = false;
-    if (quickTxt) quickTxt.textContent = 'Отправить сразу';
+    if (quickTxt) quickTxt.textContent = '⚡ Отправить другу в 1 клик (1-на-1)';
+    updatePackTemplatePreview();
     const recPackBtn = document.getElementById('btn-pack-recovery-shift');
     if (recPackBtn) {
       recPackBtn.hidden = !(state.pack.forLifeRefill || Number(state.profile?.lives || 0) <= 0);
@@ -3567,10 +3723,7 @@ async function enterWorkshopGate(withSound, ev = null) {
   const prevLbl = lblEl?.textContent || '';
   if (lblEl && !scene) lblEl.textContent = '⏳ ЗАГРУЖАЕМ 3D-ЦЕХ…';
   try {
-    // v15.4.2: Не пугаем новичка запросом пушей до 1-й игры — запрашиваем только после 1-го раунда (или у вернувшихся игроков)
-    if (state.profile?.hasPlayedSolo || Number(state.profile?.currentLevel || 1) >= 2) {
-      requestAndSyncWriteAccess();
-    }
+    // v20.7: Не запрашиваем пуши до реальной пользы (отправка другу / рейтинг / дуэль)
     if (state.entered) {
       if (withSound) {
         await audio.unlock(true);
@@ -3800,7 +3953,7 @@ function syncWorkshopRecoveryBarUI() {
   if (copyEl) {
     copyEl.textContent = curLives >= 3
       ? '❤️ 3/3 жизни собраны! Возвращайся в бой к Тилю.'
-      : `Сейчас ❤️ ${curLives}/3 · Найди бочку за 3 удара → +1 ❤️ и +75 ⭐`;
+      : `Сейчас ❤️ ${curLives}/3 · +1 ❤️ и +75 ⭐ (без редких фишек и 3/4–4/4)`;
   }
   if (backBtn) {
     if (curLives >= 1) {
@@ -7301,8 +7454,16 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
   const completedLvl = Math.max(1, Number(state.round.workshopLevel || 1));
   const isRecoveryShift = Boolean(state.round.isLifeRecoveryShift);
   const v8PointsTable = { 1: 150, 2: 150, 3: 300, 4: 350, 5: 400 };
+  const elapsedRoundSec = Math.max(
+    1,
+    Math.min(30, Math.round(AIR_DURATION_SEC - Number(state.round.airLeft || 0)))
+  );
+  state.round.lastElapsedSec = elapsedRoundSec;
   if (survived && !isRecoveryShift) {
-    const ptsDelta = v8PointsTable[completedLvl] || 300;
+    const prevBest = Number(state.profile?.bestEscapeSec || 30);
+    state.profile.bestEscapeSec = Math.max(3, Math.min(prevBest, elapsedRoundSec));
+    const mult = getActivePointsMultiplier();
+    const ptsDelta = (v8PointsTable[completedLvl] || 300) * mult;
     const nextLvl = Math.max(Number(state.profile.currentLevel || 1), completedLvl + 1);
     state.profile.currentLevel = nextLvl;
     loadTrophiesMod().then((m) => m.syncUnlockedArtifactsForLevel?.(nextLvl)).catch(() => {});
@@ -7530,6 +7691,12 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
     }
     if (state.activeScreen !== 'workshop' || duelCtrl?.isActive || _openingDuelLock) return;
     if (survived && completedLvl === 1) {
+      if (state.incomingPack && !state.incomingPack.isBroadcast) {
+        await populateFinaleScreen({ premiereResult: null });
+        if (state.activeScreen !== 'workshop' || duelCtrl?.isActive || _openingDuelLock) return;
+        showScreen('finale');
+        return;
+      }
       if (!state.trailer.shownInL1Flow && Number(state.round?.rescueStage || 0) < 4) {
         state.trailer.shownInL1Flow = true;
         openTrailerModal({ forRescue: false, afterL1ToPack: true });
@@ -7709,22 +7876,21 @@ async function rebuildPackPortraitPreview(newSource = undefined) {
   }
 }
 
-async function handleQuick1TapPrankClick() {
+async function handleQuick1TapPrankClick({ isPingPongRevenge = false, replyToPack = null } = {}) {
   const quickBtn = document.getElementById('btn-pack-quick-1tap');
   const quickTxt = document.getElementById('btn-pack-quick-1tap-text');
   if (state.pack.sealing || quickBtn?.disabled) return;
   if (quickTxt) quickTxt.textContent = 'Отправка…';
   try {
     state.pack.screamerType = pickRandomPackScreamer();
-    await handleSealBarrelClick({ forceAutoAvatar: true });
+    await handleSealBarrelClick({ forceAutoAvatar: true, isPingPongRevenge, replyToPack });
   } finally {
     if (quickBtn) quickBtn.disabled = false;
-    if (quickTxt) quickTxt.textContent = '⚡ Запаковать за 1 клик (без камеры и микрофона)';
+    if (quickTxt) quickTxt.textContent = '⚡ Отправить другу в 1 клик (1-на-1)';
   }
 }
 
-async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
-  requestAndSyncWriteAccess();
+async function handleSealBarrelClick({ forceAutoAvatar = false, isPingPongRevenge = false, replyToPack = null } = {}) {
   if (state.pack.sealing) return;
   state.pack.sealing = true;
 
@@ -7746,13 +7912,17 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
 
   try {
     const teamRole = getTeamSeedRole();
-    const isBroadcastPack = teamRole === 'prod' || teamRole === 'blog';
+    const isBroadcastPack = !isPingPongRevenge && (teamRole === 'prod' || teamRole === 'blog');
     const useAutoAvatar = !isBroadcastPack && (Boolean(forceAutoAvatar) || !state.pack.userUploadedPhoto);
 
     if (!useAutoAvatar && !state.pack.processed) {
       await rebuildPackPortraitPreview();
     }
-    const phrase = 'Я закрыл тебя в бочке — попробуй выбраться быстрее меня!';
+    const shareTpl = isPingPongRevenge ? 'record_challenge' : (state.pack.shareTemplate || 'gift_barrel');
+    const tplCopy = buildPersonalShareCopy(shareTpl, state.round?.lastElapsedSec || state.profile?.bestEscapeSec);
+    const phrase = isPingPongRevenge
+      ? `Выбрался за ${tplCopy.bestSec} сек и закрыл тебя в ответ — попробуй выбраться!`
+      : tplCopy.phrase;
     const randomSound = pickRandomPackScreamer();
     const broadcastPrefix = isBroadcastPack ? buildBroadcastPrefix(teamRole, state.tg?.user) : '';
     const created = await createBarrelPack({
@@ -7801,11 +7971,12 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
         : prevRoundLvl <= 2
           ? 3
           : Math.max(3, prevRoundLvl + 1);
-    const sharePrefix =
-      teamRole === 'blog'
-        ? '🛢 Я закрыл себя в 3D-цеху «БОЧКИ»! Попробуй найти меня за 3 удара и забери 2 билета в кино в своём городе (работает и без звука!)'
-        : '🛢 Я закрыл тебя в бочке! Попробуй выбраться быстрее меня за 3 удара и сразимся в дуэли 1×1 за 2 билета в кино в твоём городе 🎬';
-    const fullShareText = `${sharePrefix}: «${phrase}»`;
+    const fullShareText =
+      teamRole === 'blog' && isBroadcastPack
+        ? '🛢 Открыл бочку к выходу триллера «БОЧКА»! Попробуй найти меня за 3 удара и забери 2 билета в кино в своём городе (работает без звука):'
+        : isBroadcastPack
+          ? '🎁 Дарю шанс забрать 2 билета в кино на «БОЧКУ» в твоём городе — найди живую бочку за 30 сек:'
+          : tplCopy.shareText;
     const linkType = isBroadcastPack ? (teamRole === 'blog' ? 'bl' : 'pr') : 'pack';
     const prepShare = await prepareNativeShareMessage({
       tgUser: state.tg?.user,
@@ -7814,12 +7985,16 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
       senderName: state.tg?.user?.name || '',
       phrase,
       shareUrl: created.shareUrl,
+      shareTemplate: shareTpl,
+      bestSec: tplCopy.bestSec,
     }).catch(() => ({ ok: false, fallback: true, preparedMessageId: '', shareUrl: created.shareUrl }));
-    const shareOutcome = await openNativeTelegramShareCardWithConfirmation({
-      preparedMessageId: prepShare?.preparedMessageId || '',
-      shareUrl: prepShare?.shareUrl || created.shareUrl,
-      shareText: fullShareText,
-    });
+    const shareOutcome = isPingPongRevenge && replyToPack?.senderTgId
+      ? { ok: true, sent: true, cancelled: false, mode: 'ping_pong_push', preparedMessageId: prepShare?.preparedMessageId || '' }
+      : await openNativeTelegramShareCardWithConfirmation({
+          preparedMessageId: prepShare?.preparedMessageId || '',
+          shareUrl: prepShare?.shareUrl || created.shareUrl,
+          shareText: fullShareText,
+        });
     state.pack.lastShareMeta = {
       ...shareOutcome,
       linkType,
@@ -7849,8 +8024,19 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
     }).catch(() => {});
     syncUiStage(state.tg?.user, wasProducerFirstPack ? 1 : 3).catch(() => {});
 
+    if (isPingPongRevenge && replyToPack?.senderTgId) {
+      sendRevengeClosedPush({
+        targetTgId: replyToPack.senderTgId,
+        revengeName: state.tg?.user?.name || 'Твой друг',
+        revengeBarrelId: created.id,
+      }).catch(() => {});
+    }
+
     if (shareOutcome?.sent) {
       await applyShareBonusReward({ showFeedback: true }).catch(() => null);
+      if (!isBroadcastPack) {
+        await applyFirstSocialExclusive(isPingPongRevenge ? 'ping_pong_revenge' : 'first_friend_pack_sent').catch(() => null);
+      }
     }
     updatePremiereBarsUI();
     refreshHudLevelLabel();
@@ -7868,12 +8054,12 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
     state.pendingLevelStartFly = { lives: wasProducerFirstPack ? 1 : 3, strikes: 3 };
     Haptics.success();
     applyProgressiveDisclosureUI({ skipPromoteFromSocial: true });
-    showSentScreen({ wasLifeRefill, wasBroadcastPack: isBroadcastPack, broadcastRole: teamRole, prevRatingPct, packShardRes });
+    showSentScreen({ wasLifeRefill, wasBroadcastPack: isBroadcastPack, broadcastRole: teamRole, isPingPongRevenge, prevRatingPct, packShardRes });
     refreshQuestUI().catch(() => {});
   } finally {
     state.pack.sealing = false;
     if (quickBtn) quickBtn.disabled = false;
-    if (quickTxt) quickTxt.textContent = '⚡ Запаковать за 1 клик (без камеры и микрофона)';
+    if (quickTxt) quickTxt.textContent = '⚡ Отправить другу в 1 клик (1-на-1)';
     if (sendUpBtn) {
       sendUpBtn.disabled = false;
       sendUpBtn.textContent = 'Отправить вызов другу';
@@ -7881,7 +8067,7 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
   }
 }
 
-function showSentScreen({ wasBroadcastPack = false, broadcastRole = '' } = {}) {
+function showSentScreen({ wasBroadcastPack = false, broadcastRole = '', isPingPongRevenge = false } = {}) {
   const txt = document.getElementById('sent-text');
   const btnTxt = document.getElementById('btn-sent-play-text');
   const copyBtn = document.getElementById('btn-sent-copy-link');
@@ -7918,14 +8104,32 @@ function showSentScreen({ wasBroadcastPack = false, broadcastRole = '' } = {}) {
         : 'Общая ссылка готова! Дальше играй с Тилем.';
     }
     if (btnTxt) btnTxt.textContent = isBlog ? 'Играть' : 'Поиграть в цех';
+  } else if (isPingPongRevenge) {
+    if (txt) txt.textContent = '🔥 Ответная бочка улетела другу! Активен буст ×2 очков на 15 минут — забирай Тиля!';
+    if (btnTxt) btnTxt.textContent = 'Играть (×2 очки)';
   } else {
-    if (txt) txt.textContent = 'Вызов отправлен! Выиграй Тиля, чтобы забрать этап к билету в кино!';
+    if (txt) txt.textContent = '🎁 Бочка отправлена! За 1-го друга открыты редкая фишка, 3/4–4/4 билета и ×2 очки на 15 мин!';
     if (btnTxt) btnTxt.textContent = 'Играть';
   }
+  refreshBranchBattleUI().catch(() => {});
   const pushCard = document.getElementById('sent-push-optin-card');
-  if (pushCard) {
-    if (state.profile?.tgWriteAccess) pushCard.setAttribute('hidden', '');
-    else pushCard.removeAttribute('hidden');
+  const hsCard = document.getElementById('sent-homescreen-fallback-card');
+  if (state.profile?.tgWriteAccess) {
+    pushCard?.setAttribute('hidden', '');
+    hsCard?.setAttribute('hidden', '');
+  } else {
+    pushCard?.removeAttribute('hidden');
+    hsCard?.setAttribute('hidden', '');
+    // Умный запрос в момент пользы (после отправки бочки другу)
+    requestAndSyncWriteAccess({ force: false }).then((res) => {
+      if (res?.allowed) {
+        pushCard?.setAttribute('hidden', '');
+        hsCard?.setAttribute('hidden', '');
+      } else if (res && !res.skipped && !res.unsupported && res.allowed === false) {
+        pushCard?.setAttribute('hidden', '');
+        hsCard?.removeAttribute('hidden');
+      }
+    }).catch(() => {});
   }
   showScreen('sent');
 }
@@ -8223,6 +8427,23 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
       : 'Слушай стук удержанием пальца на бочке, чтобы не попасть на обманку!';
     if (packText) packText.textContent = `🔄 ПОПРОБОВАТЬ СНОВА (УРОВЕНЬ ${completedLvl})`;
     cinemaBtn?.setAttribute('hidden', '');
+  } else if (completedLvl === 1 && state.incomingPack && !state.incomingPack.isBroadcast) {
+    state.finaleMode = 'ping_pong_revenge';
+    const sender = state.incomingPack.senderName || 'друг';
+    const sec = Math.max(1, Math.round(Number(r.lastElapsedSec || 12)));
+    if (nextEl) {
+      nextEl.textContent =
+        `Ты выбрался из бочки ${sender} за ${sec} сек! Закрой его в ответ в 1 клик — и получи редкую кино-фишку, 3/4–4/4 и буст ×2 очков на 15 мин.`;
+    }
+    if (packText) packText.textContent = '🔥 ОТОМСТИТЬ / ЗАКРЫТЬ В ОТВЕТ';
+    if (cinemaBtn && !Boolean(state.trailer?.unlocked40 || getQuestState()?.trailerDone)) {
+      cinemaBtn.removeAttribute('hidden');
+      if (cinemaText) cinemaText.textContent = '🎬 Трейлер (Этап 1/4 + 6 ❤️)';
+      state.finaleSecondaryTrailer = true;
+    } else {
+      cinemaBtn?.setAttribute('hidden', '');
+      state.finaleSecondaryTrailer = false;
+    }
   } else if (completedLvl === 1) {
     const alreadyWatchedTrailer = Boolean(state.trailer?.unlocked40 || getQuestState()?.trailerDone);
     if (!alreadyWatchedTrailer) {
@@ -9609,7 +9830,6 @@ async function openDuelTable(roomId = '', { autoAddTestBots = false, initialMode
   _openingDuelLock = true;
   try {
     state.entered = true;
-    requestAndSyncWriteAccess();
     stopAirTimer();
     state.round.running = false;
     state.round.pausedForModal = false;
@@ -9999,10 +10219,14 @@ async function openLeaderboardModal() {
   }
 
   renderRetentionAndTransparencyPanels();
+  refreshBranchBattleUI().catch(() => {});
 
   const res = await fetchPremiereLeaderboard(state.tg?.user);
   const myUid = getViewerUid(state.tg?.user);
   const me = res.me || {};
+  if (me.rank && !state.profile?.tgWriteAccess) {
+    requestAndSyncWriteAccess({ force: false });
+  }
   const myPts = Number(me.premiere_points ?? state.profile.premierePoints ?? 0);
   const myFriends = Number(me.friends_brought ?? state.profile.friendsBrought ?? 0);
   const myBonusPct = Number(me.friend_bonus_pct ?? Math.min(5, myFriends) * 10);
@@ -10215,12 +10439,12 @@ async function renderRetentionAndTransparencyPanels() {
 function getActiveShareBundle(kind = 'trailer') {
   const uid = getViewerUid(state.tg?.user);
   if (kind === 'barrel' && state.pack.lastShareUrl) {
-    const phrase = document.getElementById('input-custom-phrase')?.value || 'Вытащи меня за 3 попытки';
+    const copy = buildPersonalShareCopy(state.pack.shareTemplate || 'gift_barrel', state.profile?.bestEscapeSec);
     return {
       action: 'share_barrel',
       url: state.pack.lastShareUrl,
       webUrl: state.pack.lastWebUrl || state.pack.lastShareUrl,
-      text: `🛢 Кто-то заварил тебя в цеху «БОЧКИ»! Надень наушники — 3 попытки и 30 сек воздуха: «${phrase}»`,
+      text: copy.shareText,
     };
   }
   const trLinks = buildTrailerReferralLinks(state.tg?.user);
@@ -10551,10 +10775,33 @@ function bindUIEvents() {
     const res = await requestAndSyncWriteAccess({ force: true });
     if (res?.allowed) {
       document.getElementById('sent-push-optin-card')?.setAttribute('hidden', '');
-      showToast('🔔 Уведомления бота включены — узнаешь, когда друг откроет бочку!');
+      document.getElementById('sent-homescreen-fallback-card')?.setAttribute('hidden', '');
+      showToast('🔔 Уведомления бота включены — напишем только когда друг откроет бочку или тебя обгонят!');
     } else {
-      showToast('Открой @bochka_film_bot в Telegram, чтобы получать пуши о друзьях');
+      document.getElementById('sent-push-optin-card')?.setAttribute('hidden', '');
+      document.getElementById('sent-homescreen-fallback-card')?.removeAttribute('hidden');
+      showToast('Пуши отклонены — добавь ярлык на главный экран телефона для быстрого возврата!');
     }
+  });
+  document.getElementById('btn-decline-tg-push')?.addEventListener('click', () => {
+    document.getElementById('sent-push-optin-card')?.setAttribute('hidden', '');
+    document.getElementById('sent-homescreen-fallback-card')?.removeAttribute('hidden');
+  });
+  document.getElementById('btn-add-homescreen')?.addEventListener('click', async () => {
+    const res = promptAddToHomeScreenSafe();
+    await recordHomescreenShortcut(state.tg?.user).catch(() => {});
+    if (state.profile) state.profile.homescreenShortcutAdded = true;
+    showToast(
+      res.mode === 'tg_native'
+        ? '📲 Ярлык «БОЧКИ» добавлен на экран телефона!'
+        : '📲 Сохрани страницу bochka.quest на главный экран («На экран «Домой»» в меню браузера)'
+    );
+  });
+  document.querySelectorAll('[data-share-template]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.pack.shareTemplate = btn.getAttribute('data-share-template') || 'gift_barrel';
+      updatePackTemplatePreview();
+    });
   });
   document.getElementById('btn-duel-enable-push')?.addEventListener('click', async () => {
     const res = await requestAndSyncWriteAccess({ force: true });
@@ -11202,6 +11449,12 @@ function bindUIEvents() {
   });
 
   document.getElementById('btn-cinema-reply')?.addEventListener('click', async () => {
+    if (state.finaleSecondaryTrailer && state.finaleMode === 'ping_pong_revenge') {
+      state.finaleSecondaryTrailer = false;
+      if (!audio._userMuted) audio.unlock(true).catch(() => {});
+      openTrailerModal({ forRescue: false, afterL1ToPack: true });
+      return;
+    }
     if (state.finaleMode === 'l1_reply_yes') {
       // Уровень 1 Кнопка 2: мгновенно отправляем ответ в фоне и без задержки запускаем Уровень 2 (6 бочек — найди пустую)!
       sendLevel1FriendReply({ pack: state.incomingPack, replyType: 'wait_ticket', viewerTgUser: state.tg?.user }).catch(() => {});
@@ -11247,8 +11500,13 @@ function bindUIEvents() {
   });
 
   document.getElementById('btn-pack-revenge')?.addEventListener('click', async () => {
+    if (state.finaleMode === 'ping_pong_revenge') {
+      const targetPack = state.incomingPack;
+      if (!audio._userMuted) audio.unlock(true).catch(() => {});
+      await handleQuick1TapPrankClick({ isPingPongRevenge: true, replyToPack: targetPack });
+      return;
+    }
     if (state.finaleMode === 'l1_to_trailer_then_pack') {
-      requestAndSyncWriteAccess();
       if (state.incomingPack) {
         sendLevel1FriendReply({ pack: state.incomingPack, replyType: 'cinema_accept', viewerTgUser: state.tg?.user }).catch(() => {});
       }
@@ -11257,7 +11515,6 @@ function bindUIEvents() {
       return;
     }
     if (state.finaleMode === 'l1_to_pack' || state.finaleMode === 'l1_reply_yes') {
-      requestAndSyncWriteAccess();
       if (state.incomingPack) {
         sendLevel1FriendReply({ pack: state.incomingPack, replyType: 'cinema_accept', viewerTgUser: state.tg?.user }).catch(() => {});
       }
