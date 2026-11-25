@@ -251,6 +251,7 @@ const state = {
     friendsBrought: 0,
     duelsPlayed: 0,
     duelsWon: 0,
+    liveRank: 0,
     trophiesCount: 0,
     chipsCount: 0,
     goldenTicketShards: 0,
@@ -1467,6 +1468,38 @@ function computeSuperPrizeRatingPct(profile = state.profile) {
 const SUPERPRIZE_UNLOCK_KEY_PREFIX = 'bochka_superprize_unlock_seen_v1:';
 const SUPERPRIZE_LEVEL_KEY_PREFIX = 'bochka_superprize_level_v1:';
 
+let lastRankRefreshAt = 0;
+
+function syncPlayerRankBadges(rank = state.profile?.liveRank) {
+  const num = Math.max(0, Math.round(Number(rank || 0)));
+  if (num > 0) state.profile.liveRank = num;
+  const rankStr = num > 0 ? `#${num}` : '#—';
+  const duelStarVal = document.getElementById('duel-rank-star-val');
+  if (duelStarVal) duelStarVal.textContent = rankStr;
+  const lobbyRankVal = document.getElementById('duel-lobby-rank-val');
+  if (lobbyRankVal) lobbyRankVal.textContent = rankStr;
+  const topRankBadge = document.getElementById('top-rank-badge');
+  if (topRankBadge) topRankBadge.textContent = rankStr;
+  const modeAPos = document.getElementById('mode-a-rb-pos');
+  if (modeAPos && num > 0) modeAPos.textContent = `Место: ${rankStr}`;
+  const modeABtn = document.getElementById('btn-mode-a-open-leaderboard');
+  if (modeABtn) modeABtn.textContent = num > 0 ? `★ ${rankStr} Рейтинг ↗` : '🏆 Рейтинг ↗';
+}
+
+async function refreshCachedPlayerRank({ force = false } = {}) {
+  const now = Date.now();
+  if (!force && now - lastRankRefreshAt < 12000) return state.profile?.liveRank || 0;
+  lastRankRefreshAt = now;
+  try {
+    const res = await fetchPremiereLeaderboard(state.tg?.user);
+    const r = Number(res?.me?.rank || 0);
+    if (r > 0) syncPlayerRankBadges(r);
+    return r;
+  } catch {
+    return 0;
+  }
+}
+
 async function openSuperprizeUnlockModal() {
   const modal = document.getElementById('modal-superprize-unlock');
   const rankEl = document.getElementById('superprize-unlock-rank');
@@ -1484,6 +1517,7 @@ async function openSuperprizeUnlockModal() {
     const lb = await fetchPremiereLeaderboard(state.tg?.user);
     const me = lb?.me || {};
     const rankStr = me.rank ? `#${me.rank}` : '#—';
+    if (me.rank) syncPlayerRankBadges(me.rank);
     const score = Number(me.rating_score ?? me.effective_points ?? state.profile?.premierePoints ?? 0);
     if (rankEl) {
       rankEl.textContent = `Твоё место в рейтинге: ${rankStr} · Рейтинг: ⭐ ${score.toLocaleString('ru-RU')} · Ур. ${sp.displayLevel}`;
@@ -1566,6 +1600,10 @@ function syncSuperPrizeRatingBarUI() {
   }
   if (spFill) {
     spFill.style.width = `${sp.pct.toFixed(1)}%`;
+  }
+  syncPlayerRankBadges(state.profile?.liveRank);
+  if (state.activeScreen !== 'gate') {
+    refreshCachedPlayerRank({ force: false });
   }
   checkSuperprizeTransitions({ allowModal: true });
 }
@@ -3300,6 +3338,7 @@ async function renderModeARankBoard() {
     const liveEff = Number(me.effective_points ?? effPts);
     const liveBonus = Number(me.friend_bonus_pct ?? bonusPct);
     const liveFriends = Number(me.friends_brought ?? friends);
+    if (me.rank) syncPlayerRankBadges(me.rank);
     if (posEl) posEl.textContent = me.rank ? `Место: #${me.rank}` : 'Место: #—';
     if (ptsEl) {
       ptsEl.textContent = sp.unlocked
@@ -9768,13 +9807,39 @@ async function openLeaderboardModal() {
   const myGolden = Number(me.golden_ticket_shards ?? state.profile.goldenTicketShards ?? 0);
   const sp = computeSuperprizeProgress(myPts, state.profile.goldenLevelsClaimed, myGolden);
 
+  if (me.rank) syncPlayerRankBadges(me.rank);
   if (rankEl) rankEl.textContent = me.rank ? `#${me.rank}` : '#—';
   if (ptsEl) ptsEl.textContent = myBonusPct > 0 ? `⭐ ${myEffective.toLocaleString('ru-RU')} (+${myBonusPct}%)` : `⭐ ${myEffective.toLocaleString('ru-RU')}`;
+
+  const factorGridEl = document.getElementById('leader-factor-grid');
+  if (factorGridEl) {
+    const tiles = [
+      { lbl: '⭐ Очки', val: myPts.toLocaleString('ru-RU') },
+      { lbl: '🏅 Уровень', val: `Ур. ${sp.displayLevel}` },
+      { lbl: '🎫 Фишки', val: String(myChips) },
+      { lbl: '✨ Золотой', val: `${myGolden}/12` },
+      { lbl: '👥 Друзья', val: `${myFriends} (+${myBonusPct}%)` },
+      { lbl: '⚔️ Дуэли', val: `${myDuelsWon}/${myDuelsPlayed}` },
+    ];
+    const tileNodes = tiles.map((item) => {
+      const tile = document.createElement('div');
+      tile.className = 'leader-factor-tile';
+      const lblSpan = document.createElement('span');
+      lblSpan.className = 'leader-factor-lbl';
+      lblSpan.textContent = item.lbl;
+      const valStrong = document.createElement('strong');
+      valStrong.className = 'leader-factor-val';
+      valStrong.textContent = item.val;
+      tile.append(lblSpan, valStrong);
+      return tile;
+    });
+    factorGridEl.replaceChildren(...tileNodes);
+  }
+
   if (gapEl) {
-    const factorsHint = ` · Ур.${sp.displayLevel} · Фишек: ${myChips} · 👥 ${myFriends} · ⚔️ ${myDuelsWon}/${myDuelsPlayed} · ✨ Золотой ${myGolden}/12`;
     gapEl.textContent = me.in_top10
-      ? `🔥 ТЫ В ЗОНЕ ПРИГЛАШЕНИЯ В ТОП-10!${factorsHint}`
-      : `До ТОП-10: +${Math.max(10, Number(me.points_to_top10 || 150))} ⭐${factorsHint}`;
+      ? '🔥 ТЫ В ЗОНЕ ПРИГЛАШЕНИЯ НА ПРЕМЬЕРУ (ТОП-10)!'
+      : `До входа в ТОП-10: +${Math.max(10, Number(me.points_to_top10 || 150))} ⭐`;
   }
 
   if (!listEl) return;
@@ -9812,9 +9877,22 @@ async function openLeaderboardModal() {
     const rowWon = Number(row.duels_won ?? 0);
     const rowGolden = Number(row.golden_ticket_shards ?? 0);
 
-    const smallEl = document.createElement('small');
-    smallEl.textContent = `Ур.${rowLvl} · Фишек: ${rowChips} · 👥 ${rowFriends} (+${rowBonusPct}%) · ⚔️ ${rowWon}/${rowPlayed} · ✨ ${rowGolden}/12`;
-    nameCol.append(strongEl, smallEl);
+    const tagsWrap = document.createElement('div');
+    tagsWrap.className = 'leader-row-tags';
+    const tags = [
+      `Ур.${rowLvl}`,
+      `Фишек: ${rowChips}`,
+      `👥 ${rowFriends}${rowBonusPct > 0 ? ` (+${rowBonusPct}%)` : ''}`,
+      `⚔️ ${rowWon}/${rowPlayed}`,
+      `✨ ${rowGolden}/12`,
+    ];
+    tags.forEach((tagTxt) => {
+      const spTag = document.createElement('span');
+      spTag.className = 'leader-row-tag';
+      spTag.textContent = tagTxt;
+      tagsWrap.appendChild(spTag);
+    });
+    nameCol.append(strongEl, tagsWrap);
 
     const ptsSpan = document.createElement('span');
     ptsSpan.className = 'leader-pts';
@@ -10762,6 +10840,12 @@ function bindUIEvents() {
   });
 
   document.getElementById('btn-duel-live-close')?.addEventListener('click', () => duelCtrl?.leaveRoom(true));
+  document.getElementById('btn-duel-rank-star')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openLeaderboardModal();
+  });
+  document.getElementById('btn-duel-lobby-rank')?.addEventListener('click', () => openLeaderboardModal());
+  document.getElementById('duel-superprize-strip')?.addEventListener('click', () => openLeaderboardModal());
   document.getElementById('btn-duel-skip-strike')?.addEventListener('click', () => duelCtrl?.skipCurrentStrike());
 
   document.getElementById('btn-upsell-invite-pair')?.addEventListener('click', () => {

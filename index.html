@@ -110,8 +110,10 @@
       </button>
 
       <button type="button" class="nav-link nav-leaders" id="nav-leaderboard" title="Рейтинг ТОП-20 на Закрытый показ в Москве 17 декабря">
-        <span>🏆 ТОП-20</span>
-        <span class="cap-badge points-badge" id="top-points-count">0</span>
+        <span class="nav-rank-star" aria-hidden="true">★</span>
+        <span class="nav-leaders-word">Рейтинг</span>
+        <span class="cap-badge points-badge" id="top-rank-badge">#—</span>
+        <span id="top-points-count" hidden>0</span>
       </button>
 
       <button
@@ -1235,6 +1237,11 @@
         <div class="duel-superprize-track">
           <div class="duel-superprize-fill" id="duel-superprize-fill" style="width:0%"></div>
         </div>
+        <button type="button" class="duel-rank-star-btn" id="btn-duel-rank-star" aria-label="Открыть рейтинг" title="Твоё место в рейтинге — нажми, чтобы открыть">
+          <span class="duel-rank-star-ico" aria-hidden="true">★</span>
+          <strong id="duel-rank-star-val">#—</strong>
+          <span class="duel-rank-star-lbl">Рейтинг</span>
+        </button>
       </div>
     </div>
 
@@ -1247,6 +1254,11 @@
           <strong class="duel-main-heading">⚔️ Дуэль 1×1</strong>
         </div>
         <div class="duel-top-btns">
+          <button type="button" class="hud-mini-btn duel-lobby-rank-btn" id="btn-duel-lobby-rank" title="Открыть рейтинг игроков">
+            <span class="duel-rank-star-ico" aria-hidden="true">★</span>
+            <strong id="duel-lobby-rank-val">#—</strong>
+            <span>Рейтинг</span>
+          </button>
           <button type="button" class="hud-mini-btn" id="btn-duel-add-bot" hidden>+ БОТ 🤖</button>
           <button type="button" class="icon-close" id="btn-duel-close" aria-label="Выйти из стола">✕</button>
         </div>
@@ -1349,32 +1361,41 @@
        POPUP: «🏆 ЛИГА ПРЕМЬЕРЫ: ТОП-10 ИДУТ НА ПОКАЗ СО СЪЁМОЧНОЙ ГРУППОЙ»
        ==================================================================== -->
   <div class="modal-backdrop" id="modal-leaderboard" hidden>
-    <div class="modal-card leaderboard-modal-card">
-      <div class="modal-head modal-head-sticky">
-        <span class="mono-tag accent-tag">🏆 РЕЙТИНГ ТОП-10 НА ПРЕМЬЕРУ</span>
-        <button type="button" class="btn-secondary btn-compact" id="btn-close-leaderboard" aria-label="Закрыть">✕ ЗАКРЫТЬ</button>
+    <div class="modal-card leaderboard-modal-card" role="dialog" aria-modal="true" aria-label="Рейтинг игроков">
+      <div class="modal-head modal-head-sticky lb-modal-head">
+        <span class="mono-tag accent-tag lb-head-title">🏆 РЕЙТИНГ · ЛИГА СУПЕРПРИЗА</span>
+        <button type="button" class="icon-close lb-close-btn" id="btn-close-leaderboard" aria-label="Закрыть">✕</button>
       </div>
 
-      <!-- Личная карточка игрока в рейтинге + ВИДИМАЯ ШКАЛА СУПЕР-ПРИЗА (0% -> 100%) -->
+      <!-- Личная карточка игрока в рейтинге + 6 факторов + шкала Суперприза -->
       <div class="leader-me-banner" id="leader-me-banner">
-        <div style="flex:1;">
-          <span class="mono-label">ШКАЛА РЕЙТИНГА НА СУПЕР-ПРИЗ (ДОБЕРИ 100%):</span>
-          <div class="leader-rating-bar-wrap">
-            <div class="leader-rating-bar-track">
-              <div class="leader-rating-bar-fill" id="leader-rating-fill" style="width:0%"></div>
-            </div>
+        <div class="leader-me-hero-row">
+          <div class="leader-me-rank-chip">
+            <span class="leader-me-kicker">ТВОЁ МЕСТО</span>
+            <strong id="leader-me-rank">#—</strong>
+          </div>
+          <div class="leader-me-score-col">
+            <span class="leader-me-kicker">ОБЩИЙ РЕЙТИНГ</span>
+            <strong id="leader-me-points">⭐ 0</strong>
+          </div>
+        </div>
+
+        <div class="leader-me-progress">
+          <div class="leader-progress-head">
+            <span class="mono-label">ШКАЛА СУПЕРПРИЗА</span>
             <strong id="leader-rating-pct">0%</strong>
           </div>
-          <small id="leader-rating-breakdown">👥 Друзья в игре: 0 (+20% каждый) · ⭐ Из бочек: 0</small>
+          <div class="leader-rating-bar-track">
+            <div class="leader-rating-bar-fill" id="leader-rating-fill" style="width:0%"></div>
+          </div>
         </div>
-        <div class="leader-me-right">
-          <strong id="leader-me-rank">#—</strong>
-          <strong id="leader-me-points">⭐ 0</strong>
-          <small id="leader-me-gap">До ТОП-10: расчёт...</small>
-        </div>
+
+        <div class="leader-factor-grid" id="leader-factor-grid" aria-label="Факторы рейтинга"></div>
+        <div class="leader-me-gap-pill" id="leader-me-gap">До ТОП-10: расчёт...</div>
+        <small class="leader-rating-breakdown" id="leader-rating-breakdown">👥 Друзья: 0 · Фишки: 0 · ⚔️ Дуэли: 0 · ⭐ Очки: 0</small>
       </div>
 
-      <!-- Список ТОП-10 -->
+      <!-- Список лидеров -->
       <div class="leaderboard-list" id="leaderboard-list">
         <div class="mono-tag">Загрузка рейтинга из Supabase...</div>
       </div>
@@ -1388,12 +1409,16 @@
         </div>
       </div>
 
-      <!-- Компактная подсказка без перегруза экрана -->
+      <!-- Компактная сетка 6 факторов роста рейтинга -->
       <div class="points-guide-box">
-        <span class="mono-label">КАК ПОДНЯТЬСЯ В ТОП:</span>
+        <span class="mono-label">6 ФАКТОРОВ РЕЙТИНГА:</span>
         <div class="points-guide-grid">
-          <span>🛢 Закатать друга: <strong>+200..2500 ⭐ (+3 ❤️)</strong></span>
-          <span>🎟 Билет другу: <strong>+500 ⭐ (+3 ❤️)</strong></span>
+          <span>⭐ Очки из бочек</span>
+          <span>🏅 Уровень (<strong>+250</strong>/ур.)</span>
+          <span>🎫 Фишки (<strong>+200</strong>/шт.)</span>
+          <span>✨ Золотой (<strong>+500</strong>/ч.)</span>
+          <span>👥 Друг (<strong>+600</strong> и <strong>+10%</strong>)</span>
+          <span>⚔️ Дуэль / поб. (<strong>+100/+200</strong>)</span>
         </div>
       </div>
 
@@ -1409,11 +1434,11 @@
 
       <div class="finale-cta-stack" style="margin-top:10px">
         <button type="button" class="btn-primary btn-full" id="btn-leader-play-now">
-          ▶ ИГРАТЬ В ЦЕХУ (ВЕРНУТЬСЯ К БОЧКАМ)
+          ▶ ИГРАТЬ В ЦЕХУ (К БОЧКАМ)
         </button>
         <div class="finale-dual-row">
           <button type="button" class="btn-secondary" id="btn-leader-go-share">📤 СОЦСЕТИ (+⭐)</button>
-          <button type="button" class="btn-ghost" id="btn-leader-close-bottom">✕ ЗАКРЫТЬ ОКНО</button>
+          <button type="button" class="btn-ghost" id="btn-leader-close-bottom">✕ ЗАКРЫТЬ</button>
         </div>
       </div>
     </div>
