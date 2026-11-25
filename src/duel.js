@@ -1879,12 +1879,14 @@ export class WorkshopDuelController {
     return true;
   }
 
-  syncFromProfile(profile = null) {
+  syncFromProfile(profile = null, { allowLivesRefill = false } = {}) {
     if (!profile || typeof profile !== 'object') return;
     if (typeof profile.lives === 'number' && this.phase !== 'idle') {
       const nextL = Math.max(0, Math.min(30, Math.round(Number(profile.lives))));
-      if (nextL > this.duelLives) {
+      const canRaiseLives = Boolean(allowLivesRefill || this.phase === 'lobby');
+      if (canRaiseLives && nextL > this.duelLives) {
         this.duelLives = nextL;
+        this.playerMaxDuelLives = Math.max(3, Number(this.playerMaxDuelLives || 3), nextL);
       }
     }
     this.syncEnergyUI();
@@ -2864,13 +2866,16 @@ export class WorkshopDuelController {
     const oppEntry = entries.find((e) => e.claim.uid !== this.myUid) || null;
     const diff = getTilDifficultyProfile(this.duelLives, Math.max(0, Number(this.tilRoundIdx || 1) - 1));
 
+    const myScreamerDmg = myEntry?.loot?.kind === 'screamer'
+      ? Math.max(1, Math.abs(Number(myEntry.loot.value || diff.screamerDamage || 2)))
+      : 0;
     if (anyScreamer) {
       const randScreamerIdx = Math.floor(Math.random() * 7);
       if (myEntry?.loot?.kind === 'screamer') {
-        this.onLifeLostPill?.();
+        this.onLifeLostPill?.(myScreamerDmg);
       }
       if (myEntry?.loot?.kind === 'screamer' && this.onTriggerScreamerFx) {
-        this.onTriggerScreamerFx(1350, randScreamerIdx);
+        this.onTriggerScreamerFx(1350, randScreamerIdx, myScreamerDmg);
       } else {
         this.audio.playMiniScreamer(randScreamerIdx);
         this.scene.triggerScreamerShake(0.45);
@@ -2896,7 +2901,8 @@ export class WorkshopDuelController {
       } else if (ok === 'empty') {
         this.tilLives = Math.max(0, Number(this.tilLives || 0) - 1);
       } else if (ok === 'screamer') {
-        this.tilLives = Math.max(0, Number(this.tilLives || 0) - 2);
+        const oppDmg = Math.max(1, Math.abs(Number(oppEntry.loot.value || 2)));
+        this.tilLives = Math.max(0, Number(this.tilLives || 0) - oppDmg);
       }
     }
 
@@ -2975,8 +2981,12 @@ export class WorkshopDuelController {
         }, 420);
       } else if (k === 'empty') {
         this.duelLives = Math.max(0, Number(this.duelLives || 0) - 1);
+        this.onProfileSync?.({ lives: this.duelLives });
       } else if (k === 'screamer') {
-        this.duelLives = Math.max(0, Number(this.duelLives || 0) - diff.screamerDamage);
+        const dmg = myScreamerDmg || diff.screamerDamage;
+        this._lastScreamerDmg = dmg;
+        this.duelLives = Math.max(0, Number(this.duelLives || 0) - dmg);
+        this.onProfileSync?.({ lives: this.duelLives });
       }
     }
 

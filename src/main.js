@@ -499,7 +499,7 @@ async function ensureDuelReady() {
         showScreen('pack');
       },
       onContextDiscoveryHint: (kind) => maybeShowDuelDiscoveryHint(kind),
-      onLifeLostPill: () => showLifeLostPill(),
+      onLifeLostPill: (dmg = 1) => showLifeLostPill(1750, dmg),
       onOpenHallOfFame: () => openHallOfFameModal().catch(() => {}),
       loadDuelCandidates: () => fetchDuelFriendCandidates(state.tg?.user || null),
       onChallengeFriend: (friend, roomId) => challengeSpecificFriend1v1(friend, roomId),
@@ -511,7 +511,7 @@ async function ensureDuelReady() {
         showToast('🔒 За тем столом 1×1 уже играют двое — открыли тебе новый стол!');
         openDuelTable('').catch(() => {});
       },
-      onTriggerScreamerFx: (durMs, variant = null) => triggerMiniScreamer(variant, durMs),
+      onTriggerScreamerFx: (durMs, variant = null, dmg = 1) => triggerMiniScreamer(variant, durMs, dmg),
       onUnlockFilmArtifact: () => {
         return loadTrophiesMod()
           .then((mod) => {
@@ -2736,10 +2736,13 @@ function showWorkshopIntroHint({ targetKind = 'human', durationMs = 4600 } = {})
 }
 
 let lifeLostPillTimer = null;
-function showLifeLostPill(durationMs = 1750) {
+function showLifeLostPill(durationMs = 1750, dmg = 1) {
   const pill = document.getElementById('life-lost-pill');
   if (!pill) return;
-  pill.textContent = 'Потерял жизнь';
+  const d = Math.max(1, Math.round(Number(dmg) || 1));
+  pill.textContent = d > 1
+    ? `-${d} ❤️ (${d === 2 ? 'минус 2 жизни' : d === 3 ? 'минус 3 жизни' : `минус ${d} жизней`})`
+    : '-1 ❤️ (Потерял жизнь)';
   pill.removeAttribute('hidden');
   pill.classList.remove('is-pop');
   void pill.offsetWidth;
@@ -4427,7 +4430,7 @@ async function triggerSpecialKnockBonus(source = 'ocean_rhythm') {
     if (res.granted) {
       state.profile.lives = Math.min(30, Math.max(1, Number(res.lives ?? (Number(state.profile?.lives || 0) + 3))));
       state.profile.lastSpecialKnockAt = Number(res.lastSpecialKnockAt || Date.now());
-      duelCtrl?.syncFromProfile?.(state.profile);
+      duelCtrl?.syncFromProfile?.(state.profile, { allowLivesRefill: true });
       updatePremiereBarsUI();
       refreshHudLevelLabel();
       flyRewardToHud({ type: 'lives', count: 3, label: '+3 ❤️' });
@@ -4634,7 +4637,7 @@ async function applyShareBonusReward({ showFeedback = true } = {}) {
     state.profile.dailySharePoints = bonus.dailySharePoints;
   }
   if (duelCtrl) {
-    duelCtrl.syncFromProfile?.(state.profile);
+    duelCtrl.syncFromProfile?.(state.profile, { allowLivesRefill: true });
   }
   updatePremiereBarsUI();
   syncSuperPrizeRatingBarUI();
@@ -5705,7 +5708,7 @@ function createVictimCardDataUrl(sourceImgUrl = '') {
   }
 }
 
-function triggerMiniScreamer(explicitVariant = null, durationMsOverride = null) {
+function triggerMiniScreamer(explicitVariant = null, durationMsOverride = null, lifeLossDmg = 1) {
   const isLevel1Intro =
     explicitVariant === null &&
     Boolean(state.round?.isDemo) &&
@@ -5784,7 +5787,7 @@ function triggerMiniScreamer(explicitVariant = null, durationMsOverride = null) 
 
   el.removeAttribute('hidden');
   const showMs = Number(durationMsOverride) > 300 ? Number(durationMsOverride) : 3250;
-  showLifeLostPill(Math.min(2100, showMs));
+  showLifeLostPill(Math.min(2100, showMs), lifeLossDmg);
   if (screamerPlayer) {
     imgEl?.setAttribute('hidden', '');
     screamerPlayer.play({
@@ -8388,7 +8391,7 @@ async function grantTrailerFullWatchReward() {
       if (curSh < 2) state.profile.ticketShards = curSh + 1;
     }
 
-    duelCtrl?.syncFromProfile?.(state.profile);
+    duelCtrl?.syncFromProfile?.(state.profile, { allowLivesRefill: true });
     saveLocalV9Flags();
     syncTicketShardsUI({ pulse: true });
     updatePremiereBarsUI();
@@ -8950,7 +8953,8 @@ function initLiveFriendFeedbackMonitor() {
 
       const nextBrought = prof ? Number(prof.friendsBrought || 0) : baselineFriendsBrought;
       if (prof) {
-        state.profile = { ...state.profile, ...prof };
+        const keepLives = duelCtrl?.active ? state.profile.lives : prof.lives;
+        state.profile = { ...state.profile, ...prof, lives: keepLives };
         duelCtrl?.syncFromProfile?.(state.profile);
         updatePremiereBarsUI();
         syncSuperPrizeRatingBarUI();
