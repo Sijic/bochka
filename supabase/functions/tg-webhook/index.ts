@@ -1080,8 +1080,6 @@ Deno.serve(async (req: Request) => {
         chatId: targetId,
         isServicePush: false,
         eventName: "barrel_revenge_closed",
-        dryRun: Boolean(body.dryRun),
-        simulate403: Boolean(body.simulate403),
         text:
           `🔥 <b>Друг (${revName}) выбрался и закрыл тебя в ответ!</b>\n` +
           `У тебя 30 секунд на реванш — вскрой его бочку и забери ×2 очки!`,
@@ -1101,8 +1099,6 @@ Deno.serve(async (req: Request) => {
         chatId: targetId,
         isServicePush: false,
         eventName: "duel_chip_stolen",
-        dryRun: Boolean(body.dryRun),
-        simulate403: Boolean(body.simulate403),
         text:
           `🪙 <b>${stealer} перехватил твою кино-фишку в дуэли 1×1!</b>\n` +
           `Зайди за стол и верни фишку в реванше!`,
@@ -1113,9 +1109,12 @@ Deno.serve(async (req: Request) => {
       return jsonResp({ ok: true, action: "duel_chip_stolen", ...pushRes });
     }
 
-    // v20.7: Обгон в ТОП-20 (строго <= 1 сервисный пуш в 24 часа)
-    if (action === "rank_top20_overtaken" && (body.targetTgId || verifiedCallerTgId)) {
-      const targetId = String(body.targetTgId || verifiedCallerTgId || "").trim();
+    // v20.7: Обгон в ТОП-20 (строго авторизованный caller + <= 1 сервисный пуш в 24 часа)
+    if (action === "rank_top20_overtaken") {
+      if (!verifiedCallerTgId) {
+        return jsonResp({ ok: false, error: "telegram_auth_required" }, 401);
+      }
+      const targetId = String(verifiedCallerTgId).trim();
       const overtaker = escapeHtml(String(body.overtakerName || "Игрок из цеха").slice(0, 48));
       const newRank = Math.max(2, Math.min(999, Math.round(Number(body.newRank || 11))));
       const pushRes = await sendTgPushSafe({
@@ -1123,8 +1122,6 @@ Deno.serve(async (req: Request) => {
         uid: `tg_${targetId}`,
         isServicePush: true,
         eventName: "rank_top20_overtaken",
-        dryRun: Boolean(body.dryRun),
-        simulate403: Boolean(body.simulate403),
         text:
           `⚡ <b>${overtaker} обогнал тебя в ТОП-20 (ты на #${newRank})!</b>\n` +
           `До фиксации 10 декабря остаётся немного — вернись за 2 билетами в кино в ТВОЁМ городе.`,
