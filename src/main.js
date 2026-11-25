@@ -7596,6 +7596,12 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
     if (isL1FriendReveal) {
       await playRevealAvatar(1800, { barrelIndex: revIdx, isBoy: isBoyRescue });
       if (state.activeScreen !== 'workshop' || duelCtrl?.isActive || _openingDuelLock) return;
+      if (state.incomingPack && !state.incomingPack.isBroadcast) {
+        await populateFinaleScreen({ premiereResult: null });
+        if (state.activeScreen !== 'workshop' || duelCtrl?.isActive || _openingDuelLock) return;
+        showScreen('finale');
+        return;
+      }
       if (!state.trailer.shownInL1Flow && Number(state.round?.rescueStage || 0) < 4) {
         state.trailer.shownInL1Flow = true;
         openTrailerModal({ forRescue: false, afterL1ToPack: true });
