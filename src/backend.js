@@ -2843,6 +2843,66 @@ export async function recordDuelRoundResult(tgUser = null, won = false) {
   return { ok: true, duelsPlayed: prof.duelsPlayed, duelsWon: prof.duelsWon };
 }
 
+export async function claimWorkshopRecoveryLife(tgUser = null) {
+  const uid = getViewerUid(tgUser);
+  const db = getCloudDb();
+  const prof = getLocalPreviewProfile();
+
+  if (db) {
+    try {
+      const { data, error } = await db.rpc('claim_workshop_recovery_life_rpc', { p_uid: uid });
+      if (!error && data) {
+        if (data.lives != null) prof.lives = Math.max(0, Number(data.lives));
+        if (data.premiere_points != null) prof.premierePoints = Math.max(0, Number(data.premiere_points));
+        saveLocalPreviewProfile(prof);
+        return {
+          ok: Boolean(data.ok),
+          granted: Boolean(data.granted),
+          reason: data.reason || '',
+          retryAfterSec: Number(data.retry_after_sec || 0),
+          lives: Number(data.lives ?? prof.lives ?? 0),
+          premierePoints: Number(data.premiere_points ?? prof.premierePoints ?? 0),
+          livesAdded: Number(data.lives_added || 0),
+          pointsAdded: Number(data.points_added || 0),
+          dailyRecoveryShifts: Number(data.daily_recovery_shifts || 0),
+          maxDailyShifts: Number(data.max_daily_shifts || 6),
+        };
+      }
+    } catch { /* fallback below */ }
+  }
+
+  const curLives = Math.max(0, Number(prof.lives || 0));
+  if (curLives >= 3) {
+    return {
+      ok: false,
+      granted: false,
+      reason: 'lives_ceiling_reached',
+      lives: curLives,
+      premierePoints: Number(prof.premierePoints || 0),
+      livesAdded: 0,
+      pointsAdded: 0,
+      dailyRecoveryShifts: Number(prof.dailyRecoveryShifts || 0),
+      maxDailyShifts: 6,
+    };
+  }
+  prof.lives = Math.min(3, curLives + 1);
+  prof.premierePoints = Math.max(0, Number(prof.premierePoints || 0)) + 75;
+  prof.dailyRecoveryShifts = Math.min(6, Number(prof.dailyRecoveryShifts || 0) + 1);
+  saveLocalPreviewProfile(prof);
+  return {
+    ok: true,
+    granted: true,
+    reason: '',
+    retryAfterSec: 0,
+    lives: prof.lives,
+    premierePoints: prof.premierePoints,
+    livesAdded: 1,
+    pointsAdded: 75,
+    dailyRecoveryShifts: prof.dailyRecoveryShifts,
+    maxDailyShifts: 6,
+  };
+}
+
 /**
  * v13.0: Атомарный запрос бесплатного билета в кино через жёсткий серверный пул Supabase
  * (проверяет is_paused, дату 16.12.2026, max_total_tickets, max_daily_tickets, hourly_cap).

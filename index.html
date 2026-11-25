@@ -329,6 +329,16 @@
       <button type="button" class="hud-slim-menu-btn" id="btn-hud-menu" aria-label="Меню цеха" title="Меню: пригласить друга, билеты, рейтинг">☰</button>
       <div class="hud-slim-airbar"><div class="air-bar-fill" id="air-bar-fill"></div></div>
     </div>
+    <div class="workshop-recovery-bar" id="workshop-recovery-bar" hidden>
+      <div class="workshop-recovery-info">
+        <span class="workshop-recovery-tag" id="workshop-recovery-tag">🔨 ОТРАБОТКА БЕЗ ТИЛЯ</span>
+        <span class="workshop-recovery-copy" id="workshop-recovery-copy">Найди бочку за 3 удара → +1 ❤️ и +75 ⭐ (до 3 ❤️)</span>
+      </div>
+      <div class="workshop-recovery-actions">
+        <button type="button" class="btn-primary btn-compact" id="btn-recovery-back-to-til" hidden>🥊 К Тилю (❤️ 1)</button>
+        <button type="button" class="btn-secondary btn-compact" id="btn-recovery-pack-friend">🛢 Другу (+2…+6 ❤️)</button>
+      </div>
+    </div>
     <button type="button" class="hud-duel-1x1-btn" id="btn-hud-duel-1x1" hidden>⚔️ Дуэль 1×1</button>
     <div class="hud-top-stack" id="hud-top-stack" hidden>
       <div class="hud-task-banner" id="hud-task-banner" hidden></div>
@@ -679,6 +689,9 @@
         </button>
         <button type="button" class="btn-secondary btn-full pack-quick-1tap-btn pack-quick-lazy-btn" id="btn-pack-quick-1tap">
           <span id="btn-pack-quick-1tap-text">Отправить сразу</span>
+        </button>
+        <button type="button" class="btn-ghost btn-full btn-compact pack-recovery-btn" id="btn-pack-recovery-shift" hidden>
+          🔨 Не отправлять — отработать +1 ❤️ в цеху (без Тиля)
         </button>
       </div>
     </div>
@@ -1667,6 +1680,9 @@
       </p>
       <button type="button" class="btn-primary btn-full til-hero-cta" id="btn-trapped-invite-friend">
         🛢 Закатать друга в бочку (+2…+6 ❤️)
+      </button>
+      <button type="button" class="btn-secondary btn-full btn-compact trapped-recovery-btn" id="btn-trapped-workshop-recovery">
+        🔨 Или отработать +1 ❤️ в цеху (без Тиля)
       </button>
     </div>
   </div>

@@ -603,6 +603,110 @@ export function openNativeTelegramShareCard({ preparedMessageId = '', shareUrl =
   return { mode: 'share_url_fallback', preparedMessageId: '' };
 }
 
+/**
+ * Асинхронная обёртка над Telegram shareMessage / t.me/share/url, которая ждёт реального подтверждения
+ * (sent === true) или честно ловит нажатие «✕» / быстрый отказ (< minReturnMs), чтобы не выдавать жизни без отправки.
+ */
+export function openNativeTelegramShareCardWithConfirmation({
+  preparedMessageId = '',
+  shareUrl = '',
+  shareText = '',
+  minReturnMs = 2200,
+} = {}) {
+  const tg = getWebApp();
+  if (preparedMessageId && tg && isTelegramMiniApp() && typeof tg.shareMessage === 'function') {
+    return new Promise((resolve) => {
+      let settled = false;
+      const done = (payload) => {
+        if (settled) return;
+        settled = true;
+        resolve(payload);
+      };
+      const guardTimer = window.setTimeout(() => {
+        done({ ok: false, sent: false, cancelled: true, mode: 'native_share_timeout', preparedMessageId: String(preparedMessageId) });
+      }, 45000);
+      try {
+        tg.shareMessage(String(preparedMessageId), (sent) => {
+          window.clearTimeout(guardTimer);
+          const confirmed = sent !== false;
+          done({
+            ok: confirmed,
+            sent: confirmed,
+            cancelled: !confirmed,
+            mode: 'native_share_message',
+            preparedMessageId: String(preparedMessageId),
+          });
+        });
+      } catch {
+        window.clearTimeout(guardTimer);
+        openTelegramShare(shareUrl, shareText);
+        done({ ok: true, sent: true, cancelled: false, mode: 'share_url_fallback', preparedMessageId: '' });
+      }
+    });
+  }
+
+  const openedAt = Date.now();
+  openTelegramShare(shareUrl, shareText);
+  if (typeof document === 'undefined' || typeof window === 'undefined') {
+    return Promise.resolve({ ok: true, sent: true, cancelled: false, mode: 'share_url_fallback', preparedMessageId: '' });
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let sawLeave = document.visibilityState === 'hidden';
+    const cleanup = () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('blur', onBlur);
+      window.removeEventListener('focus', onFocus);
+    };
+    const finish = (confirmed, mode) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      window.clearTimeout(noLeaveTimer);
+      window.clearTimeout(maxWaitTimer);
+      resolve({
+        ok: confirmed,
+        sent: confirmed,
+        cancelled: !confirmed,
+        mode,
+        preparedMessageId: '',
+      });
+    };
+    const evaluateReturn = () => {
+      const elapsed = Date.now() - openedAt;
+      if (elapsed < minReturnMs) {
+        finish(false, 'share_url_fast_cancel');
+      } else {
+        finish(true, 'share_url_fallback');
+      }
+    };
+    const onBlur = () => {
+      sawLeave = true;
+    };
+    const onFocus = () => {
+      if (sawLeave) evaluateReturn();
+    };
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') {
+        sawLeave = true;
+      } else if (document.visibilityState === 'visible' && sawLeave) {
+        evaluateReturn();
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('focus', onFocus);
+
+    const noLeaveTimer = window.setTimeout(() => {
+      if (!sawLeave) finish(true, 'share_url_fallback');
+    }, 2600);
+    const maxWaitTimer = window.setTimeout(() => {
+      finish(true, 'share_url_fallback');
+    }, 30000);
+  });
+}
+
 export function openWhatsAppShare(shareUrl, shareText) {
   const full = `${shareText}\n${shareUrl}`;
   openExternalLink(`https://api.whatsapp.com/send?text=${encodeURIComponent(full)}`);

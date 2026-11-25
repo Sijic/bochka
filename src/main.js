@@ -9,6 +9,7 @@ import {
   requestTelegramWriteAccessIfNeeded,
   openTelegramShare,
   openNativeTelegramShareCard,
+  openNativeTelegramShareCardWithConfirmation,
   openWhatsAppShare,
   openVkShare,
   openInstagramShareFlow,
@@ -93,6 +94,7 @@ import {
   claimSpecialKnockBonus,
   computeSuperprizeProgress,
   claimGoldenTicketShard,
+  claimWorkshopRecoveryLife,
 } from './backend.js';
 import { HorrorScreamerPlayer, preloadScreamerFrames } from './screamer-fx.js';
 
@@ -2383,6 +2385,7 @@ async function bootstrap() {
         hasLocalVideoEl: Boolean(document.getElementById('trailer-video')),
       }),
       openDuel: (code, opts) => openDuelTable(code, opts || {}),
+      startWorkshopRecoveryShift: (opts) => startWorkshopRecoveryShift(opts || {}),
       openSuperprizeUnlockModal: () => openSuperprizeUnlockModal(),
       computeSuperprizeProgress: (pts, claimed, count) => computeSuperprizeProgress(pts, claimed, count),
       triggerFirstChipHint: () => maybeShowDuelDiscoveryHint('chip'),
@@ -3130,6 +3133,7 @@ function showScreen(name) {
   document.body.setAttribute('data-screen', name);
   if (name !== 'workshop') {
     hideWorkshopIntroHint(true);
+    document.getElementById('workshop-recovery-bar')?.setAttribute('hidden', '');
   }
   if (name === 'ocean') {
     window.requestAnimationFrame(positionOceanToast);
@@ -3175,6 +3179,10 @@ function showScreen(name) {
     const quickTxt = document.getElementById('btn-pack-quick-1tap-text');
     if (quickBtn) quickBtn.disabled = false;
     if (quickTxt) quickTxt.textContent = 'Отправить сразу';
+    const recPackBtn = document.getElementById('btn-pack-recovery-shift');
+    if (recPackBtn) {
+      recPackBtn.hidden = !(state.pack.forLifeRefill || Number(state.profile?.lives || 0) <= 0);
+    }
     applySeedPackModeUI(getTeamSeedRole() === 'prod' || getTeamSeedRole() === 'blog');
   }
   const ids = {
@@ -3774,7 +3782,49 @@ async function startNewbieOnboardingRound() {
     .catch(() => {});
 }
 
-async function startDemoRound({ resumeAttempts = null } = {}) {
+function syncWorkshopRecoveryBarUI() {
+  const bar = document.getElementById('workshop-recovery-bar');
+  const copyEl = document.getElementById('workshop-recovery-copy');
+  const backBtn = document.getElementById('btn-recovery-back-to-til');
+  if (!bar) return;
+  const activeRecovery = Boolean(state.round?.isLifeRecoveryShift && state.activeScreen === 'workshop');
+  if (!activeRecovery) {
+    bar.setAttribute('hidden', '');
+    return;
+  }
+  bar.removeAttribute('hidden');
+  const curLives = Math.max(0, Math.round(Number(state.profile?.lives || 0)));
+  if (copyEl) {
+    copyEl.textContent = curLives >= 3
+      ? '❤️ 3/3 жизни собраны! Возвращайся в бой к Тилю.'
+      : `Сейчас ❤️ ${curLives}/3 · Найди бочку за 3 удара → +1 ❤️ и +75 ⭐`;
+  }
+  if (backBtn) {
+    if (curLives >= 1) {
+      backBtn.textContent = `🥊 К Тилю (❤️ ${curLives})`;
+      backBtn.removeAttribute('hidden');
+    } else {
+      backBtn.setAttribute('hidden', '');
+    }
+  }
+}
+
+async function startWorkshopRecoveryShift({ fromCancelledShare = false } = {}) {
+  duelCtrl?.leaveRoom?.(false);
+  state.pack.forLifeRefill = false;
+  state.entered = true;
+  if (fromCancelledShare) {
+    try {
+      const uid = getViewerUid(state.tg?.user) || 'anon';
+      const k = `bochka_share_cancel_count:${uid}`;
+      const next = Number(localStorage.getItem(k) || 0) + 1;
+      localStorage.setItem(k, String(next));
+    } catch { /* ignore */ }
+  }
+  await startDemoRound({ recoveryShift: true });
+}
+
+async function startDemoRound({ resumeAttempts = null, recoveryShift = false } = {}) {
   await ensureSceneReady();
   const demoChars = t('demoChars');
   const pickIdx = Math.floor(Math.random() * DEMO_PORTRAITS.length);
@@ -3783,9 +3833,11 @@ async function startDemoRound({ resumeAttempts = null } = {}) {
     : { name: 'УЗНИК ЦЕХА', quote: 'Смотри «Бочку» в кино с 17 декабря.' };
 
   const spec = getWorkshopLevelSpec(state.profile.currentLevel || 1);
+  const isRecovery = Boolean(recoveryShift);
+  const barrelCount = isRecovery ? 5 : spec.barrelCount;
   // v15.4: Ур.2 (пустая бочка) -> дно с ❤️ жизнями; Ур.3+ -> ВСЕГДА кинобилет (никакого пацана в бочке на Ур.4+!)
-  const isEmptyLevel = spec.level === 2;
-  const isTicketLevel = spec.level >= 3;
+  const isEmptyLevel = isRecovery || spec.level === 2;
+  const isTicketLevel = !isRecovery && spec.level >= 3;
   const isLiveBoyLevel = false;
   const rawPortrait = isEmptyLevel
     ? './public/sprites/empty_barrel_hearts.webp'
@@ -3797,14 +3849,14 @@ async function startDemoRound({ resumeAttempts = null } = {}) {
 
   // Избегаем бочки '19' (idx 1) как цели, чтобы пасхалка 19 -> 97 не завершала уровень досрочно
   const candidates = [];
-  for (let i = 0; i < spec.barrelCount; i++) {
+  for (let i = 0; i < barrelCount; i++) {
     if (BARREL_BATCH_CODES[i] !== '19') candidates.push(i);
   }
   const pool = candidates.length ? candidates : [0];
   const targetIndex = pool[Math.floor(Math.random() * pool.length)];
 
   let steamHazardIndex = -1;
-  if (spec.hasSteamHazard) {
+  if (!isRecovery && spec.hasSteamHazard) {
     const hazardPool = pool.filter((idx) => idx !== targetIndex);
     steamHazardIndex = hazardPool.length ? hazardPool[Math.floor(Math.random() * hazardPool.length)] : -1;
   }
@@ -3812,15 +3864,16 @@ async function startDemoRound({ resumeAttempts = null } = {}) {
   audio.setSenderVoiceUrl(boyVoiceUrl);
 
   state.round = {
-    modeType: spec.level === 1 ? 'viral' : 'demo',
+    modeType: !isRecovery && spec.level === 1 ? 'viral' : 'demo',
     isDemo: true,
-    zoneId: spec.zoneId,
-    barrelCount: spec.barrelCount,
+    isLifeRecoveryShift: isRecovery,
+    zoneId: isRecovery ? 1 : spec.zoneId,
+    barrelCount,
     workshopLevel: spec.level,
-    roundLives: spec.level === 1 ? 1 : Math.max(1, Number(state.profile.lives || 3)),
-    targetKind: spec.targetKind || 'human',
-    taskText: spec.taskText || '',
-    isBlitz: spec.isBlitz,
+    roundLives: isRecovery ? Math.max(1, Number(state.profile.lives || 0)) : (spec.level === 1 ? 1 : Math.max(1, Number(state.profile.lives || 3))),
+    targetKind: isRecovery ? 'recovery_life' : (spec.targetKind || 'human'),
+    taskText: isRecovery ? 'Отработка без Тиля: найди бочку за 3 удара → +1 ❤️ и +75 ⭐' : (spec.taskText || ''),
+    isBlitz: !isRecovery && spec.isBlitz,
     blitzTargetsCleared: 0,
     targetIndex,
     steamHazardIndex,
@@ -3830,11 +3883,11 @@ async function startDemoRound({ resumeAttempts = null } = {}) {
     dailyShiftCode: '',
     startedAtMs: performance.now(),
     attemptsLeft: resumeAttempts != null
-      ? Math.max(0, Math.min(spec.isBlitz ? 5 : 3, Number(resumeAttempts)))
-      : (spec.isBlitz ? 5 : 3),
+      ? Math.max(0, Math.min(!isRecovery && spec.isBlitz ? 5 : 3, Number(resumeAttempts)))
+      : (!isRecovery && spec.isBlitz ? 5 : 3),
     attemptsUsed: 0,
     rescueStage: 0,
-    airLeft: spec.airSec,
+    airLeft: isRecovery ? 28 : spec.airSec,
     running: true,
     pausedForModal: false,
     pausedForOcean: false,
@@ -3844,30 +3897,37 @@ async function startDemoRound({ resumeAttempts = null } = {}) {
     portraitDataUrl: rawPortrait,
     voiceUrl: boyVoiceUrl,
     useBarrelFilter: true,
-    message: isLiveBoyLevel
-      ? 'Спасибо, что вытащил меня из бочки! Встретимся на премьере 17 декабря!'
-      : charMeta.quote,
-    senderLabel: isLiveBoyLevel ? 'ПАЦАН ИЗ БОЧКИ' : charMeta.name,
+    message: isRecovery
+      ? 'Отработка в цеху без Тиля: +1 ❤️ и +75 ⭐ (или позови друга за +2…+6 ❤️)!'
+      : isLiveBoyLevel
+        ? 'Спасибо, что вытащил меня из бочки! Встретимся на премьере 17 декабря!'
+        : charMeta.quote,
+    senderLabel: isRecovery ? 'ЖИЗНЬ НА ДНЕ БОЧКИ' : isLiveBoyLevel ? 'ПАЦАН ИЗ БОЧКИ' : charMeta.name,
     lastUrgentSec: 9,
   };
 
-  document.getElementById('hud-mode-tag').textContent = spec.isBlitz
-    ? `${spec.zoneTitle} // ⚡ БЛИЦ 12 БОЧЕК`
-    : `${spec.zoneTitle} // ${spec.barrelCount} ${formatBarrelWord(spec.barrelCount)}`;
-  document.getElementById('hud-urgent-title').textContent = spec.isBlitz
-    ? 'БЛИЦ В ПРЕСС-ЦЕХУ: НАХОДИ ЖИВЫЕ БОЧКИ ПОДРЯД (+3.5 СЕК И КОМБО ⭐)!'
-    : spec.zoneId === 2
-      ? `КОНВЕЙЕР (${spec.barrelCount} БОЧЕК): ОСТОРОЖНО, ТРУБА С ПАРОМ ОТНИМАЕТ −4 СЕК O₂!`
-      : spec.zoneId === 3
-        ? `ЗАТОПЛЕННАЯ КОТЕЛЬНАЯ (${spec.barrelCount} БОЧЕК): ГУЛКОЕ ЭХО И МИГАЮЩАЯ ТРЕВОГА!`
-        : spec.zoneId === 4
-          ? `ПРЕСС-ЦЕХ (${spec.barrelCount} БОЧЕК): ДУНЬ В МИКРОФОН 💨, ЧТОБЫ СДУТЬ ПАР С НОМЕРОВ (+4с O₂)!`
-          : `НАЙДИ ЖИВУЮ БОЧКУ ИЗ ${spec.barrelCount} ПО СТУКУ ЗА 3 ПОПЫТКИ (+⭐ В ТОП-10)`;
+  document.getElementById('hud-mode-tag').textContent = isRecovery
+    ? '🔨 ОТРАБОТКА · 5 БОЧЕК'
+    : spec.isBlitz
+      ? `${spec.zoneTitle} // ⚡ БЛИЦ 12 БОЧЕК`
+      : `${spec.zoneTitle} // ${spec.barrelCount} ${formatBarrelWord(spec.barrelCount)}`;
+  document.getElementById('hud-urgent-title').textContent = isRecovery
+    ? 'ОТРАБОТКА БЕЗ ТИЛЯ: НАЙДИ ЖИВУЮ БОЧКУ ЗА 3 УДАРА (+1 ❤️ И +75 ⭐)!'
+    : spec.isBlitz
+      ? 'БЛИЦ В ПРЕСС-ЦЕХУ: НАХОДИ ЖИВЫЕ БОЧКИ ПОДРЯД (+3.5 СЕК И КОМБО ⭐)!'
+      : spec.zoneId === 2
+        ? `КОНВЕЙЕР (${spec.barrelCount} БОЧЕК): ОСТОРОЖНО, ТРУБА С ПАРОМ ОТНИМАЕТ −4 СЕК O₂!`
+        : spec.zoneId === 3
+          ? `ЗАТОПЛЕННАЯ КОТЕЛЬНАЯ (${spec.barrelCount} БОЧЕК): ГУЛКОЕ ЭХО И МИГАЮЩАЯ ТРЕВОГА!`
+          : spec.zoneId === 4
+            ? `ПРЕСС-ЦЕХ (${spec.barrelCount} БОЧЕК): ДУНЬ В МИКРОФОН 💨, ЧТОБЫ СДУТЬ ПАР С НОМЕРОВ (+4с O₂)!`
+            : `НАЙДИ ЖИВУЮ БОЧКУ ИЗ ${spec.barrelCount} ПО СТУКУ ЗА 3 ПОПЫТКИ (+⭐ В ТОП-10)`;
   document.getElementById('btn-hud-pack')?.removeAttribute('hidden');
   document.getElementById('hud-premiere-strip')?.setAttribute('hidden', '');
   configureBottomAttemptsMode('squares');
 
   launchWorkshopGameplay(false);
+  syncWorkshopRecoveryBarUI();
   refreshLevel3TicketPoolBar(state.round?.workshopLevel || 1).catch(() => {});
 
   // v11.6: Пошаговое наполнение сердец (0→1→2→3) и ударов ([ ][ ][ ]→[🟨][🟨][🟨]) при прилёте в HUD!
@@ -7235,8 +7295,9 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
   }
 
   const completedLvl = Math.max(1, Number(state.round.workshopLevel || 1));
+  const isRecoveryShift = Boolean(state.round.isLifeRecoveryShift);
   const v8PointsTable = { 1: 150, 2: 150, 3: 300, 4: 350, 5: 400 };
-  if (survived) {
+  if (survived && !isRecoveryShift) {
     const ptsDelta = v8PointsTable[completedLvl] || 300;
     const nextLvl = Math.max(Number(state.profile.currentLevel || 1), completedLvl + 1);
     state.profile.currentLevel = nextLvl;
@@ -7302,6 +7363,67 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
   window.setTimeout(async () => {
     if (state.activeScreen !== 'workshop' || duelCtrl?.isActive || _openingDuelLock) return;
     const revIdx = typeof diveBarrelIndex === 'number' && diveBarrelIndex >= 0 ? diveBarrelIndex : state.round.targetIndex;
+
+    if (isRecoveryShift) {
+      if (survived) {
+        const recRes = await claimWorkshopRecoveryLife(state.tg?.user).catch(() => null);
+        if (recRes?.granted) {
+          state.profile.lives = Number(recRes.lives ?? state.profile.lives ?? 1);
+          state.profile.premierePoints = Number(recRes.premierePoints ?? state.profile.premierePoints ?? 0);
+          duelCtrl?.syncFromProfile?.(state.profile, { allowLivesRefill: true });
+          updatePremiereBarsUI();
+          syncSuperPrizeRatingBarUI();
+          syncWorkshopRecoveryBarUI();
+          const pos = scene?.projectBarrelScreenPos?.(revIdx, 1.05);
+          flyRewardToHud({
+            type: 'lives',
+            count: 2,
+            label: '+1 ❤️ · +75 ⭐',
+            startX: pos?.visible ? pos.x : null,
+            startY: pos?.visible ? pos.y : null,
+          });
+          await playRevealAvatar(1350, {
+            barrelIndex: revIdx,
+            isBoy: false,
+            caption: `🔨 СМЕНА ПРОЙДЕНА! +1 ❤️ И +75 ⭐ (СЕЙЧАС ${state.profile.lives}/3 ❤️)`,
+          });
+          if (state.activeScreen !== 'workshop') return;
+          if (state.profile.lives >= 3) {
+            showToast('❤️ Собраны все 3/3 жизни! Жми «🥊 К Тилю» и бери реванш!');
+          } else {
+            showToast(`🔨 +1 ❤️ и +75 ⭐ (${recRes.dailyRecoveryShifts}/${recRes.maxDailyShifts} смен)! Можешь идти к Тилю или добрать до 3 ❤️.`);
+            window.setTimeout(() => {
+              if (state.activeScreen === 'workshop' && !state.round?.running && !duelCtrl?.isActive) {
+                startWorkshopRecoveryShift();
+              }
+            }, 1350);
+          }
+        } else if (recRes?.reason === 'daily_recovery_limit') {
+          showToast('🔒 Лимит отработки (6 смен/день) исчерпан — закатай друга в бочку (+2…+6 ❤️)!');
+          state.pack.forLifeRefill = true;
+          showScreen('pack');
+        } else if (recRes?.reason === 'lives_ceiling_reached') {
+          syncWorkshopRecoveryBarUI();
+          showToast(`❤️ У тебя уже ${state.profile.lives} ❤️ — возвращайся в бой к Тилю!`);
+        } else if (recRes?.reason === 'recovery_cooldown') {
+          showToast(`⏳ Подожди ${recRes.retryAfterSec || 10}с до следующей смены или жми «🥊 К Тилю»!`);
+          window.setTimeout(() => {
+            if (state.activeScreen === 'workshop' && !state.round?.running && !duelCtrl?.isActive) {
+              startWorkshopRecoveryShift();
+            }
+          }, Math.min(22000, Math.max(2000, (recRes.retryAfterSec || 3) * 1000)));
+        }
+      } else {
+        showToast('💨 Пусто! Попробуй ещё раз выбить +1 ❤️ в цеху или закатай друга (+2…+6 ❤️).');
+        window.setTimeout(() => {
+          if (state.activeScreen === 'workshop' && !state.round?.running && !duelCtrl?.isActive) {
+            startWorkshopRecoveryShift();
+          }
+        }, 1250);
+      }
+      return;
+    }
+
     const isBoyRescue = survived && ((completedLvl === 1 && !state.incomingPack) || completedLvl >= 4);
 
     // Ур.1 (входящая бочка друга или первый старт): пацан/друг вылезает -> сразу 15с трейлер (или сразу Вызов Тиля, если трейлер уже досмотрен после 3 промахов)
@@ -7675,23 +7797,6 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
         : prevRoundLvl <= 2
           ? 3
           : Math.max(3, prevRoundLvl + 1);
-    state.profile.currentLevel = targetNextLevel;
-    loadTrophiesMod().then((m) => m.syncUnlockedArtifactsForLevel?.(targetNextLevel)).catch(() => {});
-    const prevLives = Math.max(0, Number(state.profile.lives || 0));
-    const nextLives = wasLifeRefill
-      ? Math.max(6, prevLives + 6)
-      : Math.max(3, prevLives);
-    state.profile.lives = nextLives;
-    if (wasLifeRefill) {
-      duelCtrl?.refillFromTil?.();
-    }
-    awardV8LevelProgress(state.tg?.user, {
-      level: targetNextLevel,
-      pointsDelta: 0,
-      livesDelta: Math.max(0, nextLives - prevLives),
-    }).catch(() => {});
-    syncUiStage(state.tg?.user, wasProducerFirstPack ? 1 : 3).catch(() => {});
-
     const sharePrefix =
       teamRole === 'blog'
         ? '🛢 Я заварил себя в 3D-цеху фильма «БОЧКА»! Надень наушники — вытащи меня за 3 удара и собери билет в кино'
@@ -7706,7 +7811,7 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
       phrase,
       shareUrl: created.shareUrl,
     }).catch(() => ({ ok: false, fallback: true, preparedMessageId: '', shareUrl: created.shareUrl }));
-    const shareOutcome = openNativeTelegramShareCard({
+    const shareOutcome = await openNativeTelegramShareCardWithConfirmation({
       preparedMessageId: prepShare?.preparedMessageId || '',
       shareUrl: prepShare?.shareUrl || created.shareUrl,
       shareText: fullShareText,
@@ -7717,7 +7822,30 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
       startParam: prepShare?.startParam || `${linkType}_${created.id}`,
       prepareCalled: true,
     };
-    if (shareOutcome?.ok !== false) {
+
+    if (shareOutcome?.cancelled) {
+      if (wasLifeRefill || Number(state.profile?.lives || 0) <= 0) {
+        showToast('❌ Отправка отменена — жизни не начислены! Отработай +1 ❤️ в цеху без Тиля или отправь другу.');
+        await startWorkshopRecoveryShift({ fromCancelledShare: true });
+      } else {
+        showToast('❌ Отправка отменена — награда начисляется только после реальной отправки другу.');
+      }
+      return;
+    }
+
+    state.profile.currentLevel = targetNextLevel;
+    loadTrophiesMod().then((m) => m.syncUnlockedArtifactsForLevel?.(targetNextLevel)).catch(() => {});
+    const prevLives = Math.max(0, Number(state.profile.lives || 0));
+    const nextLives = wasLifeRefill ? prevLives : Math.max(3, prevLives);
+    state.profile.lives = nextLives;
+    awardV8LevelProgress(state.tg?.user, {
+      level: targetNextLevel,
+      pointsDelta: 0,
+      livesDelta: wasLifeRefill ? 0 : Math.max(0, nextLives - prevLives),
+    }).catch(() => {});
+    syncUiStage(state.tg?.user, wasProducerFirstPack ? 1 : 3).catch(() => {});
+
+    if (shareOutcome?.sent) {
       await applyShareBonusReward({ showFeedback: true }).catch(() => null);
     }
     updatePremiereBarsUI();
@@ -11320,6 +11448,24 @@ function bindUIEvents() {
     document.getElementById('modal-barrel-trapped')?.setAttribute('hidden', '');
     state.pack.forLifeRefill = true;
     duelCtrl?.leaveRoom(false);
+    showScreen('pack');
+  });
+  document.getElementById('btn-trapped-workshop-recovery')?.addEventListener('click', () => {
+    document.getElementById('modal-barrel-trapped')?.setAttribute('hidden', '');
+    startWorkshopRecoveryShift();
+  });
+  document.getElementById('btn-pack-recovery-shift')?.addEventListener('click', () => {
+    startWorkshopRecoveryShift();
+  });
+  document.getElementById('btn-recovery-back-to-til')?.addEventListener('click', () => {
+    state.round.isLifeRecoveryShift = false;
+    document.getElementById('workshop-recovery-bar')?.setAttribute('hidden', '');
+    openDuelTable('', { autoStartSoloTil: true, huntFriendBarrel: false });
+  });
+  document.getElementById('btn-recovery-pack-friend')?.addEventListener('click', () => {
+    state.round.isLifeRecoveryShift = false;
+    document.getElementById('workshop-recovery-bar')?.setAttribute('hidden', '');
+    state.pack.forLifeRefill = true;
     showScreen('pack');
   });
   document.getElementById('btn-superprize-unlock-play')?.addEventListener('click', () => {
