@@ -11125,22 +11125,29 @@ body:not([data-screen="workshop"]) .workshop-intro-hint {
 
 /* v20.6: Silent radar banner, Pack challenge subline, Telegram Push opt-in card */
 .workshop-silent-radar-pill {
-  position: relative;
-  z-index: 6;
-  margin: 6px auto 0;
-  padding: 6px 12px;
-  max-width: min(92vw, 400px);
+  position: fixed;
+  top: calc(50px + var(--safe-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 28;
+  margin: 0;
+  padding: 5px 12px;
+  width: min(calc(100vw - 20px), 400px);
   border-radius: 999px;
   border: 1px solid rgba(250, 204, 21, 0.45);
-  background: rgba(15, 23, 42, 0.88);
+  background: rgba(15, 23, 42, 0.9);
   color: #fef08a;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 10px;
+  line-height: 1.25;
   font-weight: 700;
   text-align: center;
   cursor: pointer;
   pointer-events: auto;
   display: block;
+}
+.workshop-silent-radar-pill[hidden] {
+  display: none !important;
 }
 
 .pack-duel-subline {
