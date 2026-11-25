@@ -9320,27 +9320,91 @@ body.is-air-hint-active #screen-workshop {
   box-shadow: 0 0 14px rgba(249, 115, 22, 0.75);
 }
 
+.duel-vs-side.is-til-annoyed .duel-vs-ava.is-opp {
+  border-color: #fb923c;
+  box-shadow: 0 0 12px rgba(251, 146, 60, 0.7);
+}
+
+.duel-vs-side.is-til-wounded .duel-vs-ava.is-opp {
+  border-color: #ef4444;
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.85);
+}
+
+.duel-vs-side.is-til-smug .duel-vs-ava.is-opp {
+  border-color: #a855f7;
+  box-shadow: 0 0 13px rgba(168, 85, 247, 0.7);
+}
+
 .duel-vs-side.is-til-rage .duel-vs-ava.is-opp {
   border-color: #ef4444;
   box-shadow: 0 0 18px rgba(239, 68, 68, 0.95);
   animation: dangerPulse 0.48s infinite alternate;
 }
 
-.duel-til-rage-badge {
+.duel-til-rage-badge,
+.duel-til-mood-pill {
   position: absolute;
-  top: -12px;
-  right: 0;
+  top: -8px;
+  right: 2px;
   z-index: 5;
-  padding: 1px 7px;
+  padding: 1px 6px;
   border-radius: 999px;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.duel-til-rage-badge {
   background: #dc2626;
   border: 1px solid #fecaca;
   color: #fff;
-  font-size: 9px;
   font-weight: 900;
-  letter-spacing: 0.03em;
-  white-space: nowrap;
   box-shadow: 0 2px 10px rgba(220, 38, 38, 0.85);
+}
+
+.duel-til-mood-pill[hidden],
+.duel-til-rage-badge[hidden] {
+  display: none !important;
+}
+
+.duel-til-mood-pill.is-mood-calm {
+  background: rgba(15, 23, 42, 0.94);
+  border: 1px solid rgba(96, 165, 250, 0.65);
+  color: #bfdbfe;
+}
+
+.duel-til-mood-pill.is-mood-smug {
+  background: rgba(59, 7, 100, 0.92);
+  border: 1px solid rgba(192, 132, 252, 0.72);
+  color: #f3e8ff;
+}
+
+.duel-til-mood-pill.is-mood-telegraph {
+  background: rgba(120, 53, 15, 0.95);
+  border: 1px solid rgba(250, 204, 21, 0.9);
+  color: #fef08a;
+  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.55);
+}
+
+.duel-til-mood-pill.is-mood-annoyed {
+  background: rgba(124, 45, 18, 0.94);
+  border: 1px solid rgba(251, 146, 60, 0.85);
+  color: #ffedd5;
+}
+
+.duel-til-mood-pill.is-mood-accelerated {
+  background: rgba(154, 52, 18, 0.95);
+  border: 1px solid rgba(249, 115, 22, 0.9);
+  color: #fed7aa;
+}
+
+.duel-til-mood-pill.is-mood-wounded {
+  background: rgba(127, 29, 29, 0.96);
+  border: 1px solid rgba(248, 113, 113, 0.95);
+  color: #fee2e2;
+  box-shadow: 0 2px 10px rgba(239, 68, 68, 0.6);
 }
 
 .duel-vs-bars {
@@ -9385,12 +9449,25 @@ body.is-air-hint-active #screen-workshop {
   height: 100%;
   border-radius: 999px;
   background: linear-gradient(90deg, #ef4444, #facc15);
-  transition: width 0.25s ease;
+  transition: width 0.32s cubic-bezier(0.22, 1, 0.36, 1), filter 0.2s ease;
+}
+
+.duel-vs-hp-fill.is-low {
+  background: linear-gradient(90deg, #b91c1c, #f97316);
 }
 
 .duel-vs-hp-fill.is-opp {
   background: linear-gradient(90deg, #3b82f6, #ef4444);
   margin-left: auto;
+}
+
+.duel-vs-hp-fill.is-opp.is-low {
+  background: linear-gradient(90deg, #ef4444, #dc2626);
+}
+
+.duel-vs-hp-fill.is-hp-hit {
+  filter: brightness(1.85);
+  box-shadow: 0 0 10px rgba(248, 113, 113, 0.95);
 }
 
 .duel-vs-hud .duel-energy-fill {
@@ -9928,6 +10005,7 @@ body.is-duel-spotlight-active .duel-live-mini-bar.duel-vs-hud {
   }
   .duel-vs-hud .ticket-stub-mini.is-duel { width: 16px; height: 9px; padding: 1px 1.5px; gap: 1px; }
   .duel-vs-hud .chip-token-ico { width: 9px; height: 9px; }
+  .duel-til-mood-pill, .duel-til-rage-badge { font-size: 7.5px; padding: 1px 5px; top: -7px; }
   .trophy-pick-grid { grid-template-columns: 1fr; gap: 8px; }
   .trophy-pick-item {
     flex-direction: row;

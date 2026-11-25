@@ -151,9 +151,14 @@ export class WorkshopDuelController {
     this.playerEnergy = {};
     this.playerMaxEnergy = {};
     this._energyFinisherNotified = '';
-    this.duelLives = 6;
+    this.duelLives = 3;
+    this.playerMaxDuelLives = 3;
     this.tilMaxLives = 3;
     this.tilLives = 3;
+    this._prevPlayerHp = null;
+    this._prevOppHp = null;
+    this._tilEventMood = '';
+    this._tilEventMoodUntil = 0;
     this.sessionStats = { playerChips: 0, playerPoints: 0, oppTickets: 0, oppChips: 0, oppPoints: 0 };
     this.duelRoundsWithoutTicket = 0;
     this.maxDuelRounds = 3;
@@ -662,9 +667,14 @@ export class WorkshopDuelController {
     this._energyFinisherNotified = '';
     const profLives = Number(profStats?.lives ?? 0);
     this.duelLives = Math.max(3, Math.min(30, profLives > 0 ? profLives : 3));
+    this.playerMaxDuelLives = Math.max(3, this.duelLives);
     const initDiff = getTilDifficultyProfile(this.duelLives, 0);
     this.tilMaxLives = initDiff.tier === 'rage' ? 4 : 3;
     this.tilLives = this.tilMaxLives;
+    this._prevPlayerHp = this.duelLives;
+    this._prevOppHp = this.tilLives;
+    this._tilEventMood = '';
+    this._tilEventMoodUntil = 0;
     this.sessionStats = { playerChips: 0, playerPoints: 0, oppTickets: 0, oppChips: 0, oppPoints: 0 };
     this.falseStartCount = 0;
     this.batchResolved = false;
@@ -1962,8 +1972,14 @@ export class WorkshopDuelController {
   refillFromTil() {
     const profLives = Number(this.getProfileStats?.()?.lives ?? 0);
     this.duelLives = Math.max(3, Math.min(30, Math.max(Number(this.duelLives || 0), profLives, 3)));
+    this.playerMaxDuelLives = Math.max(3, Number(this.playerMaxDuelLives || 3), this.duelLives);
     this.initBatchEnergy(Math.max(1, Number(this.tilRoundIdx || 1)));
     this.syncEnergyUI();
+  }
+
+  setTilMoodEvent(mood = '', durationMs = 4500) {
+    this._tilEventMood = String(mood || '');
+    this._tilEventMoodUntil = this._tilEventMood ? Date.now() + Math.max(1000, Number(durationMs) || 4500) : 0;
   }
 
   _syncTicketStubEl(stubEl, filledCount = 0) {
@@ -2007,6 +2023,7 @@ export class WorkshopDuelController {
     const pPtsEl = document.getElementById('duel-vs-player-pts-val');
     const oWrap = document.getElementById('duel-vs-opp-wrap');
     const rageBadge = document.getElementById('duel-til-rage-badge');
+    const moodPill = document.getElementById('duel-til-mood-pill');
     const oHpFill = document.getElementById('duel-vs-opp-hp-fill');
     const oLivesEl = document.getElementById('duel-vs-opp-lives-val');
     const oEnergyFill = document.getElementById('duel-vs-opp-energy-fill');
@@ -2046,12 +2063,19 @@ export class WorkshopDuelController {
       fillEl.style.width = `${pct}%`;
       fillEl.classList.toggle('is-low', myStrikes <= 1);
     }
-    if (livesEl) livesEl.textContent = String(dl);
-    if (livesPill) livesPill.classList.toggle('is-low', dl <= 1);
+    this.playerMaxDuelLives = Math.max(3, Number(this.playerMaxDuelLives || 3), dl);
+    const pHpPct = Math.max(0, Math.min(100, Math.round((dl / this.playerMaxDuelLives) * 100)));
+    if (livesEl) livesEl.textContent = `${dl}/${this.playerMaxDuelLives}`;
+    if (livesPill) livesPill.classList.toggle('is-low', pHpPct <= 35);
     if (pHpFill) {
-      const hpDenom = Math.max(6, dl > 12 ? 18 : dl > 6 ? 12 : 6);
-      pHpFill.style.width = `${Math.min(100, Math.round((dl / hpDenom) * 100))}%`;
+      pHpFill.style.width = `${pHpPct}%`;
+      pHpFill.classList.toggle('is-low', pHpPct <= 35);
+      if (this._prevPlayerHp !== null && dl < this._prevPlayerHp) {
+        pHpFill.classList.add('is-hp-hit');
+        window.setTimeout(() => pHpFill.classList.remove('is-hp-hit'), 450);
+      }
     }
+    this._prevPlayerHp = dl;
     if (pChipsEl) {
       const displayChips = this.hofCache?.ok
         ? Math.max(0, Number(this.hofCache.totalCount || 0))
@@ -2074,9 +2098,18 @@ export class WorkshopDuelController {
     const oppMaxStrikes = Math.max(1, Math.round(oppMax / ENERGY_PER_STRIKE));
     const oppPct = Math.max(0, Math.min(100, Math.round((oppCur / oppMax) * 100)));
     const tilHp = Math.max(0, Number(this.tilLives ?? (oppIsTil ? 3 : 6)));
-    const tilMax = Math.max(1, Number(this.tilMaxLives || (oppIsTil ? 3 : 6)));
-    if (oLivesEl) oLivesEl.textContent = String(tilHp);
-    if (oHpFill) oHpFill.style.width = `${Math.min(100, Math.round((tilHp / tilMax) * 100))}%`;
+    const tilMax = Math.max(1, Number(this.tilMaxLives || (oppIsTil ? 3 : 6)), tilHp);
+    const oHpPct = Math.max(0, Math.min(100, Math.round((tilHp / tilMax) * 100)));
+    if (oLivesEl) oLivesEl.textContent = `${tilHp}/${tilMax}`;
+    if (oHpFill) {
+      oHpFill.style.width = `${oHpPct}%`;
+      oHpFill.classList.toggle('is-low', oHpPct <= 35);
+      if (this._prevOppHp !== null && tilHp < this._prevOppHp) {
+        oHpFill.classList.add('is-hp-hit');
+        window.setTimeout(() => oHpFill.classList.remove('is-hp-hit'), 450);
+      }
+    }
+    this._prevOppHp = tilHp;
     if (oNameEl) oNameEl.textContent = oppIsTil ? `Тиль ⚡${oppStrikes}/${oppMaxStrikes}` : `${String(opp.name || 'Соперник').slice(0, 10)} ⚡${oppStrikes}/${oppMaxStrikes}`;
     if (oAvaEl) {
       const oFallback = oppIsTil ? TIL_AVATAR_URL : getFallbackFighterAvatar(opp?.uid || opp?.name || 'opp');
@@ -2097,11 +2130,51 @@ export class WorkshopDuelController {
     if (oChipsEl) oChipsEl.textContent = String(this.sessionStats?.oppChips || 0);
     if (oPtsEl) oPtsEl.textContent = String(this.sessionStats?.oppPoints || 0);
 
-    const isRage = Boolean(this.soloMode && diff.tier === 'rage');
-    if (oWrap) oWrap.classList.toggle('is-til-rage', isRage);
+    const isRage = Boolean(this.soloMode && oppIsTil && diff.tier === 'rage');
+    const showMood = Boolean(this.soloMode && oppIsTil && !isRage);
+    let moodKey = 'calm';
+    let moodLabel = '🧊 Тиль спокоен';
+    if (showMood) {
+      const eventActive = Boolean(this._tilEventMood && Date.now() < Number(this._tilEventMoodUntil || 0));
+      if (tilHp <= 1 && tilHp > 0) {
+        moodKey = 'wounded';
+        moodLabel = '💢 Тиль на грани!';
+      } else if (this._tilState === 'telegraph') {
+        moodKey = 'telegraph';
+        moodLabel = '🎯 Тиль метит!';
+      } else if (eventActive && this._tilEventMood === 'annoyed') {
+        moodKey = 'annoyed';
+        moodLabel = '😠 Тиль недоволен';
+      } else if (eventActive && this._tilEventMood === 'smug') {
+        moodKey = 'smug';
+        moodLabel = '😏 Тиль доволен';
+      } else if (diff.tier === 'accelerated') {
+        moodKey = 'accelerated';
+        moodLabel = '⚡ Тиль злится';
+      } else if (tilHp < tilMax) {
+        moodKey = 'annoyed';
+        moodLabel = '😠 Тиль недоволен';
+      }
+    }
+    if (oWrap) {
+      oWrap.classList.toggle('is-til-rage', isRage);
+      oWrap.classList.toggle('is-til-accelerated', showMood && moodKey === 'accelerated');
+      oWrap.classList.toggle('is-til-annoyed', showMood && moodKey === 'annoyed');
+      oWrap.classList.toggle('is-til-wounded', showMood && moodKey === 'wounded');
+      oWrap.classList.toggle('is-til-smug', showMood && moodKey === 'smug');
+    }
     if (rageBadge) {
       if (isRage) rageBadge.removeAttribute('hidden');
       else rageBadge.setAttribute('hidden', '');
+    }
+    if (moodPill) {
+      if (showMood) {
+        moodPill.textContent = moodLabel;
+        moodPill.className = `duel-til-mood-pill is-mood-${moodKey}`;
+        moodPill.removeAttribute('hidden');
+      } else {
+        moodPill.setAttribute('hidden', '');
+      }
     }
 
     if (timerEl) {
@@ -2908,6 +2981,16 @@ export class WorkshopDuelController {
     }
 
     // Компактные метки прямо над вскрытыми бочками
+    const oppHitTrap = Boolean(oppEntry?.loot && (oppEntry.loot.kind === 'screamer' || oppEntry.loot.kind === 'empty'));
+    const oppGotPrize = Boolean(oppEntry?.loot && ['ticket', 'chip', 'energy', 'points'].includes(oppEntry.loot.kind));
+    const myHitTrap = Boolean(myEntry?.loot && (myEntry.loot.kind === 'screamer' || myEntry.loot.kind === 'empty'));
+    if (this.soloMode) {
+      if (oppHitTrap) {
+        this.setTilMoodEvent('annoyed', 5000);
+      } else if (oppGotPrize || myHitTrap) {
+        this.setTilMoodEvent('smug', 4500);
+      }
+    }
     this.renderBarrelClaimBadges(true);
     this.syncEnergyUI();
 
