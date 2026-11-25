@@ -37,6 +37,151 @@ async function tgApi(method: string, payload: Record<string, unknown>) {
   return await res.json().catch(() => ({ ok: false, description: "invalid_tg_json" }));
 }
 
+async function sendTgPushSafe({
+  chatId = "",
+  uid = "",
+  text = "",
+  replyMarkup = undefined as Record<string, unknown> | undefined,
+  isServicePush = false,
+  eventName = "push",
+  dryRun = false,
+  markServiceCooldown = true,
+  simulate403 = false,
+}: {
+  chatId?: string;
+  uid?: string;
+  text: string;
+  replyMarkup?: Record<string, unknown>;
+  isServicePush?: boolean;
+  eventName?: string;
+  dryRun?: boolean;
+  markServiceCooldown?: boolean;
+  simulate403?: boolean;
+}) {
+  const cleanChatId = String(chatId || "").trim();
+  const resolvedUid = String(uid || (cleanChatId ? `tg_${cleanChatId}` : "")).trim();
+  if (!resolvedUid && !cleanChatId) {
+    return { ok: false, skipped: true, reason: "missing_recipient" };
+  }
+
+  const q = adminDb
+    .from("users")
+    .select("uid, tg_user_id, tg_chat_id, tg_write_access")
+    .limit(1);
+  const { data: uRow } = resolvedUid
+    ? await q.eq("uid", resolvedUid).maybeSingle()
+    : await q.eq("tg_user_id", cleanChatId).maybeSingle();
+
+  if (!uRow) {
+    return { ok: false, skipped: true, reason: "user_not_found" };
+  }
+  if (!uRow.tg_write_access) {
+    return { ok: false, skipped: true, reason: "no_write_access" };
+  }
+
+  const targetChatId = String(uRow.tg_chat_id || uRow.tg_user_id || cleanChatId).trim();
+  if (!targetChatId) {
+    return { ok: false, skipped: true, reason: "missing_chat_id" };
+  }
+
+  if (isServicePush) {
+    const { data: gateRes, error: gateErr } = await adminDb.rpc("check_and_mark_service_push_rpc", {
+      p_uid: uRow.uid,
+      p_event: eventName,
+      p_dry_run: Boolean(dryRun && !markServiceCooldown) || Boolean(simulate403),
+    });
+    if (gateErr || !gateRes?.ok || !gateRes?.allowed) {
+      return {
+        ok: true,
+        skipped: true,
+        delivered: false,
+        reason: gateRes?.reason || gateErr?.message || "service_cooldown_24h",
+        nextAllowedAt: gateRes?.next_allowed_at || null,
+      };
+    }
+  }
+
+  const tgPayload: Record<string, unknown> = {
+    chat_id: targetChatId,
+    parse_mode: "HTML",
+    text,
+  };
+  if (replyMarkup) {
+    tgPayload.reply_markup = replyMarkup;
+  }
+
+  if (simulate403) {
+    const errDesc = "Forbidden: bot was blocked by the user";
+    await adminDb
+      .from("users")
+      .update({
+        tg_write_access: false,
+        last_push_error: errDesc,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("uid", uRow.uid);
+    return {
+      ok: false,
+      skipped: true,
+      delivered: false,
+      revokedWriteAccess: true,
+      reason: "telegram_blocked_403",
+      error: errDesc,
+      payload: tgPayload,
+    };
+  }
+
+  if (dryRun) {
+    return {
+      ok: true,
+      dryRun: true,
+      skipped: false,
+      delivered: false,
+      uid: uRow.uid,
+      eventName,
+      payload: tgPayload,
+    };
+  }
+
+  const sendRes = await tgApi("sendMessage", tgPayload);
+  if (!sendRes?.ok) {
+    const desc = String(sendRes?.description || "telegram_send_failed");
+    const isBlocked =
+      Number(sendRes?.error_code) === 403 ||
+      /blocked|deactivated|chat not found|forbidden|initiate/i.test(desc);
+    if (isBlocked) {
+      await adminDb
+        .from("users")
+        .update({
+          tg_write_access: false,
+          last_push_error: desc.slice(0, 240),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("uid", uRow.uid);
+      return {
+        ok: false,
+        skipped: true,
+        delivered: false,
+        revokedWriteAccess: true,
+        reason: "telegram_blocked_403",
+        error: desc,
+      };
+    }
+    await adminDb
+      .from("users")
+      .update({ last_push_error: desc.slice(0, 240), updated_at: new Date().toISOString() })
+      .eq("uid", uRow.uid);
+    return { ok: false, skipped: false, delivered: false, reason: "telegram_send_failed", error: desc };
+  }
+
+  await adminDb
+    .from("users")
+    .update({ last_push_error: null, updated_at: new Date().toISOString() })
+    .eq("uid", uRow.uid);
+
+  return { ok: true, skipped: false, delivered: true, uid: uRow.uid, eventName, payload: tgPayload };
+}
+
 function jsonResp(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -359,6 +504,63 @@ Deno.serve(async (req: Request) => {
       return jsonResp({ ok: true, autopilot: apRes, adminNotified });
     }
 
+    if (body.adminAction === "test_push_payload") {
+      const targetUid = String(body.uid || "").trim();
+      const targetTgId = String(body.targetTgId || "").trim();
+      const kind = String(body.kind || "barrel_opened").trim();
+      const dryRun = body.dryRun !== false;
+      const simulate403 = Boolean(body.simulate403);
+      const roomId = String(body.roomId || "duel_qa").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32) || "duel_qa";
+
+      if (kind === "barrel_opened") {
+        const opener = escapeHtml(String(body.openerName || "QA Друг"));
+        const res = await sendTgPushSafe({
+          chatId: targetTgId,
+          uid: targetUid,
+          isServicePush: false,
+          eventName: "barrel_opened",
+          dryRun,
+          simulate403,
+          text:
+            `🔓 <b>${opener} вскрыл твою бочку!</b>\n` +
+            `Тебе начислены <b>+6 ❤️ жизней, +500 ⭐ очков и его именная фишка</b>.\n` +
+            `Вызывай его в дуэль 1×1, пока он в цеху!`,
+          replyMarkup: {
+            inline_keyboard: [
+              [{ text: "⚔️ В ДУЭЛЬ ЗА БИЛЕТОМ", web_app: { url: `${PUBLIC_WEB_URL}/?duel=${encodeURIComponent(roomId)}` } }],
+            ],
+          },
+        });
+        return jsonResp({ ok: true, kind, result: res });
+      }
+
+      if (kind === "service_return_push") {
+        const eventType = String(body.eventType || "daily_refill").trim();
+        const text =
+          eventType === "rank_overtaken"
+            ? `⚡ <b>Тебя подвинули в ТОП-20 за 2 билетами в кино в твоём городе!</b>\nЗайди в цех и отыграй +500 ⭐.`
+            : eventType === "friend_unfinished"
+              ? `⏳ <b>Друг ещё не вскрыл твою бочку!</b>\nПозови его на дуэль 1×1 и забери шаг к 4/4 билета.`
+              : `❤️ <b>Пора за +6 ❤️ к Тилю на Северное море!</b>\nЕжедневное пополнение жизней снова открыто — забери 2 билета в кино в ТВОЁМ городе!`;
+        const res = await sendTgPushSafe({
+          chatId: targetTgId,
+          uid: targetUid,
+          isServicePush: true,
+          eventName: eventType,
+          dryRun,
+          markServiceCooldown: body.markServiceCooldown !== false,
+          simulate403,
+          text,
+          replyMarkup: {
+            inline_keyboard: [[{ text: "🛢 ВЕРНУТЬСЯ В ЦЕХ (+6 ❤️)", web_app: { url: `${PUBLIC_WEB_URL}/` } }]],
+          },
+        });
+        return jsonResp({ ok: true, kind, eventType, result: res });
+      }
+
+      return jsonResp({ ok: false, error: "unknown_test_push_kind" }, 400);
+    }
+
     return jsonResp({ ok: false, error: "unknown_admin_action" }, 400);
   }
 
@@ -403,20 +605,20 @@ Deno.serve(async (req: Request) => {
 
       const cardTitle =
         linkType === "duel"
-          ? "⚔️ Залетай в Дуэль «НА СЧЁТ ТРИ!» в цеху «БОЧКИ»!"
+          ? "⚔️ Я закрыл тебя в бочке — попробуй выбраться быстрее меня!"
           : linkType === "bl"
-            ? "🛢 Вытащи меня из бочки — и собери билет в кино!"
-            : "🛢 Кто-то заварил тебя в 3D-цеху «БОЧКИ»!";
+            ? "🛢 Вытащи меня из бочки — и забери билет в кино в своём городе!"
+            : "🛢 Я закрыл тебя в бочке — попробуй выбраться быстрее меня!";
       const cardText =
         linkType === "duel"
-          ? `⚔️ <b>${senderName}</b> вызывает тебя за стол «НА СЧЁТ ТРИ!» в цеху триллера «БОЧКА»!\n\n` +
-            `Залетай прямо в эту комнату — хватаем живые бочки синхронно за бесплатный билет и очки ТОП-20 на Закрытый показ в Москве 17 декабря!${phrase ? `\n\n💬 «${phrase}»` : ""}`
+          ? `⚔️ <b>${senderName}</b> зовёт тебя за стол «НА СЧЁТ ТРИ!» в 3D-цеху «БОЧКА»!\n\n` +
+            `Работает со звуком и в полной тишине. Вскрой живую бочку быстрее меня — забери 2 билета в кино в ТВОЁМ городе (РФ и СНГ) или премьеру в Москве!${phrase ? `\n\n💬 «${phrase}»` : ""}`
           : linkType === "bl"
-            ? `🛢 <b>${senderName}</b> заварил себя в 3D-цеху триллера «БОЧКА»!\n\n` +
-              `Надень наушники, найди нужную крышку за 3 удара и собери 4 обрывка бесплатного билета другу + шанс попасть в ТОП-20 на Закрытый показ в Москве 17 декабря!${phrase ? `\n\n💬 «${phrase}»` : ""}`
-            : `🛢 <b>${senderName}</b> заварил тебя в цеху триллера «БОЧКА»!\n\n` +
-              `У тебя 30 секунд воздуха и 3 удара ломом — прислушайся, откуда идёт стук, и забери билет в кино!${phrase ? `\n\n💬 «${phrase}»` : ""}`;
-      const btnText = linkType === "duel" ? "⚔️ ЗАЛЕТЕТЬ В ДУЭЛЬ" : "🛢 ВСКРЫТЬ БОЧКУ";
+            ? `🛢 <b>${senderName}</b> закрыл бочку в 3D-цеху триллера «БОЧКА»!\n\n` +
+              `30 секунд воздуха, 3 удара — работает со звуком и в тишине (вибро/радар). Открой бочку за шаг к 2 билетам в кино в ТВОЁМ городе (РФ и СНГ)!${phrase ? `\n\n💬 «${phrase}»` : ""}`
+            : `🛢 <b>${senderName}:</b> Я закрыл тебя в бочке — попробуй выбраться быстрее меня!\n\n` +
+              `У тебя 30 секунд и 3 удара (со звуком или по тихому радару). Вскрой бочку — соберёшь часть билета в кино в ТВОЁМ городе (РФ и СНГ)!${phrase ? `\n\n💬 «${phrase}»` : ""}`;
+      const btnText = linkType === "duel" ? "⚔️ ПРИНЯТЬ ВЫЗОВ" : "🛢 ПОПРОБОВАТЬ ВЫБРАТЬСЯ";
 
       const preparedRes = await tgApi("savePreparedInlineMessage", {
         user_id: tgUserId,
@@ -636,29 +838,28 @@ Deno.serve(async (req: Request) => {
           return jsonResp({ ok: true, skipped: true, reason: "broadcast_no_spam" });
         }
       }
-      const { data: sUser } = await adminDb
-        .from("users")
-        .select("tg_user_id")
-        .eq("tg_user_id", String(body.senderTgId))
-        .limit(1)
-        .maybeSingle();
-      if (!sUser) return jsonResp({ ok: true, skipped: true });
-
       const openerName = escapeHtml(body.openerName || "Твой друг");
       const survived = body.survived !== false;
       const elapsedSec = Math.max(1, Math.round(Number(body.elapsedSec || 12)));
       const screamerLabel = body.screamerLabel ? ` (${escapeHtml(String(body.screamerLabel))})` : "";
-      await tgApi("sendMessage", {
-        chat_id: body.senderTgId,
-        parse_mode: "HTML",
+      const duelRoomId = String(body.roomId || body.barrelId || "duel").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32) || "duel";
+      const pushRes = await sendTgPushSafe({
+        chatId: String(body.senderTgId),
+        isServicePush: false,
+        eventName: "barrel_opened",
         text: survived
-          ? `🔓 <b>${openerName} выбрался за ${elapsedSec} сек и уже закатывает ответную бочку!</b>\nГолосовое послание прозвучало — готовься встречать ответный вызов!`
-          : `💥 <b>${openerName} спустил весь воздух на ${elapsedSec}-й секунде и словил твой скример${screamerLabel}!</b>\nСобери карточку для чата или закатай его снова.`,
-        reply_markup: {
-          inline_keyboard: [[{ text: "🏆 В ЦЕХ: РЕЙТИНГ И ПРЕМЬЕРА", url: MINI_APP_LINK }]],
+          ? `🔓 <b>${openerName} выбрался из твоей бочки за ${elapsedSec} сек!</b>\n` +
+            `Тебе начислены <b>+6 ❤️ жизней, +500 ⭐ очков и его именная фишка</b>.\n` +
+            `Сыграй с ним 1×1, пока он в цеху!`
+          : `💥 <b>${openerName} не выбрался на ${elapsedSec}-й сек (${screamerLabel || "скример"})!</b>\n` +
+            `Тебе начислены <b>+6 ❤️ жизней, +500 ⭐ очков и его именная фишка</b> — закрепи победу в дуэли!`,
+        replyMarkup: {
+          inline_keyboard: [
+            [{ text: "⚔️ В ДУЭЛЬ ЗА БИЛЕТОМ", web_app: { url: `${PUBLIC_WEB_URL}/?duel=${encodeURIComponent(duelRoomId)}` } }],
+          ],
         },
       });
-      return jsonResp({ ok: true });
+      return jsonResp({ ok: true, ...pushRes });
     }
 
     if ((action === "reaction_cinema" || action === "cinema_accept" || action === "accepted_cinema") && (body.senderTgId || body.barrelId)) {
@@ -796,34 +997,54 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === "duel_challenge" && body.targetTgId) {
-      const { data: tUser } = await adminDb
-        .from("users")
-        .select("tg_user_id")
-        .eq("tg_user_id", String(body.targetTgId))
-        .limit(1)
-        .maybeSingle();
-      if (!tUser) return jsonResp({ ok: true, skipped: true });
-
-      const challenger = escapeHtml(body.challengerName || "Кент из Цеха");
-      const roomId = String(body.roomId || "duel");
-      const sendRes = await tgApi("sendMessage", {
-        chat_id: body.targetTgId,
-        parse_mode: "HTML",
+      const challenger = escapeHtml(body.challengerName || "Друг из Цеха");
+      const roomId = String(body.roomId || "duel").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32) || "duel";
+      const pushRes = await sendTgPushSafe({
+        chatId: String(body.targetTgId),
+        isServicePush: false,
+        eventName: "duel_challenge",
         text:
-          `⚔️ <b>ВЫЗОВ НА ДУЭЛЬ 1 НА 1 В «БОЧКЕ»!</b>\n` +
-          `<b>${challenger}</b> зовёт тебя за приватный стол «НА СЧЁТ ТРИ!» (строго 1 на 1 — только вы вдвоём). Кто быстрее собьёт крышки — забирает банк и шаг к бесплатному билету в кино!`,
-        reply_markup: {
+          `⚔️ <b>ВЫЗОВ В ДУЭЛЬ 1×1 В «БОЧКЕ»!</b>\n` +
+          `<b>${challenger}</b> закрыл стол «НА СЧЁТ ТРИ!» — вскройте живые бочки на скорость за билет в кино в твоём городе (РФ и СНГ)!`,
+        replyMarkup: {
           inline_keyboard: [
             [{ text: "⚔️ ПРИНЯТЬ ВЫЗОВ «НА СЧЁТ ТРИ!»", web_app: { url: `${PUBLIC_WEB_URL}/?duel=${encodeURIComponent(roomId)}` } }],
           ],
         },
       });
       return jsonResp({
-        ok: Boolean(sendRes?.ok),
-        delivered: Boolean(sendRes?.ok),
-        skipped: false,
-        tgError: sendRes?.description || "",
+        ok: Boolean(pushRes?.ok),
+        delivered: Boolean(pushRes?.delivered),
+        skipped: Boolean(pushRes?.skipped),
+        reason: pushRes?.reason || "",
+        tgError: pushRes?.error || "",
       });
+    }
+
+    // v20.6: Сервисный возвратный пуш (строго <= 1 раза в 24 часа через check_and_mark_service_push_rpc)
+    if (action === "service_return_push") {
+      if (!verifiedCallerTgId) {
+        return jsonResp({ ok: false, error: "telegram_auth_required" }, 401);
+      }
+      const eventType = String(body.eventType || "daily_refill").trim();
+      const targetUid = `tg_${verifiedCallerTgId}`;
+      const text =
+        eventType === "rank_overtaken"
+          ? `⚡ <b>Тебя обогнали в ТОП-20 за 2 билетами в кино в ТВОЁМ городе!</b>\nЗайди в цех и отыграй позицию.`
+          : eventType === "friend_unfinished"
+            ? `⏳ <b>Друг ещё не открыл твою бочку!</b>\nЗови его в дуэль 1×1 — заберёте 3/4 и 4/4 билета в кино.`
+            : `❤️ <b>Пора за +6 ❤️ к Тилю на Северное море!</b>\nЕжедневное пополнение жизней открыто — забери 2 билета в кино в ТВОЁМ городе!`;
+      const pushRes = await sendTgPushSafe({
+        chatId: String(verifiedCallerTgId),
+        uid: targetUid,
+        isServicePush: true,
+        eventName: eventType,
+        text,
+        replyMarkup: {
+          inline_keyboard: [[{ text: "🛢 ВЕРНУТЬСЯ В ЦЕХ (+6 ❤️)", web_app: { url: `${PUBLIC_WEB_URL}/` } }]],
+        },
+      });
+      return jsonResp({ ok: true, eventType, ...pushRes });
     }
 
     // v15.2: Массовый пуш от бота ВСЕМ друзьям, кто играл в «БОЧКУ», с прямым входом за стол дуэли

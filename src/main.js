@@ -160,6 +160,7 @@ function pickRandomPackScreamer() {
 const AIR_DURATION_SEC = 30.0;
 const KP_MIN_AWAY_SEC = 3.5;
 const TRAILER_INTRO_LOCK_SEC = 15.0;
+const TRAILER_BASE_REWARD_SEC = 30.0;
 const TRAILER_UNLOCK_SEC = 15.0;
 const HINT_STORAGE_KEYS = {
   airDepleted: 'bochka_hint_air_v20',
@@ -346,6 +347,8 @@ const state = {
     prevVkTime: 0,
     lastTickWallMs: 0,
     trailerWatchedFull: false,
+    base30sRewarded: false,
+    base30sInFlight: false,
     fullWatchRewarded: false,
     fullWatchInFlight: false,
     antiSeekRejectedCount: 0,
@@ -457,10 +460,7 @@ async function ensureSceneReady() {
       scene.onEmptyBarrelHit = (idx) => audio.playEmptyBarrelClang?.(idx);
       scene.onSteamBurst = () => audio.playSteamWarningHiss?.();
       audio.setBarrelLayout(scene.getBarrelWorldPositions(), state.round?.targetIndex || 0);
-      if (!screamersPreloaded) {
-        screamersPreloaded = true;
-        window.setTimeout(() => preloadScreamerFrames(SCREAMER_META), 250);
-      }
+      scene.setSilentRadarMode(!audio.enabled, state.round?.targetIndex || 0);
       syncSceneRenderPause();
       return scene;
     } catch (err) {
@@ -476,13 +476,19 @@ async function ensureDuelReady() {
   if (duelInitPromise) return duelInitPromise;
   duelInitPromise = (async () => {
     await ensureSceneReady();
-    const mod = duelModCache || (await import('./duel.js?v=2000'));
+    if (!screamersPreloaded) {
+      screamersPreloaded = true;
+      window.setTimeout(() => preloadScreamerFrames(SCREAMER_META), 200);
+    }
+    const mod = duelModCache || (await import('./duel.js?v=2060'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
       scene,
       audio,
       getTgUser: () => state.tg?.user || null,
+      getTgWriteAccess: () => Boolean(state.profile?.tgWriteAccess),
+      onRequestWriteAccess: () => requestAndSyncWriteAccess({ force: false }),
       getPlayerAvatar: () => getPlayerAvatarUrl(state.tg?.user),
       getHasRealFriends: () => getRealFriendsCount() >= 1,
       getProfileStats: () => ({
@@ -2301,13 +2307,7 @@ async function bootstrap() {
     { passive: true }
   );
 
-  // Асинхронная фоновая подгрузка Three.js и 3D-цеха после первого кадра шлюза!
-  window.requestAnimationFrame(() => {
-    window.setTimeout(() => {
-      ensureSceneReady().catch(() => {});
-    }, 0);
-  });
-
+  // v20.6: Асинхронная подгрузка 3D-сцены выполняется строго ПОСЛЕ нажатия входа на Шлюзе (экономия мобильного 4G трафика на старте)
   window.addEventListener('resize', () => {
     if (scene) audio.setBarrelLayout(scene.getBarrelWorldPositions(), state.round.targetIndex);
   });
@@ -2379,6 +2379,7 @@ async function bootstrap() {
         vkVolume: Number(state.trailer.vkVolume ?? 1),
         vkAutoplaySoundBlocked: Boolean(state.trailer.vkAutoplaySoundBlocked),
         trailerWatchedFull: Boolean(state.profile?.trailerWatchedFull || state.trailer?.fullWatchRewarded),
+        base30sRewarded: Boolean(state.trailer?.base30sRewarded),
         fullWatchRewarded: Boolean(state.trailer?.fullWatchRewarded),
         antiSeekRejectedCount: Number(state.trailer?.antiSeekRejectedCount || 0),
         iframeSrc: document.getElementById('vk-trailer-iframe')?.getAttribute('src') || '',
@@ -2862,9 +2863,11 @@ function showWorkshopIntroHint({ targetKind = 'human', durationMs = 4600 } = {})
   }
 
   const isTouch = Boolean(window.matchMedia?.('(pointer: coarse)')?.matches || window.innerWidth <= 768);
-  subEl.textContent = isTouch
-    ? 'Зажми палец на бочке — послушай и следи за воздухом O₂'
-    : 'Зажми или наведи на бочку — послушай и следи за воздухом O₂';
+  subEl.textContent = !audio.enabled
+    ? '🔇 Тихий радар: коснись светящейся бочки и лови вибрацию!'
+    : isTouch
+      ? 'Зажми палец на бочке — лови пульс-радар и звук (работает и в тишине!)'
+      : 'Зажми или наведи на бочку — лови пульс-радар и звук (работает и в тишине!)';
 
   el.classList.remove('is-fading');
   el.removeAttribute('hidden');
@@ -5438,7 +5441,8 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
     hideWorkshopIntroHint(false);
   }
   const roundElapsedMs = performance.now() - Number(state.round.startedAtMs || 0);
-  const allowReticleHint = Boolean(isSteamHazard || (dwellMs >= 2200 && roundElapsedMs >= 4000));
+  const silentFastHint = !audio.enabled && dwellMs >= 650;
+  const allowReticleHint = Boolean(isSteamHazard || silentFastHint || (dwellMs >= 2200 && roundElapsedMs >= 4000));
 
   if (!allowReticleHint) {
     if (reticle) {
@@ -7715,7 +7719,7 @@ async function handleQuick1TapPrankClick() {
     await handleSealBarrelClick({ forceAutoAvatar: true });
   } finally {
     if (quickBtn) quickBtn.disabled = false;
-    if (quickTxt) quickTxt.textContent = 'Отправить сразу';
+    if (quickTxt) quickTxt.textContent = '⚡ Запаковать за 1 клик (без камеры и микрофона)';
   }
 }
 
@@ -7748,7 +7752,7 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
     if (!useAutoAvatar && !state.pack.processed) {
       await rebuildPackPortraitPreview();
     }
-    const phrase = 'Вытащи меня из бочки!';
+    const phrase = 'Я закрыл тебя в бочке — попробуй выбраться быстрее меня!';
     const randomSound = pickRandomPackScreamer();
     const broadcastPrefix = isBroadcastPack ? buildBroadcastPrefix(teamRole, state.tg?.user) : '';
     const created = await createBarrelPack({
@@ -7799,8 +7803,8 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
           : Math.max(3, prevRoundLvl + 1);
     const sharePrefix =
       teamRole === 'blog'
-        ? '🛢 Я заварил себя в 3D-цеху фильма «БОЧКА»! Надень наушники — вытащи меня за 3 удара и собери билет в кино'
-        : '🛢 Кто-то заварил тебя в цеху «БОЧКИ»! Надень наушники — найди нужную крышку за 3 удара и собери билет в кино';
+        ? '🛢 Я закрыл себя в 3D-цеху «БОЧКИ»! Попробуй найти меня за 3 удара и забери 2 билета в кино в своём городе (работает и без звука!)'
+        : '🛢 Я закрыл тебя в бочке! Попробуй выбраться быстрее меня за 3 удара и сразимся в дуэли 1×1 за 2 билета в кино в твоём городе 🎬';
     const fullShareText = `${sharePrefix}: «${phrase}»`;
     const linkType = isBroadcastPack ? (teamRole === 'blog' ? 'bl' : 'pr') : 'pack';
     const prepShare = await prepareNativeShareMessage({
@@ -7869,10 +7873,10 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
   } finally {
     state.pack.sealing = false;
     if (quickBtn) quickBtn.disabled = false;
-    if (quickTxt) quickTxt.textContent = 'Отправить сразу';
+    if (quickTxt) quickTxt.textContent = '⚡ Запаковать за 1 клик (без камеры и микрофона)';
     if (sendUpBtn) {
       sendUpBtn.disabled = false;
-      sendUpBtn.textContent = 'Отправить другу';
+      sendUpBtn.textContent = 'Отправить вызов другу';
     }
   }
 }
@@ -7915,8 +7919,13 @@ function showSentScreen({ wasBroadcastPack = false, broadcastRole = '' } = {}) {
     }
     if (btnTxt) btnTxt.textContent = isBlog ? 'Играть' : 'Поиграть в цех';
   } else {
-    if (txt) txt.textContent = 'Выиграй Тиля, чтобы получить билет в кино!';
+    if (txt) txt.textContent = 'Вызов отправлен! Выиграй Тиля, чтобы забрать этап к билету в кино!';
     if (btnTxt) btnTxt.textContent = 'Играть';
+  }
+  const pushCard = document.getElementById('sent-push-optin-card');
+  if (pushCard) {
+    if (state.profile?.tgWriteAccess) pushCard.setAttribute('hidden', '');
+    else pushCard.removeAttribute('hidden');
   }
   showScreen('sent');
 }
@@ -8654,15 +8663,14 @@ function clearTrailerTimers() {
   }
 }
 
-async function grantTrailerFullWatchReward() {
-  if (state.trailer.fullWatchRewarded || state.trailer.fullWatchInFlight) return;
-  state.trailer.fullWatchInFlight = true;
+async function grantTrailer30sBaseReward() {
+  if (state.trailer.base30sRewarded || state.trailer.base30sInFlight || state.trailer.fullWatchRewarded) return;
+  state.trailer.base30sInFlight = true;
   try {
-    const res = await awardTicketShardServer(state.tg?.user, 'trailer_full').catch(() => null);
-    recordFunnelEvent('trailer_watched_full', state.tg?.user).catch(() => {});
-    state.trailer.fullWatchRewarded = true;
+    const res = await awardTicketShardServer(state.tg?.user, 'trailer_30s').catch(() => null);
+    recordFunnelEvent('trailer_completions', state.tg?.user).catch(() => {});
+    state.trailer.base30sRewarded = true;
     state.trailer.unlocked40 = true;
-    state.profile.trailerWatchedFull = true;
 
     if (res?.ok) {
       state.profile.lives = Math.max(6, Number(res.lives ?? state.profile?.lives ?? 6));
@@ -8690,8 +8698,60 @@ async function grantTrailerFullWatchReward() {
     const flash = document.getElementById('trailer-reward-flash');
     if (flash) {
       flash.textContent = res?.reason === 'solo_cap_reached'
-        ? '⭐ +500 очков (лимит соло 2/4) и полные ❤️ жизни получены!'
-        : '🎟 +1/4 билета и полные ❤️ жизни получены!';
+        ? '⭐ +250 ⭐ и полные ❤️ жизни получены! Досмотри до 90% за ×2 очков!'
+        : '🎟 Этап 1 из 4 до билета (+250 ⭐) и полные ❤️ жизни получены! Досмотри до 90% за ×2!';
+      flash.removeAttribute('hidden');
+    }
+    audio.playRewardChime?.();
+    Haptics.success();
+    syncTrailerIntroLockUI(Math.max(TRAILER_BASE_REWARD_SEC, Number(state.trailer.honestWatchedSec || 0)));
+  } finally {
+    state.trailer.base30sInFlight = false;
+  }
+}
+
+async function grantTrailerFullWatchReward() {
+  if (state.trailer.fullWatchRewarded || state.trailer.fullWatchInFlight) return;
+  state.trailer.fullWatchInFlight = true;
+  try {
+    const res = await awardTicketShardServer(state.tg?.user, 'trailer_full').catch(() => null);
+    recordFunnelEvent('trailer_watched_full', state.tg?.user).catch(() => {});
+    state.trailer.base30sRewarded = true;
+    state.trailer.fullWatchRewarded = true;
+    state.trailer.unlocked40 = true;
+    state.profile.trailerWatchedFull = true;
+
+    if (res?.ok) {
+      state.profile.lives = Math.max(6, Number(res.lives ?? state.profile?.lives ?? 6));
+      if (res.shards != null) {
+        state.profile.ticketShards = res.mergedTicket ? 0 : Math.max(0, Math.min(3, Number(res.shards)));
+      }
+      if (res.premierePoints != null) {
+        state.profile.premierePoints = Math.max(
+          Number(state.profile?.premierePoints || 0),
+          Number(res.premierePoints)
+        );
+      }
+    } else {
+      state.profile.lives = Math.max(6, Number(state.profile?.lives || 0));
+      const curSh = Number(state.profile?.ticketShards || 0);
+      if (curSh < 2) state.profile.ticketShards = curSh + 1;
+      state.profile.premierePoints = Number(state.profile?.premierePoints || 0) + 250;
+    }
+
+    duelCtrl?.syncFromProfile?.(state.profile, { allowLivesRefill: true });
+    saveLocalV9Flags();
+    syncTicketShardsUI({ pulse: true });
+    updatePremiereBarsUI();
+    syncSuperPrizeRatingBarUI();
+
+    const flash = document.getElementById('trailer-reward-flash');
+    if (flash) {
+      flash.textContent = res?.doublePointsBonus || res?.reason === 'full_watch_2x_bonus'
+        ? '🔥 ×2 ОЧКОВ ПОЛУЧЕНО! Полный досмотр трейлера засчитан (+500 ⭐ итого)!'
+        : res?.reason === 'solo_cap_reached'
+          ? '🔥 ×2: +500 ⭐ (лимит соло 2/4) и полные ❤️ жизни получены!'
+          : '🔥 ×2 ОЧКОВ (+500 ⭐), Этап к билету и полные ❤️ жизни получены!';
       flash.removeAttribute('hidden');
     }
     audio.playRewardChime?.();
@@ -8725,7 +8785,7 @@ function handleVkTrailerTimeProgress(curTime, vkDur = 91.8, isEnded = false) {
     state.trailer.prevVkTime = t;
     if (Date.now() - (state.trailer.lastAntiSeekToastAt || 0) > 4000) {
       state.trailer.lastAntiSeekToastAt = Date.now();
-      showToast('⏪ Перемотка не засчитывается — досмотри трейлер до конца!');
+      showToast('⏪ Перемотка не засчитывается — досмотри 30с или до конца!');
     }
     return { accepted: false, reason: 'seek_jump', delta };
   }
@@ -8749,6 +8809,15 @@ function handleVkTrailerTimeProgress(curTime, vkDur = 91.8, isEnded = false) {
   updateTrailerProgressUI(state.trailer.honestWatchedSec, dur, unlockThreshold);
 
   if (
+    !state.trailer.base30sRewarded &&
+    !state.trailer.base30sInFlight &&
+    !state.trailer.fullWatchRewarded &&
+    state.trailer.honestWatchedSec >= TRAILER_BASE_REWARD_SEC
+  ) {
+    grantTrailer30sBaseReward();
+  }
+
+  if (
     !state.trailer.fullWatchRewarded &&
     !state.trailer.fullWatchInFlight &&
     (state.trailer.honestWatchedSec >= unlockThreshold ||
@@ -8760,6 +8829,7 @@ function handleVkTrailerTimeProgress(curTime, vkDur = 91.8, isEnded = false) {
     accepted: true,
     honestWatchedSec: state.trailer.honestWatchedSec,
     unlockThreshold,
+    base30sRewarded: state.trailer.base30sRewarded,
     fullWatchRewarded: state.trailer.fullWatchRewarded,
   };
 }
@@ -8773,6 +8843,7 @@ function syncTrailerIntroLockUI(watchedSec = 0) {
   const locked = Boolean(state.trailer.introLocked);
   const rem = Math.max(0, Math.ceil(TRAILER_INTRO_LOCK_SEC - state.trailer.introWatchedSec));
   const fullRewarded = Boolean(state.trailer.fullWatchRewarded);
+  const baseRewarded = Boolean(state.trailer.base30sRewarded);
 
   const modal = document.getElementById('modal-trailer');
   modal?.classList.toggle('is-intro-locked', locked);
@@ -8790,15 +8861,20 @@ function syncTrailerIntroLockUI(watchedSec = 0) {
   const toPackBtn = document.getElementById('btn-trailer-to-pack');
   if (toPackBtn) {
     toPackBtn.removeAttribute('hidden');
-    toPackBtn.disabled = locked && !fullRewarded;
-    toPackBtn.classList.toggle('is-ready', !locked || fullRewarded);
-    toPackBtn.classList.toggle('is-full-reward', fullRewarded);
+    toPackBtn.disabled = locked && !fullRewarded && !baseRewarded;
+    toPackBtn.classList.toggle('is-ready', !locked || fullRewarded || baseRewarded);
+    toPackBtn.classList.toggle('is-full-reward', fullRewarded || baseRewarded);
     if (fullRewarded) {
-      toPackBtn.textContent = 'Забрать награду и играть!';
+      toPackBtn.textContent = 'Забрать ×2 награду и играть!';
+    } else if (baseRewarded) {
+      toPackBtn.textContent = 'Забрать Этап 1 из 4 и играть (или жди 90% за ×2)!';
     } else if (locked) {
       toPackBtn.textContent = `Смотри трейлер... ${rem}`;
     } else {
-      toPackBtn.textContent = 'Пропустить и идти дальше';
+      const to30 = Math.max(0, Math.ceil(TRAILER_BASE_REWARD_SEC - Number(state.trailer.honestWatchedSec || 0)));
+      toPackBtn.textContent = to30 > 0
+        ? `Пропустить (до Этапа 1 осталось ${to30}с)`
+        : 'Пропустить и идти дальше';
     }
   }
 }
@@ -9315,6 +9391,8 @@ function openTrailerModal({ forRescue = false, afterL1ToPack = false } = {}) {
   state.trailer.lastTickWallMs = 0;
   state.trailer.watchedBuckets = {};
   state.trailer.antiSeekRejectedCount = 0;
+  state.trailer.base30sInFlight = false;
+  state.trailer.base30sRewarded = Boolean(state.profile?.trailerWatchedFull);
   state.trailer.fullWatchInFlight = false;
   state.trailer.fullWatchRewarded = Boolean(state.profile?.trailerWatchedFull);
   state.trailer.externalRescueDepartedAt = 0;
@@ -10468,6 +10546,25 @@ function bindUIEvents() {
   };
   document.getElementById('btn-hud-sound')?.addEventListener('click', toggleWorkshopSound);
   document.getElementById('btn-sound-corner')?.addEventListener('click', toggleWorkshopSound);
+  document.getElementById('workshop-silent-radar-pill')?.addEventListener('click', toggleWorkshopSound);
+  document.getElementById('btn-enable-tg-push')?.addEventListener('click', async () => {
+    const res = await requestAndSyncWriteAccess({ force: true });
+    if (res?.allowed) {
+      document.getElementById('sent-push-optin-card')?.setAttribute('hidden', '');
+      showToast('🔔 Уведомления бота включены — узнаешь, когда друг откроет бочку!');
+    } else {
+      showToast('Открой @bochka_film_bot в Telegram, чтобы получать пуши о друзьях');
+    }
+  });
+  document.getElementById('btn-duel-enable-push')?.addEventListener('click', async () => {
+    const res = await requestAndSyncWriteAccess({ force: true });
+    if (res?.allowed) {
+      document.getElementById('btn-duel-enable-push')?.setAttribute('hidden', '');
+      showToast('🔔 Уведомления бота о вызовах и дуэлях 1×1 включены!');
+    } else {
+      showToast('Разреши уведомления в @bochka_film_bot, чтобы не пропустить дуэль');
+    }
+  });
 
   document.querySelectorAll('[data-life-action]').forEach((btn) => {
     btn.addEventListener('click', () => handleLifeRecoveryAction(btn.getAttribute('data-life-action') || 'kp'));
@@ -11651,6 +11748,12 @@ function refreshSoundButtonLabel() {
     cornerBtn.textContent = icon;
     cornerBtn.classList.toggle('is-muted', !audio.enabled);
   }
+  const radarPill = document.getElementById('workshop-silent-radar-pill');
+  if (radarPill) {
+    if (audio.enabled) radarPill.setAttribute('hidden', '');
+    else radarPill.removeAttribute('hidden');
+  }
+  scene?.setSilentRadarMode?.(!audio.enabled, state.round?.targetIndex);
   const burgerBtn = document.getElementById('btn-burger-sound');
   if (burgerBtn) {
     burgerBtn.textContent = audio.enabled ? `🔊 ${txt}` : `🔇 ${txt}`;

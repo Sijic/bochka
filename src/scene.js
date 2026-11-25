@@ -164,6 +164,9 @@ export class WorkshopScene {
     this.boilerTargetRippleTimer = 0.6;
     this.gaugeJitterCount = 0;
     this.boilerRipplesSpawned = 0;
+    this.silentRadarMode = false;
+    this.silentTargetIndex = 0;
+    this._silentPulseTimer = 0.25;
     this._isPortraitLayout = false;
     this._projVec = new THREE.Vector3();
 
@@ -186,6 +189,14 @@ export class WorkshopScene {
     if (!this.interactive && this.hoveredIndex !== -1) {
       this._setHovered(-1);
     }
+  }
+
+  setSilentRadarMode(enabled, targetIndex = null) {
+    this.silentRadarMode = Boolean(enabled);
+    if (typeof targetIndex === 'number' && Number.isFinite(targetIndex) && targetIndex >= 0) {
+      this.silentTargetIndex = Math.round(targetIndex);
+    }
+    this._silentPulseTimer = 0.12;
   }
 
   setDuelDirectClick(flag) {
@@ -264,6 +275,7 @@ export class WorkshopScene {
     this.diving = false;
     this.diveProgress = 0;
     this.diveTargetIndex = targetIndex;
+    this.silentTargetIndex = Math.max(0, Number(targetIndex || 0));
     this.telegraphIndex = -1;
     this.idleHintPulse = false;
     this.pullIntoBarrel = 0;
@@ -2219,6 +2231,19 @@ export class WorkshopScene {
       }
     }
 
+    // v20.6: Визуальный радар стука в тихом режиме без звука (кольца волны у живой бочки)
+    if (this.silentRadarMode && this.interactive && !this.diving) {
+      this._silentPulseTimer -= dt;
+      if (this._silentPulseTimer <= 0) {
+        this._silentPulseTimer = 1.15;
+        const tb = this.barrels?.[this.silentTargetIndex];
+        if (tb && tb.group.visible && !tb.struck) {
+          this._spawnFloorRipple(tb.group.position.x, tb.group.position.z, 0.06);
+          tb.lidRattle = Math.max(tb.lidRattle || 0, 0.26);
+        }
+      }
+    }
+
     if (this.activeZoneId === 4) {
       this.wiringArcCountdown -= dt;
       if (this.wiringArcCountdown <= 0) {
@@ -2244,6 +2269,13 @@ export class WorkshopScene {
 
     for (let idx = 0; idx < this.barrels.length; idx++) {
       const b = this.barrels[idx];
+      if (this.silentRadarMode && this.interactive && idx === this.silentTargetIndex && !b.struck && b.group.visible && !this.goldenMode) {
+        const pulse = 0.45 + 0.55 * Math.abs(Math.sin(elapsed * 4.2));
+        b.bodyMat.emissive.setHex(0x854d0e);
+        b.bodyMat.emissiveIntensity = 0.16 + pulse * 0.28;
+      } else if (!this.goldenMode && this.hoveredIndex !== idx && b.bodyMat?.emissiveIntensity > 0) {
+        b.bodyMat.emissiveIntensity = 0;
+      }
       if (b.steamVeilMesh) {
         const showVeil = this.numbersObscured && idx < this.activeBarrelCount && !b.struck;
         b.steamVeilMesh.visible = showVeil;

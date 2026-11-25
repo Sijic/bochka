@@ -611,6 +611,8 @@ export async function recordBarrelResult(
     survived,
     elapsedSec: Math.max(1, Math.round(Number(elapsedSec || 12))),
     screamerLabel,
+    jackpotLives: 6,
+    jackpotPoints: 500,
   });
 
   return { notified, senderBonusCredited };
@@ -3130,6 +3132,8 @@ export async function awardTicketShardServer(tgUser = null, source = 'level') {
           duplicateBlocked: Boolean(data.duplicate_blocked),
           reason: data.reason || '',
           fallbackPoints: Number(data.fallback_points || 0),
+          doublePointsBonus: Boolean(data.double_points_bonus),
+          bonusPoints: Number(data.bonus_points || 0),
           premierePoints: data.premiere_points != null ? Number(data.premiere_points) : null,
           pendingTicketsCount: Number(data.pending_tickets_count || 0),
           lives: data.lives != null ? Number(data.lives) : null,
@@ -3154,7 +3158,7 @@ export async function awardTicketShardServer(tgUser = null, source = 'level') {
   }
   const prof = getLocalPreviewProfile();
   const prev = Math.max(0, Math.min(3, Number(prof.ticketShards || 0)));
-  if (['solo_til', 'trailer_full', 'til_trophy'].includes(source) && prev >= 2) {
+  if (['solo_til', 'trailer_30s', 'trailer_full', 'til_trophy'].includes(source) && prev >= 2) {
     return {
       ok: true,
       source,

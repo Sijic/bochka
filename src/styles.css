@@ -11122,3 +11122,52 @@ body:not([data-screen="workshop"]) .workshop-intro-hint {
   border-color: rgba(250, 204, 21, 0.36) !important;
   color: #fde68a !important;
 }
+
+/* v20.6: Silent radar banner, Pack challenge subline, Telegram Push opt-in card */
+.workshop-silent-radar-pill {
+  position: relative;
+  z-index: 6;
+  margin: 6px auto 0;
+  padding: 6px 12px;
+  max-width: min(92vw, 400px);
+  border-radius: 999px;
+  border: 1px solid rgba(250, 204, 21, 0.45);
+  background: rgba(15, 23, 42, 0.88);
+  color: #fef08a;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+  pointer-events: auto;
+  display: block;
+}
+
+.pack-duel-subline {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: #cbd5e1;
+  text-align: center;
+}
+
+.push-optin-card {
+  width: 100%;
+  margin: 8px 0;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: rgba(14, 116, 144, 0.16);
+  border: 1px solid rgba(56, 189, 248, 0.38);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: center;
+}
+
+.push-optin-copy {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.32;
+  color: #e0f2fe;
+}
+

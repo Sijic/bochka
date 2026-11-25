@@ -103,10 +103,13 @@ const IDLE_HINT_DELAY_MS = 2700;
  * Все промежуточные клики и таймеры идут строго через WebSocket в оперативной памяти (0 записей в БД).
  */
 export class WorkshopDuelController {
-  constructor({ scene, audio, getTgUser, getPlayerAvatar, getHasRealFriends, getProfileStats, getTicketShards, onCollectChipFromBarrel, onCollectGoldenShard, onUnlockFilmArtifact, canUseOceanRefill, onOpenPackForLives, onFoundFriendBarrel, onContextDiscoveryHint, onLifeLostPill, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDefeatCinematic, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels, onOpenHallOfFame, loadDuelCandidates, onChallengeFriend, onOpenPackFriend, onRoomFull, onTriggerScreamerFx }) {
+  constructor({ scene, audio, getTgUser, getTgWriteAccess, onRequestWriteAccess, getPlayerAvatar, getHasRealFriends, getProfileStats, getTicketShards, onCollectChipFromBarrel, onCollectGoldenShard, onUnlockFilmArtifact, canUseOceanRefill, onOpenPackForLives, onFoundFriendBarrel, onContextDiscoveryHint, onLifeLostPill, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDefeatCinematic, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels, onOpenHallOfFame, loadDuelCandidates, onChallengeFriend, onOpenPackFriend, onRoomFull, onTriggerScreamerFx }) {
     this.scene = scene;
     this.audio = audio;
     this.getTgUser = getTgUser;
+    this.getTgWriteAccess = getTgWriteAccess || null;
+    this.onRequestWriteAccess = onRequestWriteAccess || null;
+    this._duelPushAutoPrompted = false;
     this.getPlayerAvatar = getPlayerAvatar || null;
     this.getHasRealFriends = getHasRealFriends || null;
     this.getProfileStats = getProfileStats || null;
@@ -2852,7 +2855,7 @@ export class WorkshopDuelController {
       let pickedRes = { kind };
       try {
         if (kind === 'ticket') {
-          this.onFlyRating?.({ type: 'ticket', count: 3, label: '🎟 +1/4 билета' });
+          this.onFlyRating?.({ type: 'ticket', count: 3, label: '🎟 Этап к билету' });
           const sRes = await awardTicketShardServer(this.getTgUser?.(), isPvp1x1 ? 'duel' : 'til_trophy').catch(() => null);
           pickedRes.serverTicketRes = sRes;
           pickedRes.serverTicketGranted = Boolean(sRes?.granted);
@@ -3515,6 +3518,16 @@ export class WorkshopDuelController {
       } else {
         switchLobbyBtn.setAttribute('hidden', '');
       }
+    }
+    const pushEnableBtn = document.getElementById('btn-duel-enable-push');
+    const hasWriteAccess = Boolean(this.getTgWriteAccess?.());
+    if (pushEnableBtn) {
+      if (hasWriteAccess) pushEnableBtn.setAttribute('hidden', '');
+      else pushEnableBtn.removeAttribute('hidden');
+    }
+    if (!hasWriteAccess && !this._duelPushAutoPrompted) {
+      this._duelPushAutoPrompted = true;
+      this.onRequestWriteAccess?.();
     }
 
     const resTrophyEl = document.getElementById('duel-result-trophy');
