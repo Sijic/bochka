@@ -10803,3 +10803,21 @@ body:not([data-screen="workshop"]) .workshop-intro-hint {
   gap: 8px;
   width: 100%;
 }
+
+@media (max-width: 520px) {
+  .leader-me-banner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .leader-me-right {
+    align-items: flex-start;
+    text-align: left;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 6px;
+  }
+  .leader-rating-bar-wrap strong {
+    white-space: nowrap;
+    font-size: 12px;
+  }
+}

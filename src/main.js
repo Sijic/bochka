@@ -1551,8 +1551,8 @@ function syncSuperPrizeRatingBarUI() {
   if (lbFill) lbFill.style.width = `${sp.unlocked ? sp.pct.toFixed(1) : pct}%`;
   if (lbBrk) {
     lbBrk.textContent = sp.unlocked
-      ? `🏆 Лига Суперприза (Ур.${sp.displayLevel} · ${sp.barCur.toLocaleString('ru-RU')}/3 000 ⭐ · ✨ Золотой ${sp.goldenCount}/12) · 👥 Друзей: ${friends} · 🪙 Фишек: ${chips} · ⚔️ Дуэлей: ${duelsPlayed} (${duelsWon} поб.)`
-      : `👥 Друзья: ${friends} · 🪙 Фишки: ${chips} · ⚔️ Дуэли: ${duelsPlayed} · ⭐ Очки: ${pts} (после 5 000 ⭐ — 12 уровней Золотого билета!)`;
+      ? `🏆 Лига Суперприза (Ур.${sp.displayLevel} · ${sp.barCur.toLocaleString('ru-RU')}/3 000 ⭐ · ✨ Золотой ${sp.goldenCount}/12) · 👥 Друзей: ${friends} · Фишек: ${chips} · ⚔️ Дуэлей: ${duelsPlayed} (${duelsWon} поб.)`
+      : `👥 Друзья: ${friends} · Фишки: ${chips} · ⚔️ Дуэли: ${duelsPlayed} · ⭐ Очки: ${pts} (после 5 000 ⭐ — 12 уровней Золотого билета!)`;
   }
 
   const spStrip = document.getElementById('duel-superprize-strip');
@@ -9771,7 +9771,7 @@ async function openLeaderboardModal() {
   if (rankEl) rankEl.textContent = me.rank ? `#${me.rank}` : '#—';
   if (ptsEl) ptsEl.textContent = myBonusPct > 0 ? `⭐ ${myEffective.toLocaleString('ru-RU')} (+${myBonusPct}%)` : `⭐ ${myEffective.toLocaleString('ru-RU')}`;
   if (gapEl) {
-    const factorsHint = ` · Ур.${sp.displayLevel} · 🪙 ${myChips} · 👥 ${myFriends} · ⚔️ ${myDuelsWon}/${myDuelsPlayed} · ✨ Золотой ${myGolden}/12`;
+    const factorsHint = ` · Ур.${sp.displayLevel} · Фишек: ${myChips} · 👥 ${myFriends} · ⚔️ ${myDuelsWon}/${myDuelsPlayed} · ✨ Золотой ${myGolden}/12`;
     gapEl.textContent = me.in_top10
       ? `🔥 ТЫ В ЗОНЕ ПРИГЛАШЕНИЯ В ТОП-10!${factorsHint}`
       : `До ТОП-10: +${Math.max(10, Number(me.points_to_top10 || 150))} ⭐${factorsHint}`;
@@ -9813,7 +9813,7 @@ async function openLeaderboardModal() {
     const rowGolden = Number(row.golden_ticket_shards ?? 0);
 
     const smallEl = document.createElement('small');
-    smallEl.textContent = `Ур.${rowLvl} · 🪙 ${rowChips} · 👥 ${rowFriends} (+${rowBonusPct}%) · ⚔️ ${rowWon}/${rowPlayed} · ✨ ${rowGolden}/12`;
+    smallEl.textContent = `Ур.${rowLvl} · Фишек: ${rowChips} · 👥 ${rowFriends} (+${rowBonusPct}%) · ⚔️ ${rowWon}/${rowPlayed} · ✨ ${rowGolden}/12`;
     nameCol.append(strongEl, smallEl);
 
     const ptsSpan = document.createElement('span');
