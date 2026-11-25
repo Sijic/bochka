@@ -1213,6 +1213,7 @@ function mergeFreshProfile(freshProfile, { preserveProgress = true } = {}) {
   saveLocalV9Flags();
   syncTicketShardsUI();
   syncDuel1x1Visibility();
+  syncSuperPrizeRatingBarUI();
 }
 
 /* ============================================================================
@@ -1503,7 +1504,7 @@ function checkSuperprizeTransitions({ allowModal = true } = {}) {
     const lvlKey = `${SUPERPRIZE_LEVEL_KEY_PREFIX}${uid}`;
     const prevSeenLvl = Number(localStorage.getItem(lvlKey) || 0);
     if (!localStorage.getItem(unlockKey)) {
-      if (allowModal && state.entered && state.activeScreen !== 'gate') {
+      if (allowModal && state.activeScreen !== 'gate') {
         localStorage.setItem(unlockKey, '1');
         localStorage.setItem(lvlKey, String(sp.displayLevel));
         openSuperprizeUnlockModal().catch(() => {});
@@ -3165,10 +3166,14 @@ function showScreen(name) {
 
   if (name === 'modeA') {
     updatePremiereBarsUI();
+    syncSuperPrizeRatingBarUI();
     document.getElementById('btn-mode-a-premiere')?.setAttribute('hidden', '');
     enterModeABarrelHub();
   } else {
     leaveModeABarrelHub();
+    if (name === 'workshop') {
+      syncSuperPrizeRatingBarUI();
+    }
   }
 
   if (name === 'pack') {
