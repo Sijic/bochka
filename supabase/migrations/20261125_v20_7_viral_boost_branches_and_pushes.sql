@@ -374,7 +374,7 @@ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_pref text := lower(trim(coalesce(p_branch_prefix, '')));
-  v_include_qa boolean := (v_pref LIKE '%qa_test%');
+  v_include_qa boolean := (v_pref LIKE '%qa_%');
   v_my jsonb := NULL;
   v_top jsonb := '[]'::jsonb;
 BEGIN
@@ -382,21 +382,24 @@ BEGIN
     v_pref := '';
   END IF;
 
-  WITH raw_branches AS (
+  WITH user_branches AS (
     SELECT
+      u.uid,
       CASE
-        WHEN COALESCE(seed_prefix, '') ~ '^(pr|bl)_' THEN lower(seed_prefix)
-        WHEN COALESCE(traffic_source, '') ~ '^(pr|bl)_' THEN lower(traffic_source)
-        ELSE NULL
+        WHEN COALESCE(u.seed_prefix, '') ~ '^(pr|bl)_' THEN lower(u.seed_prefix)
+        WHEN COALESCE(u.traffic_source, '') ~ '^(pr|bl)_' THEN lower(u.traffic_source)
+        ELSE (
+          SELECT lower(b.broadcast_prefix)
+          FROM public.barrels b
+          WHERE b.sender_uid = u.uid AND COALESCE(b.is_broadcast, false) = true AND COALESCE(b.broadcast_prefix, '') ~ '^(pr|bl)_'
+          ORDER BY b.created_at DESC
+          LIMIT 1
+        )
       END AS branch_key,
-      COALESCE(premiere_points, 0)::bigint AS pts
-    FROM public.users
-    WHERE NOT public.is_sandbox_uid(uid)
-      AND (v_include_qa OR COALESCE(display_name, '') NOT ILIKE 'QA_TEST_%')
-      AND (
-        COALESCE(seed_prefix, '') ~ '^(pr|bl)_'
-        OR COALESCE(traffic_source, '') ~ '^(pr|bl)_'
-      )
+      COALESCE(u.premiere_points, 0)::bigint AS pts
+    FROM public.users u
+    WHERE NOT public.is_sandbox_uid(u.uid)
+      AND (v_include_qa OR COALESCE(u.display_name, '') NOT ILIKE 'QA_TEST_%')
   ),
   agg AS (
     SELECT
@@ -405,8 +408,9 @@ BEGIN
       COUNT(*)::integer AS members_count,
       SUM(pts)::bigint AS total_points,
       ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC, SUM(pts) DESC, branch_key ASC)::integer AS rank
-    FROM raw_branches
+    FROM user_branches
     WHERE branch_key IS NOT NULL
+      AND (v_include_qa OR branch_key NOT LIKE '%qa_%')
     GROUP BY branch_key
   )
   SELECT
