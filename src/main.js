@@ -101,6 +101,7 @@ import {
   recordHomescreenShortcut,
   sendRevengeClosedPush,
   claimTrailer60sCheckpointServer,
+  claimPingPongRevengeBonusServer,
 } from './backend.js';
 import { HorrorScreamerPlayer, preloadScreamerFrames } from './screamer-fx.js';
 
@@ -414,7 +415,7 @@ const state = {
     lastShareUrl: '',
     lastWebUrl: '',
     shareLifeClaimedForUrl: '',
-    shareTemplate: 'record_challenge',
+    shareTemplate: 'gift_barrel',
     customEdited: false,
     userUploadedPhoto: false,
     sealing: false,
@@ -976,26 +977,26 @@ async function refreshBranchBattleUI() {
   return data;
 }
 
-function buildPersonalShareCopy(template = 'record_challenge', bestSec = null) {
+function buildPersonalShareCopy(template = 'gift_barrel', bestSec = null) {
   const sec = Math.max(3, Math.min(30, Math.round(Number(bestSec ?? state.profile?.bestEscapeSec ?? 12))));
   if (template === 'record_challenge') {
     return {
       template: 'record_challenge',
       bestSec: sec,
-      phrase: `Я выбрался из бочки за ${sec} сек — побьешь мой рекорд, заберешь фишку`,
-      shareText: `⏱ Я выбрался из бочки за ${sec} сек — побьешь мой рекорд, заберешь фишку! (работает со звуком и в тишине):`,
+      phrase: `Выбрался из бочки за ${sec} сек — попробуешь пройти быстрее?`,
+      shareText: `⏱ Выбрался из бочки за ${sec} сек — попробуешь побить мой результат? (работает и без звука):`,
     };
   }
   return {
     template: 'gift_barrel',
     bestSec: sec,
-    phrase: 'Дарю тебе часть билета в кино в нашем городе — успей забрать из бочки',
-    shareText: '🎁 Дарю тебе часть билета в кино в нашем городе — успей забрать из бочки (30 сек, работает и без звука):',
+    phrase: 'Дарю тебе часть билета в кино в нашем городе — успей забрать из бочки!',
+    shareText: '🎁 Дарю тебе часть билета в кино в нашем городе — успей забрать из бочки! (30 сек, работает и без звука):',
   };
 }
 
 function updatePackTemplatePreview() {
-  const tpl = state.pack.shareTemplate || 'record_challenge';
+  const tpl = state.pack.shareTemplate || 'gift_barrel';
   document.getElementById('btn-tpl-gift')?.classList.toggle('is-active', tpl === 'gift_barrel');
   document.getElementById('btn-tpl-record')?.classList.toggle('is-active', tpl === 'record_challenge');
   const prevEl = document.getElementById('pack-template-preview');
@@ -3984,9 +3985,9 @@ function syncWorkshopRecoveryBarUI() {
   bar.removeAttribute('hidden');
   const curLives = Math.max(0, Math.round(Number(state.profile?.lives || 0)));
   if (copyEl) {
-    copyEl.textContent = curLives >= 3
-      ? '❤️ 3/3 жизни собраны! Возвращайся в бой к Тилю.'
-      : `Сейчас ❤️ ${curLives}/3 · +1 ❤️ и +75 ⭐ (без редких фишек и 3/4–4/4)`;
+    copyEl.textContent = curLives >= 2
+      ? '❤️ 2/2 жизни собраны! Возвращайся в бой к Тилю или позови друга за +6 ❤️.'
+      : `Сейчас ❤️ ${curLives}/2 · +1 ❤️ (без очков и фишек · макс. 2 смены/сут)`;
   }
   if (backBtn) {
     if (curLives >= 1) {
@@ -4061,7 +4062,7 @@ async function startDemoRound({ resumeAttempts = null, recoveryShift = false } =
     workshopLevel: spec.level,
     roundLives: isRecovery ? Math.max(1, Number(state.profile.lives || 0)) : (spec.level === 1 ? 1 : Math.max(1, Number(state.profile.lives || 3))),
     targetKind: isRecovery ? 'recovery_life' : (spec.targetKind || 'human'),
-    taskText: isRecovery ? 'Отработка без Тиля: найди бочку за 3 удара → +1 ❤️ и +75 ⭐' : (spec.taskText || ''),
+    taskText: isRecovery ? 'Отработка без Тиля: найди бочку за 3 удара → +1 ❤️ (без очков, до 2 ❤️)' : (spec.taskText || ''),
     isBlitz: !isRecovery && spec.isBlitz,
     blitzTargetsCleared: 0,
     targetIndex,
@@ -7576,40 +7577,31 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
           flyRewardToHud({
             type: 'lives',
             count: 2,
-            label: '+1 ❤️ · +75 ⭐',
+            label: '+1 ❤️',
             startX: pos?.visible ? pos.x : null,
             startY: pos?.visible ? pos.y : null,
           });
           await playRevealAvatar(1350, {
             barrelIndex: revIdx,
             isBoy: false,
-            caption: `🔨 СМЕНА ПРОЙДЕНА! +1 ❤️ И +75 ⭐ (СЕЙЧАС ${state.profile.lives}/3 ❤️)`,
+            caption: `🔨 СМЕНА ПРОЙДЕНА! +1 ❤️ БЕЗ ОЧКОВ (СЕЙЧАС ${state.profile.lives}/2 ❤️)`,
           });
           if (state.activeScreen !== 'workshop') return;
-          if (state.profile.lives >= 3) {
-            showToast('❤️ Собраны все 3/3 жизни! Жми «🥊 К Тилю» и бери реванш!');
+          if (state.profile.lives >= 2) {
+            showToast('❤️ Потолок отработки 2/2 ❤️ достигнут! Иди к Тилю или позови друга за +6 ❤️!');
           } else {
-            showToast(`🔨 +1 ❤️ и +75 ⭐ (${recRes.dailyRecoveryShifts}/${recRes.maxDailyShifts} смен)! Можешь идти к Тилю или добрать до 3 ❤️.`);
-            window.setTimeout(() => {
-              if (state.activeScreen === 'workshop' && !state.round?.running && !duelCtrl?.isActive) {
-                startWorkshopRecoveryShift();
-              }
-            }, 1350);
+            showToast(`🔨 +1 ❤️ (без очков, смена ${recRes.dailyRecoveryShifts}/${recRes.maxDailyShifts || 2}). Следующая смена через 15 мин!`);
           }
         } else if (recRes?.reason === 'daily_recovery_limit') {
-          showToast('🔒 Лимит отработки (6 смен/день) исчерпан — закатай друга в бочку (+2…+6 ❤️)!');
+          showToast('🔒 Лимит отработки (2 смены/день) исчерпан — позови друга (+6 ❤️ и ×2 очки)!');
           state.pack.forLifeRefill = true;
           showScreen('pack');
         } else if (recRes?.reason === 'lives_ceiling_reached') {
           syncWorkshopRecoveryBarUI();
-          showToast(`❤️ У тебя уже ${state.profile.lives} ❤️ — возвращайся в бой к Тилю!`);
+          showToast(`❤️ Потолок отработки (${state.profile.lives}/2 ❤️) — возвращайся к Тилю или позови друга (+6 ❤️)!`);
         } else if (recRes?.reason === 'recovery_cooldown') {
-          showToast(`⏳ Подожди ${recRes.retryAfterSec || 10}с до следующей смены или жми «🥊 К Тилю»!`);
-          window.setTimeout(() => {
-            if (state.activeScreen === 'workshop' && !state.round?.running && !duelCtrl?.isActive) {
-              startWorkshopRecoveryShift();
-            }
-          }, Math.min(22000, Math.max(2000, (recRes.retryAfterSec || 3) * 1000)));
+          const minsLeft = Math.max(1, Math.ceil((recRes.retryAfterSec || 900) / 60));
+          showToast(`⏳ Пауза между сменами 15 мин (осталось ~${minsLeft} мин) — позови друга (+6 ❤️) или иди к Тилю!`);
         }
       } else {
         showToast('💨 Пусто! Попробуй ещё раз выбить +1 ❤️ в цеху или закатай друга (+2…+6 ❤️).');
@@ -7957,10 +7949,10 @@ async function handleSealBarrelClick({ forceAutoAvatar = false, isPingPongReveng
     if (!useAutoAvatar && !state.pack.processed) {
       await rebuildPackPortraitPreview();
     }
-    const shareTpl = isPingPongRevenge ? 'record_challenge' : (state.pack.shareTemplate || 'record_challenge');
+    const shareTpl = isPingPongRevenge ? 'record_challenge' : (state.pack.shareTemplate || 'gift_barrel');
     const tplCopy = buildPersonalShareCopy(shareTpl, state.round?.lastElapsedSec || state.profile?.bestEscapeSec);
     const phrase = isPingPongRevenge
-      ? `Выбрался за ${tplCopy.bestSec} сек и закрыл тебя в ответ — попробуй выбраться!`
+      ? `Выбрался за ${tplCopy.bestSec} сек и закрыл тебя в ответ — попробуешь побить время?`
       : tplCopy.phrase;
     const randomSound = pickRandomPackScreamer();
     const broadcastPrefix = isBroadcastPack ? buildBroadcastPrefix(teamRole, state.tg?.user) : '';
@@ -8063,6 +8055,27 @@ async function handleSealBarrelClick({ forceAutoAvatar = false, isPingPongReveng
     }).catch(() => {});
     syncUiStage(state.tg?.user, wasProducerFirstPack ? 1 : 3).catch(() => {});
 
+    let revengeBonusRes = null;
+    if (isPingPongRevenge && replyToPack?.id) {
+      revengeBonusRes = await claimPingPongRevengeBonusServer(state.tg?.user, {
+        originalBarrelId: replyToPack.id,
+        revengeBarrelId: created.id,
+      }).catch(() => null);
+      if (revengeBonusRes?.ok) {
+        if (revengeBonusRes.lives != null) {
+          state.profile.lives = Math.max(Number(state.profile.lives || 0), Number(revengeBonusRes.lives));
+        } else if (revengeBonusRes.granted) {
+          state.profile.lives = Number(state.profile.lives || 0) + 1;
+        }
+        if (revengeBonusRes.premierePoints != null) {
+          state.profile.premierePoints = Math.max(Number(state.profile.premierePoints || 0), Number(revengeBonusRes.premierePoints));
+        } else if (revengeBonusRes.granted) {
+          state.profile.premierePoints = Number(state.profile.premierePoints || 0) + 200;
+        }
+        duelCtrl?.syncFromProfile?.(state.profile, { allowLivesRefill: true });
+      }
+    }
+
     if (isPingPongRevenge && replyToPack?.senderTgId) {
       sendRevengeClosedPush({
         targetTgId: replyToPack.senderTgId,
@@ -8093,7 +8106,16 @@ async function handleSealBarrelClick({ forceAutoAvatar = false, isPingPongReveng
     state.pendingLevelStartFly = { lives: wasProducerFirstPack ? 1 : 3, strikes: 3 };
     Haptics.success();
     applyProgressiveDisclosureUI({ skipPromoteFromSocial: true });
-    showSentScreen({ wasLifeRefill, wasBroadcastPack: isBroadcastPack, broadcastRole: teamRole, isPingPongRevenge, prevRatingPct, packShardRes });
+    showSentScreen({
+      wasLifeRefill,
+      wasBroadcastPack: isBroadcastPack,
+      broadcastRole: teamRole,
+      isPingPongRevenge,
+      revengeTargetName: replyToPack?.senderName || '',
+      revengeBonus: revengeBonusRes,
+      prevRatingPct,
+      packShardRes,
+    });
     refreshQuestUI().catch(() => {});
   } finally {
     state.pack.sealing = false;
@@ -8106,7 +8128,13 @@ async function handleSealBarrelClick({ forceAutoAvatar = false, isPingPongReveng
   }
 }
 
-function showSentScreen({ wasBroadcastPack = false, broadcastRole = '', isPingPongRevenge = false } = {}) {
+function showSentScreen({
+  wasBroadcastPack = false,
+  broadcastRole = '',
+  isPingPongRevenge = false,
+  revengeTargetName = '',
+  revengeBonus = null,
+} = {}) {
   const txt = document.getElementById('sent-text');
   const btnTxt = document.getElementById('btn-sent-play-text');
   const copyBtn = document.getElementById('btn-sent-copy-link');
@@ -8144,29 +8172,30 @@ function showSentScreen({ wasBroadcastPack = false, broadcastRole = '', isPingPo
     }
     if (btnTxt) btnTxt.textContent = isBlog ? 'Играть' : 'Поиграть в цех';
   } else if (isPingPongRevenge) {
-    if (txt) txt.textContent = '🔥 Ответная бочка улетела другу! Активен буст ×2 очков на 15 минут — забирай Тиля!';
+    const revBonusTxt = revengeBonus?.granted ? ' (+1 ❤️ и +200 ⭐ уже начислены!)' : '';
+    if (txt) txt.textContent = `🔥 Ответная бочка улетела ${revengeTargetName || 'другу'}!${revBonusTxt} Активен буст ×2 очков на 15 мин.`;
     if (btnTxt) btnTxt.textContent = 'Играть (×2 очки)';
   } else {
-    if (txt) txt.textContent = '🎁 Бочка отправлена! За 1-го друга открыты редкая фишка, 3/4–4/4 билета и ×2 очки на 15 мин!';
+    if (txt) txt.textContent = '🎁 Подарочная бочка отправлена! За 1-го друга открыты редкая фишка, 3/4–4/4 билета и ×2 очки на 15 мин!';
     if (btnTxt) btnTxt.textContent = 'Играть';
   }
   refreshBranchBattleUI().catch(() => {});
   const pushCard = document.getElementById('sent-push-optin-card');
-  const hsCard = document.getElementById('sent-homescreen-fallback-card');
-  if (state.profile?.tgWriteAccess) {
+  const pushCopy = document.getElementById('sent-push-optin-copy');
+  const targetLabel = String(revengeTargetName || state.incomingPack?.senderName || '').trim() || 'друг';
+  if (pushCopy) {
+    pushCopy.innerHTML = `🔔 Узнай в ту же секунду, когда <strong>${targetLabel.replace(/[<>&"]/g, '')}</strong> откроет твою бочку или отомстит! За включение сразу <strong>+1 ❤️ и +150 ⭐</strong> (без рекламы).`;
+  }
+  if (state.profile?.tgWriteAccess || wasBroadcastPack) {
     pushCard?.setAttribute('hidden', '');
-    hsCard?.setAttribute('hidden', '');
   } else {
     pushCard?.removeAttribute('hidden');
-    hsCard?.setAttribute('hidden', '');
-    // Умный запрос в момент пользы (после отправки бочки другу)
     requestAndSyncWriteAccess({ force: false }).then((res) => {
       if (res?.allowed) {
         pushCard?.setAttribute('hidden', '');
-        hsCard?.setAttribute('hidden', '');
       } else if (res && !res.skipped && !res.unsupported && res.allowed === false) {
+        // v20.9: Не раздражаем отказавшегося всплывающим попапом ярлыка
         pushCard?.setAttribute('hidden', '');
-        hsCard?.removeAttribute('hidden');
       }
     }).catch(() => {});
   }
@@ -8305,10 +8334,13 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
   const cinemaText = $('btn-cinema-reply-text');
   const packBtn = $('btn-pack-revenge');
   const packText = $('btn-pack-revenge-text');
+  const playFurtherBtn = $('btn-finale-play-further');
 
   $('finale-cinema-feedback-box')?.setAttribute('hidden', '');
   $('finale-ticket-win-box')?.setAttribute('hidden', '');
   document.querySelector('#screen-finale .finale-sheet')?.classList.remove('is-ticket-mode');
+  packBtn?.classList.remove('btn-revenge-hero');
+  playFurtherBtn?.setAttribute('hidden', '');
   if (cinemaBtn) cinemaBtn.disabled = false;
   if (cinemaText) cinemaText.textContent = t('btnGoCinema');
 
@@ -8468,21 +8500,17 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
     cinemaBtn?.setAttribute('hidden', '');
   } else if (completedLvl === 1 && state.incomingPack && !state.incomingPack.isBroadcast) {
     state.finaleMode = 'ping_pong_revenge';
-    const sender = state.incomingPack.senderName || 'друг';
+    const sender = state.incomingPack.senderName || 'друга';
     const sec = Math.max(1, Math.round(Number(r.lastElapsedSec || 12)));
     if (nextEl) {
       nextEl.textContent =
-        `Ты выбрался из бочки ${sender} за ${sec} сек! Закрой его в ответ в 1 клик — и получи редкую кино-фишку, 3/4–4/4 и буст ×2 очков на 15 мин.`;
+        `Ты выбрался из бочки ${sender} за ${sec} сек! Отправь ответку в 1 тап — сразу получишь +1 ❤️, +200 ⭐, редкую фишку и буст ×2 очков.`;
     }
-    if (packText) packText.textContent = '🔥 ОТОМСТИТЬ / ЗАКРЫТЬ В ОТВЕТ';
-    if (cinemaBtn && !Boolean(state.trailer?.unlocked40 || getQuestState()?.trailerDone)) {
-      cinemaBtn.removeAttribute('hidden');
-      if (cinemaText) cinemaText.textContent = '🎬 Трейлер (Этап 1/4 + 6 ❤️)';
-      state.finaleSecondaryTrailer = true;
-    } else {
-      cinemaBtn?.setAttribute('hidden', '');
-      state.finaleSecondaryTrailer = false;
-    }
+    if (packText) packText.textContent = `🔥 ЗАКРЫТЬ ${sender.toUpperCase()} В ОТВЕТ (+1 ❤️ И +200 ⭐)`;
+    packBtn?.classList.add('btn-revenge-hero');
+    cinemaBtn?.setAttribute('hidden', '');
+    playFurtherBtn?.removeAttribute('hidden');
+    state.finaleSecondaryTrailer = false;
   } else if (completedLvl === 1) {
     const alreadyWatchedTrailer = Boolean(state.trailer?.unlocked40 || getQuestState()?.trailerDone);
     if (!alreadyWatchedTrailer) {
@@ -8541,7 +8569,7 @@ async function populateFinaleScreen({ premiereResult = null } = {}) {
     if (packText) packText.textContent = `🔥 ИГРАТЬ УРОВЕНЬ ${spec.level} (${spec.barrelCount} ${formatBarrelWord(spec.barrelCount)} · +${spec.pointsReward || 350} ⭐)`;
     cinemaBtn?.setAttribute('hidden', '');
   }
-  packBtn?.classList.toggle('btn-temu-pulse', state.finaleMode === 'duels_unlocked' || state.finaleMode === 'l1_reply_yes' || state.finaleMode === 'recover_lives');
+  packBtn?.classList.toggle('btn-temu-pulse', state.finaleMode === 'ping_pong_revenge' || state.finaleMode === 'duels_unlocked' || state.finaleMode === 'l1_reply_yes' || state.finaleMode === 'recover_lives');
 
   await refreshQuestUI();
 }
@@ -8996,11 +9024,13 @@ async function grantTrailer60sMidReward() {
     const flash = document.getElementById('trailer-reward-flash');
     if (flash) {
       flash.textContent =
-        '🔥 Чекпоинт 60с: +100 ⭐! Подсказка: у моря стучи «3 — пауза — 2», в цеху 19-97! Досмотри до 90% за +250 ⭐!';
+        res?.hint ||
+        '🔥 Чекпоинт 60с: +100 ⭐! Первая половина секретного кода: «19-...». Вторая половина и +1 ❤️ откроются в финале ролика (через 20 сек)!';
       flash.removeAttribute('hidden');
     }
     audio.playRewardChime?.();
     Haptics.medium();
+    syncTrailerIntroLockUI(Math.max(TRAILER_MID_REWARD_SEC, Number(state.trailer.honestWatchedSec || 0)));
   } finally {
     state.trailer.mid60sInFlight = false;
   }
@@ -9018,7 +9048,11 @@ async function grantTrailerFullWatchReward() {
     state.profile.trailerWatchedFull = true;
 
     if (res?.ok) {
-      state.profile.lives = Math.max(6, Number(res.lives ?? state.profile?.lives ?? 6));
+      if (res.lives != null) {
+        state.profile.lives = Math.max(Number(state.profile?.lives || 0), Number(res.lives));
+      } else {
+        state.profile.lives = Number(state.profile?.lives || 0) + 1;
+      }
       if (res.shards != null) {
         state.profile.ticketShards = res.mergedTicket ? 0 : Math.max(0, Math.min(3, Number(res.shards)));
       }
@@ -9029,7 +9063,7 @@ async function grantTrailerFullWatchReward() {
         );
       }
     } else {
-      state.profile.lives = Math.max(6, Number(state.profile?.lives || 0));
+      state.profile.lives = Number(state.profile?.lives || 0) + 1;
       const curSh = Number(state.profile?.ticketShards || 0);
       if (curSh < 2) state.profile.ticketShards = curSh + 1;
       state.profile.premierePoints = Number(state.profile?.premierePoints || 0) + 250;
@@ -9043,11 +9077,9 @@ async function grantTrailerFullWatchReward() {
 
     const flash = document.getElementById('trailer-reward-flash');
     if (flash) {
-      flash.textContent = res?.doublePointsBonus || res?.reason === 'full_watch_2x_bonus'
-        ? '🔥 ×2 ОЧКОВ ПОЛУЧЕНО! Полный досмотр трейлера засчитан (+500 ⭐ итого)!'
-        : res?.reason === 'solo_cap_reached'
-          ? '🔥 ×2: +500 ⭐ (лимит соло 2/4) и полные ❤️ жизни получены!'
-          : '🔥 ×2 ОЧКОВ (+500 ⭐), Этап к билету и полные ❤️ жизни получены!';
+      flash.textContent =
+        res?.hint ||
+        '🔥 Финал 90%: +250 ⭐ и +1 ❤️! Вторая половина кода: «...-97» (полная комбинация в цеху: 19-97 → +3 ❤️)!';
       flash.removeAttribute('hidden');
     }
     audio.playRewardChime?.();
@@ -9149,6 +9181,7 @@ function syncTrailerIntroLockUI(watchedSec = 0) {
   const locked = Boolean(state.trailer.introLocked);
   const rem = Math.max(0, Math.ceil(TRAILER_INTRO_LOCK_SEC - state.trailer.introWatchedSec));
   const fullRewarded = Boolean(state.trailer.fullWatchRewarded);
+  const midRewarded = Boolean(state.trailer.mid60sRewarded);
   const baseRewarded = Boolean(state.trailer.base30sRewarded);
 
   const modal = document.getElementById('modal-trailer');
@@ -9171,9 +9204,11 @@ function syncTrailerIntroLockUI(watchedSec = 0) {
     toPackBtn.classList.toggle('is-ready', !locked || fullRewarded || baseRewarded);
     toPackBtn.classList.toggle('is-full-reward', fullRewarded || baseRewarded);
     if (fullRewarded) {
-      toPackBtn.textContent = 'Забрать ×2 награду и играть!';
+      toPackBtn.textContent = 'Забрать код 19-97, +250 ⭐ и +1 ❤️ — играть!';
+    } else if (midRewarded) {
+      toPackBtn.textContent = 'Забрать +100 ⭐ (или жди 20с за 2-ю часть кода и +1 ❤️)';
     } else if (baseRewarded) {
-      toPackBtn.textContent = 'Забрать Этап 1 из 4 и играть (или жди 90% за ×2)!';
+      toPackBtn.textContent = 'Забрать Этап 1/4 и играть (на 60с и 90% части кода + бонусы)!';
     } else if (locked) {
       toPackBtn.textContent = `Смотри трейлер... ${rem}`;
     } else {
@@ -10526,7 +10561,7 @@ async function renderRetentionAndTransparencyPanels() {
 function getActiveShareBundle(kind = 'trailer') {
   const uid = getViewerUid(state.tg?.user);
   if (kind === 'barrel' && state.pack.lastShareUrl) {
-    const copy = buildPersonalShareCopy(state.pack.shareTemplate || 'record_challenge', state.profile?.bestEscapeSec);
+    const copy = buildPersonalShareCopy(state.pack.shareTemplate || 'gift_barrel', state.profile?.bestEscapeSec);
     return {
       action: 'share_barrel',
       url: state.pack.lastShareUrl,
@@ -10862,24 +10897,22 @@ function bindUIEvents() {
     const res = await requestAndSyncWriteAccess({ force: true });
     if (res?.allowed) {
       document.getElementById('sent-push-optin-card')?.setAttribute('hidden', '');
-      document.getElementById('sent-homescreen-fallback-card')?.setAttribute('hidden', '');
       const gotBonus = Boolean(res?.bonus?.granted);
       showToast(
         gotBonus
           ? '🔔 Уведомления включены! Зачислено +1 ❤️ и +150 ⭐!'
-          : '🔔 Уведомления бота включены — напишем только когда друг откроет бочку или вызовет в дуэль!'
+          : '🔔 Уведомления бота включены — напишем сразу, когда друг вскроет бочку или отомстит!'
       );
     } else {
       document.getElementById('sent-push-optin-card')?.setAttribute('hidden', '');
-      document.getElementById('sent-homescreen-fallback-card')?.removeAttribute('hidden');
-      showToast('Пуши отклонены — добавь ярлык на экран за +100 ⭐!');
+      showToast('Хорошо, без уведомлений! Ярлык (+100 ⭐) всегда доступен в меню.');
     }
   });
   document.getElementById('btn-decline-tg-push')?.addEventListener('click', () => {
     document.getElementById('sent-push-optin-card')?.setAttribute('hidden', '');
-    document.getElementById('sent-homescreen-fallback-card')?.removeAttribute('hidden');
   });
   document.getElementById('btn-add-homescreen')?.addEventListener('click', async () => {
+    closeBurgerDrawer();
     const res = promptAddToHomeScreenSafe();
     const hsRes = await recordHomescreenShortcut(state.tg?.user).catch(() => null);
     if (state.profile) {
@@ -10900,12 +10933,12 @@ function bindUIEvents() {
     showToast(
       res.mode === 'tg_native'
         ? `📲 Ярлык «БОЧКИ» добавлен на экран телефона!${ptsMsg}`
-        : `📲 Сохрани страницу bochka.quest на главный экран («На экран «Домой»» в меню браузера).${ptsMsg}`
+        : `📲 Сохрани страницу bochka.quest на главный экран («На экран «Домой»» в меню).${ptsMsg}`
     );
   });
   document.querySelectorAll('[data-share-template]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      state.pack.shareTemplate = btn.getAttribute('data-share-template') || 'record_challenge';
+      state.pack.shareTemplate = btn.getAttribute('data-share-template') || 'gift_barrel';
       updatePackTemplatePreview();
     });
   });
@@ -11603,6 +11636,16 @@ function bindUIEvents() {
     } else {
       startPremiereRaceRound();
     }
+  });
+
+  document.getElementById('btn-finale-play-further')?.addEventListener('click', () => {
+    if (!audio._userMuted) audio.unlock(true).catch(() => {});
+    if (!Boolean(state.trailer?.unlocked40 || getQuestState()?.trailerDone)) {
+      openTrailerModal({ forRescue: false, afterL1ToPack: true });
+      return;
+    }
+    state.profile.currentLevel = Math.max(2, Number(state.profile.currentLevel || 2));
+    startDemoRound();
   });
 
   document.getElementById('btn-pack-revenge')?.addEventListener('click', async () => {

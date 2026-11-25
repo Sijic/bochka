@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0d0d'/%3E%3Crect x='8' y='4' width='16' height='24' rx='2' fill='none' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='11' x2='25' y2='11' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='21' x2='25' y2='21' stroke='%23eab308' stroke-width='2'/%3E%3C/svg%3E" />
   <title>БОЧКА — Заводской триллер | 2 билета в кино в твоём городе</title>
-  <meta name="bochka-build" content="v20.6-oasis" />
+  <meta name="bochka-build" content="v20.9-rf" />
   <meta name="description" content="Четыре цеха завода, заваренные 200-литровые бочки и 30 секунд кислорода. Запакуй друга в 1 клик (работает и без звука!), сразись в дуэли 1×1 и забери 2 билета в кино в своём городе или проходку на закрытую премьеру 17 декабря." />
 
   <!-- Open Graph / Telegram / WhatsApp Link Preview -->
@@ -48,7 +48,7 @@
   }
   </script>
 
-  <link rel="modulepreload" href="./src/main.js?v=2060" />
+  <link rel="modulepreload" href="./src/main.js?v=2090" />
   <link rel="modulepreload" href="./src/backend.js" />
   <link rel="modulepreload" href="./src/env.js" />
   <link rel="modulepreload" href="./vendor/supabase.esm.js" />
@@ -65,8 +65,8 @@
     #screen-gate .btn-primary{width:100%;min-height:48px;padding:12px 16px;border:0;border-radius:8px;background:#eab308;color:#0d0d0d;font-weight:800;font-size:15px;cursor:pointer}
     #screen-gate .btn-gate-mute{width:100%;min-height:44px;padding:10px 14px;border:1px solid rgba(148,163,184,.42);border-radius:8px;background:rgba(30,41,59,.72);color:#e2e8f0;font-weight:700;font-size:13.5px;cursor:pointer}
   </style>
-  <link rel="stylesheet" href="./src/styles.css?v=2081" media="print" onload="this.media='all'" />
-  <noscript><link rel="stylesheet" href="./src/styles.css?v=2081" /></noscript>
+  <link rel="stylesheet" href="./src/styles.css?v=2090" media="print" onload="this.media='all'" />
+  <noscript><link rel="stylesheet" href="./src/styles.css?v=2090" /></noscript>
 </head>
 <body data-ui-stage="1" data-blitz-unlocked="0">
   <!-- 3D Three.js Industrial Workshop Canvas -->
@@ -154,6 +154,7 @@
       <button type="button" class="burger-item burger-item-gold" id="btn-burger-send-tickets">🎟 ПОДАРИТЬ БИЛЕТ (<span id="burger-tickets-count">0</span> · <span id="burger-shards-count">0/4</span>)</button>
       <button type="button" class="burger-item" id="btn-burger-leaderboard">🏆 РЕЙТИНГ ТОП-20</button>
       <button type="button" class="burger-item" id="btn-burger-rules" data-i18n="burgerRules">📜 ПРАВИЛА И ПРИЗЫ</button>
+      <button type="button" class="burger-item" id="btn-add-homescreen">📲 Ярлык на экран (+100 ⭐)</button>
       <button type="button" class="burger-item" id="btn-burger-test-ticket" hidden>🎟 ТЕСТ: ВЫБИТЬ БИЛЕТ (УР. 3)</button>
     </div>
 
@@ -346,11 +347,11 @@
     <div class="workshop-recovery-bar" id="workshop-recovery-bar" hidden>
       <div class="workshop-recovery-info">
         <span class="workshop-recovery-tag" id="workshop-recovery-tag">🔨 ОТРАБОТКА БЕЗ ТИЛЯ</span>
-        <span class="workshop-recovery-copy" id="workshop-recovery-copy">Найди бочку за 3 удара → +1 ❤️ и +75 ⭐ (до 3 ❤️)</span>
+        <span class="workshop-recovery-copy" id="workshop-recovery-copy">Найди бочку за 3 удара → +1 ❤️ (без очков, до 2 ❤️, макс. 2 смены/сут, пауза 15 мин)</span>
       </div>
       <div class="workshop-recovery-actions">
         <button type="button" class="btn-primary btn-compact" id="btn-recovery-back-to-til" hidden>🥊 К Тилю (❤️ 1)</button>
-        <button type="button" class="btn-secondary btn-compact" id="btn-recovery-pack-friend">🛢 Другу (+2…+6 ❤️)</button>
+        <button type="button" class="btn-secondary btn-compact" id="btn-recovery-pack-friend">🔥 Другу (+6 ❤️ + ×2)</button>
       </div>
     </div>
     <button type="button" class="hud-duel-1x1-btn" id="btn-hud-duel-1x1" hidden>⚔️ Дуэль 1×1</button>
@@ -693,10 +694,10 @@
         🎁 1-й друг или дуэль 1×1: редкая кино-фишка + доступ к 3/4–4/4 билета + буст ×2 очков на 15 мин
       </p>
       <div class="pack-template-switch" id="pack-template-switch" role="group" aria-label="Повод для отправки 1-на-1">
-        <button type="button" class="pack-template-btn is-active" id="btn-tpl-record" data-share-template="record_challenge">⏱ Вызов с рекордом</button>
-        <button type="button" class="pack-template-btn" id="btn-tpl-gift" data-share-template="gift_barrel">🎁 Подарочная бочка</button>
+        <button type="button" class="pack-template-btn is-active" id="btn-tpl-gift" data-share-template="gift_barrel">🎁 Подарочная бочка</button>
+        <button type="button" class="pack-template-btn" id="btn-tpl-record" data-share-template="record_challenge">⏱ Вызов с рекордом</button>
       </div>
-      <div class="pack-template-preview" id="pack-template-preview">«Я выбрался из бочки за 12 сек — побьешь мой рекорд, заберешь фишку»</div>
+      <div class="pack-template-preview" id="pack-template-preview">«Дарю тебе часть билета в кино в нашем городе — успей забрать из бочки!»</div>
       <input type="file" id="input-photo-file" accept="image/*" hidden />
       <div class="pack-uploaded-confirm" id="pack-uploaded-confirm" hidden>
         <img id="pack-uploaded-thumb" alt="Фото друга" class="pack-uploaded-thumb" loading="lazy" decoding="async" />
@@ -713,7 +714,7 @@
           📷 Опционально: добавить фото друга
         </label>
         <button type="button" class="btn-ghost btn-full btn-compact pack-recovery-btn" id="btn-pack-recovery-shift" hidden>
-          🔨 Отработать +1 ❤️ без Тиля (без редких фишек и 3/4–4/4 билета)
+          🔨 Отработать +1 ❤️ без Тиля (без очков и фишек · макс. 2 смены/сут)
         </button>
       </div>
     </div>
@@ -795,6 +796,9 @@
         <button type="button" class="btn-primary btn-full" id="btn-pack-revenge">
           <span id="btn-pack-revenge-text">🛢 УРОВЕНЬ 2: ЗАКАТАТЬ ДРУГА (ОТПРАВИТЬ СКРИМЕР)</span>
         </button>
+        <button type="button" class="btn-link-subtle" id="btn-finale-play-further" hidden>
+          Просто играть дальше
+        </button>
         <button type="button" class="btn-secondary btn-full" id="btn-cinema-reply">
           <span id="btn-cinema-reply-text" data-i18n="btnGoCinema">🍿 ПОЙДУ В КИНО 17 ДЕКАБРЯ!</span>
         </button>
@@ -817,15 +821,11 @@
       <div class="seed-sent-meta" id="sent-seed-meta" hidden></div>
       <div class="branch-battle-pill" id="sent-branch-battle-pill" hidden></div>
       <div class="push-optin-card" id="sent-push-optin-card">
-        <p class="push-optin-copy">🔔 Включи уведомления о ходах друзей и забери <strong>+1 ❤️ и +150 ⭐</strong>. Никакой рекламы — только когда друг вскроет твою бочку или вызовет в дуэль</p>
+        <p class="push-optin-copy" id="sent-push-optin-copy">🔔 Узнай в ту же секунду, когда друг откроет твою бочку или отомстит! За включение сразу <strong>+1 ❤️ и +150 ⭐</strong> (без рекламы).</p>
         <div class="push-optin-actions">
           <button type="button" class="btn-secondary btn-compact btn-full" id="btn-enable-tg-push">🔔 Включить уведомления (+1 ❤️ и +150 ⭐)</button>
           <button type="button" class="btn-ghost btn-compact" id="btn-decline-tg-push">Не сейчас</button>
         </div>
-      </div>
-      <div class="push-optin-card homescreen-fallback-card" id="sent-homescreen-fallback-card" hidden>
-        <p class="push-optin-copy">📱 Без пушей проще вернуться в 1 касание — добавь ярлык «БОЧКИ» на экран телефона и забери <strong>+100 ⭐</strong></p>
-        <button type="button" class="btn-secondary btn-compact btn-full" id="btn-add-homescreen">📲 Добавить ярлык на экран (+100 ⭐)</button>
       </div>
       <button type="button" class="btn-secondary btn-full" id="btn-sent-copy-link" hidden>
         📋 Скопировать общую ссылку
@@ -1109,7 +1109,7 @@
       </div>
 
       <p class="trailer-motivation-copy" id="trailer-motivation-copy">
-        30с — Этап 1/4 + 250 ⭐ + 6 ❤️ · 60с — +100 ⭐ и подсказка секретного стука · 90% — ещё +250 ⭐ (×2)!
+        30с — Этап 1/4 + 250 ⭐ + 6 ❤️ · 60с — +100 ⭐ и 1-я часть кода («19-...») · 90% — +250 ⭐, +1 ❤️ и 2-я часть («...-97»)!
       </p>
 
       <div class="video-aspect" id="trailer-video-wrap">
@@ -1714,13 +1714,13 @@
         <img src="./public/sprites/horror_hero_captive.webp" alt="Заперт в бочке" class="til-hero-photo" loading="lazy" decoding="async" />
       </div>
       <p class="til-hero-copy" id="barrel-trapped-copy">
-        ⚔️ Тиль закрыл крышку (0 ❤️). Брось другу вызов «Я закрыл тебя в бочке — выберись быстрее меня»: откроется дуэль 1×1, его именная фишка и +6 ❤️!
+        🔥 Тиль закрыл крышку (0 ❤️). Позови друга в бочку — сразу получишь +6 ❤️ и буст ×2 очков на 15 мин!
       </p>
-      <button type="button" class="btn-primary btn-full til-hero-cta" id="btn-trapped-invite-friend">
-        ⚔️ Бросить вызов другу (дуэль 1×1 + фишка +6 ❤️)
+      <button type="button" class="btn-primary btn-full btn-temu-pulse til-hero-cta" id="btn-trapped-invite-friend">
+        🔥 Позвать друга (+6 ❤️ сразу + ×2 очки на 15 мин)
       </button>
-      <button type="button" class="btn-secondary btn-full btn-compact trapped-recovery-btn" id="btn-trapped-workshop-recovery">
-        🔨 Или отработать +1 ❤️ в цеху (без Тиля)
+      <button type="button" class="btn-ghost btn-full btn-compact trapped-recovery-btn" id="btn-trapped-workshop-recovery">
+        🔨 Отработка (+1 ❤️ без очков · до 2 смен/сут, пауза 15 мин)
       </button>
     </div>
   </div>
@@ -1728,6 +1728,6 @@
   <!-- Toast уведомления -->
   <div class="toast" id="toast" hidden></div>
 
-  <script type="module" src="./src/main.js?v=2060"></script>
+  <script type="module" src="./src/main.js?v=2090"></script>
 </body>
 </html>

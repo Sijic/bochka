@@ -1089,9 +1089,9 @@ Deno.serve(async (req: Request) => {
         eventName: "barrel_revenge_closed",
         text:
           `🔥 <b>Друг (${revName}) выбрался и закрыл тебя в ответ!</b>\n` +
-          `У тебя 30 секунд на реванш — вскрой его бочку и забери ×2 очки!`,
+          `Закрой в ответ в 1 клик — сразу получишь +1 ❤️, +200 ⭐ и ×2 очки на 15 мин!`,
         replyMarkup: {
-          inline_keyboard: [[{ text: "🔥 ВЫБРАТЬСЯ И ОТОМСТИТЬ", web_app: { url: targetUrl } }]],
+          inline_keyboard: [[{ text: "🔥 ЗАКРЫТЬ В ОТВЕТ (+1 ❤️ И +200 ⭐)", web_app: { url: targetUrl } }]],
         },
       });
       return jsonResp({ ok: true, action: "barrel_revenge_closed", ...pushRes });

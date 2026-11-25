@@ -11270,3 +11270,30 @@ body:not([data-screen="workshop"]) .workshop-intro-hint {
   display: none !important;
 }
 
+.btn-revenge-hero {
+  background: linear-gradient(135deg, #f97316, #ef4444) !important;
+  color: #ffffff !important;
+  border: 1.5px solid rgba(254, 240, 138, 0.85) !important;
+  box-shadow: 0 10px 26px rgba(239, 68, 68, 0.42);
+  font-size: 15px !important;
+  min-height: 54px;
+}
+
+.btn-link-subtle {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: rgba(203, 213, 225, 0.72);
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: 6px 10px;
+  cursor: pointer;
+  align-self: center;
+}
+.btn-link-subtle[hidden] {
+  display: none !important;
+}
+
+

@@ -2905,7 +2905,7 @@ export async function claimWorkshopRecoveryLife(tgUser = null) {
   }
 
   const curLives = Math.max(0, Number(prof.lives || 0));
-  if (curLives >= 3) {
+  if (curLives >= 2) {
     return {
       ok: false,
       granted: false,
@@ -2915,12 +2915,11 @@ export async function claimWorkshopRecoveryLife(tgUser = null) {
       livesAdded: 0,
       pointsAdded: 0,
       dailyRecoveryShifts: Number(prof.dailyRecoveryShifts || 0),
-      maxDailyShifts: 6,
+      maxDailyShifts: 2,
     };
   }
-  prof.lives = Math.min(3, curLives + 1);
-  prof.premierePoints = Math.max(0, Number(prof.premierePoints || 0)) + 75;
-  prof.dailyRecoveryShifts = Math.min(6, Number(prof.dailyRecoveryShifts || 0) + 1);
+  prof.lives = Math.min(2, curLives + 1);
+  prof.dailyRecoveryShifts = Math.min(2, Number(prof.dailyRecoveryShifts || 0) + 1);
   saveLocalPreviewProfile(prof);
   return {
     ok: true,
@@ -2928,11 +2927,11 @@ export async function claimWorkshopRecoveryLife(tgUser = null) {
     reason: '',
     retryAfterSec: 0,
     lives: prof.lives,
-    premierePoints: prof.premierePoints,
+    premierePoints: Number(prof.premierePoints || 0),
     livesAdded: 1,
-    pointsAdded: 75,
+    pointsAdded: 0,
     dailyRecoveryShifts: prof.dailyRecoveryShifts,
-    maxDailyShifts: 6,
+    maxDailyShifts: 2,
   };
 }
 
@@ -3169,6 +3168,10 @@ export async function awardTicketShardServer(tgUser = null, source = 'level') {
           fallbackPoints: Number(data.fallback_points || 0),
           doublePointsBonus: Boolean(data.double_points_bonus),
           bonusPoints: Number(data.bonus_points || 0),
+          livesAdded: Number(data.lives_added || 0),
+          codePart: data.code_part || '',
+          fullCode: data.full_code || '',
+          hint: data.hint || '',
           premierePoints: data.premiere_points != null ? Number(data.premiere_points) : null,
           pendingTicketsCount: Number(data.pending_tickets_count || 0),
           lives: data.lives != null ? Number(data.lives) : null,
@@ -3444,7 +3447,62 @@ export async function claimTrailer60sCheckpointServer(tgUser = null, watchedSec 
     granted: true,
     bonusPoints: 100,
     premierePoints: prof.premierePoints,
-    hint: 'Секретный стук: у моря 3-пауза-2, в цеху 19-97 (+3 ❤️)',
+    code_part: '19-',
+    hint: 'Первая половина секретного кода: «19-...». Вторая половина и +1 ❤️ откроются в финале ролика (через 20 сек)!',
+  };
+}
+
+export async function claimPingPongRevengeBonusServer(tgUser = null, { originalBarrelId = '', revengeBarrelId = '' } = {}) {
+  const uid = getViewerUid(tgUser);
+  const orig = String(originalBarrelId || '').trim();
+  const rev = String(revengeBarrelId || '').trim();
+  const db = getCloudDb();
+  if (db && !isTestBogActive() && orig) {
+    try {
+      const { data, error } = await db.rpc('claim_ping_pong_revenge_bonus_rpc', {
+        p_uid: uid,
+        p_original_barrel_id: orig,
+        p_revenge_barrel_id: rev,
+      });
+      if (!error && data) {
+        return {
+          ok: Boolean(data.ok),
+          granted: Boolean(data.granted),
+          duplicateBlocked: Boolean(data.duplicate_blocked),
+          reason: data.reason || '',
+          livesAdded: Number(data.lives_added || 0),
+          pointsAdded: Number(data.points_added || 0),
+          lives: data.lives != null ? Number(data.lives) : null,
+          premierePoints: data.premiere_points != null ? Number(data.premiere_points) : null,
+          targetUid: data.target_uid || '',
+        };
+      }
+    } catch { /* fallback below */ }
+  }
+  const prof = getLocalPreviewProfile();
+  prof.claimedRevengePairs = prof.claimedRevengePairs || {};
+  if (orig && prof.claimedRevengePairs[orig]) {
+    return {
+      ok: true,
+      granted: false,
+      duplicateBlocked: true,
+      reason: 'already_claimed_revenge',
+      lives: Number(prof.lives || 0),
+      premierePoints: Number(prof.premierePoints || 0),
+    };
+  }
+  if (orig) prof.claimedRevengePairs[orig] = true;
+  prof.lives = Number(prof.lives || 0) + 1;
+  prof.premierePoints = Number(prof.premierePoints || 0) + 200;
+  saveLocalPreviewProfile(prof);
+  return {
+    ok: true,
+    granted: true,
+    duplicateBlocked: false,
+    livesAdded: 1,
+    pointsAdded: 200,
+    lives: prof.lives,
+    premierePoints: prof.premierePoints,
   };
 }
 
@@ -3453,7 +3511,7 @@ export async function recordHomescreenShortcut(tgUser = null) {
   const db = getCloudDb();
   const prof = getLocalPreviewProfile();
   prof.homescreenShortcutAdded = true;
-  if (!prof.homescreenBonusClaimed && !prof.tgWriteAccess) {
+  if (!prof.homescreenBonusClaimed) {
     prof.homescreenBonusClaimed = true;
     prof.premierePoints = Number(prof.premierePoints || 0) + 100;
   }
