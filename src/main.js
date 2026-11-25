@@ -2672,7 +2672,7 @@ async function bootstrap() {
 
   initVoiceRecorderInstance();
   initVisibilityAndAntiSeekGuards();
-  // v19.0: Трейлер работает через VK Видео (РФ/СНГ без VPN) — YouTube API на старте НЕ прогреваем!
+  // v19.0: Трейлер работает через VK Видео (РФ без VPN) — YouTube API на старте НЕ прогреваем!
   // v14.3: Регистрируем роль команды (team_prod/team_blog) ИЛИ атомарно нумеруем входящего по pr_/bl_!
   const earlyRole = state.tg?.teamSeedRole || '';
   const earlyTeamPromise = earlyRole

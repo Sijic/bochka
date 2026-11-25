@@ -8592,7 +8592,7 @@ body.is-duel-active .topbar {
   color: #e4e4e7;
 }
 
-/* VK Видео плеер в модалке трейлера (РФ/СНГ без VPN) */
+/* VK Видео плеер в модалке трейлера (РФ без VPN) */
 .vk-trailer-iframe {
   position: relative;
   z-index: 2;

@@ -28,7 +28,7 @@
   <meta name="twitter:description" content="Индустриальный триллер в браузере и Telegram: 4 цеха завода, упаковка друга с голосом из бочки и дуэль «На счёт три!»." />
   <meta name="twitter:image" content="https://bochka.quest/bochka_og_1280x720.jpg" />
 
-  <!-- Telegram Mini App SDK и VK VideoPlayer API (100% локально — работает в РФ/СНГ без внешних CDN!) -->
+  <!-- Telegram Mini App SDK и VK VideoPlayer API (100% локально — работает в РФ без внешних CDN!) -->
   <link rel="preconnect" href="https://vkvideo.ru" crossorigin />
   <link rel="preconnect" href="https://st.vkvideo.ru" crossorigin />
   <link rel="preconnect" href="https://api.vk.ru" crossorigin />
@@ -65,8 +65,8 @@
     #screen-gate .btn-primary{width:100%;min-height:48px;padding:12px 16px;border:0;border-radius:8px;background:#eab308;color:#0d0d0d;font-weight:800;font-size:15px;cursor:pointer}
     #screen-gate .btn-gate-mute{width:100%;min-height:44px;padding:10px 14px;border:1px solid rgba(148,163,184,.42);border-radius:8px;background:rgba(30,41,59,.72);color:#e2e8f0;font-weight:700;font-size:13.5px;cursor:pointer}
   </style>
-  <link rel="stylesheet" href="./src/styles.css?v=2080" media="print" onload="this.media='all'" />
-  <noscript><link rel="stylesheet" href="./src/styles.css?v=2080" /></noscript>
+  <link rel="stylesheet" href="./src/styles.css?v=2081" media="print" onload="this.media='all'" />
+  <noscript><link rel="stylesheet" href="./src/styles.css?v=2081" /></noscript>
 </head>
 <body data-ui-stage="1" data-blitz-unlocked="0">
   <!-- 3D Three.js Industrial Workshop Canvas -->
@@ -99,7 +99,7 @@
         <strong id="top-shards-count">0 · 0/4</strong>
       </button>
 
-      <button type="button" class="nav-link top-rating-pill" id="top-rating-pill" title="Главный приз: 2 билета в кино в твоём городе (РФ и СНГ) или закрытая премьера в Москве">
+      <button type="button" class="nav-link top-rating-pill" id="top-rating-pill" title="Главный приз: 2 билета в кино в твоём городе (по всей России) или закрытая премьера в Москве">
         <span class="top-rating-lbl">🏆 <strong id="top-rating-pct">0%</strong></span>
         <span class="top-rating-track"><span class="top-rating-fill" id="top-rating-fill" style="width:0%"></span></span>
       </button>
@@ -179,7 +179,7 @@
       <h1 class="metal-logo" data-i18n="gateTitle">БОЧКА</h1>
       <p class="gate-subtitle" data-i18n="gateSubtitle">Найди друга в бочке за 30 сек — работает со звуком и в тишине!</p>
       <div class="gate-prize-pill" id="gate-prize-pill">
-        🎟 Главный приз: 2 билета в кино в ТВОЁМ городе (РФ и СНГ) или закрытая премьера в Москве · 17.12
+        🎟 Главный приз: 2 билета в кино в ТВОЁМ городе (по всей России) или закрытая премьера в Москве · 17.12
       </div>
 
       <div class="branch-battle-pill" id="gate-branch-battle-pill" hidden></div>
@@ -255,7 +255,7 @@
   <section class="screen mode-barrel-hub" id="screen-mode-a" hidden>
     <div class="mode-barrel-top-strip">
       <button type="button" class="premiere-hub-strip-btn" id="mode-a-premiere-banner">
-        🏆 ГЛАВНЫЙ ПРИЗ: 2 БИЛЕТА В КИНО В ТВОЁМ ГОРОДЕ (РФ И СНГ) ИЛИ ПРЕМЬЕРА В МОСКВЕ · 17.12 ↗
+        🏆 ГЛАВНЫЙ ПРИЗ: 2 БИЛЕТА В КИНО В ТВОЁМ ГОРОДЕ (РФ) ИЛИ ПРЕМЬЕРА В МОСКВЕ · 17.12 ↗
       </button>
       <span class="mono-tag accent-tag">ВЫБЕРИ БОЧКУ В ЦЕХУ — ЖМИ ПРЯМО ПО БОЧКЕ</span>
       <div class="mode-hub-quick-row">
@@ -1174,15 +1174,15 @@
   <div class="modal-backdrop" id="modal-prize" hidden>
     <div class="modal-card">
       <div class="modal-head">
-        <span class="mono-tag accent-tag" data-i18n="premiereRaceTitle">🏆 ГЛАВНЫЙ ПРИЗ: 2 БИЛЕТА В КИНО В ТВОЁМ ГОРОДЕ (РФ И СНГ) ИЛИ ПРЕМЬЕРА В МОСКВЕ · 17.12</span>
+        <span class="mono-tag accent-tag" data-i18n="premiereRaceTitle">🏆 ГЛАВНЫЙ ПРИЗ: 2 БИЛЕТА В КИНО В ТВОЁМ ГОРОДЕ (РФ) ИЛИ ПРЕМЬЕРА В МОСКВЕ · 17.12</span>
         <button type="button" class="icon-close" id="btn-close-prize" aria-label="Закрыть">✕</button>
       </div>
       <div class="premiere-rules-highlight">
         <p class="modal-hint" style="margin:0 0 8px;">
-          <strong>20 лучших игроков из ТОП-20</strong> получают <strong>2 бесплатных билета на «БОЧКУ» в кинотеатр своего города (РФ, Казахстан и СНГ)</strong> или проходку на Закрытый показ в Москве 17 декабря!
+          <strong>20 лучших игроков из ТОП-20</strong> получают <strong>2 бесплатных билета на «БОЧКУ» в кинотеатр своего города (по всей России)</strong> или проходку на Закрытый показ в Москве 17 декабря!
         </p>
         <ul class="premiere-rules-bullets">
-          <li>🌍 <strong>Работает в каждом городе РФ и СНГ:</strong> билеты приходят прямо в Telegram — в любой кинотеатр твоего города на премьерную неделю!</li>
+          <li>🌍 <strong>Работает в каждом городе России:</strong> билеты приходят прямо в Telegram — в любой кинотеатр твоего города на премьерную неделю!</li>
           <li>🛢 <strong>+20% шкалы (+500 ⭐)</strong> за каждого друга, кто открыл твою бочку + его именная фишка и режим дуэли 1×1</li>
           <li>🎟 <strong>Собери 4 этапа билета</strong> — подари другу бесплатный билет без чеков и поднимись в ТОП-20!</li>
           <li>⚔️ <strong>Победы в Дуэлях</strong> дают жирный буст очков ⭐ к финальному рейтингу</li>
@@ -1455,8 +1455,8 @@
       <div class="premiere-final-rule-box">
         <img src="./public/sprites/points_token_barrel.webp" class="premiere-token-thumb" alt="Баллы в бочке" loading="lazy" decoding="async" />
         <div>
-          <strong>🏆 ГЛАВНЫЙ ПРИЗ: 2 БИЛЕТА В КИНО В ТВОЁМ ГОРОДЕ (РФ И СНГ) ИЛИ ЗАКРЫТАЯ ПРЕМЬЕРА В МОСКВЕ · ФИНАЛ 10.12</strong>
-          <small>Работает в каждом городе РФ, Казахстана и СНГ: 20 лидеров рейтинга автоматически получают <strong>2 бесплатных билета на «БОЧКУ» в любой кинотеатр своего города</strong> на премьерную неделю с 17 декабря (а жители Москвы и МО могут выбрать именные проходки на Закрытый показ). Собирай ⭐ баллы и вызывай друзей в дуэли 1×1!</small>
+          <strong>🏆 ГЛАВНЫЙ ПРИЗ: 2 БИЛЕТА В КИНО В ТВОЁМ ГОРОДЕ (РФ) ИЛИ ЗАКРЫТАЯ ПРЕМЬЕРА В МОСКВЕ · ФИНАЛ 10.12</strong>
+          <small>Работает в каждом городе России: 20 лидеров рейтинга автоматически получают <strong>2 бесплатных билета на «БОЧКУ» в любой кинотеатр своего города</strong> на премьерную неделю с 17 декабря (а жители Москвы и МО могут выбрать именные проходки на Закрытый показ). Собирай ⭐ баллы и вызывай друзей в дуэли 1×1!</small>
         </div>
       </div>
 
@@ -1548,11 +1548,11 @@
         <div>🛢 В одной из заваренных бочек заперт друг — ищи по звуку или визуальному вибро-радару в тишине!</div>
         <div>⏳ У тебя 30 секунд воздуха и всего 3 удара ломом, чтобы сорвать нужную крышку.</div>
         <div>⚡ Запакуй ответную бочку в 1 клик (без камеры и микрофона) — откроешь дуэль 1×1 и именную фишку друга.</div>
-        <div>🎟 Выигрывай <strong>2 билета в кино в своём городе (РФ и СНГ)</strong> или проходку на Премьеру в Москве 17 декабря!</div>
+        <div>🎟 Выигрывай <strong>2 билета в кино в своём городе (по всей России)</strong> или проходку на Премьеру в Москве 17 декабря!</div>
       </div>
       <ul class="rules-compact-list">
         <li>🔇 <strong>Работает со звуком и без звука:</strong> включи режим «Без звука» на входе или в шапке — живую бочку подскажут визуальная волна и вибрация.</li>
-        <li>🌍 <strong>Главный приз — 2 билета в ТВОЁМ городе (17 декабря):</strong> победители в любых городах РФ, Казахстана и СНГ сразу получают <strong>2 билета на фильм «БОЧКА» в кинотеатр своего города</strong> (для Москвы/МО — билеты на Закрытый показ).</li>
+        <li>🌍 <strong>Главный приз — 2 билета в ТВОЁМ городе (17 декабря):</strong> победители в любых городах России сразу получают <strong>2 билета на фильм «БОЧКА» в кинотеатр своего города</strong> (для Москвы/МО — билеты на Закрытый показ).</li>
         <li>⏳ <strong>Восстановление сил:</strong> <strong>1 ❤️ жизнь и 3 удара</strong> возвращаются <strong>1 раз в сутки</strong>; если вышел без ударов — восстанавливается <strong>+1 удар каждый час</strong> (до 3 ударов).</li>
         <li>🎟 <strong>Парный билет 1+1 «Соседнее кресло за 0 ₽»:</strong> собери 4 этапа (Этап 1 — уже за 30с трейлера!) · отправить можно 1 раз · если друг не зашёл за 24ч — вернётся · 16.12 неактивированные билеты сгорают.</li>
         <li class="stage4-only-item">⚔️ <strong>Дуэль «На счёт три!» (после Ур. 5 / 1500 ⭐):</strong> 6 дуэльных жизней, охота за билетом; при 0 ❤️ — на берег к Тилю зарядить силы.</li>
