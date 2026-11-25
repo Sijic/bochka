@@ -512,6 +512,17 @@ async function ensureDuelReady() {
         openDuelTable('').catch(() => {});
       },
       onTriggerScreamerFx: (durMs, variant = null) => triggerMiniScreamer(variant, durMs),
+      onUnlockFilmArtifact: () => {
+        return loadTrophiesMod()
+          .then((mod) => {
+            const res = mod.unlockNextArtifactLevel?.();
+            if (res?.isNew && res.slot) {
+              showToast(`🎬 Открыт артефакт фильма (${res.unlockedCount}/${res.totalSlots}): «${res.slot.title}» — смотри в Зале славы!`);
+            }
+            return res;
+          })
+          .catch(() => null);
+      },
       onCollectChipFromBarrel: ({ source = 'duel_barrel' } = {}) => {
         return rollRareMovieCardLazy(source)
           .then((res) => {
@@ -627,6 +638,7 @@ async function openHallOfFameModal() {
     renderModeARankBoard();
   }
   mod.renderHallOfFameModal(body, data, {
+    currentLevel: Number(state.profile?.currentLevel || 1),
     onInviteFriend: () => {
       modal.setAttribute('hidden', '');
       state.round.pausedForModal = false;
@@ -7063,6 +7075,7 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
     const ptsDelta = v8PointsTable[completedLvl] || 300;
     const nextLvl = Math.max(Number(state.profile.currentLevel || 1), completedLvl + 1);
     state.profile.currentLevel = nextLvl;
+    loadTrophiesMod().then((m) => m.syncUnlockedArtifactsForLevel?.(nextLvl)).catch(() => {});
     state.profile.premierePoints = Math.max(0, Number(state.profile.premierePoints || 0) + ptsDelta);
     state.round.lastPointsAwarded = ptsDelta;
 
@@ -7498,6 +7511,7 @@ async function handleSealBarrelClick({ forceAutoAvatar = false } = {}) {
           ? 3
           : Math.max(3, prevRoundLvl + 1);
     state.profile.currentLevel = targetNextLevel;
+    loadTrophiesMod().then((m) => m.syncUnlockedArtifactsForLevel?.(targetNextLevel)).catch(() => {});
     const prevLives = Math.max(0, Number(state.profile.lives || 0));
     const nextLives = wasLifeRefill
       ? Math.max(6, prevLives + 6)

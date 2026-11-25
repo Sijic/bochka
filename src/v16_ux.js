@@ -162,6 +162,36 @@ export function unlockArtifactLevel(level = 1) {
   return { level: cleanLvl, isNew, unlocked: next };
 }
 
+export function syncUnlockedArtifactsForLevel(currentLevel = 1) {
+  const slots = getCachedMediaSlots().level_artifacts || DEFAULT_MEDIA_SLOTS.level_artifacts;
+  const completedCap = Math.min(slots.length, Math.max(0, Math.round(Number(currentLevel) || 1) - 1));
+  if (completedCap <= 0) return getUnlockedArtifactLevels();
+  const merged = new Set(getUnlockedArtifactLevels());
+  for (let i = 1; i <= completedCap; i += 1) {
+    merged.add(i);
+  }
+  const next = Array.from(merged).sort((a, b) => a - b);
+  try {
+    localStorage.setItem(ARTIFACTS_STORAGE_KEY, JSON.stringify(next));
+  } catch { /* ignore */ }
+  return next;
+}
+
+export function unlockNextArtifactLevel() {
+  const slots = getCachedMediaSlots().level_artifacts || DEFAULT_MEDIA_SLOTS.level_artifacts;
+  const current = new Set(getUnlockedArtifactLevels());
+  const nextSlot = slots.find((s) => !current.has(Number(s.level)));
+  if (!nextSlot) return null;
+  const res = unlockArtifactLevel(Number(nextSlot.level));
+  return {
+    level: Number(nextSlot.level),
+    isNew: res.isNew,
+    slot: nextSlot,
+    unlockedCount: res.unlocked.length,
+    totalSlots: slots.length,
+  };
+}
+
 export function getTilCurrentLevel() {
   try {
     const n = Number(localStorage.getItem(TIL_LEVEL_STORAGE_KEY) || 1);
@@ -369,7 +399,7 @@ export function createCircleVideoWidget(slot, { autoplay = true, compact = false
     const statusLine = el(
       'div',
       'v16-circle-stub-caption',
-      slot?.placeholder_caption || 'Видео-кружок о съёмках (слот готов под MP4)'
+      slot?.placeholder_caption || 'Эксклюзивный кадр со съёмок «БОЧКИ»'
     );
 
     let playing = Boolean(autoplay);
@@ -427,9 +457,10 @@ export function openArtifactPlayerModal(slot, { onClose } = {}) {
   showDuolingoCard({
     badge: `🎬 УРОВЕНЬ ${slot?.level || 1} · АРТЕФАКТ ФИЛЬМА`,
     title: slot?.title || 'Видео-кружок о фильме',
-    body: slot?.video_url
-      ? slot?.subtitle || 'Закадровый видео-кружок фильма «БОЧКА»'
-      : 'Видео-заглушка из assets/config/media_slots.json — замени video_url на реальный MP4-кружок за 5 секунд.',
+    body:
+      slot?.video_url
+        ? slot?.subtitle || 'Закадровый видео-кружок фильма «БОЧКА»'
+        : slot?.placeholder_caption || slot?.subtitle || 'Эксклюзивный кадр со съёмок триллера «БОЧКА» (премьера 17 декабря).',
     buttonText: 'ЗАКРЫТЬ',
     tone: 'gold',
     customNode: circleWidget,

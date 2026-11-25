@@ -4,7 +4,15 @@
 // Весь DOM строится безопасно (createElement + textContent, без innerHTML).
 // ============================================================================
 import { getCloudDb, getViewerUid } from './backend.js';
-import { getCachedMediaSlots, getUnlockedArtifactLevels, openArtifactPlayerModal } from './v16_ux.js';
+import {
+  getCachedMediaSlots,
+  getUnlockedArtifactLevels,
+  openArtifactPlayerModal,
+  syncUnlockedArtifactsForLevel,
+  unlockNextArtifactLevel,
+} from './v16_ux.js';
+
+export { syncUnlockedArtifactsForLevel, unlockNextArtifactLevel };
 
 export const CHIP_DUEL_UNLOCK_INVITES = 1;
 
@@ -325,7 +333,7 @@ function showTrophyDetailOverlay(modalHost, trophy) {
   modalHost.appendChild(ov);
 }
 
-export function renderHallOfFameModal(bodyEl, data, { onInviteFriend, onOpenChipDuel, onPlayTil, initialTab = 'auto' } = {}) {
+export function renderHallOfFameModal(bodyEl, data, { onInviteFriend, onOpenChipDuel, onPlayTil, initialTab = 'auto', currentLevel = 1 } = {}) {
   if (!bodyEl) return;
   bodyEl.textContent = '';
 
@@ -338,16 +346,17 @@ export function renderHallOfFameModal(bodyEl, data, { onInviteFriend, onOpenChip
   const bonusPct = Number(data?.rareDropBonusPct || 0);
   const trophies = Array.isArray(data?.trophies) ? data.trophies : [];
 
+  syncUnlockedArtifactsForLevel(currentLevel);
   const slots = getCachedMediaSlots().level_artifacts || [];
   const unlockedLevels = new Set(getUnlockedArtifactLevels());
   const unlockedArtCount = slots.filter((s) => unlockedLevels.has(Number(s.level))).length;
 
-  // v16.0: 2 понятные полки коллекции — «Артефакты фильма» (видео-кружки) и «Друзья из ветки»
+  // 2 полки коллекции — «Артефакты фильма» (видео-кружки) и «Фишки» (фишки из бочек + именные фишки друзей)
   const tabBar = el('div', 'hof-tabs-v16');
   const tabArt = el('button', 'hof-tab-btn', `🎬 Артефакты фильма (${unlockedArtCount}/${slots.length})`);
   tabArt.type = 'button';
   tabArt.id = 'btn-hof-tab-artifacts';
-  const tabFriends = el('button', 'hof-tab-btn', `🪙 Фишки и друзья (${trophies.length})`);
+  const tabFriends = el('button', 'hof-tab-btn', `🪙 Фишки (${trophies.length})`);
   tabFriends.type = 'button';
   tabFriends.id = 'btn-hof-tab-friends';
   tabBar.appendChild(tabArt);
@@ -449,21 +458,27 @@ export function renderHallOfFameModal(bodyEl, data, { onInviteFriend, onOpenChip
   statusCard.appendChild(invBtn);
   paneFriends.appendChild(statusCard);
 
-  const gridTitle = el(
-    'div',
-    'hof-section-title',
-    trophies.length ? `КОЛЛЕКЦИЯ ФИШЕК И ДРУЗЕЙ (${trophies.length})` : 'КОЛЛЕКЦИЯ ФИШЕК И ДРУЗЕЙ'
-  );
+  const movieChips = trophies.filter((t) => t.trophy_type === 'movie_card');
+  const friendChips = trophies.filter((t) => t.trophy_type !== 'movie_card');
+  const gridHeadingText =
+    movieChips.length > 0 && friendChips.length > 0
+      ? `ФИШКИ ИЗ БОЧЕК (${movieChips.length}) И ДРУЗЬЯ (${friendChips.length})`
+      : movieChips.length > 0
+        ? `ФИШКИ ИЗ БОЧЕК (${movieChips.length})`
+        : friendChips.length > 0
+          ? `ФИШКИ ДРУЗЕЙ (${friendChips.length})`
+          : 'ФИШКИ ИЗ БОЧЕК И ДРУЗЕЙ';
+  const gridTitle = el('div', 'hof-section-title', gridHeadingText);
   paneFriends.appendChild(gridTitle);
 
   if (trophies.length === 0) {
     const empty = el('div', 'hof-empty-box');
-    empty.appendChild(el('strong', '', 'Здесь появятся фото-фишки и аватарки друзей!'));
+    empty.appendChild(el('strong', '', 'Здесь появятся фишки из бочек и именные фишки друзей!'));
     empty.appendChild(
       el(
         'p',
         '',
-        'Вскрывай бочки друзей из своей ветки или отправляй свои — их фото-фишки сохранятся здесь и пригодятся в Дуэли на фишки.'
+        'Выбивай фишки в бочках и дуэлях с Тилем или приглашай друзей — вся коллекция хранится здесь и участвует в Дуэли на фишки.'
       )
     );
     paneFriends.appendChild(empty);

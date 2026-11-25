@@ -98,7 +98,7 @@ const IDLE_HINT_DELAY_MS = 2700;
  * Все промежуточные клики и таймеры идут строго через WebSocket в оперативной памяти (0 записей в БД).
  */
 export class WorkshopDuelController {
-  constructor({ scene, audio, getTgUser, getPlayerAvatar, getHasRealFriends, getProfileStats, getTicketShards, onCollectChipFromBarrel, canUseOceanRefill, onOpenPackForLives, onFoundFriendBarrel, onContextDiscoveryHint, onLifeLostPill, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDefeatCinematic, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels, onOpenHallOfFame, loadDuelCandidates, onChallengeFriend, onOpenPackFriend, onRoomFull, onTriggerScreamerFx }) {
+  constructor({ scene, audio, getTgUser, getPlayerAvatar, getHasRealFriends, getProfileStats, getTicketShards, onCollectChipFromBarrel, onUnlockFilmArtifact, canUseOceanRefill, onOpenPackForLives, onFoundFriendBarrel, onContextDiscoveryHint, onLifeLostPill, onProfileSync, onToast, onOpenInviteShare, onOpenGoldenFork, onExitToHub, onDefeatCinematic, onDuelDefeatToTil, onFlyRating, onFlyLife, onReturnToLevels, onOpenHallOfFame, loadDuelCandidates, onChallengeFriend, onOpenPackFriend, onRoomFull, onTriggerScreamerFx }) {
     this.scene = scene;
     this.audio = audio;
     this.getTgUser = getTgUser;
@@ -128,6 +128,7 @@ export class WorkshopDuelController {
     this.onLifeLostPill = onLifeLostPill || null;
     this.onRoomFull = onRoomFull || null;
     this.onTriggerScreamerFx = onTriggerScreamerFx || null;
+    this.onUnlockFilmArtifact = onUnlockFilmArtifact || null;
     this.duelCandidates = { sent: [], branch: [], loaded: false };
     this.pickerTab = 'sent'; // 'sent' | 'branch'
     this.challengedUids = new Set();
@@ -2964,6 +2965,7 @@ export class WorkshopDuelController {
     );
 
     if (playerBeatTilSolo) {
+      this.onUnlockFilmArtifact?.();
       this.scheduleStepWhenUnblocked(() => {
         if (!this.active) return;
         this.clearBarrelClaimBadges();
@@ -3014,6 +3016,7 @@ export class WorkshopDuelController {
     );
 
     if (playerWonLive1x1) {
+      this.onUnlockFilmArtifact?.();
       const oppPlayer = this.players.find((p) => p.uid !== this.myUid) || null;
       const oppLabel = oppEntry?.claim?.name || oppPlayer?.name || 'друга';
       this.scheduleStepWhenUnblocked(() => {
