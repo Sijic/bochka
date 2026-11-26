@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0d0d'/%3E%3Crect x='8' y='4' width='16' height='24' rx='2' fill='none' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='11' x2='25' y2='11' stroke='%23eab308' stroke-width='2'/%3E%3Cline x1='7' y1='21' x2='25' y2='21' stroke='%23eab308' stroke-width='2'/%3E%3C/svg%3E" />
   <title>БОЧКА — Заводской триллер | 2 билета в кино в твоём городе</title>
-  <meta name="bochka-build" content="v20.12-rf" />
+  <meta name="bochka-build" content="v20.13-rf" />
   <meta name="description" content="Четыре цеха завода, заваренные 200-литровые бочки и 30 секунд кислорода. Запакуй друга в 1 клик (работает и без звука!), сразись в дуэли 1×1 и забери 2 билета в кино в своём городе или проходку на закрытую премьеру 17 декабря." />
 
   <!-- Open Graph / Telegram / WhatsApp Link Preview -->
@@ -48,7 +48,7 @@
   }
   </script>
 
-  <link rel="modulepreload" href="./src/main.js?v=2013" />
+  <link rel="modulepreload" href="./src/main.js?v=2014" />
   <link rel="modulepreload" href="./src/backend.js" />
   <link rel="modulepreload" href="./src/env.js" />
   <link rel="modulepreload" href="./vendor/supabase.esm.js" />
@@ -65,8 +65,8 @@
     #screen-gate .btn-primary{width:100%;min-height:48px;padding:12px 16px;border:0;border-radius:8px;background:#eab308;color:#0d0d0d;font-weight:800;font-size:15px;cursor:pointer}
     #screen-gate .btn-gate-mute{width:100%;min-height:44px;padding:10px 14px;border:1px solid rgba(148,163,184,.42);border-radius:8px;background:rgba(30,41,59,.72);color:#e2e8f0;font-weight:700;font-size:13.5px;cursor:pointer}
   </style>
-  <link rel="stylesheet" href="./src/styles.css?v=2013" media="print" onload="this.media='all'" />
-  <noscript><link rel="stylesheet" href="./src/styles.css?v=2013" /></noscript>
+  <link rel="stylesheet" href="./src/styles.css?v=2014" media="print" onload="this.media='all'" />
+  <noscript><link rel="stylesheet" href="./src/styles.css?v=2014" /></noscript>
 </head>
 <body data-ui-stage="1" data-blitz-unlocked="0">
   <!-- 3D Three.js Industrial Workshop Canvas -->
@@ -689,33 +689,33 @@
        ==================================================================== -->
   <section class="screen" id="screen-pack" hidden>
     <div class="panel-sheet pack-clean">
-      <h2 class="section-title pack-clean-title" id="pack-screen-title">Закатать друга в бочку</h2>
+      <h2 class="section-title pack-clean-title" id="pack-screen-title">🔥 Отомсти и закатай друга</h2>
       <p class="pack-duel-subline" id="pack-duel-subline">
-        🎁 За друга: редкая фишка + сборка целого билета + ×2 очки
+        Добавь фото друга и отправь ему ссылку — текст-хук и скример подставятся сами!
       </p>
       <input type="file" id="input-photo-file" accept="image/*" hidden />
       <div class="pack-uploaded-confirm" id="pack-uploaded-confirm" hidden>
         <img id="pack-uploaded-thumb" alt="Фото друга" class="pack-uploaded-thumb" loading="lazy" decoding="async" />
       </div>
       <div class="pack-two-actions">
-        <button type="button" class="btn-primary btn-full pack-quick-1tap-btn pack-quick-lazy-btn" id="btn-pack-quick-1tap">
-          <span id="btn-pack-quick-1tap-text">🔥 Отомсти и закатай друга</span>
-        </button>
-        <button type="button" class="btn-primary btn-full" id="btn-pack-send-uploaded" hidden>
-          🔥 Отправить вызов с фото
-        </button>
-        <label class="btn-secondary btn-full btn-compact pack-upload-direct-btn" id="label-pack-upload-photo" for="input-photo-file">
+        <label class="btn-primary btn-full pack-upload-direct-btn" id="label-pack-upload-photo" for="input-photo-file">
           📷 Добавить фото друга
         </label>
+        <button type="button" class="btn-primary btn-full" id="btn-pack-send-uploaded" hidden>
+          ⚡ Отправить другу
+        </button>
+        <button type="button" class="btn-ghost btn-full btn-compact pack-quick-1tap-btn pack-quick-lazy-btn" id="btn-pack-quick-1tap">
+          <span id="btn-pack-quick-1tap-text">⚡ Отправить без фото</span>
+        </button>
         <p class="pack-screamer-note" id="pack-screamer-note">
-          😱 Скример и крик из бочки добавятся случайно
+          🎁 За друга: фишка и сборка билета · 😱 скример и крик случайно
         </p>
-        <div class="pack-template-switch" id="pack-template-switch" role="group" aria-label="Повод для отправки 1-на-1">
+        <div class="pack-template-switch" id="pack-template-switch" role="group" aria-label="Повод для отправки 1-на-1" hidden>
           <button type="button" class="pack-template-btn is-active" id="btn-tpl-thriller" data-share-template="thriller_challenge">🎬 Вызов</button>
           <button type="button" class="pack-template-btn" id="btn-tpl-friend-ticket" data-share-template="friend_ticket">🎟 Часть билета</button>
         </div>
         <p class="pack-template-hint" id="pack-template-hint" hidden>Вызов — для любых знакомых · Часть билета — для близкого друга</p>
-        <div class="pack-template-preview" id="pack-template-preview">«Закрыл тебя в стальной бочке из триллера с Тилем Швайгером. 30 секунд воздуха, работает даже без звука — проверишь, успеешь выбраться?»</div>
+        <div class="pack-template-preview" id="pack-template-preview" hidden>«Закрыл тебя в стальной бочке из триллера с Тилем Швайгером. 30 секунд воздуха, работает даже без звука — проверишь, успеешь выбраться?»</div>
         <button type="button" class="btn-ghost btn-full btn-compact pack-recovery-btn" id="btn-pack-recovery-shift" hidden>
           🔨 Отработать +1 ❤️ без Тиля
         </button>
@@ -1747,6 +1747,6 @@
   <!-- Toast уведомления -->
   <div class="toast" id="toast" hidden></div>
 
-  <script type="module" src="./src/main.js?v=2013"></script>
+  <script type="module" src="./src/main.js?v=2014"></script>
 </body>
 </html>

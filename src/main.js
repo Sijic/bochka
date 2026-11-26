@@ -502,7 +502,7 @@ async function ensureDuelReady() {
       screamersPreloaded = true;
       window.setTimeout(() => preloadScreamerFrames(SCREAMER_META), 200);
     }
-    const mod = duelModCache || (await import('./duel.js?v=2013'));
+    const mod = duelModCache || (await import('./duel.js?v=2014'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -1038,7 +1038,7 @@ function applySeedPackModeUI(active) {
     }
     return;
   }
-  if (titleEl) titleEl.textContent = 'Закатать друга в бочку';
+  if (titleEl) titleEl.textContent = '🔥 Отомсти и закатай друга';
 }
 
 const ACTIVE_TG_ACCOUNT_KEY = 'bochka_active_tg_account';
@@ -3393,13 +3393,16 @@ function showScreen(name) {
     const sendUpBtn = document.getElementById('btn-pack-send-uploaded');
     if (sendUpBtn) {
       sendUpBtn.disabled = false;
-      sendUpBtn.textContent = 'Отправить другу';
+      sendUpBtn.textContent = '⚡ Отправить другу';
       sendUpBtn.setAttribute('hidden', '');
     }
     const quickBtn = document.getElementById('btn-pack-quick-1tap');
     const quickTxt = document.getElementById('btn-pack-quick-1tap-text');
-    if (quickBtn) quickBtn.disabled = false;
-    if (quickTxt) quickTxt.textContent = '🔥 Отомсти и закатай друга';
+    if (quickBtn) {
+      quickBtn.removeAttribute('hidden');
+      quickBtn.disabled = false;
+    }
+    if (quickTxt) quickTxt.textContent = '⚡ Отправить без фото';
     updatePackTemplatePreview();
     const recPackBtn = document.getElementById('btn-pack-recovery-shift');
     if (recPackBtn) {
@@ -7985,7 +7988,7 @@ async function handleQuick1TapPrankClick({ isPingPongRevenge = false, replyToPac
     await handleSealBarrelClick({ forceAutoAvatar: true, isPingPongRevenge, replyToPack });
   } finally {
     if (quickBtn) quickBtn.disabled = false;
-    if (quickTxt) quickTxt.textContent = '🔥 Отомсти и закатай друга';
+    if (quickTxt) quickTxt.textContent = '⚡ Отправить без фото';
   }
 }
 
@@ -11411,9 +11414,10 @@ function bindUIEvents() {
       }
       confirmBox?.removeAttribute('hidden');
       uploadLbl?.setAttribute('hidden', '');
+      document.getElementById('btn-pack-quick-1tap')?.setAttribute('hidden', '');
       if (sendUpBtn) {
         sendUpBtn.disabled = false;
-        sendUpBtn.textContent = 'Отправить другу';
+        sendUpBtn.textContent = '⚡ Отправить другу';
         sendUpBtn.removeAttribute('hidden');
       }
       Haptics.light();
