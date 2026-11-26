@@ -502,7 +502,7 @@ async function ensureDuelReady() {
       screamersPreloaded = true;
       window.setTimeout(() => preloadScreamerFrames(SCREAMER_META), 200);
     }
-    const mod = duelModCache || (await import('./duel.js?v=2014'));
+    const mod = duelModCache || (await import('./duel.js?v=2015'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -3402,7 +3402,7 @@ function showScreen(name) {
       quickBtn.removeAttribute('hidden');
       quickBtn.disabled = false;
     }
-    if (quickTxt) quickTxt.textContent = '⚡ Отправить без фото';
+    if (quickTxt) quickTxt.textContent = '⚡ Отправить в 1 клик (с аватаром)';
     updatePackTemplatePreview();
     const recPackBtn = document.getElementById('btn-pack-recovery-shift');
     if (recPackBtn) {
@@ -7988,7 +7988,7 @@ async function handleQuick1TapPrankClick({ isPingPongRevenge = false, replyToPac
     await handleSealBarrelClick({ forceAutoAvatar: true, isPingPongRevenge, replyToPack });
   } finally {
     if (quickBtn) quickBtn.disabled = false;
-    if (quickTxt) quickTxt.textContent = '⚡ Отправить без фото';
+    if (quickTxt) quickTxt.textContent = '⚡ Отправить в 1 клик (с аватаром)';
   }
 }
 
