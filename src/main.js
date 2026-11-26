@@ -9366,11 +9366,11 @@ function syncTrailerStagePillsAndCountdown(watchedSec = 0, dur = 91.8) {
     pill90.classList.toggle('is-done', fullDone);
     pill90.classList.toggle('is-hot', !fullDone && baseDone && secToFinale > 0);
     if (fullDone) {
-      pill90.textContent = '🏆 Код 19-97 + 350 ⭐ + 1 ❤️';
+      pill90.textContent = '🏆 19-97 + 350 ⭐ + 1 ❤️';
     } else if (baseDone && secToFinale > 0) {
-      pill90.textContent = `🔥 Финал через ${secToFinale}с: +350 ⭐ + код`;
+      pill90.textContent = `🔥 Через ${secToFinale}с: +350 ⭐ + код`;
     } else {
-      pill90.textContent = '2️⃣ Финал 90%: +350 ⭐ + секрет-код';
+      pill90.textContent = '2️⃣ 90%: +350 ⭐ + код';
     }
   }
 
