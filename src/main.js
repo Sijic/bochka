@@ -515,9 +515,12 @@ async function ensureDuelReady() {
     await ensureSceneReady();
     if (!screamersPreloaded) {
       screamersPreloaded = true;
-      window.setTimeout(() => preloadScreamerFrames(SCREAMER_META), 200);
+      window.setTimeout(() => {
+        preloadScreamerFrames(SCREAMER_META);
+        preloadBarrelClosers();
+      }, 200);
     }
-    const mod = duelModCache || (await import('./duel.js?v=2017'));
+    const mod = duelModCache || (await import('./duel.js?v=2018'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -681,7 +684,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=2017'));
+  const mod = duelModCache || (await import('./duel.js?v=2018'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
@@ -2679,6 +2682,7 @@ async function bootstrap() {
         return { profile: state.profile, friendsCount: getRealFriendsCount() };
       },
       simulateVkTimeUpdate: (sec, dur = 91.8) => handleVkTrailerTimeProgress(Number(sec || 0), Number(dur || 91.8), false),
+      triggerDefeatCinematic: (opts) => playBarrelDefeatCinematic(opts || {}),
     };
   }
 
@@ -5055,6 +5059,18 @@ const BARREL_CLOSER_CAST = [
   { id: 'girl', name: 'Девушка', src: './public/sprites/fighter_4.webp?v=2000' },
 ];
 let _lastBarrelCloserIdx = -1;
+let _barrelClosersPreloaded = false;
+
+function preloadBarrelClosers() {
+  if (_barrelClosersPreloaded || typeof Image === 'undefined') return;
+  _barrelClosersPreloaded = true;
+  for (const item of BARREL_CLOSER_CAST) {
+    if (!item?.src) continue;
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = item.src;
+  }
+}
 
 function pickNextBarrelCloser() {
   let prev = _lastBarrelCloserIdx;
@@ -5071,9 +5087,8 @@ function pickNextBarrelCloser() {
 }
 
 /**
- * Единая 4-актная POV-сцена поражения при 0 ❤️:
- * 1) затягивает вниз в бочку -> 2) взгляд вверх на край круга (каждый раз новое лицо: Тиль/Отец/Механик/Девушка)
- * -> 3) тяжёлая крышка захлопывается + полная темнота -> 4) «Ты на небе» (1 раз/сутки) или попап друга.
+ * Единая 4-актная POV-сцена поражения при 0 ❤️ (без текстовых плашек — чистый визуальный взгляд сверху и крышка):
+ * 1) затягивает вниз в бочку -> 2) взгляд вверх на край круга -> 3) тяжёлая крышка захлопывается + полная темнота -> 4) «Ты на небе» или попап друга.
  */
 function playBarrelDefeatCinematic({ oceanAllowed = true, roomId = '', solo = true } = {}) {
   if (defeatCinematicActive) return;
@@ -5089,15 +5104,24 @@ function playBarrelDefeatCinematic({ oceanAllowed = true, roomId = '', solo = tr
   Haptics.heavy();
 
   const overlay = document.getElementById('barrel-trap-cinematic');
-  const captionEl = document.getElementById('barrel-trap-caption');
   const closerEl = document.getElementById('barrel-closer-face');
   const closer = pickNextBarrelCloser();
 
   if (closerEl) {
+    closerEl.style.visibility = 'hidden';
+    closerEl.onload = () => {
+      closerEl.style.visibility = 'visible';
+    };
+    closerEl.onerror = () => {
+      closerEl.style.visibility = 'hidden';
+    };
+    closerEl.alt = '';
+    closerEl.removeAttribute('src');
     closerEl.src = closer.src;
-    closerEl.alt = closer.name;
+    if (closerEl.complete && closerEl.naturalWidth > 0) {
+      closerEl.style.visibility = 'visible';
+    }
   }
-  if (captionEl) captionEl.textContent = '☠️ 0 ЖИЗНЕЙ — ЗАТЯГИВАЕТ В БОЧКУ!';
 
   if (overlay) {
     overlay.classList.remove('is-pulling', 'is-closer-looming', 'is-lid-slammed', 'is-pitch-dark', 'is-heaven-flash');
@@ -5108,14 +5132,12 @@ function playBarrelDefeatCinematic({ oceanAllowed = true, roomId = '', solo = tr
 
   window.setTimeout(() => {
     overlay?.classList.add('is-closer-looming');
-    if (captionEl) captionEl.textContent = `👁 ${closer.name} смотрит сверху и закрывает крышку…`;
   }, 520);
 
   window.setTimeout(() => {
     audio.playLidSlamShut?.();
     Haptics.error();
     overlay?.classList.add('is-lid-slammed');
-    if (captionEl) captionEl.textContent = '🔒 КРЫШКА ЗАХЛОПНУЛАСЬ…';
   }, 1480);
 
   window.setTimeout(() => {
@@ -5126,12 +5148,7 @@ function playBarrelDefeatCinematic({ oceanAllowed = true, roomId = '', solo = tr
   if (oceanAllowed) {
     window.setTimeout(() => {
       overlay?.classList.add('is-heaven-flash');
-      if (captionEl) captionEl.textContent = '☁️ ТЫ НА НЕБЕ — 1 РАЗ В СУТКИ МОЖНО ДОСТУЧАТЬСЯ И ВЕРНУТЬСЯ В ЦЕХ!';
     }, 2320);
-  } else {
-    window.setTimeout(() => {
-      if (captionEl) captionEl.textContent = '🔒 НА НЕБО УЖЕ ХОДИЛ СЕГОДНЯ — ПОЗОВИ ДРУГА!';
-    }, 2250);
   }
 
   window.setTimeout(() => {
