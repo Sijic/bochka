@@ -9543,7 +9543,7 @@ function mountVkTrailerPlayer() {
     ifr.title = 'БОЧКА — официальный трейлер (VK Видео)';
     ifr.referrerPolicy = 'strict-origin-when-cross-origin';
     ifr.setAttribute('frameborder', '0');
-    ifr.setAttribute('allow', 'autoplay; encrypted-media; fullscreen; picture-in-picture');
+    ifr.setAttribute('allow', 'autoplay; encrypted-media; fullscreen; picture-in-picture; screen-wake-lock');
     ifr.setAttribute('allowfullscreen', '');
     ifr.setAttribute('playsinline', '');
 
