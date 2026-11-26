@@ -520,7 +520,7 @@ async function ensureDuelReady() {
         preloadBarrelClosers();
       }, 200);
     }
-    const mod = duelModCache || (await import('./duel.js?v=2024'));
+    const mod = duelModCache || (await import('./duel.js?v=2025'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -684,7 +684,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=2024'));
+  const mod = duelModCache || (await import('./duel.js?v=2025'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
@@ -692,7 +692,7 @@ async function createWatchChannelLazy(barrelId, opts) {
 let trophiesModCache = null;
 async function loadTrophiesMod() {
   if (!trophiesModCache) {
-    trophiesModCache = await import('./trophies.js?v=2024');
+    trophiesModCache = await import('./trophies.js?v=2025');
   }
   return trophiesModCache;
 }
@@ -9433,13 +9433,13 @@ function syncTrailerIntroLockUI(watchedSec = 0) {
       toPackBtn.textContent = 'Забрать код 19-97 и все призы — играть!';
     } else if (baseRewarded) {
       toPackBtn.textContent = secToEnd > 0
-        ? `Забрать приз и играть (до кода ${secToEnd}с)`
-        : 'Конец ролика — открываем код...';
+        ? `Забрать приз и играть (до приза 🏆 ${secToEnd}с)`
+        : 'Конец ролика — открываем приз 🏆...';
     } else if (toPackBtn.disabled) {
       toPackBtn.textContent = `Смотри трейлер... ${rem}с`;
     } else {
       toPackBtn.textContent = toMid > 0
-        ? `Пропустить без приза (${toMid}с до подарка)`
+        ? `Пропустить без приза (до приза 🎁 ${toMid}с)`
         : 'Пропустить и идти дальше';
     }
   }
