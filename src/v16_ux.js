@@ -4,7 +4,7 @@
 // ============================================================================
 import { Haptics } from './telegram.js';
 
-const MEDIA_SLOTS_URL = './assets/config/media_slots.json?v=2025';
+const MEDIA_SLOTS_URL = './assets/config/media_slots.json?v=2026';
 const ARTIFACTS_STORAGE_KEY = 'bochka_v16_unlocked_artifacts';
 const TIL_LEVEL_STORAGE_KEY = 'bochka_v16_til_level';
 

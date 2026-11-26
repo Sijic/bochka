@@ -520,13 +520,16 @@ async function ensureDuelReady() {
         preloadBarrelClosers();
       }, 200);
     }
-    const mod = duelModCache || (await import('./duel.js?v=2025'));
+    const mod = duelModCache || (await import('./duel.js?v=2026'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
       scene,
       audio,
-      onPhaseChange: () => syncLobbyHomescreenPillUI(),
+      onPhaseChange: () => {
+        syncLobbyHomescreenPillUI();
+        syncSecretCode1997HintUI();
+      },
       getTgUser: () => state.tg?.user || null,
       getTgWriteAccess: () => Boolean(state.profile?.tgWriteAccess),
       onRequestWriteAccess: () => requestAndSyncWriteAccess({ force: false }),
@@ -684,7 +687,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=2025'));
+  const mod = duelModCache || (await import('./duel.js?v=2026'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
@@ -692,7 +695,7 @@ async function createWatchChannelLazy(barrelId, opts) {
 let trophiesModCache = null;
 async function loadTrophiesMod() {
   if (!trophiesModCache) {
-    trophiesModCache = await import('./trophies.js?v=2025');
+    trophiesModCache = await import('./trophies.js?v=2026');
   }
   return trophiesModCache;
 }
@@ -1452,6 +1455,7 @@ function mergeFreshProfile(freshProfile, { preserveProgress = true } = {}) {
   syncTicketShardsUI();
   syncDuel1x1Visibility();
   syncSuperPrizeRatingBarUI();
+  syncSecretCode1997HintUI();
 }
 
 /* ============================================================================
@@ -2684,6 +2688,8 @@ async function bootstrap() {
       openTrailerModal: (opts) => openTrailerModal(opts || {}),
       getTrailerState: () => ({ ...state.trailer }),
       simulateVkTimeUpdate: (sec, dur = 91.8) => handleVkTrailerTimeProgress(Number(sec || 0), Number(dur || 91.8), false),
+      syncSecretCode1997HintUI: () => syncSecretCode1997HintUI(),
+      triggerSpecialKnockBonus: (src) => triggerSpecialKnockBonus(src || 'workshop_1997'),
       triggerDefeatCinematic: (opts) => playBarrelDefeatCinematic(opts || {}),
     };
   }
@@ -3505,6 +3511,7 @@ function showScreen(name) {
     refreshPackFriendsStrip();
   }
   syncLobbyHomescreenPillUI(name);
+  syncSecretCode1997HintUI();
 
   if (name !== 'pass' && state.passClockTimer) {
     clearInterval(state.passClockTimer);
@@ -4955,6 +4962,28 @@ function renderAttemptSquares(attemptsLeft, totalCount = null) {
   }
 }
 
+function isSecret1997Ready() {
+  if (!state.profile?.trailerWatchedFull) return false;
+  const lastAt = Number(state.profile?.lastSpecialKnockAt || 0);
+  if (lastAt > 0 && Date.now() - lastAt < 24 * 60 * 60 * 1000) return false;
+  return true;
+}
+
+function syncSecretCode1997HintUI() {
+  const ready = isSecret1997Ready();
+  const wsEl = document.getElementById('workshop-1997-reminder');
+  if (wsEl) {
+    const showWs = ready && state.activeScreen === 'workshop' && !duelCtrl?.isActive;
+    if (showWs) wsEl.removeAttribute('hidden');
+    else wsEl.setAttribute('hidden', '');
+  }
+  const trapEl = document.getElementById('trapped-1997-reminder');
+  if (trapEl) {
+    if (ready) trapEl.removeAttribute('hidden');
+    else trapEl.setAttribute('hidden', '');
+  }
+}
+
 let _specialKnockBusy = false;
 async function triggerSpecialKnockBonus(source = 'ocean_rhythm') {
   if (_specialKnockBusy) return null;
@@ -4973,12 +5002,22 @@ async function triggerSpecialKnockBonus(source = 'ocean_rhythm') {
       audio.playRewardChime?.();
       Haptics.success();
       showToast('Спец-стук сработал! +3 доп. жизни!', { className: 'is-special-knock', durationMs: 5200 });
+    } else if (res.reason === 'trailer_full_required') {
+      Haptics.error();
+      showToast('Сначала досмотри трейлер до конца', { durationMs: 3600 });
     } else if (res.reason === 'special_knock_cooldown') {
+      if (Number(res.lastSpecialKnockAt || 0) > 0) {
+        state.profile.lastSpecialKnockAt = Number(res.lastSpecialKnockAt);
+      } else {
+        state.profile.lastSpecialKnockAt = Date.now();
+      }
       Haptics.error();
       showToast('⏳ Спец-стук уже использован за последние 24 часа — бонус не дублируется!', { durationMs: 3600 });
     }
+    syncSecretCode1997HintUI();
     return res;
   } finally {
+    syncSecretCode1997HintUI();
     _specialKnockBusy = false;
   }
 }
@@ -5161,6 +5200,7 @@ function playBarrelDefeatCinematic({ oceanAllowed = true, roomId = '', solo = tr
     if (oceanAllowed) {
       triggerOceanEasterEggScene();
     } else {
+      syncSecretCode1997HintUI();
       const trappedModal = document.getElementById('modal-barrel-trapped');
       trappedModal?.removeAttribute('hidden');
     }
@@ -9179,6 +9219,7 @@ async function grantTrailer30sBaseReward() {
     syncTicketShardsUI({ pulse: true });
     updatePremiereBarsUI();
     syncSuperPrizeRatingBarUI();
+    syncSecretCode1997HintUI();
 
     syncTrailerIntroLockUI(Math.max(TRAILER_BASE_REWARD_SEC, Number(state.trailer.honestWatchedSec || 0)));
     audio.playRewardChime?.();
@@ -9256,6 +9297,7 @@ async function grantTrailerFullWatchReward() {
     syncTicketShardsUI({ pulse: true });
     updatePremiereBarsUI();
     syncSuperPrizeRatingBarUI();
+    syncSecretCode1997HintUI();
 
     audio.playRewardChime?.();
     Haptics.success();

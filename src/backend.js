@@ -1612,6 +1612,18 @@ export async function claimSpecialKnockBonus(tgUser = null, source = 'ocean_rhyt
   const now = Date.now();
   const prevAt = Number(safeRead(`${SPECIAL_KNOCK_LOCAL_KEY}_${uid}`) || 0);
   const prof = getLocalPreviewProfile();
+  if (source === 'workshop_1997' && !prof.trailerWatchedFull) {
+    return {
+      ok: true,
+      granted: false,
+      reason: 'trailer_full_required',
+      source,
+      lives: Number(prof.lives || 3),
+      livesAdded: 0,
+      lastSpecialKnockAt: prevAt,
+      retryAfterSec: 0,
+    };
+  }
   if (prevAt > 0 && now - prevAt < 24 * 60 * 60 * 1000) {
     return {
       ok: true,

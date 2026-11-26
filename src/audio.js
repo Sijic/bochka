@@ -1925,7 +1925,7 @@ class WorkshopAudio {
   }
 
   async _preloadBuffers() {
-    const coreKeys = ['hum', 'knockInside', 'hitMid', 'target_human', 'target_ticket', 'target_empty'];
+    const immediateKeys = ['hitMid', 'target_human'];
     const loadOne = async (key) => {
       if (this.buffers.has(key)) return;
       const url = SFX_PATHS[key];
@@ -1939,31 +1939,42 @@ class WorkshopAudio {
       } catch { /* ignore */ }
     };
 
-    // Load 6 core SFX with concurrency=2 so mobile 3G/4G & Supabase RPCs stay fast
-    for (let i = 0; i < coreKeys.length; i += 2) {
-      await Promise.allSettled(coreKeys.slice(i, i + 2).map((k) => loadOne(k)));
-    }
+    // На старте грузим строго 2 базовых звука первого экрана, чтобы не тормозить 3G и RPC
+    await Promise.allSettled(immediateKeys.map((k) => loadOne(k)));
 
-    const humBuf = this.buffers.get('hum');
-    if (humBuf && this.ctx) {
-      const src = this.ctx.createBufferSource();
-      src.buffer = humBuf;
-      src.loop = true;
-      const g = this.ctx.createGain();
-      g.gain.value = 0.28;
-      src.connect(g).connect(this.master);
-      try { src.start(0); } catch { /* ignore */ }
-    }
+    const startHumIfReady = () => {
+      const humBuf = this.buffers.get('hum');
+      if (humBuf && this.ctx && this.enabled && !this._humLoopStarted) {
+        this._humLoopStarted = true;
+        const src = this.ctx.createBufferSource();
+        src.buffer = humBuf;
+        src.loop = true;
+        const g = this.ctx.createGain();
+        g.gain.value = 0.28;
+        src.connect(g).connect(this.master);
+        try { src.start(0); } catch { /* ignore */ }
+      }
+    };
 
-    const conn = typeof navigator !== 'undefined' ? navigator.connection : null;
-    const isSlowConn = Boolean(conn?.saveData || /2g|3g/i.test(String(conn?.effectiveType || '')));
-    if (!isSlowConn && typeof window !== 'undefined') {
+    if (typeof window !== 'undefined') {
       window.setTimeout(async () => {
-        for (const k of ['hitHigh', 'crowbar', 'lidBlow', 'target_muffled_1']) {
+        for (const k of ['hum', 'knockInside', 'target_ticket', 'target_empty']) {
           if (!this.enabled || !this.ctx) break;
           await loadOne(k);
         }
-      }, 5000);
+        startHumIfReady();
+      }, 3200);
+
+      const conn = typeof navigator !== 'undefined' ? navigator.connection : null;
+      const isSlowConn = Boolean(conn?.saveData || /2g|3g/i.test(String(conn?.effectiveType || '')));
+      if (!isSlowConn) {
+        window.setTimeout(async () => {
+          for (const k of ['hitHigh', 'crowbar', 'lidBlow', 'target_muffled_1']) {
+            if (!this.enabled || !this.ctx) break;
+            await loadOne(k);
+          }
+        }, 7500);
+      }
     }
   }
 
