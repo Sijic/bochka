@@ -520,7 +520,7 @@ async function ensureDuelReady() {
         preloadBarrelClosers();
       }, 200);
     }
-    const mod = duelModCache || (await import('./duel.js?v=2026'));
+    const mod = duelModCache || (await import('./duel.js?v=2027'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -687,7 +687,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=2026'));
+  const mod = duelModCache || (await import('./duel.js?v=2027'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
@@ -695,7 +695,7 @@ async function createWatchChannelLazy(barrelId, opts) {
 let trophiesModCache = null;
 async function loadTrophiesMod() {
   if (!trophiesModCache) {
-    trophiesModCache = await import('./trophies.js?v=2026');
+    trophiesModCache = await import('./trophies.js?v=2027');
   }
   return trophiesModCache;
 }
@@ -9199,7 +9199,9 @@ async function grantTrailer30sBaseReward() {
     state.trailer.unlocked40 = true;
 
     if (res?.ok) {
-      state.profile.lives = Math.max(6, Number(res.lives ?? state.profile?.lives ?? 6));
+      state.profile.lives = res.lives != null
+        ? Math.max(Number(state.profile?.lives || 0), Number(res.lives))
+        : Math.min(30, Number(state.profile?.lives || 0) + 2);
       if (res.shards != null) {
         state.profile.ticketShards = res.mergedTicket ? 0 : Math.max(0, Math.min(3, Number(res.shards)));
       }
@@ -9210,7 +9212,7 @@ async function grantTrailer30sBaseReward() {
         );
       }
     } else {
-      state.profile.lives = Math.max(6, Number(state.profile?.lives || 0));
+      state.profile.lives = Math.min(30, Number(state.profile?.lives || 0) + 2);
       const curSh = Number(state.profile?.ticketShards || 0);
       if (curSh < 2) state.profile.ticketShards = curSh + 1;
     }
@@ -9275,7 +9277,7 @@ async function grantTrailerFullWatchReward() {
       if (res.lives != null) {
         state.profile.lives = Math.max(Number(state.profile?.lives || 0), Number(res.lives));
       } else {
-        state.profile.lives = Number(state.profile?.lives || 0) + 1;
+        state.profile.lives = Math.min(30, Number(state.profile?.lives || 0) + 4);
       }
       if (res.shards != null) {
         state.profile.ticketShards = res.mergedTicket ? 0 : Math.max(0, Math.min(3, Number(res.shards)));
@@ -9287,7 +9289,7 @@ async function grantTrailerFullWatchReward() {
         );
       }
     } else {
-      state.profile.lives = Number(state.profile?.lives || 0) + 1;
+      state.profile.lives = Math.min(30, Number(state.profile?.lives || 0) + 4);
       const curSh = Number(state.profile?.ticketShards || 0);
       if (curSh < 2) state.profile.ticketShards = curSh + 1;
       state.profile.premierePoints = Number(state.profile?.premierePoints || 0) + 250;
@@ -9408,7 +9410,7 @@ function syncTrailerStepGuideUI(watchedSec = 0, dur = 91.8) {
       guide.classList.remove('is-countdown', 'is-final-stretch');
       guide.classList.add('is-finale-unlocked');
       guide.textContent =
-        '🏆 Получено +350 ⭐ и +1 ❤️! Секретный код на доп. жизни (+3 ❤️): стукни в цеху бочку №19, затем №97!';
+        '🏆 Финал твой: +4 ❤️ и +350 ⭐! Секретный код на доп. жизни (+3 ❤️): стукни в цеху бочку №19, затем №97!';
     } else if (baseDone) {
       guide.classList.remove('is-finale-unlocked');
       guide.classList.add('is-countdown');
@@ -9416,19 +9418,19 @@ function syncTrailerStepGuideUI(watchedSec = 0, dur = 91.8) {
       guide.classList.toggle('is-final-stretch', isFinalStretch);
       if (isFinalStretch) {
         guide.textContent =
-          `🔥 Осталось ${secToEnd}с до конца — получишь +350 ⭐ и секретный код на дополнительные жизни!`;
+          `🔥 Осталось ${secToEnd}с до финала — заберёшь главную пачку +4 ❤️, +350 ⭐ и секретный код на +3 ❤️!`;
       } else {
         guide.textContent =
-          `✅ Приз за середину твой (+6 ❤️ и +250 ⭐)! Досмотри до конца (${secToEnd}с) — получишь +350 ⭐ и секретный код на дополнительные жизни!`;
+          `✅ Аванс получен (+2 ❤️ и +250 ⭐)! Досмотри до конца (${secToEnd}с) — заберёшь ещё +4 ❤️, +350 ⭐ и секретный код на +3 ❤️!`;
       }
     } else {
       guide.classList.remove('is-countdown', 'is-final-stretch', 'is-finale-unlocked');
       if (sec < TRAILER_INTRO_LOCK_SEC) {
-        guide.textContent = '🎬 Идёт трейлер. Досмотри до середины — получишь 6 ❤️ и +250 ⭐ к билету!';
+        guide.textContent = '🎬 Идёт трейлер: в середине аванс +2 ❤️ и +250 ⭐, а в финале — +4 ❤️, +350 ⭐ и секретный код!';
       } else {
         guide.textContent = toMid > 0
-          ? `🎁 Досмотри до середины (осталось ${toMid} сек) — получишь 6 ❤️ и +250 ⭐ к билету!`
-          : '🎁 Середина рядом — открываем приз!';
+          ? `🎁 До середины осталось ${toMid} сек (+2 ❤️ и +250 ⭐). Главный приз (+4 ❤️, +350 ⭐ и код) — в конце!`
+          : '🎁 Середина рядом — открываем аванс +2 ❤️!';
       }
     }
   }
@@ -9473,16 +9475,16 @@ function syncTrailerIntroLockUI(watchedSec = 0) {
     toPackBtn.classList.toggle('is-mid-reward', !fullRewarded && baseRewarded);
     toPackBtn.classList.toggle('is-skip-early', !fullRewarded && !baseRewarded && !toPackBtn.disabled);
     if (fullRewarded) {
-      toPackBtn.textContent = 'Забрать код 19-97 и все призы — играть!';
+      toPackBtn.textContent = 'Забрать +4 ❤️, код 19-97 и играть!';
     } else if (baseRewarded) {
       toPackBtn.textContent = secToEnd > 0
-        ? `Забрать приз и играть (до приза 🏆 ${secToEnd}с)`
-        : 'Конец ролика — открываем приз 🏆...';
+        ? `Уйти с +2 ❤️ (до +4 ❤️ и кода 🏆 ${secToEnd}с)`
+        : 'Конец ролика — открываем +4 ❤️ и код 🏆...';
     } else if (toPackBtn.disabled) {
       toPackBtn.textContent = `Смотри трейлер... ${rem}с`;
     } else {
       toPackBtn.textContent = toMid > 0
-        ? `Пропустить без приза (до приза 🎁 ${toMid}с)`
+        ? `Пропустить без приза (до аванса 🎁 ${toMid}с)`
         : 'Пропустить и идти дальше';
     }
   }

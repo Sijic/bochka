@@ -179,6 +179,24 @@ function stripStaticImportMapAndCopyAssets() {
       };
       copyTexRec(texRoot, '');
 
+      // Рекурсивно копируем assets/video/* (вертикальные/квадратные MP4 для Зала славы при наличии)
+      const videoRoot = path.join(root, 'assets', 'video');
+      const copyVideoRec = (srcDir, relSub) => {
+        if (!fs.existsSync(srcDir)) return;
+        for (const ent of fs.readdirSync(srcDir, { withFileTypes: true })) {
+          const s = path.join(srcDir, ent.name);
+          const r = path.join(relSub, ent.name);
+          if (ent.isDirectory()) {
+            copyVideoRec(s, r);
+          } else {
+            const dst = path.join(root, outDir, 'assets', 'video', r);
+            fs.mkdirSync(path.dirname(dst), { recursive: true });
+            fs.copyFileSync(s, dst);
+          }
+        }
+      };
+      copyVideoRec(videoRoot, '');
+
       const dictSrc = path.join(root, 'src', 'dict.json');
       if (fs.existsSync(dictSrc)) {
         const dictDst = path.join(root, outDir, 'src', 'dict.json');

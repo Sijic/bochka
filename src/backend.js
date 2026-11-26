@@ -3188,6 +3188,7 @@ export async function awardTicketShardServer(tgUser = null, source = 'level') {
           premierePoints: data.premiere_points != null ? Number(data.premiere_points) : null,
           pendingTicketsCount: Number(data.pending_tickets_count || 0),
           lives: data.lives != null ? Number(data.lives) : null,
+          livesAdded: data.lives_added != null ? Number(data.lives_added) : null,
           trailerWatchedFull: Boolean(data.trailer_watched_full),
           dailyIssued: Number(data.daily_tickets_issued || 0),
           maxDaily: Number(data.max_daily_tickets || 6),
@@ -3220,7 +3221,9 @@ export async function awardTicketShardServer(tgUser = null, source = 'level') {
       duplicateBlocked: false,
       reason: 'solo_cap_reached',
       fallbackPoints: 500,
-      lives: source === 'trailer_full' ? Math.max(6, Number(prof.lives || 3)) : Number(prof.lives || 3),
+      lives: source === 'trailer_full'
+        ? Number(prof.lives || 3) + 4
+        : (source === 'trailer_30s' ? Number(prof.lives || 3) + 2 : Number(prof.lives || 3)),
       trailerWatchedFull: source === 'trailer_full' || Boolean(prof.trailerWatchedFull),
       pendingTicketsCount: Number(prof.pendingTicketsCount || 0),
     };
