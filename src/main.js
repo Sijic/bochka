@@ -520,7 +520,7 @@ async function ensureDuelReady() {
         preloadBarrelClosers();
       }, 200);
     }
-    const mod = duelModCache || (await import('./duel.js?v=2023'));
+    const mod = duelModCache || (await import('./duel.js?v=2024'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -684,7 +684,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=2023'));
+  const mod = duelModCache || (await import('./duel.js?v=2024'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
@@ -692,7 +692,7 @@ async function createWatchChannelLazy(barrelId, opts) {
 let trophiesModCache = null;
 async function loadTrophiesMod() {
   if (!trophiesModCache) {
-    trophiesModCache = await import('./trophies.js?v=2023');
+    trophiesModCache = await import('./trophies.js?v=2024');
   }
   return trophiesModCache;
 }
@@ -9362,44 +9362,31 @@ function syncTrailerStepGuideUI(watchedSec = 0, dur = 91.8) {
   const guide = document.getElementById('trailer-motivation-copy');
   if (guide) {
     if (fullDone) {
-      guide.textContent = '🏆 Трейлер досмотрен! Все призы и секретный код в цеху открыты.';
+      guide.classList.remove('is-countdown', 'is-final-stretch');
+      guide.classList.add('is-finale-unlocked');
+      guide.textContent =
+        '🏆 Получено +350 ⭐ и +1 ❤️! Секретный код на доп. жизни (+3 ❤️): стукни в цеху бочку №19, затем №97!';
     } else if (baseDone) {
-      guide.textContent = secToEnd > 0
-        ? `🔥 Досмотри до конца (осталось ${secToEnd} сек) — откроется секретный код в цеху и +350 ⭐!`
-        : '🔥 Почти финал — открываем секретный код и +350 ⭐!';
-    } else if (sec < TRAILER_INTRO_LOCK_SEC) {
-      guide.textContent = '🎬 Идёт трейлер. Досмотри до середины — получишь приз: 6 ❤️ и +250 ⭐ к билету!';
-    } else {
-      guide.textContent = toMid > 0
-        ? `🎁 Досмотри до середины (осталось ${toMid} сек) — получишь 6 ❤️, +250 ⭐ и шаг к билету!`
-        : '🎁 Середина рядом — открываем приз!';
-    }
-  }
-
-  const flash = document.getElementById('trailer-reward-flash');
-  if (flash) {
-    if (fullDone) {
-      flash.removeAttribute('hidden');
-      flash.classList.remove('is-countdown', 'is-final-stretch');
-      flash.classList.add('is-finale-unlocked');
-      flash.textContent =
-        '🏆 Главный приз твой: +350 ⭐ и +1 ❤️! Секретный код в цеху: стукни бочку №19, затем №97 (+3 ❤️)!';
-    } else if (baseDone) {
-      flash.removeAttribute('hidden');
-      flash.classList.remove('is-finale-unlocked');
-      flash.classList.add('is-countdown');
+      guide.classList.remove('is-finale-unlocked');
+      guide.classList.add('is-countdown');
       const isFinalStretch = sec >= TRAILER_MID_REWARD_SEC;
-      flash.classList.toggle('is-final-stretch', isFinalStretch);
+      guide.classList.toggle('is-final-stretch', isFinalStretch);
       if (isFinalStretch) {
-        flash.textContent =
-          `🔥 Осталось ${secToEnd}с до конца — откроется секретный код (+3 ❤️ в цеху) и +350 ⭐!`;
+        guide.textContent =
+          `🔥 Осталось ${secToEnd}с до конца — получишь +350 ⭐ и секретный код на дополнительные жизни!`;
       } else {
-        flash.textContent =
-          `✅ Приз за середину получен: +6 ❤️ и +250 ⭐! До конца и секретного кода — ${secToEnd}с`;
+        guide.textContent =
+          `✅ Приз за середину твой (+6 ❤️ и +250 ⭐)! Досмотри до конца (${secToEnd}с) — получишь +350 ⭐ и секретный код на дополнительные жизни!`;
       }
     } else {
-      flash.setAttribute('hidden', '');
-      flash.classList.remove('is-countdown', 'is-final-stretch', 'is-finale-unlocked');
+      guide.classList.remove('is-countdown', 'is-final-stretch', 'is-finale-unlocked');
+      if (sec < TRAILER_INTRO_LOCK_SEC) {
+        guide.textContent = '🎬 Идёт трейлер. Досмотри до середины — получишь 6 ❤️ и +250 ⭐ к билету!';
+      } else {
+        guide.textContent = toMid > 0
+          ? `🎁 Досмотри до середины (осталось ${toMid} сек) — получишь 6 ❤️ и +250 ⭐ к билету!`
+          : '🎁 Середина рядом — открываем приз!';
+      }
     }
   }
 }
