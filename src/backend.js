@@ -3061,7 +3061,7 @@ export async function prepareNativeShareMessage({
           } catch {
             /* ignore */
           }
-        }, 1800)
+        }, 3500)
       : null;
   try {
     const res = await fetch(ENV.tgNotifyWebhook, {
