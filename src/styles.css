@@ -10219,7 +10219,7 @@ body.is-duel-spotlight-active .duel-live-mini-bar.duel-vs-hud {
   }
   .duel-vs-hud .ticket-stub-mini.is-duel { width: 16px; height: 9px; padding: 1px 1.5px; gap: 1px; }
   .duel-vs-hud .chip-token-ico { width: 9px; height: 9px; }
-  .duel-til-mood-pill, .duel-til-rage-badge { font-size: 7.5px; padding: 1px 5px; top: -11px; }
+  .duel-til-mood-pill, .duel-til-rage-badge { font-size: 8.5px; padding: 2px 6px; top: calc(100% + 4px); right: 8px; }
   .trophy-pick-grid { grid-template-columns: 1fr; gap: 8px; }
   .trophy-pick-item {
     flex-direction: row;

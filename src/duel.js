@@ -1261,7 +1261,10 @@ export class WorkshopDuelController {
           const st = document.createElement('strong');
           st.textContent = 'Ждём друга';
           const sub = document.createElement('span');
-          sub.textContent = 'Выбери ниже';
+          const hasPickerRows = Boolean(
+            (this.duelCandidates?.sent?.length || 0) + (this.duelCandidates?.branch?.length || 0) > 0
+          );
+          sub.textContent = hasPickerRows ? 'Выбери ниже' : 'Позови по кнопке';
           meta.append(st, sub);
           card.append(avaWrap, meta);
         }

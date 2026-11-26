@@ -502,7 +502,7 @@ async function ensureDuelReady() {
       screamersPreloaded = true;
       window.setTimeout(() => preloadScreamerFrames(SCREAMER_META), 200);
     }
-    const mod = duelModCache || (await import('./duel.js?v=2011'));
+    const mod = duelModCache || (await import('./duel.js?v=2012'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
