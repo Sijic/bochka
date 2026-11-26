@@ -404,7 +404,7 @@ class WorkshopAudio {
     this.barrelPositions = Array.isArray(positions) ? positions.slice() : [];
     this.duelLootMap = barrelLoot && typeof barrelLoot === 'object' ? { ...barrelLoot } : {};
     const entries = Object.entries(this.duelLootMap);
-    const ticketEntry = entries.find(([, l]) => l?.kind === 'ticket' || l?.kind === 'friend_barrel')
+    const ticketEntry = entries.find(([, l]) => l?.kind === 'ticket' || l?.kind === 'golden_shard' || l?.kind === 'friend_barrel')
       || entries.find(([, l]) => l?.kind === 'chip' || l?.kind === 'life');
     this.targetIndex = ticketEntry ? Number(ticketEntry[0]) : -1;
     this.targetKind = 'ticket';
@@ -414,7 +414,7 @@ class WorkshopAudio {
   getBarrelSoundKey(index) {
     if (this.duelLootMap) {
       const kind = String(this.duelLootMap[index]?.kind || 'empty');
-      if (kind === 'ticket') return 'target_ticket';
+      if (kind === 'ticket' || kind === 'golden_shard') return 'target_ticket';
       if (kind === 'friend_barrel') return 'target_human';
       if (kind === 'chip' || kind === 'life') return 'patch_barrel_ring';
       if (kind === 'energy') return 'patch_tesla_arc';
@@ -794,7 +794,7 @@ class WorkshopAudio {
       listenCycle += 1;
       const duelLoot = this.duelLootMap ? String(this.duelLootMap[index]?.kind || 'empty') : '';
       const isGood = this.duelLootMap
-        ? ['ticket', 'friend_barrel', 'chip', 'life'].includes(duelLoot)
+        ? ['ticket', 'golden_shard', 'friend_barrel', 'chip', 'life', 'energy'].includes(duelLoot)
         : index === this.targetIndex;
       const isTarget = this.duelLootMap ? isGood : index === this.targetIndex;
       Haptics.barrelListenPulse(isGood);

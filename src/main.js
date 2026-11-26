@@ -502,7 +502,7 @@ async function ensureDuelReady() {
       screamersPreloaded = true;
       window.setTimeout(() => preloadScreamerFrames(SCREAMER_META), 200);
     }
-    const mod = duelModCache || (await import('./duel.js?v=2010'));
+    const mod = duelModCache || (await import('./duel.js?v=2011'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -1025,14 +1025,20 @@ function updatePackTemplatePreview() {
 function applySeedPackModeUI(active) {
   const titleEl = document.getElementById('pack-screen-title');
   const role = getTeamSeedRole();
-  if (active && (role === 'prod' || role === 'blog')) {
+  const needsInitialSeedPack = Boolean(
+    active &&
+      (role === 'prod' || role === 'blog') &&
+      !state.profile?.seedFirstPackDone &&
+      !state.profile?.hasBroadcastBarrel
+  );
+  if (needsInitialSeedPack) {
     const isBlog = role === 'blog';
     if (titleEl) {
       titleEl.textContent = isBlog ? 'Запакуй себя для Stories и канала' : 'Запакуй себя в общую бочку';
     }
     return;
   }
-  if (titleEl) titleEl.textContent = 'Запакуй друга в бочку';
+  if (titleEl) titleEl.textContent = 'Закатать друга в бочку';
 }
 
 const ACTIVE_TG_ACCOUNT_KEY = 'bochka_active_tg_account';
@@ -3393,11 +3399,11 @@ function showScreen(name) {
     const quickBtn = document.getElementById('btn-pack-quick-1tap');
     const quickTxt = document.getElementById('btn-pack-quick-1tap-text');
     if (quickBtn) quickBtn.disabled = false;
-    if (quickTxt) quickTxt.textContent = '⚡ Отправить другу в 1 клик (1-на-1)';
+    if (quickTxt) quickTxt.textContent = '⚡ Отправить другу в 1 клик';
     updatePackTemplatePreview();
     const recPackBtn = document.getElementById('btn-pack-recovery-shift');
     if (recPackBtn) {
-      recPackBtn.hidden = !(state.pack.forLifeRefill || Number(state.profile?.lives || 0) <= 0);
+      recPackBtn.hidden = Number(state.profile?.lives || 0) > 0;
     }
     applySeedPackModeUI(getTeamSeedRole() === 'prod' || getTeamSeedRole() === 'blog');
   }
@@ -4994,7 +5000,7 @@ let defeatCinematicActive = false;
 const BARREL_CLOSER_CAST = [
   { id: 'til', name: 'Тиль', src: './public/sprites/til_avatar.webp?v=2000' },
   { id: 'father', name: 'Отец', src: './public/sprites/horror_hero_warden.webp?v=2000' },
-  { id: 'ola', name: 'Ола', src: './public/sprites/horror_hero_mechanic.webp?v=2000' },
+  { id: 'mechanic', name: 'Механик', src: './public/sprites/horror_hero_mechanic.webp?v=2000' },
   { id: 'girl', name: 'Девушка', src: './public/sprites/fighter_4.webp?v=2000' },
 ];
 let _lastBarrelCloserIdx = -1;
@@ -5015,7 +5021,7 @@ function pickNextBarrelCloser() {
 
 /**
  * Единая 4-актная POV-сцена поражения при 0 ❤️:
- * 1) затягивает вниз в бочку -> 2) взгляд вверх на край круга (каждый раз новое лицо: Тиль/Отец/Ола/Девушка)
+ * 1) затягивает вниз в бочку -> 2) взгляд вверх на край круга (каждый раз новое лицо: Тиль/Отец/Механик/Девушка)
  * -> 3) тяжёлая крышка захлопывается + полная темнота -> 4) «Ты на небе» (1 раз/сутки) или попап друга.
  */
 function playBarrelDefeatCinematic({ oceanAllowed = true, roomId = '', solo = true } = {}) {
@@ -5611,7 +5617,7 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
         if (_hoverBarrelIdx === index && duelCtrl?.isActive) {
           handleBarrelHover(index, _hoverLastPos.sx, _hoverLastPos.sy, _hoverLastPos.alreadyStruck);
         }
-      }, 880);
+      }, 400);
     }
     _hoverLastPos = { sx, sy, alreadyStruck: Boolean(alreadyStruck) };
     audio.setListeningBarrel(index);
@@ -5623,20 +5629,23 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
       reticle.classList.remove('is-radar-human', 'is-radar-empty', 'is-radar-ticket', 'is-radar-trap');
       reticle.classList.add('is-knocking');
       const dwellMs = performance.now() - _hoverStartedAt;
-      if (!audio.enabled && dwellMs >= 850) {
+      if (dwellMs >= 380) {
         const lKind = String(duelCtrl.barrelLoot?.[index]?.kind || 'empty');
-        if (['ticket', 'friend_barrel', 'chip', 'life', 'energy'].includes(lKind)) {
+        if (['ticket', 'golden_shard', 'friend_barrel'].includes(lKind)) {
           reticle.classList.add('is-radar-ticket');
-          retId.textContent = `ПРОСЛУШКА · №${bCode} // 🎟 ЖИВОЙ ЗВУК`;
+          retId.textContent = `№${bCode} // 🎟 ЖИВОЙ СТУК`;
+        } else if (['chip', 'life', 'energy'].includes(lKind)) {
+          reticle.classList.add('is-radar-ticket');
+          retId.textContent = `№${bCode} // ⚡ ЗВОН (БОНУС)`;
         } else if (lKind === 'screamer') {
           reticle.classList.add('is-radar-trap');
-          retId.textContent = `ПРОСЛУШКА · №${bCode} // ⚠️ СКРЕЖЕТ`;
+          retId.textContent = `№${bCode} // ⚠️ СКРЕЖЕТ`;
         } else {
           reticle.classList.add('is-radar-empty');
-          retId.textContent = `ПРОСЛУШКА · №${bCode} // 💨 ГЛУХОЕ ЭХО`;
+          retId.textContent = `№${bCode} // 💨 ГЛУХО`;
         }
       } else {
-        retId.textContent = `ПРОСЛУШКА · №${bCode} // ${t('reticleListening')}`;
+        retId.textContent = `№${bCode} // 👂 СЛУШАЮ...`;
       }
     }
     return;
@@ -5666,7 +5675,7 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
         if (_hoverBarrelIdx === index && state.round.running && !state.round.pausedForModal && !duelCtrl?.isActive) {
           handleBarrelHover(index, _hoverLastPos.sx, _hoverLastPos.sy, _hoverLastPos.alreadyStruck);
         }
-      }, 2250);
+      }, audio.enabled ? 860 : 560);
     }
   }
 
@@ -5685,12 +5694,10 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
   }
 
   const dwellMs = performance.now() - _hoverStartedAt;
-  if (!alreadyStruck && dwellMs >= 700) {
+  if (!alreadyStruck && dwellMs >= 650) {
     hideWorkshopIntroHint(false);
   }
-  const roundElapsedMs = performance.now() - Number(state.round.startedAtMs || 0);
-  const silentFastHint = !audio.enabled && dwellMs >= 650;
-  const allowReticleHint = Boolean(isSteamHazard || silentFastHint || (dwellMs >= 2200 && roundElapsedMs >= 4000));
+  const allowReticleHint = Boolean(isSteamHazard || dwellMs >= (audio.enabled ? 850 : 550));
 
   if (!allowReticleHint) {
     if (reticle) {
@@ -5706,7 +5713,7 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
   }
 
   const isTarget = !alreadyStruck && index === state.round.targetIndex;
-  const silentRadarMode = !audio.enabled && !alreadyStruck && !isSteamHazard;
+  const acousticHintMode = !alreadyStruck && !isSteamHazard;
   const kind = state.round.targetKind || 'human';
 
   if (reticle && retId) {
@@ -5717,7 +5724,6 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
     const batchNum = obscured ? '?? [ПАР]' : (BARREL_BATCH_CODES[index] || `0${index + 1}`);
     const labelBase = `${t('reticleBatch')}${batchNum}`;
 
-    // v19.6: Визуальный радар включается только без звука после длительного удержания; при звуке никаких цветных спойлеров!
     reticle.classList.remove('is-radar-human', 'is-radar-empty', 'is-radar-ticket', 'is-radar-trap', 'is-knocking');
 
     const nowH = performance.now();
@@ -5740,12 +5746,12 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
         Haptics.error();
         vib([25, 35, 25, 35, 25]);
       }
-    } else if (!silentRadarMode) {
+    } else if (!acousticHintMode) {
       retId.textContent = `${labelBase} // ${t('reticleListening')}`;
     } else if (isTarget) {
       if (kind === 'empty') {
         reticle.classList.add('is-radar-empty');
-        retId.textContent = `${labelBase} // 🕳 ПУСТОЕ ЭХО · ШИРОКОЕ КОЛЬЦО`;
+        retId.textContent = `${labelBase} // 🕳 ПУСТОЕ ЭХО · БЕЗ ЛОВУШКИ`;
         if (canBuzz) {
           lastSilentRadarHapticAt = nowH;
           Haptics.light();
@@ -5753,7 +5759,7 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
         }
       } else if (kind === 'ticket') {
         reticle.classList.add('is-radar-ticket');
-        retId.textContent = `${labelBase} // 🎟 ЗОЛОТОЙ ПРОБЛЕСК · БИЛЕТ 1+1`;
+        retId.textContent = `${labelBase} // 🎟 ЗВОН БИЛЕТА`;
         if (canBuzz) {
           lastSilentRadarHapticAt = nowH;
           Haptics.success();
@@ -5761,7 +5767,7 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
         }
       } else {
         reticle.classList.add('is-radar-human');
-        retId.textContent = `${labelBase} // 🎯 ЖИВОЙ ПУЛЬС (ТУК-ТУК) · РАДАР`;
+        retId.textContent = `${labelBase} // 🎯 СТУК ИЗНУТРИ`;
         if (canBuzz) {
           lastSilentRadarHapticAt = nowH;
           Haptics.medium();
@@ -5770,7 +5776,7 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
       }
     } else {
       reticle.classList.add('is-radar-trap');
-      retId.textContent = `${labelBase} // ⚠️ РВАНАЯ ДРОЖЬ (ЛОВУШКА / ПУСТО)`;
+      retId.textContent = `${labelBase} // ⚠️ СКРЕЖЕТ / ЛОВУШКА`;
       if (canBuzz) {
         lastSilentRadarHapticAt = nowH;
         Haptics.light();
@@ -5778,7 +5784,7 @@ function handleBarrelHover(index, sx, sy, alreadyStruck) {
       }
     }
 
-    const showPulse = Boolean(silentRadarMode && isTarget);
+    const showPulse = Boolean(acousticHintMode && isTarget);
     reticle.classList.toggle('is-knocking', showPulse);
   }
 
@@ -10972,7 +10978,10 @@ function bindUIEvents() {
 
   // Экран 2 (Режим А)
   document.getElementById('btn-start-demo')?.addEventListener('click', () => startDemoRound());
-  document.getElementById('btn-go-pack')?.addEventListener('click', () => showScreen('pack'));
+  document.getElementById('btn-go-pack')?.addEventListener('click', () => {
+    state.pack.forLifeRefill = false;
+    showScreen('pack');
+  });
   document.getElementById('btn-mode-a-premiere')?.addEventListener('click', () => startPremiereRaceRound());
 
   // Экран 3 (HUD Цеха) + угловая кнопка звука в шапке
@@ -11092,6 +11101,7 @@ function bindUIEvents() {
   document.getElementById('btn-hud-pack')?.addEventListener('click', () => {
     stopAirTimer();
     state.round.running = false;
+    state.pack.forLifeRefill = false;
     showScreen('pack');
   });
 
