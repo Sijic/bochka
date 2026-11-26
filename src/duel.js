@@ -223,6 +223,10 @@ export class WorkshopDuelController {
     this._activeClaimElapsedMs = 0;
     this._tilTelegraphBarrel = -1;
     this._tilState = 'idle'; // 'idle' | 'telegraph' | 'struck'
+    this._roundTicketWinner = null;
+    this._roundServerTicketRes = null;
+    this._roundServerTicketPromise = null;
+    this._roundTilKoNotified = false;
     this.lastRattleAt = 0;
     this.botCounter = 0;
   }
@@ -1528,6 +1532,10 @@ export class WorkshopDuelController {
     }
     if (!isFreeRerack) {
       this._roundResultRecorded = false;
+      this._roundTicketWinner = null;
+      this._roundServerTicketRes = null;
+      this._roundServerTicketPromise = null;
+      this._roundTilKoNotified = false;
     }
     this._roundStarting = true;
     this._roundStartingSince = Date.now();
@@ -1544,9 +1552,7 @@ export class WorkshopDuelController {
         (i) => !prevOpened.includes(i)
       );
 
-      const minNeed = this.friendBarrelHunt || (isFreeRerack && this.getEnergyActiveContenders().length <= 1)
-        ? 1
-        : Math.max(2, isFreeRerack ? this.getEnergyActiveContenders().length : contenders.length);
+      const minNeed = isFreeRerack ? 1 : Math.max(2, contenders.length);
       const needFreshRack = !isFreeRerack || closedRemaining.length < minNeed || !this.safeIndices.length;
 
       let safeIndices = this.safeIndices;
@@ -1749,6 +1755,10 @@ export class WorkshopDuelController {
     }
     this.contenderUids = payload.contenderUids || this.players.map((p) => p.uid);
     if (!payload.isFreeRerack) {
+      this._roundTicketWinner = null;
+      this._roundServerTicketRes = null;
+      this._roundServerTicketPromise = null;
+      this._roundTilKoNotified = false;
       this.roundParticipants = Array.from(
         new Set(payload.roundParticipants || this.players.map((p) => p.uid))
       );
@@ -2027,9 +2037,11 @@ export class WorkshopDuelController {
     const list = Array.isArray(this.contenderUids) && this.contenderUids.length > 0
       ? this.contenderUids
       : (this.players || []).map((p) => p.uid);
-    return list.filter(
-      (u) => !this.spectatorUids.includes(u) && this.getPlayerEnergy(u) >= ENERGY_PER_STRIKE
-    );
+    return list.filter((u) => {
+      if (this.spectatorUids.includes(u)) return false;
+      if (this.soloMode && u === TIL_BOT_UID && this.tilLives <= 0) return false;
+      return this.getPlayerEnergy(u) >= ENERGY_PER_STRIKE;
+    });
   }
 
   refillFromTil() {
@@ -2380,7 +2392,11 @@ export class WorkshopDuelController {
     const roundIdx = Math.max(0, Number(this.tilRoundIdx || 1) - 1);
     const diff = getTilDifficultyProfile(this.duelLives, roundIdx);
     const myHasEnergy = this.getPlayerEnergy(this.myUid) >= ENERGY_PER_STRIKE;
-    const oppUids = this.contenderUids.filter((u) => u !== this.myUid && !this.spectatorUids.includes(u));
+    const oppUids = this.contenderUids.filter((u) => {
+      if (u === this.myUid || this.spectatorUids.includes(u)) return false;
+      if (this.soloMode && u === TIL_BOT_UID && this.tilLives <= 0) return false;
+      return true;
+    });
     const oppHasEnergy = oppUids.some((u) => this.getPlayerEnergy(u) >= ENERGY_PER_STRIKE);
     const tilSoloFinisher = Boolean(this.soloMode && !myHasEnergy && oppHasEnergy);
 
@@ -2478,7 +2494,7 @@ export class WorkshopDuelController {
 
       if (this.soloMode) {
         const tilBot = this.players.find((p) => p.isBot && this.contenderUids.includes(p.uid));
-        if (tilBot && this.getPlayerEnergy(tilBot.uid) >= ENERGY_PER_STRIKE) {
+        if (tilBot && this.tilLives > 0 && this.getPlayerEnergy(tilBot.uid) >= ENERGY_PER_STRIKE) {
           const tilAlreadyClaimed = Object.values(this.claims).some((c) => c.uid === tilBot.uid);
           if (!tilAlreadyClaimed) {
             if (this._tilState === 'idle' && this._activeClaimElapsedMs >= pacing.tilTelegraphMs) {
@@ -2520,7 +2536,11 @@ export class WorkshopDuelController {
           .map((c) => c.uid)
           .filter((u) => activeEnergyUids.includes(u))
       ).size;
-      const expectedClaimers = activeEnergyUids.length - (this.skippedThisTurn && myHasEnergy ? 1 : 0);
+      const closedBarrelsCount = Math.max(0, (this.barrelCount || 6) - (this.openedIndices?.length || 0));
+      const expectedClaimers = Math.min(
+        Math.max(1, closedBarrelsCount),
+        Math.max(1, activeEnergyUids.length - (this.skippedThisTurn && myHasEnergy ? 1 : 0))
+      );
       if (claimedCount >= Math.max(1, expectedClaimers) || this.claimTimeLeft <= 0) {
         clearInterval(this.claimInterval);
         this.claimInterval = null;
@@ -3011,6 +3031,7 @@ export class WorkshopDuelController {
       const oppUid = oppEntry.claim?.uid || TIL_BOT_UID;
       if (ok === 'ticket') {
         this.sessionStats.oppTickets += 1;
+        this._roundTicketWinner = this._roundTicketWinner || oppEntry.claim;
       } else if (ok === 'chip') {
         this.sessionStats.oppChips += 1;
       } else if (ok === 'points') {
@@ -3041,12 +3062,35 @@ export class WorkshopDuelController {
           barrelIndex: myEntry.barrelIndex,
         });
       } else if (k === 'ticket') {
+        this._roundTicketWinner = myEntry.claim;
         this.onFlyRating?.({
           type: 'ticket',
           count: 3,
           label: '🎟 +1/4',
           barrelIndex: myEntry.barrelIndex,
         });
+        if (!this._roundServerTicketPromise) {
+          const hasRealOpponent = this.players.some((p) => !p.isBot && p.uid !== this.myUid);
+          const shardSource = this.soloMode || !hasRealOpponent ? 'solo_til' : 'duel';
+          this._roundServerTicketPromise = awardTicketShardServer(this.getTgUser?.(), shardSource)
+            .then((sRes) => {
+              this._roundServerTicketRes = sRes;
+              if (
+                sRes?.ok &&
+                (!sRes.reason || sRes.reason === 'solo_cap_reached' || sRes.reason === 'friend_or_duel_required')
+              ) {
+                const patch = {
+                  ticketShards: sRes.mergedTicket ? 0 : Math.max(0, Math.min(3, Number(sRes.shards || 0))),
+                };
+                if (sRes.premierePoints != null) patch.premierePoints = Number(sRes.premierePoints);
+                if (sRes.granted) patch.hasPendingTicket = true;
+                if (sRes.pendingTicketsCount != null) patch.pendingTicketsCount = Number(sRes.pendingTicketsCount);
+                this.onProfileSync?.(patch);
+              }
+              return sRes;
+            })
+            .catch(() => null);
+        }
         this.scheduleTimeout(() => {
           if (this.active && (this.phase === 'reveal' || this.phase === 'finished')) {
             this.onContextDiscoveryHint?.('ticket');
@@ -3167,11 +3211,20 @@ export class WorkshopDuelController {
     }
 
     const ticketEntry = entries.find((e) => e.loot.kind === 'ticket') || null;
+    if (ticketEntry && !this._roundTicketWinner) {
+      this._roundTicketWinner = ticketEntry.claim;
+    }
+    const effectiveTicketWinner = ticketEntry?.claim || this._roundTicketWinner || null;
     const needTilNow = this.duelLives <= 0;
     const tilKnockedOut = Boolean(!this.friendBarrelHunt && this.tilLives <= 0 && !needTilNow);
+    const closedRemainingCount = Math.max(0, (this.barrelCount || 6) - (this.openedIndices?.length || 0));
     const activeEnergyUids = this.getEnergyActiveContenders();
-    const anyEnergyLeft = activeEnergyUids.length > 0;
-    this.batchResolved = Boolean(ticketEntry || tilKnockedOut || !anyEnergyLeft);
+    const myHasEnergy = this.getPlayerEnergy(this.myUid) >= ENERGY_PER_STRIKE;
+    const allBarrelsOpened = closedRemainingCount <= 0;
+    const allEnergySpent = this.soloMode ? !myHasEnergy : activeEnergyUids.length === 0;
+    // Раунд завершается ТОЛЬКО когда кончились: (1) все жизни, (2) все бочки, ИЛИ (3) вся энергия!
+    const roundFinished = Boolean(needTilNow || allBarrelsOpened || allEnergySpent);
+    this.batchResolved = roundFinished;
 
     const summaryLine = entries
       .map((e) => `${e.claim.uid === this.myUid ? 'ТЫ' : e.claim.name}: ${e.loot.label}`)
@@ -3191,7 +3244,11 @@ export class WorkshopDuelController {
       return;
     }
 
-    if (!ticketEntry && !tilKnockedOut && anyEnergyLeft) {
+    if (!roundFinished) {
+      if (tilKnockedOut && this.soloMode && !this._roundTilKoNotified) {
+        this._roundTilKoNotified = true;
+        this.onToast?.('🔥 Тиль выбыл (0 ❤️)! Забирай оставшиеся бочки, пока есть энергия!');
+      }
       const pauseMs = anyScreamer ? LOOT_READ_SCREAMER_MS : LOOT_READ_PAUSE_MS;
       this.scheduleStepWhenUnblocked(() => {
         if (!this.active) return;
@@ -3206,7 +3263,7 @@ export class WorkshopDuelController {
     const playerBeatTilSolo = Boolean(
       this.soloMode &&
       !this.friendBarrelHunt &&
-      (tilKnockedOut || (ticketEntry && ticketEntry.claim.uid === this.myUid))
+      tilKnockedOut
     );
 
     if (playerBeatTilSolo) {
@@ -3222,7 +3279,7 @@ export class WorkshopDuelController {
             if (!this.active) return;
             this.setPhase('finished');
             this.spectatorUids = [];
-            this.showRoundResultCard(ticketEntry?.claim || { uid: this.myUid, name: this.myName }, { potLives: 0 }, {
+            this.showRoundResultCard(effectiveTicketWinner || { uid: this.myUid, name: this.myName }, { potLives: 0 }, {
               myEntry,
               oppEntry,
               summaryLine,
@@ -3238,11 +3295,11 @@ export class WorkshopDuelController {
       return;
     }
 
-    const settleRes = ticketEntry
+    const settleRes = effectiveTicketWinner
       ? await settleDuelRound({
           roomId: this.roomId,
           roundKey: this.roundKey,
-          winnerUid: ticketEntry.claim.uid,
+          winnerUid: effectiveTicketWinner.uid,
           playerUids: Array.from(
             new Set(
               this.roundParticipants?.length
@@ -3258,7 +3315,7 @@ export class WorkshopDuelController {
       !this.soloMode &&
       !this.friendBarrelHunt &&
       !needTilNow &&
-      ((ticketEntry && ticketEntry.claim.uid === this.myUid) || tilKnockedOut)
+      ((effectiveTicketWinner && effectiveTicketWinner.uid === this.myUid) || tilKnockedOut)
     );
 
     if (playerWonLive1x1) {
@@ -3278,7 +3335,7 @@ export class WorkshopDuelController {
             if (!this.active) return;
             this.setPhase('finished');
             this.spectatorUids = [];
-            this.showRoundResultCard(ticketEntry?.claim || { uid: this.myUid, name: this.myName }, settleRes, {
+            this.showRoundResultCard(effectiveTicketWinner || { uid: this.myUid, name: this.myName }, settleRes, {
               myEntry,
               oppEntry,
               summaryLine,
@@ -3295,33 +3352,38 @@ export class WorkshopDuelController {
       return;
     }
 
-    let serverTicketRes = null;
-    if (ticketEntry && ticketEntry.claim.uid === this.myUid) {
-      const hasRealOpponent = this.players.some((p) => !p.isBot && p.uid !== this.myUid);
-      const shardSource = this.soloMode || !hasRealOpponent ? 'solo_til' : 'duel';
-      serverTicketRes = await awardTicketShardServer(this.getTgUser?.(), shardSource).catch(() => ({
-        ok: false,
-        source: shardSource,
-        shards: 0,
-        mergedTicket: false,
-        granted: false,
-        reason: 'network_error',
-        fallbackPoints: 500,
-      }));
+    let serverTicketRes = this._roundServerTicketRes || null;
+    if (effectiveTicketWinner && effectiveTicketWinner.uid === this.myUid && !serverTicketRes) {
+      if (this._roundServerTicketPromise) {
+        serverTicketRes = await this._roundServerTicketPromise.catch(() => null);
+      }
+      if (!serverTicketRes) {
+        const hasRealOpponent = this.players.some((p) => !p.isBot && p.uid !== this.myUid);
+        const shardSource = this.soloMode || !hasRealOpponent ? 'solo_til' : 'duel';
+        serverTicketRes = await awardTicketShardServer(this.getTgUser?.(), shardSource).catch(() => ({
+          ok: false,
+          source: shardSource,
+          shards: 0,
+          mergedTicket: false,
+          granted: false,
+          reason: 'network_error',
+          fallbackPoints: 500,
+        }));
+      }
     }
 
-    this._recordRoundOutcomeOnce(Boolean(ticketEntry && ticketEntry.claim.uid === this.myUid));
+    this._recordRoundOutcomeOnce(Boolean(effectiveTicketWinner && effectiveTicketWinner.uid === this.myUid));
     this.scheduleStepWhenUnblocked(() => {
       if (!this.active) return;
       this.setPhase('finished');
       this.spectatorUids = [];
       document.getElementById('duel-countdown-banner')?.setAttribute('hidden', '');
       document.getElementById('duel-spectator-bar')?.setAttribute('hidden', '');
-      this.showRoundResultCard(ticketEntry?.claim || null, settleRes, {
+      this.showRoundResultCard(effectiveTicketWinner, settleRes, {
         myEntry,
         oppEntry,
         summaryLine,
-        ticketFound: Boolean(ticketEntry),
+        ticketFound: Boolean(effectiveTicketWinner),
         serverTicketGranted: Boolean(serverTicketRes?.granted),
         serverTicketRes,
       });
@@ -3496,7 +3558,13 @@ export class WorkshopDuelController {
           subEl.textContent = 'Закатай друга в бочку и получи +6 ❤️.';
         }
       }
-    } else if (this.getEnergyActiveContenders().length === 0) {
+    } else if (closedLeft <= 0) {
+      Haptics.light();
+      if (titleEl) titleEl.textContent = '🛢 Все бочки открыты — раунд завершён!';
+      if (subEl) {
+        subEl.textContent = `❤️ ${this.duelLives} · В новом раунде ждут свежие бочки и полная энергия.`;
+      }
+    } else if (this.getEnergyActiveContenders().length === 0 || (this.soloMode && this.getPlayerEnergy(this.myUid) < ENERGY_PER_STRIKE)) {
       Haptics.light();
       if (titleEl) titleEl.textContent = '⚡ Энергия закончилась — раунд завершён!';
       if (subEl) {

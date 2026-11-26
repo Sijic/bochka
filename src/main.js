@@ -520,7 +520,7 @@ async function ensureDuelReady() {
         preloadBarrelClosers();
       }, 200);
     }
-    const mod = duelModCache || (await import('./duel.js?v=2018'));
+    const mod = duelModCache || (await import('./duel.js?v=2019'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -684,7 +684,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=2018'));
+  const mod = duelModCache || (await import('./duel.js?v=2019'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
