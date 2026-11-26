@@ -2847,7 +2847,7 @@ export class WorkshopDuelController {
       if (settling) return;
       if (kind === 'ticket' && ticketLocked) {
         Haptics.error();
-        this.onToast?.('🔒 Уже 2/4! Позови друга или сыграй 1×1, чтобы забрать 3/4 и 4/4.');
+        this.onToast?.('🔒 Половина билета в кино (2 из 4 частей) уже собрана! Позови друга или сыграй 1×1, чтобы собрать целый билет.');
         return;
       }
       settling = true;
@@ -3395,17 +3395,17 @@ export class WorkshopDuelController {
       } else {
         const sRes = detail.serverTicketRes || {};
         if (serverTicketGranted) {
-          if (titleEl) titleEl.textContent = '🎟 Билет 4/4 собран!';
+          if (titleEl) titleEl.textContent = '🎟 Целый билет в кино собран!';
           if (subEl) subEl.textContent = 'Подари бесплатный билет другу в Telegram!';
           this.scheduleTimeout(() => this.onOpenGoldenFork?.(), 900);
         } else if (sRes.reason === 'solo_cap_reached' || sRes.reason === 'friend_or_duel_required') {
-          if (titleEl) titleEl.textContent = `${tilKo ? '🏆 Тиль повержен!' : '🎟 ' + winPrefix} Билет 2/4`;
-          if (subEl) subEl.textContent = `У тебя осталось ${this.duelLives} ❤️ — для 3/4 и 4/4 закатай друга или жми следующий раунд.`;
+          if (titleEl) titleEl.textContent = tilKo ? '🏆 Тиль повержен! Половина билета собрана' : '🎟 Половина билета в кино собрана!';
+          if (subEl) subEl.textContent = `У тебя осталось ${this.duelLives} ❤️. Позови 1 друга, чтобы собрать целый бесплатный билет (из 4 частей), или жми следующий раунд.`;
         } else {
           const sh = Number(sRes.shards ?? (this.getTicketShards?.() || 0));
           if (sh > 0) {
-            if (titleEl) titleEl.textContent = `${tilKo ? '🏆 Тиль повержен!' : '🎟 ' + winPrefix} Билет ${sh}/4`;
-            if (subEl) subEl.textContent = `У тебя осталось ${this.duelLives} ❤️ — двигайся к 4/4 в следующем раунде.`;
+            if (titleEl) titleEl.textContent = `${tilKo ? '🏆 Тиль повержен!' : '🎟 ' + winPrefix} Часть билета (${sh} из 4)`;
+            if (subEl) subEl.textContent = `У тебя осталось ${this.duelLives} ❤️. Собери все 4 части — получишь бесплатный билет в кино!`;
           } else {
             if (titleEl) titleEl.textContent = tilKo ? '🏆 Тиль повержен (0/3 ❤️)!' : `🏆 ${winPrefix}!`;
             if (subEl) subEl.textContent = `У тебя осталось ${this.duelLives} ❤️ — жми «Следующий раунд»!`;
@@ -3416,21 +3416,21 @@ export class WorkshopDuelController {
       Haptics.success();
       const sRes = detail.serverTicketRes || {};
       if (serverTicketGranted) {
-        if (titleEl) titleEl.textContent = '🎟 Билет 4/4 собран!';
+        if (titleEl) titleEl.textContent = '🎟 Целый билет в кино собран!';
         if (subEl) {
           subEl.textContent = 'Подари бесплатный билет другу в Telegram!';
         }
         this.scheduleTimeout(() => this.onOpenGoldenFork?.(), 900);
       } else if (sRes.reason === 'solo_cap_reached' || sRes.reason === 'friend_or_duel_required') {
-        if (titleEl) titleEl.textContent = '🎟 Полбилета уже у тебя (2/4)!';
+        if (titleEl) titleEl.textContent = '🎟 Половина билета в кино собрана!';
         if (subEl) {
-          subEl.textContent = 'Чтобы забрать 3/4 и 4/4, закатай друга или сыграй 1×1.';
+          subEl.textContent = 'Позови 1 друга или сыграй 1×1, чтобы собрать оставшиеся части до целого бесплатного билета.';
         }
       } else if (sRes.ok && !sRes.reason && Number(sRes.shards || 0) > 0) {
         const sh = Number(sRes.shards || 1);
-        if (titleEl) titleEl.textContent = `🎟 Билет: ${sh}/4!`;
+        if (titleEl) titleEl.textContent = `🎟 Часть билета (${sh} из 4)!`;
         if (subEl) {
-          subEl.textContent = `Собери 4/4 и забери билет в кино.`;
+          subEl.textContent = 'Собери все 4 части и забери бесплатный билет в кино.';
         }
       } else if (sRes.reason === 'seed_admin_excluded') {
         if (titleEl) titleEl.textContent = '🛡 Победа в дуэли';
@@ -3520,7 +3520,7 @@ export class WorkshopDuelController {
     }
     if (inviteLivesBtn) {
       if (capHit || (needTilRefill && !oceanAllowed)) {
-        inviteLivesBtn.textContent = capHit ? '🛢 Закатать друга (3/4 и 4/4)' : '🛢 Закатать друга (+6 ❤️)';
+        inviteLivesBtn.textContent = capHit ? '🛢 Закатать друга и собрать целый билет' : '🛢 Закатать друга (+6 ❤️)';
         inviteLivesBtn.removeAttribute('hidden');
       } else {
         inviteLivesBtn.setAttribute('hidden', '');

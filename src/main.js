@@ -502,7 +502,7 @@ async function ensureDuelReady() {
       screamersPreloaded = true;
       window.setTimeout(() => preloadScreamerFrames(SCREAMER_META), 200);
     }
-    const mod = duelModCache || (await import('./duel.js?v=2012'));
+    const mod = duelModCache || (await import('./duel.js?v=2013'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -934,7 +934,7 @@ async function applyFirstSocialExclusive(trigger = 'friend_or_duel') {
     syncSuperPrizeRatingBarUI();
     if (res.granted) {
       rollRareMovieCardLazy('first_social_v207').catch(() => {});
-      showToast('🎁 1-й друг / дуэль 1×1: редкая фишка + 3/4–4/4 билета + буст ×2 очков на 15 минут!', { durationMs: 4800 });
+      showToast('🎁 1-й друг / дуэль 1×1: редкая фишка + сборка целого билета в кино + буст ×2 очков на 15 мин!', { durationMs: 4800 });
     }
   }
   return res;
@@ -1220,7 +1220,7 @@ function createTicketShardDataUrl(shards = 1, merged = false) {
       );
     })
     .join('');
-  const title = merged ? '4/4 БИЛЕТ СКЛЕЕН!' : `ЧАСТЬ БИЛЕТА ${count}/4`;
+  const title = merged ? '🎟 ЦЕЛЫЙ БИЛЕТ СОБРАН!' : `ЧАСТЬ БИЛЕТА (${count} ИЗ 4)`;
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="260" height="160" viewBox="0 0 260 160">` +
     `<defs><linearGradient id="monoG" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#ffffff"/><stop offset="60%" stop-color="#cbd5e1"/><stop offset="100%" stop-color="#94a3b8"/></linearGradient></defs>` +
@@ -1291,7 +1291,7 @@ async function awardTicketShard(source = 'level', { silent = false } = {}) {
     updatePremiereBarsUI();
     window.setTimeout(() => syncTicketShardsUI({ pulse: false }), 1100);
     if (!silent) {
-      showToast('🎟 4/4! Четыре части склеились в ЦЕЛЫЙ БЕСПЛАТНЫЙ БИЛЕТ для друга! Отправь его в Telegram!');
+      showToast('🎟 Все 4 части собраны — целый бесплатный билет в кино готов! Отправь его другу в Telegram!');
     }
     return { merged: true, granted: true, shards: 0, res };
   }
@@ -1307,7 +1307,7 @@ async function awardTicketShard(source = 'level', { silent = false } = {}) {
     syncTicketShardsUI({ pulse: true });
     updatePremiereBarsUI();
     if (!silent) {
-      showToast('🎟 Полбилета уже у тебя (2/4)! Чтобы забрать 3/4 и 4/4, закатай друга или сыграй 1×1 с живым игроком (+500 ⭐)!');
+      showToast('🎟 Половина билета в кино (2 из 4 частей) уже собрана! Закатай друга или сыграй 1×1, чтобы собрать целый билет (+500 ⭐)!');
     }
     return { merged: false, granted: false, soloCapReached: true, fallbackPoints: bonusFallback, shards: keepShards, res };
   }
@@ -1334,7 +1334,7 @@ async function awardTicketShard(source = 'level', { silent = false } = {}) {
   saveLocalV9Flags();
   syncTicketShardsUI({ pulse: nextShards > 0, justEarned: nextShards });
   if (!silent && nextShards > 0) {
-    showToast(`🎟 Собрана часть билета ${nextShards}/4 (${nextShards * 25}%)! Собери 4/4 и подари другу бесплатный билет!`);
+    showToast(`🎟 Собрана часть билета (${nextShards} из 4)! Собери все 4 части — получишь бесплатный билет в кино!`);
   }
   return { merged: false, granted: false, capReached: false, shards: nextShards, res };
 }
@@ -3245,8 +3245,8 @@ const DUEL_DISCOVERY_CARDS = {
     stateKey: 'firstTicket',
     icon: '🎟',
     text: 'Первая часть билета в кино!',
-    what: 'Часть билета (1/4)',
-    gives: 'Собери 4/4 и забери настоящий билет в кинотеатр или подари другу',
+    what: 'Часть билета (1 из 4)',
+    gives: 'Собери все 4 части и забери настоящий билет в кинотеатр или подари другу',
     where: 'Счётчик 🎟 в левом верхнем углу VS-панели',
     spotlightId: 'duel-shards-pill',
   },
@@ -3399,7 +3399,7 @@ function showScreen(name) {
     const quickBtn = document.getElementById('btn-pack-quick-1tap');
     const quickTxt = document.getElementById('btn-pack-quick-1tap-text');
     if (quickBtn) quickBtn.disabled = false;
-    if (quickTxt) quickTxt.textContent = '⚡ Отправить другу в 1 клик';
+    if (quickTxt) quickTxt.textContent = '🔥 Отомсти и закатай друга';
     updatePackTemplatePreview();
     const recPackBtn = document.getElementById('btn-pack-recovery-shift');
     if (recPackBtn) {
@@ -4315,7 +4315,7 @@ async function startViralFriendRound(pack) {
         return;
       }
       if (lockRes.isSelf) {
-        showToast('📌 Это твоя собственная бочка — перешли её реальному другу в Telegram, чтобы получить +20% к Премьере и обрывок 3/4!');
+        showToast('📌 Это твоя собственная бочка — перешли её реальному другу в Telegram, чтобы открыть сборку целого билета в кино!');
       } else if (pack?.id) {
         state.profile.hasSocialConnection = true;
         state.profile.friendsCount = Math.max(1, Number(state.profile.friendsCount || 0));
@@ -7985,7 +7985,7 @@ async function handleQuick1TapPrankClick({ isPingPongRevenge = false, replyToPac
     await handleSealBarrelClick({ forceAutoAvatar: true, isPingPongRevenge, replyToPack });
   } finally {
     if (quickBtn) quickBtn.disabled = false;
-    if (quickTxt) quickTxt.textContent = '⚡ Отправить другу в 1 клик (1-на-1)';
+    if (quickTxt) quickTxt.textContent = '🔥 Отомсти и закатай друга';
   }
 }
 
@@ -8201,7 +8201,7 @@ async function handleSealBarrelClick({
   } finally {
     state.pack.sealing = false;
     if (quickBtn) quickBtn.disabled = false;
-    if (quickTxt) quickTxt.textContent = '⚡ Отправить другу в 1 клик (1-на-1)';
+    if (quickTxt) quickTxt.textContent = '🔥 Отомсти и закатай друга';
     if (sendUpBtn) {
       sendUpBtn.disabled = false;
       sendUpBtn.textContent = 'Отправить вызов другу';
