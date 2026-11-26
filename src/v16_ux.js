@@ -4,7 +4,7 @@
 // ============================================================================
 import { Haptics } from './telegram.js';
 
-const MEDIA_SLOTS_URL = './assets/config/media_slots.json?v=1612';
+const MEDIA_SLOTS_URL = './assets/config/media_slots.json?v=2021';
 const ARTIFACTS_STORAGE_KEY = 'bochka_v16_unlocked_artifacts';
 const TIL_LEVEL_STORAGE_KEY = 'bochka_v16_til_level';
 
@@ -13,8 +13,8 @@ const DEFAULT_MEDIA_SLOTS = {
   til_victory_video: {
     id: 'til_victory_invite',
     title: 'Приглашение в кино от Тиля Швайгера',
-    placeholder_caption: 'Здесь будет видео-приглашение от Тиля Швайгера',
-    placeholder_hint: 'Подключается за 5 секунд в assets/config/media_slots.json → til_victory_video.video_url',
+    placeholder_caption: 'Тут будет видео со съёмок',
+    placeholder_hint: '',
     video_url: '',
     poster_url: './public/cards/card_til_north_sea.webp?v=1553',
     duration_label: '0:18',
@@ -29,7 +29,7 @@ const DEFAULT_MEDIA_SLOTS = {
       level: 1,
       title: 'Секрет цеха «Корпус Б»',
       subtitle: 'Видео-кружок со съёмок · Уровень 1',
-      placeholder_caption: 'Видео-кружок уровня 1: как строили настоящий цех',
+      placeholder_caption: 'Тут будет видео со съёмок',
       video_url: '',
       poster_url: './public/cards/card_workshop_hall.webp?v=1553',
       duration_label: '0:15',
@@ -39,7 +39,7 @@ const DEFAULT_MEDIA_SLOTS = {
       level: 2,
       title: 'Внутри 200-литровой бочки',
       subtitle: 'Видео-кружок со съёмок · Уровень 2',
-      placeholder_caption: 'Видео-кружок уровня 2: как снимали сцену побега',
+      placeholder_caption: 'Тут будет видео со съёмок',
       video_url: '',
       poster_url: './public/cards/card_boy_escape.webp?v=1553',
       duration_label: '0:14',
@@ -49,7 +49,7 @@ const DEFAULT_MEDIA_SLOTS = {
       level: 3,
       title: 'Взгляд сквозь крышку',
       subtitle: 'Видео-кружок со съёмок · Уровень 3',
-      placeholder_caption: 'Видео-кружок уровня 3: операторская фишка с крышкой',
+      placeholder_caption: 'Тут будет видео со съёмок',
       video_url: '',
       poster_url: './public/cards/card_barrel_eye.webp?v=1553',
       duration_label: '0:16',
@@ -59,7 +59,7 @@ const DEFAULT_MEDIA_SLOTS = {
       level: 4,
       title: 'Пастор · Крупный план',
       subtitle: 'Видео-кружок со съёмок · Уровень 4',
-      placeholder_caption: 'Видео-кружок уровня 4: Тиль Швайгер на площадке',
+      placeholder_caption: 'Тут будет видео со съёмок',
       video_url: '',
       poster_url: './public/cards/card_pastor_vigil.webp?v=1553',
       duration_label: '0:19',
@@ -69,7 +69,7 @@ const DEFAULT_MEDIA_SLOTS = {
       level: 5,
       title: 'Огонь и овчарка в кадре',
       subtitle: 'Видео-кружок со съёмок · Уровень 5',
-      placeholder_caption: 'Видео-кружок уровня 5: реальный трюк с огнём',
+      placeholder_caption: 'Тут будет видео со съёмок',
       video_url: '',
       poster_url: './public/cards/card_fire_dog.webp?v=1553',
       duration_label: '0:17',
@@ -79,7 +79,7 @@ const DEFAULT_MEDIA_SLOTS = {
       level: 6,
       title: 'Режиссёр Алексей Звонцов и Тиль',
       subtitle: 'Финальный видео-кружок · Уровень 6',
-      placeholder_caption: 'Видео-кружок уровня 6: закадровая история фильма',
+      placeholder_caption: 'Тут будет видео со съёмок',
       video_url: '',
       poster_url: './public/cards/card_til_north_sea.webp?v=1553',
       duration_label: '0:22',
@@ -374,60 +374,32 @@ export function createCircleVideoWidget(slot, { autoplay = true, compact = false
       try { vid.pause(); } catch { /* ignore */ }
     };
   } else {
-    // Интерактивная видео-заглушка в круглой рамке Telegram-кружка
+    // Честная стильная заглушка видео-кружка до подключения реального MP4
     const poster = document.createElement('img');
     poster.className = 'v16-circle-poster';
     poster.src = posterUrl;
     poster.alt = String(slot?.title || 'Видео-артефакт фильма');
     ring.appendChild(poster);
 
-    const scanOverlay = el('div', 'v16-circle-live-sweep');
-    ring.appendChild(scanOverlay);
-
-    const pillTop = el('span', 'v16-circle-lvl-pill', `УР. ${slot?.level || 1} · ${slot?.duration_label || '0:15'}`);
+    const pillTop = el('span', 'v16-circle-lvl-pill', `🎬 ВИДЕО · ${slot?.duration_label || '0:15'}`);
     ring.appendChild(pillTop);
 
-    const playBtn = el('button', 'v16-circle-stub-btn', autoplay ? '⏸' : '▶');
-    playBtn.type = 'button';
-    playBtn.setAttribute('aria-label', 'Проиграть превью видео-кружка');
-    ring.appendChild(playBtn);
-
-    const progBar = el('div', 'v16-circle-stub-progress');
-    const progFill = el('div', 'v16-circle-stub-progress-fill');
-    progBar.appendChild(progFill);
+    const stubBadge = el(
+      'div',
+      'v16-circle-stub-badge',
+      slot?.placeholder_caption || 'Тут будет видео со съёмок'
+    );
+    ring.appendChild(stubBadge);
 
     const statusLine = el(
       'div',
       'v16-circle-stub-caption',
-      slot?.placeholder_caption || 'Эксклюзивный кадр со съёмок «БОЧКИ»'
+      slot?.subtitle || 'Тут будет видео со съёмок'
     );
 
-    let playing = Boolean(autoplay);
-    let pct = 0;
-    const syncState = () => {
-      ring.classList.toggle('is-playing', playing);
-      playBtn.textContent = playing ? '⏸' : '▶';
-    };
-    syncState();
-
-    demoTimer = window.setInterval(() => {
-      if (!playing) return;
-      pct = (pct + 2.5) % 102;
-      progFill.style.width = `${Math.min(100, pct)}%`;
-    }, 180);
-
-    ring.addEventListener('click', () => {
-      playing = !playing;
-      Haptics.light();
-      syncState();
-    });
-
     wrap.appendChild(ring);
-    wrap.appendChild(progBar);
     wrap.appendChild(statusLine);
-    wrap.__cleanup = () => {
-      if (demoTimer) clearInterval(demoTimer);
-    };
+    wrap.__cleanup = () => {};
     return wrap;
   }
 
@@ -460,7 +432,7 @@ export function openArtifactPlayerModal(slot, { onClose } = {}) {
     body:
       slot?.video_url
         ? slot?.subtitle || 'Закадровый видео-кружок фильма «БОЧКА»'
-        : slot?.placeholder_caption || slot?.subtitle || 'Эксклюзивный кадр со съёмок триллера «БОЧКА» (премьера 17 декабря).',
+        : slot?.placeholder_caption || 'Тут будет видео со съёмок',
     buttonText: 'ЗАКРЫТЬ',
     tone: 'gold',
     customNode: circleWidget,
@@ -515,7 +487,7 @@ export function renderTilVictoryPlayer(hostEl, slot) {
 
   const captionBox = el('div', 'til-victory-caption');
   captionBox.appendChild(
-    el('strong', 'til-victory-cap-main', data?.placeholder_caption || 'Здесь будет видео-приглашение от Тиля Швайгера')
+    el('strong', 'til-victory-cap-main', data?.placeholder_caption || 'Тут будет видео со съёмок')
   );
   captionBox.appendChild(el('span', 'til-victory-cap-sub', '«Встретимся в кино 17 декабря!»'));
   frame.appendChild(captionBox);

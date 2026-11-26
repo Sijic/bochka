@@ -520,7 +520,7 @@ async function ensureDuelReady() {
         preloadBarrelClosers();
       }, 200);
     }
-    const mod = duelModCache || (await import('./duel.js?v=2020'));
+    const mod = duelModCache || (await import('./duel.js?v=2021'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -684,7 +684,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=2020'));
+  const mod = duelModCache || (await import('./duel.js?v=2021'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
@@ -692,7 +692,7 @@ async function createWatchChannelLazy(barrelId, opts) {
 let trophiesModCache = null;
 async function loadTrophiesMod() {
   if (!trophiesModCache) {
-    trophiesModCache = await import('./trophies.js?v=2000');
+    trophiesModCache = await import('./trophies.js?v=2021');
   }
   return trophiesModCache;
 }
