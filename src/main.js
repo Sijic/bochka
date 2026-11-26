@@ -2,6 +2,7 @@ import { ENV, resolveSiteAsset } from './env.js';
 import { initI18n, setLang, t, applyDomTranslations, onLangChange } from './i18n.js';
 import {
   initTelegram,
+  buildTelegramStartAppUrl,
   isAdminModeRequested,
   isTestBogRequested,
   isTestBogSessionActive,
@@ -103,6 +104,7 @@ import {
   claimTrailer60sCheckpointServer,
   claimPingPongRevengeBonusServer,
   claimPingPongRelayBonusServer,
+  randomShortId,
 } from './backend.js';
 import { HorrorScreamerPlayer, preloadScreamerFrames } from './screamer-fx.js';
 
@@ -502,7 +504,7 @@ async function ensureDuelReady() {
       screamersPreloaded = true;
       window.setTimeout(() => preloadScreamerFrames(SCREAMER_META), 200);
     }
-    const mod = duelModCache || (await import('./duel.js?v=2015'));
+    const mod = duelModCache || (await import('./duel.js?v=2016'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -2756,24 +2758,39 @@ async function bootstrap() {
     : Promise.resolve();
   initPackConstructorDefaults().catch(() => {});
 
-  mergeFreshProfile(await fetchPlayerProfile(state.tg?.user), { preserveProgress: false });
-  if (earlyRole) {
-    state.profile.isSeedAdmin = true;
-    if (earlyRole === 'blog') state.profile.isBloggerSeed = true;
+  if (state.tg?.teamSeedRole === 'prod' && !state.incomingPassId) {
+    state.entered = true;
+    applySeedPackModeUI(true);
+    showScreen('pack');
+    showToast('🎬 Нажми кнопку ниже — сразу получишь общую ссылку для друзей и подписчиков!');
   }
-  await Promise.all([earlyTrafficPromise, earlyTeamPromise, earlyBroadcastAssignPromise]);
-  refreshInitialSeedGateUI();
-  recordPlayerMeta(state.tg?.user).catch(() => {});
-  if (state.tg?.duelRoomParam) {
-    await syncUiStage(state.tg?.user, 4);
-    applyProgressiveDisclosureUI({ forceStage: 4 });
-  } else {
-    applyProgressiveDisclosureUI();
-  }
-  updatePremiereBarsUI();
-  syncX2BoostHudUI();
-  refreshBranchBattleUI().catch(() => {});
-  await refreshQuestUI();
+
+  const bootHydratePromise = Promise.allSettled([
+    fetchPlayerProfile(state.tg?.user).then((prof) => {
+      mergeFreshProfile(prof, { preserveProgress: false });
+      if (earlyRole) {
+        state.profile.isSeedAdmin = true;
+        if (earlyRole === 'blog') state.profile.isBloggerSeed = true;
+      }
+    }),
+    earlyTrafficPromise,
+    earlyTeamPromise,
+    earlyBroadcastAssignPromise,
+  ]).then(async () => {
+    refreshInitialSeedGateUI();
+    recordPlayerMeta(state.tg?.user).catch(() => {});
+    if (state.tg?.duelRoomParam) {
+      await syncUiStage(state.tg?.user, 4);
+      applyProgressiveDisclosureUI({ forceStage: 4 });
+    } else {
+      applyProgressiveDisclosureUI();
+    }
+    updatePremiereBarsUI();
+    syncX2BoostHudUI();
+    refreshBranchBattleUI().catch(() => {});
+    refreshQuestUI().catch(() => {});
+  });
+
   initLiveFriendFeedbackMonitor();
 
   // Автооткрытие трейлера по прямой ссылке (?trailer=1&ref=...)
@@ -2781,16 +2798,12 @@ async function bootstrap() {
     openTrailerModal({ forRescue: false });
   }
 
-  // Единый разбор входящего трафика (Deep Links: gift_ / duel_ / til_knock / team_prod)
-  // v19.0: По ссылкам бочек, дуэли 1×1 и моря НЕ перепрыгиваем стартовый шлюз #screen-gate —
-  // один тап гостя синхронно разблокирует AudioContext на iOS/Android и сразу ведёт в игру/стол/море!
+  // Только для gift_ / duel_ ждём гидратацию профиля (до 4.5с), остальной вход 100% мгновенный!
   if (state.incomingPassId) {
+    await Promise.race([bootHydratePromise, new Promise((r) => window.setTimeout(r, 4500))]);
     await openIncomingPassScreen(state.incomingPassId);
-  } else if (state.tg?.teamSeedRole === 'prod') {
-    state.entered = true;
-    applySeedPackModeUI(true);
-    showScreen('pack');
-    showToast('🎬 Запакуй СЕБЯ в бочку 1 раз — получишь ОДНУ общую ссылку для своих знакомых и подписчиков!');
+  } else if (state.tg?.duelRoomParam) {
+    await Promise.race([bootHydratePromise, new Promise((r) => window.setTimeout(r, 3500))]);
   }
 
   // Если активирована сессия «ТЕСТ-БОГА» (/testbog/) — лениво монтируем плавающий пульт песочницы (0 запросов в БД)
@@ -8021,7 +8034,7 @@ async function handleSealBarrelClick({
     const teamRole = getTeamSeedRole();
     const isPersonalMode = Boolean(isPingPongRevenge) || Boolean(isRelayNewFriend);
     const isBroadcastPack = !isPersonalMode && (teamRole === 'prod' || teamRole === 'blog');
-    const useAutoAvatar = !isBroadcastPack && (Boolean(forceAutoAvatar) || !state.pack.userUploadedPhoto);
+    const useAutoAvatar = Boolean(forceAutoAvatar) || !state.pack.userUploadedPhoto;
 
     if (!useAutoAvatar && !state.pack.processed) {
       await rebuildPackPortraitPreview();
@@ -8039,21 +8052,38 @@ async function handleSealBarrelClick({
       : tplCopy.phrase;
     const randomSound = pickRandomPackScreamer();
     const broadcastPrefix = isBroadcastPack ? buildBroadcastPrefix(teamRole, state.tg?.user) : '';
-    const created = await createBarrelPack({
-      mode: useAutoAvatar ? 'auto_avatar' : 'friend',
-      autoAvatar: useAutoAvatar,
-      message: phrase,
-      frameStyle: useAutoAvatar ? 'auto_avatar' : 'flashlight',
-      screamerType: randomSound,
-      zoneId: 1,
-      targetBarrelIndex: -1,
-      senderName: state.tg?.user?.name || '',
-      tgUser: state.tg.user,
-      processedImage: useAutoAvatar ? null : state.pack.processed,
-      recordedVoice: state.pack.voice,
-      isBroadcast: isBroadcastPack,
-      broadcastPrefix,
-    });
+    const preId = randomShortId(7);
+    const linkType = isBroadcastPack ? (teamRole === 'blog' ? 'bl' : 'pr') : 'pack';
+    const preShareUrl = buildTelegramStartAppUrl(`${linkType}_${preId}`);
+
+    const [created, prepShare] = await Promise.all([
+      createBarrelPack({
+        shortId: preId,
+        mode: useAutoAvatar ? 'auto_avatar' : 'friend',
+        autoAvatar: useAutoAvatar,
+        message: phrase,
+        frameStyle: useAutoAvatar ? 'auto_avatar' : 'flashlight',
+        screamerType: randomSound,
+        zoneId: 1,
+        targetBarrelIndex: -1,
+        senderName: state.tg?.user?.name || '',
+        tgUser: state.tg.user,
+        processedImage: useAutoAvatar ? null : state.pack.processed,
+        recordedVoice: state.pack.voice,
+        isBroadcast: isBroadcastPack,
+        broadcastPrefix,
+      }),
+      prepareNativeShareMessage({
+        tgUser: state.tg?.user,
+        barrelId: preId,
+        linkType,
+        senderName: state.tg?.user?.name || '',
+        phrase,
+        shareUrl: preShareUrl,
+        shareTemplate: shareTpl,
+        bestSec: tplCopy.bestSec,
+      }).catch(() => ({ ok: false, fallback: true, preparedMessageId: '', shareUrl: preShareUrl })),
+    ]);
 
     state.pack.lastShareUrl = created.shareUrl;
     state.pack.lastBloggerInviteUrl = created.bloggerInviteUrl || '';
@@ -8091,17 +8121,6 @@ async function handleSealBarrelClick({
         : isBroadcastPack
           ? '🛢 Закрой живую бочку к триллеру «БОЧКА» (0.58 МБ, работает в метро без звука по вибро-радару) — финальный приз 2 билета в кино в твоём городе:'
           : tplCopy.shareText;
-    const linkType = isBroadcastPack ? (teamRole === 'blog' ? 'bl' : 'pr') : 'pack';
-    const prepShare = await prepareNativeShareMessage({
-      tgUser: state.tg?.user,
-      barrelId: created.id,
-      linkType,
-      senderName: state.tg?.user?.name || '',
-      phrase,
-      shareUrl: created.shareUrl,
-      shareTemplate: shareTpl,
-      bestSec: tplCopy.bestSec,
-    }).catch(() => ({ ok: false, fallback: true, preparedMessageId: '', shareUrl: created.shareUrl }));
     const shareOutcome = isPingPongRevenge && replyToPack?.senderTgId
       ? { ok: true, sent: true, cancelled: false, mode: 'ping_pong_push', preparedMessageId: prepShare?.preparedMessageId || '' }
       : await openNativeTelegramShareCardWithConfirmation({
@@ -8131,63 +8150,12 @@ async function handleSealBarrelClick({
     const prevLives = Math.max(0, Number(state.profile.lives || 0));
     const nextLives = wasLifeRefill ? prevLives : Math.max(3, prevLives);
     state.profile.lives = nextLives;
-    awardV8LevelProgress(state.tg?.user, {
-      level: targetNextLevel,
-      pointsDelta: 0,
-      livesDelta: wasLifeRefill ? 0 : Math.max(0, nextLives - prevLives),
-    }).catch(() => {});
-    syncUiStage(state.tg?.user, wasProducerFirstPack ? 1 : 3).catch(() => {});
 
-    let revengeBonusRes = null;
-    if (isPingPongRevenge && replyToPack?.id) {
-      revengeBonusRes = await claimPingPongRevengeBonusServer(state.tg?.user, {
-        originalBarrelId: replyToPack.id,
-        revengeBarrelId: created.id,
-      }).catch(() => null);
-      if (revengeBonusRes?.ok) {
-        if (revengeBonusRes.lives != null) {
-          state.profile.lives = Math.max(Number(state.profile.lives || 0), Number(revengeBonusRes.lives));
-        } else if (revengeBonusRes.granted) {
-          state.profile.lives = Number(state.profile.lives || 0) + 1;
-        }
-        if (revengeBonusRes.premierePoints != null) {
-          state.profile.premierePoints = Math.max(Number(state.profile.premierePoints || 0), Number(revengeBonusRes.premierePoints));
-        } else if (revengeBonusRes.granted) {
-          state.profile.premierePoints = Number(state.profile.premierePoints || 0) + 200;
-        }
-        duelCtrl?.syncFromProfile?.(state.profile, { allowLivesRefill: true });
-      }
-    }
-
-    if (isPingPongRevenge && replyToPack?.senderTgId) {
-      sendRevengeClosedPush({
-        targetTgId: replyToPack.senderTgId,
-        revengeName: state.tg?.user?.name || 'Твой друг',
-        revengeBarrelId: created.id,
-      }).catch(() => {});
-    }
-
-    if (shareOutcome?.sent) {
-      await applyShareBonusReward({ showFeedback: true }).catch(() => null);
-      if (!isBroadcastPack) {
-        await applyFirstSocialExclusive(isPingPongRevenge ? 'ping_pong_revenge' : 'first_friend_pack_sent').catch(() => null);
-      }
-    }
-    updatePremiereBarsUI();
-    refreshHudLevelLabel();
-
-    let packShardRes = null;
-    if (!isBroadcastPack && Number(state.profile?.ticketShards || 0) === 0 && Number(state.profile?.pendingTicketsCount || 0) === 0) {
-      packShardRes = await Promise.race([
-        awardTicketShard('level2_pack', { silent: false }).catch(() => null),
-        new Promise((resolve) => window.setTimeout(() => resolve(null), 4500)),
-      ]);
-      if (packShardRes?.shards > 0) {
-        syncTicketShardsUI({ pulse: true, justEarned: packShardRes.shards });
-      }
-    }
+    // Instant #screen-sent UI (post-share bonus RPCs run cleanly in parallel in background!)
     state.pendingLevelStartFly = { lives: wasProducerFirstPack ? 1 : 3, strikes: 3 };
     Haptics.success();
+    updatePremiereBarsUI();
+    refreshHudLevelLabel();
     applyProgressiveDisclosureUI({ skipPromoteFromSocial: true });
     showSentScreen({
       wasLifeRefill,
@@ -8196,18 +8164,90 @@ async function handleSealBarrelClick({
       isPingPongRevenge,
       isRelayNewFriend,
       revengeTargetName: replyToPack?.senderName || '',
-      revengeBonus: revengeBonusRes,
+      revengeBonus: isPingPongRevenge ? { granted: true } : null,
       prevRatingPct,
-      packShardRes,
+      packShardRes: null,
     });
-    refreshQuestUI().catch(() => {});
+
+    const bgTasks = [
+      awardV8LevelProgress(state.tg?.user, {
+        level: targetNextLevel,
+        pointsDelta: 0,
+        livesDelta: wasLifeRefill ? 0 : Math.max(0, nextLives - prevLives),
+      }).catch(() => {}),
+      syncUiStage(state.tg?.user, wasProducerFirstPack ? 1 : 3).catch(() => {}),
+    ];
+    if (isPingPongRevenge && replyToPack?.id) {
+      bgTasks.push(
+        claimPingPongRevengeBonusServer(state.tg?.user, {
+          originalBarrelId: replyToPack.id,
+          revengeBarrelId: created.id,
+        })
+          .then((res) => {
+            if (res?.ok) {
+              if (res.lives != null) {
+                state.profile.lives = Math.max(Number(state.profile.lives || 0), Number(res.lives));
+              } else if (res.granted) {
+                state.profile.lives = Number(state.profile.lives || 0) + 1;
+              }
+              if (res.premierePoints != null) {
+                state.profile.premierePoints = Math.max(Number(state.profile.premierePoints || 0), Number(res.premierePoints));
+              } else if (res.granted) {
+                state.profile.premierePoints = Number(state.profile.premierePoints || 0) + 200;
+              }
+              duelCtrl?.syncFromProfile?.(state.profile, { allowLivesRefill: true });
+              updatePremiereBarsUI();
+            }
+          })
+          .catch(() => {})
+      );
+    }
+    if (isPingPongRevenge && replyToPack?.senderTgId) {
+      bgTasks.push(
+        sendRevengeClosedPush({
+          targetTgId: replyToPack.senderTgId,
+          revengeName: state.tg?.user?.name || 'Твой друг',
+          revengeBarrelId: created.id,
+        }).catch(() => {})
+      );
+    }
+    if (shareOutcome?.sent) {
+      bgTasks.push(
+        applyShareBonusReward({ showFeedback: true })
+          .then(() => {
+            if (!isBroadcastPack) {
+              return applyFirstSocialExclusive(isPingPongRevenge ? 'ping_pong_revenge' : 'first_friend_pack_sent');
+            }
+            return null;
+          })
+          .catch(() => null)
+      );
+    }
+    if (!isBroadcastPack && Number(state.profile?.ticketShards || 0) === 0 && Number(state.profile?.pendingTicketsCount || 0) === 0) {
+      bgTasks.push(
+        awardTicketShard('level2_pack', { silent: false })
+          .then((packShardRes) => {
+            if (packShardRes?.shards > 0) {
+              syncTicketShardsUI({ pulse: true, justEarned: packShardRes.shards });
+            }
+          })
+          .catch(() => null)
+      );
+    }
+    Promise.allSettled(bgTasks)
+      .then(() => {
+        updatePremiereBarsUI();
+        refreshHudLevelLabel();
+        refreshQuestUI().catch(() => {});
+      })
+      .catch(() => {});
   } finally {
     state.pack.sealing = false;
     if (quickBtn) quickBtn.disabled = false;
-    if (quickTxt) quickTxt.textContent = '🔥 Отомсти и закатай друга';
+    if (quickTxt) quickTxt.textContent = '⚡ Отправить в 1 клик (с аватаром)';
     if (sendUpBtn) {
       sendUpBtn.disabled = false;
-      sendUpBtn.textContent = 'Отправить вызов другу';
+      sendUpBtn.textContent = '⚡ Отправить другу';
     }
   }
 }
@@ -8257,14 +8297,14 @@ function showSentScreen({
     }
     if (btnTxt) btnTxt.textContent = isBlog ? 'Играть' : 'Поиграть в цех';
   } else if (isRelayNewFriend) {
-    if (txt) txt.textContent = '🚀 Эстафетная бочка улетела новому другу! Как только он откроет её — сразу упадут +300 ⭐ и откроется 3/4 билета.';
+    if (txt) txt.textContent = '🚀 Эстафетная бочка улетела новому другу! Как только он откроет её — сразу упадут +300 ⭐ и откроется сборка целого билета.';
     if (btnTxt) btnTxt.textContent = 'Играть (×2 очки)';
   } else if (isPingPongRevenge) {
     const revBonusTxt = revengeBonus?.granted ? ' (+1 ❤️ и +200 ⭐ уже начислены!)' : '';
     if (txt) txt.textContent = `🔥 Ответная бочка улетела ${revengeTargetName || 'другу'}!${revBonusTxt} Активен буст ×2 очков на 15 мин.`;
     if (btnTxt) btnTxt.textContent = 'Играть (×2 очки)';
   } else {
-    if (txt) txt.textContent = '🔥 Вызов в стальную бочку отправлен! За 1-го друга открыты редкая фишка, 3/4–4/4 билета и ×2 очки на 15 мин!';
+    if (txt) txt.textContent = '🔥 Вызов в стальную бочку отправлен! За 1-го друга открыты редкая фишка, сборка целого билета в кино и ×2 очки на 15 мин!';
     if (btnTxt) btnTxt.textContent = 'Играть';
   }
   refreshBranchBattleUI().catch(() => {});
@@ -8275,7 +8315,7 @@ function showSentScreen({
   if (relayCard) {
     if (isPingPongRevenge && !isRelayNewFriend && !wasBroadcastPack && !state.profile?.relayBonusClaimed) {
       if (relayCopy) {
-        relayCopy.innerHTML = `🔥 Ответка улетела! Закрой ещё 1 нового друга (не <strong>${safeTargetLabel}</strong>) — получишь <strong>+300 ⭐</strong> и откроешь <strong>3/4 билета</strong>.`;
+        relayCopy.innerHTML = `🔥 Ответка улетела! Закрой ещё 1 нового друга (не <strong>${safeTargetLabel}</strong>) — получишь <strong>+300 ⭐</strong> и откроешь <strong>сборку целого билета</strong>.`;
       }
       relayCard.removeAttribute('hidden');
     } else {

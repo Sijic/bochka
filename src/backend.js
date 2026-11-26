@@ -11,14 +11,14 @@ const UID_STORAGE_KEY = 'bochka_v2_uid';
 const UI_STAGE_STORAGE_KEY = 'bochka_v6_ui_stage';
 
 // v16.0: Устойчивый fetch с таймаутом и 2 автоматическими ретраями для РФ и Беларуси
-const SUPABASE_TIMEOUT_MS = 12000;
-const SUPABASE_RETRIES = 2;
+const SUPABASE_TIMEOUT_MS = 6500;
+const SUPABASE_RETRIES = 1;
 
 export async function resilientFetch(input, init = {}) {
   const urlStr = typeof input === 'string' ? input : String(input?.url || '');
   const method = String(init?.method || (typeof input !== 'string' ? input?.method : '') || 'GET').toUpperCase();
   const isStorageWrite = urlStr.includes('/storage/v1/object/') && method !== 'GET' && method !== 'HEAD';
-  const timeoutMs = isStorageWrite ? 28000 : SUPABASE_TIMEOUT_MS;
+  const timeoutMs = isStorageWrite ? 9000 : SUPABASE_TIMEOUT_MS;
   let lastErr = null;
   for (let attempt = 0; attempt <= SUPABASE_RETRIES; attempt += 1) {
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -190,6 +190,7 @@ export function buildBroadcastPrefix(role = 'prod', tgUser = null) {
 }
 
 export async function createBarrelPack({
+  shortId = '',
   mode = 'friend',
   message = '',
   frameStyle = 'flashlight',
@@ -206,7 +207,7 @@ export async function createBarrelPack({
   broadcastPrefix = '',
   autoAvatar = false,
 }) {
-  const id = randomShortId(7);
+  const id = String(shortId || '').trim() || randomShortId(7);
   const cleanZone = Math.max(1, Math.min(4, Number(zoneId) || 1));
   const zoneBarrels = cleanZone === 1 ? 4 : cleanZone === 2 ? 6 : cleanZone === 3 ? 9 : 12;
   const maxIdx = Math.min(6, zoneBarrels);
@@ -3060,7 +3061,7 @@ export async function prepareNativeShareMessage({
           } catch {
             /* ignore */
           }
-        }, 3200)
+        }, 1800)
       : null;
   try {
     const res = await fetch(ENV.tgNotifyWebhook, {

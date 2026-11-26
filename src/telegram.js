@@ -624,7 +624,7 @@ export function openNativeTelegramShareCardWithConfirmation({
       };
       const guardTimer = window.setTimeout(() => {
         done({ ok: false, sent: false, cancelled: true, mode: 'native_share_timeout', preparedMessageId: String(preparedMessageId) });
-      }, 45000);
+      }, 20000);
       try {
         tg.shareMessage(String(preparedMessageId), (sent) => {
           window.clearTimeout(guardTimer);
@@ -700,10 +700,10 @@ export function openNativeTelegramShareCardWithConfirmation({
 
     const noLeaveTimer = window.setTimeout(() => {
       if (!sawLeave) finish(true, 'share_url_fallback');
-    }, 2600);
+    }, 1500);
     const maxWaitTimer = window.setTimeout(() => {
       finish(true, 'share_url_fallback');
-    }, 30000);
+    }, 15000);
   });
 }
 

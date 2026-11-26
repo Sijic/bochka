@@ -1925,16 +1925,24 @@ class WorkshopAudio {
   }
 
   async _preloadBuffers() {
-    const entries = Object.entries(SFX_PATHS);
-    await Promise.allSettled(
-      entries.map(async ([key, url]) => {
+    const coreKeys = ['hum', 'knockInside', 'hitMid', 'target_human', 'target_ticket', 'target_empty'];
+    const loadOne = async (key) => {
+      if (this.buffers.has(key)) return;
+      const url = SFX_PATHS[key];
+      if (!url || !this.ctx) return;
+      try {
         const res = await fetch(url);
         if (!res.ok) return;
         const arr = await res.arrayBuffer();
         const decoded = await this.ctx.decodeAudioData(arr);
         this.buffers.set(key, decoded);
-      })
-    );
+      } catch { /* ignore */ }
+    };
+
+    // Load 6 core SFX with concurrency=2 so mobile 3G/4G & Supabase RPCs stay fast
+    for (let i = 0; i < coreKeys.length; i += 2) {
+      await Promise.allSettled(coreKeys.slice(i, i + 2).map((k) => loadOne(k)));
+    }
 
     const humBuf = this.buffers.get('hum');
     if (humBuf && this.ctx) {
@@ -1945,6 +1953,17 @@ class WorkshopAudio {
       g.gain.value = 0.28;
       src.connect(g).connect(this.master);
       try { src.start(0); } catch { /* ignore */ }
+    }
+
+    const conn = typeof navigator !== 'undefined' ? navigator.connection : null;
+    const isSlowConn = Boolean(conn?.saveData || /2g|3g/i.test(String(conn?.effectiveType || '')));
+    if (!isSlowConn && typeof window !== 'undefined') {
+      window.setTimeout(async () => {
+        for (const k of ['hitHigh', 'crowbar', 'lidBlow', 'target_muffled_1']) {
+          if (!this.enabled || !this.ctx) break;
+          await loadOne(k);
+        }
+      }, 5000);
     }
   }
 

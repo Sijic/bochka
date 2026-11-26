@@ -134,7 +134,7 @@ export async function processPortraitToWebP(source, frameStyle = 'flashlight') {
     sh = img.naturalHeight || img.height;
   }
 
-  const SIZE = 512;
+  const SIZE = 384;
   const canvas = document.createElement('canvas');
   canvas.width = SIZE;
   canvas.height = SIZE;
@@ -158,15 +158,15 @@ export async function processPortraitToWebP(source, frameStyle = 'flashlight') {
   applyVividCinemaGrade(ctx, SIZE);
   drawBarrelInteriorFX(ctx, SIZE, frameStyle);
 
-  // v8.0: гарантированное авто-сжатие любого фото с телефона до 512x512 JPEG < 80 КБ
-  let quality = 0.86;
+  // v20.15: быстрое авто-сжатие любого фото с телефона до 384x384 JPEG <= 36 КБ для быстрого аплоада на 3G/4G
+  let quality = 0.78;
   let blob = await canvasToBlob(canvas, 'image/jpeg', quality);
-  while (blob && blob.size > 76 * 1024 && quality > 0.34) {
-    quality -= 0.08;
+  while (blob && blob.size > 36 * 1024 && quality > 0.34) {
+    quality -= 0.1;
     blob = await canvasToBlob(canvas, 'image/jpeg', quality);
   }
-  if (!blob || blob.size > 79 * 1024) {
-    blob = await canvasToBlob(canvas, 'image/jpeg', 0.42);
+  if (!blob || blob.size > 38 * 1024) {
+    blob = await canvasToBlob(canvas, 'image/jpeg', 0.38);
   }
 
   const dataUrl = await blobToDataUrl(blob);
