@@ -520,7 +520,7 @@ async function ensureDuelReady() {
         preloadBarrelClosers();
       }, 200);
     }
-    const mod = duelModCache || (await import('./duel.js?v=2021'));
+    const mod = duelModCache || (await import('./duel.js?v=2022'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -684,7 +684,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=2021'));
+  const mod = duelModCache || (await import('./duel.js?v=2022'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
@@ -692,7 +692,7 @@ async function createWatchChannelLazy(barrelId, opts) {
 let trophiesModCache = null;
 async function loadTrophiesMod() {
   if (!trophiesModCache) {
-    trophiesModCache = await import('./trophies.js?v=2021');
+    trophiesModCache = await import('./trophies.js?v=2022');
   }
   return trophiesModCache;
 }
@@ -2681,6 +2681,8 @@ async function bootstrap() {
         }
         return { profile: state.profile, friendsCount: getRealFriendsCount() };
       },
+      openTrailerModal: (opts) => openTrailerModal(opts || {}),
+      getTrailerState: () => ({ ...state.trailer }),
       simulateVkTimeUpdate: (sec, dur = 91.8) => handleVkTrailerTimeProgress(Number(sec || 0), Number(dur || 91.8), false),
       triggerDefeatCinematic: (opts) => playBarrelDefeatCinematic(opts || {}),
     };
@@ -9178,16 +9180,9 @@ async function grantTrailer30sBaseReward() {
     updatePremiereBarsUI();
     syncSuperPrizeRatingBarUI();
 
-    const flash = document.getElementById('trailer-reward-flash');
-    if (flash) {
-      flash.textContent = res?.reason === 'solo_cap_reached'
-        ? '⭐ +250 ⭐ и полные ❤️ жизни получены! Досмотри до 60с за +100 ⭐ и до 90% за ×2!'
-        : '🎟 Этап 1 из 4 до билета (+250 ⭐) и 6 ❤️ получены! На 60с: +100 ⭐ + секрет!';
-      flash.removeAttribute('hidden');
-    }
+    syncTrailerIntroLockUI(Math.max(TRAILER_BASE_REWARD_SEC, Number(state.trailer.honestWatchedSec || 0)));
     audio.playRewardChime?.();
     Haptics.success();
-    syncTrailerIntroLockUI(Math.max(TRAILER_BASE_REWARD_SEC, Number(state.trailer.honestWatchedSec || 0)));
   } finally {
     state.trailer.base30sInFlight = false;
   }
@@ -9215,15 +9210,7 @@ async function grantTrailer60sMidReward() {
     updatePremiereBarsUI();
     syncSuperPrizeRatingBarUI();
 
-    const flash = document.getElementById('trailer-reward-flash');
-    if (flash) {
-      flash.textContent =
-        res?.hint ||
-        '🔥 Чекпоинт 60с: +100 ⭐! Первая половина секретного кода: «19-...». Вторая половина и +1 ❤️ откроются в финале ролика (через 20 сек)!';
-      flash.removeAttribute('hidden');
-    }
-    audio.playRewardChime?.();
-    Haptics.medium();
+    // Тихий серверный чекпоинт без «праздника» на 60с — сразу вводим в финальный обратный отсчёт до кода 19-97
     syncTrailerIntroLockUI(Math.max(TRAILER_MID_REWARD_SEC, Number(state.trailer.honestWatchedSec || 0)));
   } finally {
     state.trailer.mid60sInFlight = false;
@@ -9237,6 +9224,7 @@ async function grantTrailerFullWatchReward() {
     const res = await awardTicketShardServer(state.tg?.user, 'trailer_full').catch(() => null);
     recordFunnelEvent('trailer_watched_full', state.tg?.user).catch(() => {});
     state.trailer.base30sRewarded = true;
+    state.trailer.mid60sRewarded = true;
     state.trailer.fullWatchRewarded = true;
     state.trailer.unlocked40 = true;
     state.profile.trailerWatchedFull = true;
@@ -9269,13 +9257,6 @@ async function grantTrailerFullWatchReward() {
     updatePremiereBarsUI();
     syncSuperPrizeRatingBarUI();
 
-    const flash = document.getElementById('trailer-reward-flash');
-    if (flash) {
-      flash.textContent =
-        res?.hint ||
-        '🔥 Финал 90%: +250 ⭐ и +1 ❤️! Вторая половина кода: «...-97» (полная комбинация в цеху: 19-97 → +3 ❤️)!';
-      flash.removeAttribute('hidden');
-    }
     audio.playRewardChime?.();
     Haptics.success();
     syncTrailerIntroLockUI(Math.max(TRAILER_INTRO_LOCK_SEC, Number(state.trailer.honestWatchedSec || 0)));
@@ -9366,6 +9347,61 @@ function handleVkTrailerTimeProgress(curTime, vkDur = 91.8, isEnded = false) {
   };
 }
 
+function syncTrailerStagePillsAndCountdown(watchedSec = 0, dur = 91.8) {
+  const safeDur = Number(dur) > 10 ? Number(dur) : (Number(state.trailer.vkDuration) || 91.8);
+  const unlockThreshold = Math.max(82.6, Math.floor(safeDur * 0.90));
+  const sec = Math.max(0, Number(watchedSec || 0), Number(state.trailer.honestWatchedSec || 0));
+  const secToFinale = Math.max(0, Math.ceil(unlockThreshold - sec));
+  const baseDone = Boolean(state.trailer.base30sRewarded || state.trailer.fullWatchRewarded);
+  const fullDone = Boolean(state.trailer.fullWatchRewarded);
+
+  const pill30 = document.getElementById('trailer-pill-30s');
+  if (pill30) {
+    pill30.classList.toggle('is-done', baseDone);
+    pill30.textContent = baseDone ? '✅ 30с: Этап 1/4 + 6 ❤️' : '1️⃣ 30с: Этап 1/4 + 6 ❤️';
+  }
+
+  const pill90 = document.getElementById('trailer-pill-90');
+  if (pill90) {
+    pill90.classList.toggle('is-done', fullDone);
+    pill90.classList.toggle('is-hot', !fullDone && baseDone && secToFinale > 0);
+    if (fullDone) {
+      pill90.textContent = '🏆 Код 19-97 + 350 ⭐ + 1 ❤️';
+    } else if (baseDone && secToFinale > 0) {
+      pill90.textContent = `🔥 Финал через ${secToFinale}с: +350 ⭐ + код`;
+    } else {
+      pill90.textContent = '2️⃣ Финал 90%: +350 ⭐ + секрет-код';
+    }
+  }
+
+  const flash = document.getElementById('trailer-reward-flash');
+  if (flash) {
+    if (fullDone) {
+      flash.removeAttribute('hidden');
+      flash.classList.remove('is-countdown', 'is-final-stretch');
+      flash.classList.add('is-finale-unlocked');
+      flash.textContent =
+        '🏆 ФИНАЛ! +350 ⭐ и +1 ❤️ получены! Секретный код в цеху: 19 → 97 (стукни бочку №19, затем №97 → +3 ❤️!)';
+    } else if (baseDone) {
+      flash.removeAttribute('hidden');
+      flash.classList.remove('is-finale-unlocked');
+      flash.classList.add('is-countdown');
+      const isFinalStretch = sec >= TRAILER_MID_REWARD_SEC;
+      flash.classList.toggle('is-final-stretch', isFinalStretch);
+      if (isFinalStretch) {
+        flash.textContent =
+          `🔥 Почти финал — осталось ${secToFinale}с: откроется секретный код (+3 ❤️ в цеху), +350 ⭐ и +1 ❤️!`;
+      } else {
+        flash.textContent =
+          `✅ Этап 1/4 и 6 ❤️ получены! Осталось ${secToFinale}с до финала: +350 ⭐, +1 ❤️ и секретный код в цеху`;
+      }
+    } else {
+      flash.setAttribute('hidden', '');
+      flash.classList.remove('is-countdown', 'is-final-stretch', 'is-finale-unlocked');
+    }
+  }
+}
+
 function syncTrailerIntroLockUI(watchedSec = 0) {
   const sec = Math.max(0, Number(watchedSec || 0));
   state.trailer.introWatchedSec = Math.max(Number(state.trailer.introWatchedSec || 0), sec);
@@ -9375,8 +9411,11 @@ function syncTrailerIntroLockUI(watchedSec = 0) {
   const locked = Boolean(state.trailer.introLocked);
   const rem = Math.max(0, Math.ceil(TRAILER_INTRO_LOCK_SEC - state.trailer.introWatchedSec));
   const fullRewarded = Boolean(state.trailer.fullWatchRewarded);
-  const midRewarded = Boolean(state.trailer.mid60sRewarded);
   const baseRewarded = Boolean(state.trailer.base30sRewarded);
+  const dur = Number(state.trailer.vkDuration) || 91.8;
+  const unlockThreshold = Math.max(82.6, Math.floor(dur * 0.90));
+  const watchedTotal = Math.max(sec, Number(state.trailer.honestWatchedSec || 0));
+  const secToFinale = Math.max(0, Math.ceil(unlockThreshold - watchedTotal));
 
   const modal = document.getElementById('modal-trailer');
   modal?.classList.toggle('is-intro-locked', locked);
@@ -9396,22 +9435,24 @@ function syncTrailerIntroLockUI(watchedSec = 0) {
     toPackBtn.removeAttribute('hidden');
     toPackBtn.disabled = locked && !fullRewarded && !baseRewarded;
     toPackBtn.classList.toggle('is-ready', !locked || fullRewarded || baseRewarded);
-    toPackBtn.classList.toggle('is-full-reward', fullRewarded || baseRewarded);
+    toPackBtn.classList.toggle('is-full-reward', fullRewarded);
+    toPackBtn.classList.toggle('is-leaving-early', !fullRewarded && baseRewarded);
     if (fullRewarded) {
-      toPackBtn.textContent = 'Забрать код 19-97, +250 ⭐ и +1 ❤️ — играть!';
-    } else if (midRewarded) {
-      toPackBtn.textContent = 'Забрать +100 ⭐ (или жди 20с за 2-ю часть кода и +1 ❤️)';
+      toPackBtn.textContent = 'Забрать код 19-97, +350 ⭐ и +1 ❤️ — играть!';
     } else if (baseRewarded) {
-      toPackBtn.textContent = 'Забрать Этап 1/4 и играть (на 60с и 90% части кода + бонусы)!';
+      toPackBtn.textContent = secToFinale > 0
+        ? `Уйти сейчас (до кода и +350 ⭐ осталось ${secToFinale}с)`
+        : 'Финал ролика — забираем код...';
     } else if (locked) {
-      toPackBtn.textContent = `Смотри трейлер... ${rem}`;
+      toPackBtn.textContent = `Смотри трейлер... ${rem}с`;
     } else {
-      const to30 = Math.max(0, Math.ceil(TRAILER_BASE_REWARD_SEC - Number(state.trailer.honestWatchedSec || 0)));
+      const to30 = Math.max(0, Math.ceil(TRAILER_BASE_REWARD_SEC - watchedTotal));
       toPackBtn.textContent = to30 > 0
         ? `Пропустить (до Этапа 1 осталось ${to30}с)`
         : 'Пропустить и идти дальше';
     }
   }
+  syncTrailerStagePillsAndCountdown(watchedTotal, dur);
 }
 
 function destroyVkTrailerPlayerAndIframe() {
@@ -9935,11 +9976,7 @@ function openTrailerModal({ forRescue = false, afterL1ToPack = false } = {}) {
   state.trailer.externalRescueDepartedAt = 0;
   recordFunnelEvent('trailer_open', state.tg?.user).catch(() => {});
 
-  const flashEl = document.getElementById('trailer-reward-flash');
-  if (flashEl) {
-    if (state.trailer.fullWatchRewarded) flashEl.removeAttribute('hidden');
-    else flashEl.setAttribute('hidden', '');
-  }
+  syncTrailerStagePillsAndCountdown(state.trailer.fullWatchRewarded ? 91.8 : 0, 91.8);
   document.getElementById('btn-trailer-to-pack')?.classList.toggle('is-full-reward', Boolean(state.trailer.fullWatchRewarded));
   document.getElementById('btn-trailer-to-pack')?.removeAttribute('hidden');
   audio.stopListening();
@@ -10036,6 +10073,7 @@ function updateTrailerProgressUI(cur, dur, targetSec = null) {
   const watched = Math.max(Number(state.trailer.honestWatchedSec || 0), Number(cur || 0));
   const pct = Math.min(100, Math.max(0, (watched / Math.max(1, target)) * 100));
   if (fill) fill.style.width = `${pct.toFixed(1)}%`;
+  syncTrailerStagePillsAndCountdown(watched, fullDur);
 
   if (state.trailer.forRescue && !state.trailer.unlocked40) {
     updateTrailerRescueBanner(state.trailer.maxTime, targetSec ?? TRAILER_UNLOCK_SEC);

@@ -3448,8 +3448,7 @@ export async function claimTrailer60sCheckpointServer(tgUser = null, watchedSec 
     granted: true,
     bonusPoints: 100,
     premierePoints: prof.premierePoints,
-    code_part: '19-',
-    hint: 'Первая половина секретного кода: «19-...». Вторая половина и +1 ❤️ откроются в финале ролика (через 20 сек)!',
+    hint: '',
   };
 }
 
