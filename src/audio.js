@@ -1924,23 +1924,28 @@ class WorkshopAudio {
     drone2.start(now);
   }
 
+  async _loadBufferKey(key) {
+    if (this.buffers.has(key)) return;
+    const url = SFX_PATHS[key];
+    if (!url || !this.ctx) return;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const arr = await res.arrayBuffer();
+      const decoded = await this.ctx.decodeAudioData(arr);
+      this.buffers.set(key, decoded);
+    } catch { /* ignore */ }
+  }
+
   async _preloadBuffers() {
     const immediateKeys = ['hitMid', 'target_human'];
-    const loadOne = async (key) => {
-      if (this.buffers.has(key)) return;
-      const url = SFX_PATHS[key];
-      if (!url || !this.ctx) return;
-      try {
-        const res = await fetch(url);
-        if (!res.ok) return;
-        const arr = await res.arrayBuffer();
-        const decoded = await this.ctx.decodeAudioData(arr);
-        this.buffers.set(key, decoded);
-      } catch { /* ignore */ }
-    };
-
     // На старте грузим строго 2 базовых звука первого экрана, чтобы не тормозить 3G и RPC
-    await Promise.allSettled(immediateKeys.map((k) => loadOne(k)));
+    await Promise.allSettled(immediateKeys.map((k) => this._loadBufferKey(k)));
+  }
+
+  schedulePostRoundPreload() {
+    if (this._bgPreloadScheduled || !this.enabled || !this.ctx || typeof window === 'undefined') return;
+    this._bgPreloadScheduled = true;
 
     const startHumIfReady = () => {
       const humBuf = this.buffers.get('hum');
@@ -1956,25 +1961,24 @@ class WorkshopAudio {
       }
     };
 
-    if (typeof window !== 'undefined') {
-      window.setTimeout(async () => {
-        for (const k of ['hum', 'knockInside', 'target_ticket', 'target_empty']) {
-          if (!this.enabled || !this.ctx) break;
-          await loadOne(k);
-        }
-        startHumIfReady();
-      }, 3200);
+    const conn = typeof navigator !== 'undefined' ? navigator.connection : null;
+    const isSlowConn = Boolean(conn?.saveData || /2g|3g/i.test(String(conn?.effectiveType || '')));
 
-      const conn = typeof navigator !== 'undefined' ? navigator.connection : null;
-      const isSlowConn = Boolean(conn?.saveData || /2g|3g/i.test(String(conn?.effectiveType || '')));
-      if (!isSlowConn) {
-        window.setTimeout(async () => {
-          for (const k of ['hitHigh', 'crowbar', 'lidBlow', 'target_muffled_1']) {
-            if (!this.enabled || !this.ctx) break;
-            await loadOne(k);
-          }
-        }, 7500);
+    window.setTimeout(async () => {
+      for (const k of ['hum', 'knockInside', 'target_ticket', 'target_empty']) {
+        if (!this.enabled || !this.ctx) break;
+        await this._loadBufferKey(k);
       }
+      startHumIfReady();
+    }, isSlowConn ? 7500 : 4500);
+
+    if (!isSlowConn) {
+      window.setTimeout(async () => {
+        for (const k of ['hitHigh', 'crowbar', 'lidBlow', 'target_muffled_1']) {
+          if (!this.enabled || !this.ctx) break;
+          await this._loadBufferKey(k);
+        }
+      }, 9500);
     }
   }
 

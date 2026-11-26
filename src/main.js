@@ -4773,6 +4773,7 @@ function reloadPremiereBarrelsWave() {
 
 function startAirCountdownLoop() {
   stopAirTimer();
+  audio.schedulePostRoundPreload?.();
   let lastTs = performance.now();
   state.airInterval = window.setInterval(() => {
     if (!state.round.running || state.round.pausedForModal) {
