@@ -520,7 +520,7 @@ async function ensureDuelReady() {
         preloadBarrelClosers();
       }, 200);
     }
-    const mod = duelModCache || (await import('./duel.js?v=2019'));
+    const mod = duelModCache || (await import('./duel.js?v=2020'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -684,7 +684,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=2019'));
+  const mod = duelModCache || (await import('./duel.js?v=2020'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
@@ -4109,7 +4109,7 @@ function syncWorkshopRecoveryBarUI() {
   if (copyEl) {
     copyEl.textContent = curLives >= 2
       ? '❤️ 2/2 жизни собраны! Возвращайся в бой к Тилю или позови друга за +6 ❤️.'
-      : `Сейчас ❤️ ${curLives}/2 · +1 ❤️ (без очков и фишек · макс. 2 смены/сут)`;
+      : `Сейчас ❤️ ${curLives}/2 · найди бочку за 3 удара → +1 ❤️`;
   }
   if (backBtn) {
     if (curLives >= 1) {
@@ -4184,7 +4184,7 @@ async function startDemoRound({ resumeAttempts = null, recoveryShift = false } =
     workshopLevel: spec.level,
     roundLives: isRecovery ? Math.max(1, Number(state.profile.lives || 0)) : (spec.level === 1 ? 1 : Math.max(1, Number(state.profile.lives || 3))),
     targetKind: isRecovery ? 'recovery_life' : (spec.targetKind || 'human'),
-    taskText: isRecovery ? 'Отработка без Тиля: найди бочку за 3 удара → +1 ❤️ (без очков, до 2 ❤️)' : (spec.taskText || ''),
+    taskText: isRecovery ? 'В цеху: найди бочку за 3 удара → +1 ❤️' : (spec.taskText || ''),
     isBlitz: !isRecovery && spec.isBlitz,
     blitzTargetsCleared: 0,
     targetIndex,
@@ -4210,7 +4210,7 @@ async function startDemoRound({ resumeAttempts = null, recoveryShift = false } =
     voiceUrl: boyVoiceUrl,
     useBarrelFilter: true,
     message: isRecovery
-      ? 'Отработка в цеху без Тиля: +1 ❤️ и +75 ⭐ (или позови друга за +2…+6 ❤️)!'
+      ? 'Ты в цеху: найди бочку за +1 ❤️ (или позови друга за +6 ❤️)!'
       : isLiveBoyLevel
         ? 'Спасибо, что вытащил меня из бочки! Встретимся на премьере 17 декабря!'
         : charMeta.quote,
@@ -4219,12 +4219,12 @@ async function startDemoRound({ resumeAttempts = null, recoveryShift = false } =
   };
 
   document.getElementById('hud-mode-tag').textContent = isRecovery
-    ? '🔨 ОТРАБОТКА · 5 БОЧЕК'
+    ? '⏳ ЦЕХ · 5 БОЧЕК'
     : spec.isBlitz
       ? `${spec.zoneTitle} // ⚡ БЛИЦ 12 БОЧЕК`
       : `${spec.zoneTitle} // ${spec.barrelCount} ${formatBarrelWord(spec.barrelCount)}`;
   document.getElementById('hud-urgent-title').textContent = isRecovery
-    ? 'ОТРАБОТКА БЕЗ ТИЛЯ: НАЙДИ ЖИВУЮ БОЧКУ ЗА 3 УДАРА (+1 ❤️ И +75 ⭐)!'
+    ? 'В ЦЕХУ: НАЙДИ ЖИВУЮ БОЧКУ ЗА 3 УДАРА (+1 ❤️)!'
     : spec.isBlitz
       ? 'БЛИЦ В ПРЕСС-ЦЕХУ: НАХОДИ ЖИВЫЕ БОЧКИ ПОДРЯД (+3.5 СЕК И КОМБО ⭐)!'
       : spec.zoneId === 2
@@ -7720,24 +7720,24 @@ async function finishRound(survived, { diveBarrelIndex = null, hitTarget = null 
           await playRevealAvatar(1350, {
             barrelIndex: revIdx,
             isBoy: false,
-            caption: `🔨 СМЕНА ПРОЙДЕНА! +1 ❤️ БЕЗ ОЧКОВ (СЕЙЧАС ${state.profile.lives}/2 ❤️)`,
+            caption: `⏳ +1 ❤️ В ЦЕХУ (СЕЙЧАС ${state.profile.lives}/2 ❤️)`,
           });
           if (state.activeScreen !== 'workshop') return;
           if (state.profile.lives >= 2) {
-            showToast('❤️ Потолок отработки 2/2 ❤️ достигнут! Иди к Тилю или позови друга за +6 ❤️!');
+            showToast('❤️ 2/2 жизни собраны! Возвращайся к Тилю или позови друга за +6 ❤️!');
           } else {
-            showToast(`🔨 +1 ❤️ (без очков, смена ${recRes.dailyRecoveryShifts}/${recRes.maxDailyShifts || 2}). Следующая смена через 5 мин!`);
+            showToast('⏳ +1 ❤️ получено в цеху. Следующая попытка через 5 мин или позови друга (+6 ❤️)!');
           }
         } else if (recRes?.reason === 'daily_recovery_limit') {
-          showToast('🔒 Лимит отработки (2 смены/день) исчерпан — позови друга (+6 ❤️ и ×2 очки)!');
+          showToast('⏳ Лимит на сегодня исчерпан — позови друга (+6 ❤️ и ×2 очки)!');
           state.pack.forLifeRefill = true;
           showScreen('pack');
         } else if (recRes?.reason === 'lives_ceiling_reached') {
           syncWorkshopRecoveryBarUI();
-          showToast(`❤️ Потолок отработки (${state.profile.lives}/2 ❤️) — возвращайся к Тилю или позови друга (+6 ❤️)!`);
+          showToast(`❤️ В цеху уже максимум (${state.profile.lives}/2 ❤️) — возвращайся к Тилю или позови друга (+6 ❤️)!`);
         } else if (recRes?.reason === 'recovery_cooldown') {
           const minsLeft = Math.max(1, Math.ceil((recRes.retryAfterSec || 300) / 60));
-          showToast(`⏳ Пауза между сменами 5 мин (осталось ~${minsLeft} мин) — позови друга (+6 ❤️) или иди к Тилю!`);
+          showToast(`⏳ Пауза в цеху — осталось ~${minsLeft} мин. Можно позвать друга (+6 ❤️) или вернуться к Тилю!`);
         }
       } else {
         showToast('💨 Пусто! Попробуй ещё раз выбить +1 ❤️ в цеху или закатай друга (+2…+6 ❤️).');
@@ -8189,7 +8189,7 @@ async function handleSealBarrelClick({
 
     if (shareOutcome?.cancelled) {
       if (wasLifeRefill || Number(state.profile?.lives || 0) <= 0) {
-        showToast('❌ Отправка отменена — жизни не начислены! Отработай +1 ❤️ в цеху без Тиля или отправь другу.');
+        showToast('❌ Отправка отменена — жизни не начислены! Подожди в цеху (+1 ❤️) или позови друга.');
         await startWorkshopRecoveryShift({ fromCancelledShare: true });
       } else {
         showToast('❌ Отправка отменена — награда начисляется только после реальной отправки другу.');
