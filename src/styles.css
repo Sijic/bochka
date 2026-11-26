@@ -1624,19 +1624,46 @@ button:disabled {
 }
 
 .trailer-progress-track {
+  position: relative;
   flex: 1;
   min-width: 28px;
   height: 6px;
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.12);
-  overflow: hidden;
+  overflow: visible;
   pointer-events: none;
 }
 
 .trailer-progress-fill {
   width: 0%;
   height: 100%;
+  border-radius: 999px;
   background: var(--accent);
   transition: width 0.15s linear;
+}
+
+.trailer-mark {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.55;
+  transition: transform 0.25s ease, opacity 0.25s ease, filter 0.25s ease;
+}
+
+.trailer-mark-mid {
+  left: 48%;
+}
+
+.trailer-mark-end {
+  left: 98%;
+}
+
+.trailer-mark.is-done {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1.22);
+  filter: drop-shadow(0 0 6px rgba(74, 222, 128, 0.85));
 }
 
 .trailer-time-readout {
@@ -9459,43 +9486,6 @@ body.is-air-hint-active #screen-workshop {
   text-align: center;
 }
 
-.trailer-stage-pills {
-  display: flex;
-  gap: 6px;
-  margin-top: 6px;
-  flex-wrap: nowrap;
-}
-
-.trailer-stage-pill {
-  flex: 1;
-  min-width: 0;
-  padding: 4px 6px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  color: rgba(255, 255, 255, 0.78);
-  font-size: 11px;
-  line-height: 1.2;
-  font-weight: 700;
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.trailer-stage-pill.is-done {
-  background: rgba(21, 128, 61, 0.35);
-  border-color: #4ade80;
-  color: #dcfce7;
-}
-
-.trailer-stage-pill.is-hot {
-  background: rgba(245, 158, 11, 0.24);
-  border-color: #facc15;
-  color: #fef08a;
-  animation: trailerFinalePulse 1.3s ease-in-out infinite;
-}
-
 .trailer-reward-flash {
   margin-top: 8px;
   padding: 7px 10px;
@@ -9540,12 +9530,20 @@ body.is-air-hint-active #screen-workshop {
   to { opacity: 1; transform: scale(1); }
 }
 
-#btn-trailer-to-pack.is-leaving-early:not(:disabled) {
-  background: rgba(24, 24, 27, 0.88);
-  color: #fde68a;
-  border: 1px solid rgba(250, 204, 21, 0.45);
+#btn-trailer-to-pack.is-skip-early:not(:disabled) {
+  background: rgba(24, 24, 27, 0.86);
+  color: #a1a1aa;
+  border: 1px solid rgba(161, 161, 170, 0.35);
   box-shadow: none;
   font-size: 13px;
+}
+
+#btn-trailer-to-pack.is-mid-reward:not(:disabled) {
+  background: linear-gradient(135deg, rgba(217, 119, 6, 0.92) 0%, rgba(180, 83, 9, 0.95) 100%);
+  color: #fffbeb;
+  border: 1.5px solid #fde047;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.4);
+  font-size: 13.5px;
 }
 
 #btn-trailer-to-pack.is-full-reward:not(:disabled) {

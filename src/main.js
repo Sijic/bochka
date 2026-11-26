@@ -169,10 +169,10 @@ function pickRandomPackScreamer() {
 
 const AIR_DURATION_SEC = 30.0;
 const KP_MIN_AWAY_SEC = 3.5;
-const TRAILER_INTRO_LOCK_SEC = 15.0;
-const TRAILER_BASE_REWARD_SEC = 30.0;
+const TRAILER_INTRO_LOCK_SEC = 10.0;
+const TRAILER_BASE_REWARD_SEC = 40.0;
 const TRAILER_MID_REWARD_SEC = 60.0;
-const TRAILER_UNLOCK_SEC = 15.0;
+const TRAILER_UNLOCK_SEC = 10.0;
 const HINT_STORAGE_KEYS = {
   airDepleted: 'bochka_hint_air_v21',
   firstTicket: 'bochka_hint_ticket_v21',
@@ -520,7 +520,7 @@ async function ensureDuelReady() {
         preloadBarrelClosers();
       }, 200);
     }
-    const mod = duelModCache || (await import('./duel.js?v=2022'));
+    const mod = duelModCache || (await import('./duel.js?v=2023'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -684,7 +684,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=2022'));
+  const mod = duelModCache || (await import('./duel.js?v=2023'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
@@ -692,7 +692,7 @@ async function createWatchChannelLazy(barrelId, opts) {
 let trophiesModCache = null;
 async function loadTrophiesMod() {
   if (!trophiesModCache) {
-    trophiesModCache = await import('./trophies.js?v=2022');
+    trophiesModCache = await import('./trophies.js?v=2023');
   }
   return trophiesModCache;
 }
@@ -9288,7 +9288,7 @@ function handleVkTrailerTimeProgress(curTime, vkDur = 91.8, isEnded = false) {
     state.trailer.prevVkTime = t;
     if (Date.now() - (state.trailer.lastAntiSeekToastAt || 0) > 4000) {
       state.trailer.lastAntiSeekToastAt = Date.now();
-      showToast('⏪ Перемотка не засчитывается — досмотри 30с или до конца!');
+      showToast('⏪ Перемотка не засчитывается — досмотри до середины или до конца!');
     }
     return { accepted: false, reason: 'seek_jump', delta };
   }
@@ -9347,30 +9347,32 @@ function handleVkTrailerTimeProgress(curTime, vkDur = 91.8, isEnded = false) {
   };
 }
 
-function syncTrailerStagePillsAndCountdown(watchedSec = 0, dur = 91.8) {
+function syncTrailerStepGuideUI(watchedSec = 0, dur = 91.8) {
   const safeDur = Number(dur) > 10 ? Number(dur) : (Number(state.trailer.vkDuration) || 91.8);
   const unlockThreshold = Math.max(82.6, Math.floor(safeDur * 0.90));
   const sec = Math.max(0, Number(watchedSec || 0), Number(state.trailer.honestWatchedSec || 0));
-  const secToFinale = Math.max(0, Math.ceil(unlockThreshold - sec));
+  const toMid = Math.max(0, Math.ceil(TRAILER_BASE_REWARD_SEC - sec));
+  const secToEnd = Math.max(0, Math.ceil(unlockThreshold - sec));
   const baseDone = Boolean(state.trailer.base30sRewarded || state.trailer.fullWatchRewarded);
   const fullDone = Boolean(state.trailer.fullWatchRewarded);
 
-  const pill30 = document.getElementById('trailer-pill-30s');
-  if (pill30) {
-    pill30.classList.toggle('is-done', baseDone);
-    pill30.textContent = baseDone ? '✅ 30с: Этап 1/4 + 6 ❤️' : '1️⃣ 30с: Этап 1/4 + 6 ❤️';
-  }
+  document.getElementById('trailer-mark-mid')?.classList.toggle('is-done', baseDone);
+  document.getElementById('trailer-mark-end')?.classList.toggle('is-done', fullDone);
 
-  const pill90 = document.getElementById('trailer-pill-90');
-  if (pill90) {
-    pill90.classList.toggle('is-done', fullDone);
-    pill90.classList.toggle('is-hot', !fullDone && baseDone && secToFinale > 0);
+  const guide = document.getElementById('trailer-motivation-copy');
+  if (guide) {
     if (fullDone) {
-      pill90.textContent = '🏆 19-97 + 350 ⭐ + 1 ❤️';
-    } else if (baseDone && secToFinale > 0) {
-      pill90.textContent = `🔥 Через ${secToFinale}с: +350 ⭐ + код`;
+      guide.textContent = '🏆 Трейлер досмотрен! Все призы и секретный код в цеху открыты.';
+    } else if (baseDone) {
+      guide.textContent = secToEnd > 0
+        ? `🔥 Досмотри до конца (осталось ${secToEnd} сек) — откроется секретный код в цеху и +350 ⭐!`
+        : '🔥 Почти финал — открываем секретный код и +350 ⭐!';
+    } else if (sec < TRAILER_INTRO_LOCK_SEC) {
+      guide.textContent = '🎬 Идёт трейлер. Досмотри до середины — получишь приз: 6 ❤️ и +250 ⭐ к билету!';
     } else {
-      pill90.textContent = '2️⃣ 90%: +350 ⭐ + код';
+      guide.textContent = toMid > 0
+        ? `🎁 Досмотри до середины (осталось ${toMid} сек) — получишь 6 ❤️, +250 ⭐ и шаг к билету!`
+        : '🎁 Середина рядом — открываем приз!';
     }
   }
 
@@ -9381,7 +9383,7 @@ function syncTrailerStagePillsAndCountdown(watchedSec = 0, dur = 91.8) {
       flash.classList.remove('is-countdown', 'is-final-stretch');
       flash.classList.add('is-finale-unlocked');
       flash.textContent =
-        '🏆 ФИНАЛ! +350 ⭐ и +1 ❤️ получены! Секретный код в цеху: 19 → 97 (стукни бочку №19, затем №97 → +3 ❤️!)';
+        '🏆 Главный приз твой: +350 ⭐ и +1 ❤️! Секретный код в цеху: стукни бочку №19, затем №97 (+3 ❤️)!';
     } else if (baseDone) {
       flash.removeAttribute('hidden');
       flash.classList.remove('is-finale-unlocked');
@@ -9390,10 +9392,10 @@ function syncTrailerStagePillsAndCountdown(watchedSec = 0, dur = 91.8) {
       flash.classList.toggle('is-final-stretch', isFinalStretch);
       if (isFinalStretch) {
         flash.textContent =
-          `🔥 Почти финал — осталось ${secToFinale}с: откроется секретный код (+3 ❤️ в цеху), +350 ⭐ и +1 ❤️!`;
+          `🔥 Осталось ${secToEnd}с до конца — откроется секретный код (+3 ❤️ в цеху) и +350 ⭐!`;
       } else {
         flash.textContent =
-          `✅ Этап 1/4 и 6 ❤️ получены! Осталось ${secToFinale}с до финала: +350 ⭐, +1 ❤️ и секретный код в цеху`;
+          `✅ Приз за середину получен: +6 ❤️ и +250 ⭐! До конца и секретного кода — ${secToEnd}с`;
       }
     } else {
       flash.setAttribute('hidden', '');
@@ -9409,13 +9411,15 @@ function syncTrailerIntroLockUI(watchedSec = 0) {
     state.trailer.introLocked = false;
   }
   const locked = Boolean(state.trailer.introLocked);
-  const rem = Math.max(0, Math.ceil(TRAILER_INTRO_LOCK_SEC - state.trailer.introWatchedSec));
   const fullRewarded = Boolean(state.trailer.fullWatchRewarded);
   const baseRewarded = Boolean(state.trailer.base30sRewarded);
   const dur = Number(state.trailer.vkDuration) || 91.8;
   const unlockThreshold = Math.max(82.6, Math.floor(dur * 0.90));
   const watchedTotal = Math.max(sec, Number(state.trailer.honestWatchedSec || 0));
-  const secToFinale = Math.max(0, Math.ceil(unlockThreshold - watchedTotal));
+  const btnWarmupLocked = !fullRewarded && !baseRewarded && watchedTotal < TRAILER_INTRO_LOCK_SEC;
+  const rem = Math.max(0, Math.ceil(TRAILER_INTRO_LOCK_SEC - watchedTotal));
+  const toMid = Math.max(0, Math.ceil(TRAILER_BASE_REWARD_SEC - watchedTotal));
+  const secToEnd = Math.max(0, Math.ceil(unlockThreshold - watchedTotal));
 
   const modal = document.getElementById('modal-trailer');
   modal?.classList.toggle('is-intro-locked', locked);
@@ -9433,26 +9437,26 @@ function syncTrailerIntroLockUI(watchedSec = 0) {
   const toPackBtn = document.getElementById('btn-trailer-to-pack');
   if (toPackBtn) {
     toPackBtn.removeAttribute('hidden');
-    toPackBtn.disabled = locked && !fullRewarded && !baseRewarded;
-    toPackBtn.classList.toggle('is-ready', !locked || fullRewarded || baseRewarded);
+    toPackBtn.disabled = Boolean((locked || btnWarmupLocked) && !fullRewarded && !baseRewarded);
+    toPackBtn.classList.toggle('is-ready', !toPackBtn.disabled);
     toPackBtn.classList.toggle('is-full-reward', fullRewarded);
-    toPackBtn.classList.toggle('is-leaving-early', !fullRewarded && baseRewarded);
+    toPackBtn.classList.toggle('is-mid-reward', !fullRewarded && baseRewarded);
+    toPackBtn.classList.toggle('is-skip-early', !fullRewarded && !baseRewarded && !toPackBtn.disabled);
     if (fullRewarded) {
-      toPackBtn.textContent = 'Забрать код 19-97, +350 ⭐ и +1 ❤️ — играть!';
+      toPackBtn.textContent = 'Забрать код 19-97 и все призы — играть!';
     } else if (baseRewarded) {
-      toPackBtn.textContent = secToFinale > 0
-        ? `Уйти сейчас (до кода и +350 ⭐ осталось ${secToFinale}с)`
-        : 'Финал ролика — забираем код...';
-    } else if (locked) {
+      toPackBtn.textContent = secToEnd > 0
+        ? `Забрать приз и играть (до кода ${secToEnd}с)`
+        : 'Конец ролика — открываем код...';
+    } else if (toPackBtn.disabled) {
       toPackBtn.textContent = `Смотри трейлер... ${rem}с`;
     } else {
-      const to30 = Math.max(0, Math.ceil(TRAILER_BASE_REWARD_SEC - watchedTotal));
-      toPackBtn.textContent = to30 > 0
-        ? `Пропустить (до Этапа 1 осталось ${to30}с)`
+      toPackBtn.textContent = toMid > 0
+        ? `Пропустить без приза (${toMid}с до подарка)`
         : 'Пропустить и идти дальше';
     }
   }
-  syncTrailerStagePillsAndCountdown(watchedTotal, dur);
+  syncTrailerStepGuideUI(watchedTotal, dur);
 }
 
 function destroyVkTrailerPlayerAndIframe() {
@@ -9976,7 +9980,7 @@ function openTrailerModal({ forRescue = false, afterL1ToPack = false } = {}) {
   state.trailer.externalRescueDepartedAt = 0;
   recordFunnelEvent('trailer_open', state.tg?.user).catch(() => {});
 
-  syncTrailerStagePillsAndCountdown(state.trailer.fullWatchRewarded ? 91.8 : 0, 91.8);
+  syncTrailerStepGuideUI(state.trailer.fullWatchRewarded ? 91.8 : 0, 91.8);
   document.getElementById('btn-trailer-to-pack')?.classList.toggle('is-full-reward', Boolean(state.trailer.fullWatchRewarded));
   document.getElementById('btn-trailer-to-pack')?.removeAttribute('hidden');
   audio.stopListening();
@@ -10073,7 +10077,7 @@ function updateTrailerProgressUI(cur, dur, targetSec = null) {
   const watched = Math.max(Number(state.trailer.honestWatchedSec || 0), Number(cur || 0));
   const pct = Math.min(100, Math.max(0, (watched / Math.max(1, target)) * 100));
   if (fill) fill.style.width = `${pct.toFixed(1)}%`;
-  syncTrailerStagePillsAndCountdown(watched, fullDur);
+  syncTrailerStepGuideUI(watched, fullDur);
 
   if (state.trailer.forRescue && !state.trailer.unlocked40) {
     updateTrailerRescueBanner(state.trailer.maxTime, targetSec ?? TRAILER_UNLOCK_SEC);
