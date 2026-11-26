@@ -2875,17 +2875,33 @@ export class WorkshopDuelController {
             if (sRes.pendingTicketsCount != null) patch.pendingTicketsCount = Number(sRes.pendingTicketsCount);
             this.onProfileSync?.(patch);
           }
+          this.scheduleTimeout(() => {
+            if (this.active && (this.phase === 'reveal' || this.phase === 'finished')) {
+              this.onContextDiscoveryHint?.('ticket');
+            }
+          }, 180);
         } else if (kind === 'chip') {
           this.sessionStats.playerChips += 1;
           this.onFlyRating?.({ type: 'chip', count: 3, label: '🪙 Новая фишка' });
           await this.onCollectChipFromBarrel?.({ source: 'duel_trophy', barrelIndex: -1, loot: { kind: 'chip', value: 150, label: '🪙 Новая фишка' } });
           const bankRes = await claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: 150, solo: !isPvp1x1, countWin: false }).catch(() => null);
           if (bankRes?.ok) this.onProfileSync?.({ premierePoints: bankRes.premierePoints });
+          this.scheduleTimeout(() => {
+            if (this.active && (this.phase === 'reveal' || this.phase === 'finished')) {
+              this.onContextDiscoveryHint?.('chip');
+              this.onContextDiscoveryHint?.('points');
+            }
+          }, 180);
         } else {
           this.sessionStats.playerPoints += 300;
           this.onFlyRating?.({ type: 'points', count: 3, label: '+300 ⭐' });
           const bankRes = await claimDuelPremiereBankReward(this.getTgUser?.(), { pointsBonus: 300, solo: !isPvp1x1, countWin: false }).catch(() => null);
           if (bankRes?.ok) this.onProfileSync?.({ premierePoints: bankRes.premierePoints });
+          this.scheduleTimeout(() => {
+            if (this.active && (this.phase === 'reveal' || this.phase === 'finished')) {
+              this.onContextDiscoveryHint?.('points');
+            }
+          }, 180);
         }
       } finally {
         this.syncEnergyUI();
@@ -3032,10 +3048,10 @@ export class WorkshopDuelController {
           barrelIndex: myEntry.barrelIndex,
         });
         this.scheduleTimeout(() => {
-          if (this.active && this.phase === 'reveal') {
+          if (this.active && (this.phase === 'reveal' || this.phase === 'finished')) {
             this.onContextDiscoveryHint?.('ticket');
           }
-        }, 420);
+        }, 180);
       } else if (k === 'golden_shard') {
         const gLevel = Math.max(1, Math.min(12, Number(myEntry.loot.goldenLevel || 1)));
         const ptsBonus = Number(myEntry.loot.value || 400);
@@ -3056,6 +3072,11 @@ export class WorkshopDuelController {
             }
           })
           .catch(() => {});
+        this.scheduleTimeout(() => {
+          if (this.active && (this.phase === 'reveal' || this.phase === 'finished')) {
+            this.onContextDiscoveryHint?.('points');
+          }
+        }, 180);
       } else if (k === 'points' || k === 'chip') {
         const val = Number(myEntry.loot.value || 150);
         if (k === 'chip') this.sessionStats.playerChips += 1;
@@ -3077,10 +3098,13 @@ export class WorkshopDuelController {
           })
           .catch(() => {});
         this.scheduleTimeout(() => {
-          if (this.active && this.phase === 'reveal') {
+          if (this.active && (this.phase === 'reveal' || this.phase === 'finished')) {
             this.onContextDiscoveryHint?.(k);
+            if (k === 'chip') {
+              this.onContextDiscoveryHint?.('points');
+            }
           }
-        }, 420);
+        }, 180);
       } else if (k === 'energy') {
         this.setPlayerEnergy(this.myUid, this.getPlayerEnergy(this.myUid) + ENERGY_BARREL_REFILL);
         this.audio?.playRewardChime?.();
@@ -3091,19 +3115,19 @@ export class WorkshopDuelController {
           barrelIndex: myEntry.barrelIndex,
         });
         this.scheduleTimeout(() => {
-          if (this.active && this.phase === 'reveal') {
+          if (this.active && (this.phase === 'reveal' || this.phase === 'finished')) {
             this.onContextDiscoveryHint?.('energy');
           }
-        }, 420);
+        }, 180);
       } else if (k === 'life') {
         this.duelLives = Math.min(30, Math.max(1, Number(this.duelLives || 0) + 1));
         this.onProfileSync?.({ lives: this.duelLives });
         this.onFlyLife?.({ type: 'lives', count: 1, label: '+1 ❤️', barrelIndex: myEntry.barrelIndex });
         this.scheduleTimeout(() => {
-          if (this.active && this.phase === 'reveal') {
+          if (this.active && (this.phase === 'reveal' || this.phase === 'finished')) {
             this.onContextDiscoveryHint?.('life');
           }
-        }, 420);
+        }, 180);
       } else if (k === 'empty') {
         this.duelLives = Math.max(0, Number(this.duelLives || 0) - 1);
         this.onProfileSync?.({ lives: this.duelLives });

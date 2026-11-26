@@ -174,12 +174,12 @@ const TRAILER_BASE_REWARD_SEC = 30.0;
 const TRAILER_MID_REWARD_SEC = 60.0;
 const TRAILER_UNLOCK_SEC = 15.0;
 const HINT_STORAGE_KEYS = {
-  airDepleted: 'bochka_hint_air_v20',
-  firstTicket: 'bochka_hint_ticket_v20',
-  firstChip: 'bochka_hint_chip_v20',
-  firstPoints: 'bochka_hint_points_v20',
-  firstEnergy: 'bochka_hint_energy_v20',
-  firstLife: 'bochka_hint_life_v20',
+  airDepleted: 'bochka_hint_air_v21',
+  firstTicket: 'bochka_hint_ticket_v21',
+  firstChip: 'bochka_hint_chip_v21',
+  firstPoints: 'bochka_hint_points_v21',
+  firstEnergy: 'bochka_hint_energy_v21',
+  firstLife: 'bochka_hint_life_v21',
 };
 
 function loadHintsShownState() {
@@ -203,6 +203,18 @@ function persistHintShown(kind) {
   const key = HINT_STORAGE_KEYS[kind];
   if (!key) return;
   try { localStorage.setItem(key, '1'); } catch { /* ignore */ }
+}
+
+function resetHintsShownState() {
+  try {
+    for (const storageKey of Object.values(HINT_STORAGE_KEYS)) {
+      localStorage.removeItem(storageKey);
+    }
+  } catch { /* ignore private storage */ }
+  if (typeof state !== 'undefined' && state) {
+    state.hintsShown = loadHintsShownState();
+    state.contextHintQueue = [];
+  }
 }
 const STALE_YT_IDS = new Set(['EZFDcXeLTzQ', 'vAJpT_82uUo']);
 const OFFICIAL_YT_TRAILER_ID = (ENV.youtubeFallbackId && !STALE_YT_IDS.has(ENV.youtubeFallbackId))
@@ -401,6 +413,7 @@ const state = {
   },
 
   hintsShown: loadHintsShownState(),
+  contextHintQueue: [],
   contextHint: {
     open: false,
     kind: '',
@@ -504,7 +517,7 @@ async function ensureDuelReady() {
       screamersPreloaded = true;
       window.setTimeout(() => preloadScreamerFrames(SCREAMER_META), 200);
     }
-    const mod = duelModCache || (await import('./duel.js?v=2016'));
+    const mod = duelModCache || (await import('./duel.js?v=2017'));
     duelModCache = mod;
     if (duelCtrl) return duelCtrl;
     duelCtrl = new mod.WorkshopDuelController({
@@ -668,7 +681,7 @@ async function ensureDuelReady() {
 }
 
 async function createWatchChannelLazy(barrelId, opts) {
-  const mod = duelModCache || (await import('./duel.js?v=2000'));
+  const mod = duelModCache || (await import('./duel.js?v=2017'));
   duelModCache = mod;
   return mod.createBarrelWatchChannel(barrelId, opts);
 }
@@ -1350,6 +1363,14 @@ function mergeFreshProfile(freshProfile, { preserveProgress = true } = {}) {
     try {
       localStorage.removeItem(SESSION_RESUME_STORAGE_KEY);
     } catch { /* ignore */ }
+    if (
+      Number(freshProfile.premierePoints || 0) === 0 &&
+      Number(freshProfile.currentLevel || 1) <= 1 &&
+      Number(freshProfile.packedCount || 0) === 0 &&
+      Number(freshProfile.duelsPlayed || 0) === 0
+    ) {
+      resetHintsShownState();
+    }
     const cleanMerged = {
       ...prev,
       ...freshProfile,
@@ -3251,6 +3272,14 @@ function dismissContextHintModal() {
   modal?.setAttribute('hidden', '');
   Haptics.light();
   cb?.();
+  if (Array.isArray(state.contextHintQueue) && state.contextHintQueue.length > 0) {
+    const nextKind = state.contextHintQueue.shift();
+    if (nextKind) {
+      window.setTimeout(() => {
+        maybeShowDuelDiscoveryHint(nextKind);
+      }, 140);
+    }
+  }
 }
 
 const DUEL_DISCOVERY_CARDS = {
@@ -3277,7 +3306,7 @@ const DUEL_DISCOVERY_CARDS = {
     icon: '⭐',
     text: 'Первые очки к суперпризу!',
     what: 'Очки суперприза (⭐)',
-    gives: 'Заполняют шкалу до 5 000 очков на закрытую премьеру 17 декабря',
+    gives: 'Заполняют шкалу до 5 000 очков на главный приз и рейтинг ТОП-20',
     where: 'Золотая полоса «До суперприза» прямо под VS-панелью',
     spotlightId: 'duel-superprize-strip',
   },
@@ -3322,9 +3351,15 @@ function triggerAvatarMenuHintPulse(durationMs = 6500) {
 }
 
 function maybeShowDuelDiscoveryHint(kind) {
-  if (state.contextHint?.open) return false;
   const spec = DUEL_DISCOVERY_CARDS[kind];
   if (!spec || state.hintsShown?.[spec.stateKey]) return false;
+  if (state.contextHint?.open) {
+    if (!Array.isArray(state.contextHintQueue)) state.contextHintQueue = [];
+    if (state.contextHint.kind !== spec.stateKey && !state.contextHintQueue.includes(kind)) {
+      state.contextHintQueue.push(kind);
+    }
+    return true;
+  }
   const isChip = kind === 'chip';
   if (isChip) {
     document.getElementById('btn-duel-vs-avatar-menu')?.classList.add('is-avatar-menu-pulse');
